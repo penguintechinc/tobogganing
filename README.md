@@ -7,7 +7,7 @@ Utilize open source solutions together to form an Open Source Secure Access Serv
 ## Built in self testing and healing
 All PTG builds have unit and dynamic tests as part of the build of their images, as well as during runtime to ensure the system keeps running as expected. If the system falls out of bounds of the test, the images have some self healing capabilities fix common minor problems.
 
-## Secured... even if the software isn'template
+## Secured... even if the software isn't
 All PTG images under go a 8 stage security check to ensure not only is the PTG portion of the code secure, but to also identify and help remediate the underlying libraries and software security. 
 
 ## Updated daily
