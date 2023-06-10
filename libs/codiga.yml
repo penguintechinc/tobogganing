@@ -1,0 +1,7 @@
+rulesets:
+  - python-security
+  - python-flask
+  - python-django
+  - python-pandas
+  - python-boto3
+  - python-best-practices

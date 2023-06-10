@@ -1,0 +1,13 @@
+- name: Building Image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/base.yml
+  become: true
+  become_user: root
+  remote_user: root
+  tasks:
+    - name: Build And Install
+      include_tasks:
+        file: jobs/build/build.yml
