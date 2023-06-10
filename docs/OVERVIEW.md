@@ -11,10 +11,12 @@
 * Gluu & Gluu Proxy
 * SOF-ELK (Logging)
 * Rookery - VDI
+* Cuckoo (sandbox)
 
 ## Premium Components
 * PenguinSASE Agent - GoLang based agent which can handle auth and enforcement and L4SSL tunnels
 * PenguinSASE Unified Console - Django based console
+* PenguinSASE in-line / out of band detection for Suricata toggle
 
 # Overview of flow
 1. Traffic comes in via VPN, Direct Proxy, or VDI 
