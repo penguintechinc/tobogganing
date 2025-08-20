@@ -55,6 +55,32 @@ node_modules/
 npm-debug.log*
 .next/
 out/
+node_modules/
+ios/build/
+android/app/build/
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.xcuserstate
+*.xcworkspace
+*.xcodeproj
+*.swp
+*.DS_Store
+*.log
+*.env
+*.gradle
+android/.gradle/
+android/.idea/
+android/local.properties
+android/.cxx/
+android/.settings/
+android/build/
+*.iml
+
+# Go
 
 # IDE and editor files
 .idea/
@@ -63,6 +89,32 @@ out/
 *.swo
 .DS_Store
 Thumbs.db
+
+bin/
+obj/
+*.exe
+*.test
+*.out
+*.a
+*.so
+*.dll
+*.dylib
+*.cgo1.go
+*.cgo2.c
+*.coverprofile
+*.log
+*.tmp
+vendor/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+Gemfile.lock
+Pipfile.lock
+poetry.lock
+Cargo.lock
+composer.lock
 
 # Database files
 *.db
