@@ -18,6 +18,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -288,7 +289,7 @@ func (cm *Manager) validateAndSaveConfig(configData string) error {
 	
 	// Save to file
 	configPath := cm.config.GetWireGuardConfigPath()
-	if err := cm.config.WriteConfigFile(configPath, []byte(configData)); err != nil {
+	if err := cm.WriteConfigFile(configPath, []byte(configData)); err != nil {
 		return fmt.Errorf("failed to write configuration file: %w", err)
 	}
 	
@@ -321,38 +322,42 @@ func (cm *Manager) validateWireGuardConfig(config string) error {
 // Utility methods for Config integration
 
 func (cfg *Config) GetManagerURL() string {
-	// Return configured Manager service URL
-	return "https://manager.example.com" // Placeholder - would read from config
+	if cfg.ManagerURL != "" {
+		return cfg.ManagerURL
+	}
+	return "https://manager.sasewaddle.com"
 }
 
 func (cfg *Config) GetClientID() string {
-	// Return unique client identifier
-	return "client-12345" // Placeholder - would read from config
+	if cfg.ClientName != "" {
+		return cfg.ClientName
+	}
+	// Generate a client ID based on hostname if not configured
+	hostname, _ := os.Hostname()
+	return fmt.Sprintf("client-%s", hostname)
 }
 
 func (cfg *Config) GetAPIKey() string {
-	// Return API key for Manager service authentication
-	return "api-key-12345" // Placeholder - would read from config
+	return cfg.APIKey
 }
 
 func (cfg *Config) GetUserAgent() string {
-	// Return User-Agent string
 	return fmt.Sprintf("SASEWaddle-Client/%s", cfg.GetVersion())
 }
 
 func (cfg *Config) GetVersion() string {
-	// Return client version
-	return "1.0.0" // Placeholder - would read from build info
+	// This would be set during build time via ldflags
+	return "1.0.0"
 }
 
 func (cfg *Config) InsecureSkipVerify() bool {
-	// Return whether to skip TLS verification (development mode)
-	return false // Placeholder - would read from config
+	// For production, always verify TLS certificates
+	return false
 }
 
-func (cfg *Config) WriteConfigFile(path string, data []byte) error {
+func (cm *Manager) WriteConfigFile(path string, data []byte) error {
 	// Write configuration file with proper permissions
-	return cfg.WriteFile(path, data) // Uses existing WriteFile method
+	return cm.config.WriteFile(path, data) // Uses existing WriteFile method
 }
 
 // Additional configuration management methods

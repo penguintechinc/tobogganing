@@ -209,3 +209,24 @@ func GetConfigDir() string {
 func GetDefaultConfigFile() string {
     return GetConfigDir() + "/config.yaml"
 }
+
+// GetWireGuardConfigPath returns the path to the WireGuard configuration file
+func (c *Config) GetWireGuardConfigPath() string {
+    return GetConfigDir() + "/wireguard.conf"
+}
+
+// WriteFile writes data to a file with proper permissions
+func (c *Config) WriteFile(path string, data []byte) error {
+    // Create directory if it doesn't exist
+    configDir := filepath.Dir(path)
+    if err := os.MkdirAll(configDir, 0700); err != nil {
+        return fmt.Errorf("failed to create directory: %w", err)
+    }
+    
+    // Write file with secure permissions
+    if err := os.WriteFile(path, data, 0600); err != nil {
+        return fmt.Errorf("failed to write file: %w", err)
+    }
+    
+    return nil
+}

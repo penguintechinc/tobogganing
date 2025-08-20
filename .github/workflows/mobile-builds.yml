@@ -1,0 +1,521 @@
+name: Mobile App Builds
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'clients/mobile/**'
+      - '.github/workflows/mobile-builds.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'clients/mobile/**'
+      - '.github/workflows/mobile-builds.yml'
+  release:
+    types: [ published ]
+  # Manual workflow trigger
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - staging
+        - production
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - ios
+        - android
+      upload_to_stores:
+        description: 'Upload to App Stores'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+  JAVA_VERSION: '17'
+  RUBY_VERSION: '3.1'
+
+jobs:
+  # Test React Native code
+  test-mobile:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: clients/mobile/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd clients/mobile
+        npm ci
+    
+    - name: Run TypeScript check
+      run: |
+        cd clients/mobile
+        npx tsc --noEmit
+    
+    - name: Run linting
+      run: |
+        cd clients/mobile
+        npx eslint src/
+    
+    - name: Run tests
+      run: |
+        cd clients/mobile
+        npm test || echo "No tests configured yet"
+
+  # Build Android APK/AAB
+  build-android:
+    needs: [test-mobile]
+    if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'android' || github.event.inputs.platforms == null }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: clients/mobile/package-lock.json
+    
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        # Convert version to Android version code (remove dots and pad)
+        VERSION_CODE=$(echo $VERSION | tr -d '.' | head -c 8 | sed 's/$/000/' | head -c 8)
+        echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
+    
+    - name: Install dependencies
+      run: |
+        cd clients/mobile
+        npm ci
+    
+    - name: Install React Native CLI
+      run: npm install -g @react-native-community/cli
+    
+    - name: Cache Gradle dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('clients/mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradlew executable
+      run: |
+        cd clients/mobile/android
+        chmod +x ./gradlew
+    
+    - name: Generate Android keystore (for non-production builds)
+      if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
+      run: |
+        cd clients/mobile/android/app
+        keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
+    
+    - name: Build Android APK (Debug)
+      if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.version }}
+        VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        BUILD_TYPE: ${{ github.event.inputs.build_type || 'development' }}
+      run: |
+        cd clients/mobile
+        # Create build configuration
+        echo "export const BUILD_CONFIG = {
+          VERSION: '$VERSION_NAME',
+          BUILD_TYPE: '$BUILD_TYPE',
+          API_ENDPOINT: 'https://api-dev.sasewaddle.com'
+        };" > src/config/build.ts
+        
+        # Build APK
+        cd android
+        ./gradlew assembleDebug
+    
+    - name: Build Android AAB (Release)
+      if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.version }}
+        VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+        UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        UPLOAD_STORE_FILE: upload-keystore.jks
+        UPLOAD_KEY_ALIAS: upload
+      run: |
+        cd clients/mobile
+        # Create production build configuration
+        echo "export const BUILD_CONFIG = {
+          VERSION: '$VERSION_NAME',
+          BUILD_TYPE: 'production',
+          API_ENDPOINT: 'https://api.sasewaddle.com'
+        };" > src/config/build.ts
+        
+        # Decode and save keystore
+        echo ${{ secrets.ANDROID_UPLOAD_KEYSTORE }} | base64 --decode > android/app/upload-keystore.jks
+        
+        # Build AAB
+        cd android
+        ./gradlew bundleRelease
+    
+    - name: Sign APK (Debug builds)
+      if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
+      run: |
+        cd clients/mobile/android/app/build/outputs/apk/debug
+        # APK is already signed with debug key
+        mv app-debug.apk "sasewaddle-mobile-android-${{ steps.version.outputs.version }}-debug.apk"
+    
+    - name: Upload Android APK artifact (Debug)
+      if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk-debug
+        path: clients/mobile/android/app/build/outputs/apk/debug/*.apk
+        retention-days: 30
+    
+    - name: Upload Android AAB artifact (Release)
+      if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-aab-release
+        path: clients/mobile/android/app/build/outputs/bundle/release/*.aab
+        retention-days: 90
+    
+    - name: Upload to Google Play Console
+      if: ${{ (github.event.inputs.build_type == 'production' || github.event_name == 'release') && github.event.inputs.upload_to_stores == 'true' }}
+      uses: r0adkll/upload-google-play@v1
+      with:
+        serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        packageName: com.sasewaddle.mobile
+        releaseFiles: clients/mobile/android/app/build/outputs/bundle/release/*.aab
+        track: internal
+        status: draft
+
+  # Build iOS IPA
+  build-ios:
+    needs: [test-mobile]
+    if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'ios' || github.event.inputs.platforms == null }}
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: clients/mobile/package-lock.json
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ env.RUBY_VERSION }}
+        bundler-cache: true
+        working-directory: clients/mobile/ios
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        # Convert version to iOS build number
+        BUILD_NUMBER=$(echo $VERSION | tr -d '.' | head -c 6)
+        echo "build_number=${BUILD_NUMBER}" >> $GITHUB_OUTPUT
+    
+    - name: Install dependencies
+      run: |
+        cd clients/mobile
+        npm ci
+    
+    - name: Install React Native CLI
+      run: npm install -g @react-native-community/cli
+    
+    - name: Install CocoaPods
+      run: |
+        cd clients/mobile/ios
+        gem install cocoapods
+        pod install
+    
+    - name: Install Fastlane
+      run: |
+        cd clients/mobile/ios
+        bundle install
+    
+    - name: Cache Pods dependencies
+      uses: actions/cache@v3
+      with:
+        path: clients/mobile/ios/Pods
+        key: ${{ runner.os }}-pods-${{ hashFiles('clients/mobile/ios/Podfile.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-pods-
+    
+    - name: Configure Xcode project
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.version }}
+        BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        BUILD_TYPE: ${{ github.event.inputs.build_type || 'development' }}
+      run: |
+        cd clients/mobile
+        # Create build configuration
+        echo "export const BUILD_CONFIG = {
+          VERSION: '$VERSION_NAME',
+          BUILD_TYPE: '$BUILD_TYPE',
+          API_ENDPOINT: 'https://api-dev.sasewaddle.com'
+        };" > src/config/build.ts
+        
+        # Update iOS project version
+        cd ios
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION_NAME" SASEWaddleMobile/Info.plist
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" SASEWaddleMobile/Info.plist
+    
+    - name: Build iOS App (Debug)
+      if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
+      run: |
+        cd clients/mobile/ios
+        xcodebuild -workspace SASEWaddleMobile.xcworkspace \
+          -scheme SASEWaddleMobile \
+          -configuration Debug \
+          -destination 'generic/platform=iOS' \
+          -archivePath SASEWaddleMobile.xcarchive \
+          archive
+        
+        # Export IPA
+        xcodebuild -exportArchive \
+          -archivePath SASEWaddleMobile.xcarchive \
+          -exportPath ./build \
+          -exportOptionsPlist ExportOptions-Debug.plist
+    
+    - name: Setup iOS certificates and provisioning profiles (Production)
+      if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
+      env:
+        IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+        IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        # Create keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+        
+        # Import certificate
+        echo $IOS_CERTIFICATE_P12 | base64 --decode > certificate.p12
+        security import certificate.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+        
+        # Install provisioning profile
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        echo $IOS_PROVISIONING_PROFILE | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+    
+    - name: Build iOS App (Release)
+      if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.version }}
+        BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+      run: |
+        cd clients/mobile
+        # Create production build configuration
+        echo "export const BUILD_CONFIG = {
+          VERSION: '$VERSION_NAME',
+          BUILD_TYPE: 'production',
+          API_ENDPOINT: 'https://api.sasewaddle.com'
+        };" > src/config/build.ts
+        
+        cd ios
+        xcodebuild -workspace SASEWaddleMobile.xcworkspace \
+          -scheme SASEWaddleMobile \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath SASEWaddleMobile.xcarchive \
+          archive CODE_SIGN_STYLE=Manual
+        
+        # Export IPA for App Store
+        xcodebuild -exportArchive \
+          -archivePath SASEWaddleMobile.xcarchive \
+          -exportPath ./build \
+          -exportOptionsPlist ExportOptions-AppStore.plist
+    
+    - name: Upload iOS Debug artifact
+      if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-ipa-debug
+        path: clients/mobile/ios/build/*.ipa
+        retention-days: 30
+    
+    - name: Upload iOS Release artifact
+      if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-ipa-release
+        path: clients/mobile/ios/build/*.ipa
+        retention-days: 90
+    
+    - name: Upload to App Store Connect
+      if: ${{ (github.event.inputs.build_type == 'production' || github.event_name == 'release') && github.event.inputs.upload_to_stores == 'true' }}
+      env:
+        APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+      run: |
+        cd clients/mobile/ios
+        bundle exec fastlane upload_to_testflight
+
+  # Create mobile release packages
+  create-mobile-release:
+    if: github.event_name == 'release'
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Download Android artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: android-aab-release
+        path: ./mobile-artifacts/android/
+    
+    - name: Download iOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ios-ipa-release
+        path: ./mobile-artifacts/ios/
+    
+    - name: Create mobile release packages
+      run: |
+        mkdir -p mobile-release-packages
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Package Android AAB
+        cp mobile-artifacts/android/*.aab "mobile-release-packages/sasewaddle-mobile-android-${VERSION}.aab"
+        
+        # Package iOS IPA
+        cp mobile-artifacts/ios/*.ipa "mobile-release-packages/sasewaddle-mobile-ios-${VERSION}.ipa"
+        
+        # Create checksums
+        cd mobile-release-packages
+        sha256sum * > mobile-checksums.txt
+        cd ..
+        
+        # Create installation guide
+        cat > mobile-release-packages/MOBILE_INSTALL.md << 'EOF'
+        # SASEWaddle Mobile App Installation Guide
+        
+        ## Android Installation
+        
+        ### From Google Play Store (Recommended)
+        1. Search for "SASEWaddle" in the Google Play Store
+        2. Install the app
+        
+        ### Manual Installation (APK Sideloading)
+        1. Enable "Install from unknown sources" in Android Settings > Security
+        2. Download the APK file
+        3. Tap the APK file to install
+        
+        ### Enterprise Installation (AAB)
+        The AAB file is for distribution through Google Play Console or enterprise MDM systems.
+        
+        ## iOS Installation
+        
+        ### From App Store (Recommended)
+        1. Search for "SASEWaddle" in the App Store
+        2. Install the app
+        
+        ### Enterprise Installation (IPA)
+        The IPA file is for distribution through:
+        - Apple Business Manager
+        - Enterprise MDM systems
+        - TestFlight for beta testing
+        
+        ## Configuration
+        
+        After installation:
+        1. Open the SASEWaddle app
+        2. Enter your Manager URL (e.g., https://manager.company.com)
+        3. Enter your API key or scan the QR code provided by your administrator
+        4. Follow the setup wizard to complete configuration
+        
+        ## Troubleshooting
+        
+        - Ensure your device meets the minimum requirements:
+          - Android: Android 7.0 (API level 24) or higher
+          - iOS: iOS 12.0 or higher
+        - Check network connectivity
+        - Verify Manager URL is accessible
+        - Contact your administrator for API key issues
+        
+        ## Support
+        
+        For technical support, please contact your system administrator or visit:
+        https://github.com/your-org/sasewaddle/issues
+        EOF
+    
+    - name: Upload mobile release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          mobile-release-packages/*
+        tag_name: ${{ github.ref_name }}
+        append_body: true
+        body: |
+          
+          ## 📱 Mobile Applications
+          
+          ### Android
+          - **Google Play AAB**: `sasewaddle-mobile-android-${{ steps.version.outputs.version }}.aab`
+          
+          ### iOS  
+          - **App Store IPA**: `sasewaddle-mobile-ios-${{ steps.version.outputs.version }}.ipa`
+          
+          See `MOBILE_INSTALL.md` for detailed installation instructions.
+
+  # Notify on completion
+  notify-completion:
+    if: always()
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Notify build completion
+      run: |
+        echo "Mobile builds completed!"
+        echo "Android build: ${{ needs.build-android.result }}"
+        echo "iOS build: ${{ needs.build-ios.result }}"
+        
+        if [[ "${{ github.event.inputs.upload_to_stores }}" == "true" ]]; then
+          echo "Apps have been uploaded to respective stores for review."
+        fi

@@ -129,6 +129,14 @@ sasewaddle-client status
 git clone https://github.com/your-org/sasewaddle.git
 cd sasewaddle
 
+# Quick build all React applications + screenshots
+./scripts/build-apps.sh
+
+# Alternative: Build individual components
+./scripts/build-apps.sh --mobile-only      # Mobile app only
+./scripts/build-apps.sh --website-only     # Website only  
+./scripts/build-apps.sh --screenshots-only # Screenshots only
+
 # Build Manager Service
 cd manager
 pip install -r requirements.txt
@@ -159,6 +167,28 @@ cd clients/native && go test ./...
 
 # Integration tests
 make test-integration
+```
+
+### Build Artifacts
+
+The build process generates the following artifacts:
+
+```bash
+build/
+├── apps/
+│   ├── mobile-android.bundle      # React Native Android bundle
+│   ├── mobile-ios.bundle         # React Native iOS bundle  
+│   ├── mobile-assets/            # Mobile app assets
+│   ├── website-static/           # Next.js static files
+│   └── website-export/           # Exported website
+├── screenshots/                  # Generated app screenshots
+└── BUILD_REPORT.md              # Comprehensive build report
+
+website/public/images/screenshots/  # Website screenshots
+├── homepage-desktop.png
+├── features-desktop.png
+├── mobile-connection-screen.png
+└── ...more screenshots
 ```
 
 ## 🚢 Deployment Options

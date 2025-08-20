@@ -72,18 +72,27 @@ ListenPort = $WG_LISTEN_PORT
 PrivateKey = $WG_PRIVATE_KEY
 SaveConfig = true
 
-# Route all traffic through the proxy
-PostUp = iptables -A FORWARD -i wg0 -j ACCEPT
-PostUp = iptables -A FORWARD -o wg0 -j ACCEPT  
-PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostUp = iptables -t nat -A PREROUTING -i wg0 -p tcp --dport 1:65535 -j REDIRECT --to-port 8444
-PostUp = iptables -t nat -A PREROUTING -i wg0 -p udp --dport 1:65535 -j REDIRECT --to-port 8445
+# Enable forwarding between WireGuard clients (peer-to-peer)
+PostUp = iptables -A FORWARD -i wg0 -o wg0 -j ACCEPT
 
-PostDown = iptables -D FORWARD -i wg0 -j ACCEPT
-PostDown = iptables -D FORWARD -o wg0 -j ACCEPT
-PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -t nat -D PREROUTING -i wg0 -p tcp --dport 1:65535 -j REDIRECT --to-port 8444
-PostDown = iptables -t nat -D PREROUTING -i wg0 -p udp --dport 1:65535 -j REDIRECT --to-port 8445
+# Enable forwarding from WireGuard to external interfaces
+PostUp = iptables -A FORWARD -i wg0 -o eth0 -j ACCEPT
+PostUp = iptables -A FORWARD -i eth0 -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# Masquerade outgoing traffic to internet (for external destinations)
+PostUp = iptables -t nat -A POSTROUTING -s $WG_IP_ADDRESS -o eth0 -j MASQUERADE
+
+# Route internet-bound traffic through authentication proxy
+# Only redirect traffic NOT destined for other WireGuard peers
+PostUp = iptables -t nat -A PREROUTING -i wg0 -p tcp ! -d $WG_IP_ADDRESS -j REDIRECT --to-port 8444
+PostUp = iptables -t nat -A PREROUTING -i wg0 -p udp ! -d $WG_IP_ADDRESS --dport 53 -j REDIRECT --to-port 8445
+
+PostDown = iptables -D FORWARD -i wg0 -o wg0 -j ACCEPT
+PostDown = iptables -D FORWARD -i wg0 -o eth0 -j ACCEPT  
+PostDown = iptables -D FORWARD -i eth0 -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -s $WG_IP_ADDRESS -o eth0 -j MASQUERADE
+PostDown = iptables -t nat -D PREROUTING -i wg0 -p tcp ! -d $WG_IP_ADDRESS -j REDIRECT --to-port 8444
+PostDown = iptables -t nat -D PREROUTING -i wg0 -p udp ! -d $WG_IP_ADDRESS --dport 53 -j REDIRECT --to-port 8445
 
 # Peers will be added dynamically by the Go application
 EOF
@@ -99,6 +108,11 @@ fi
 
 echo "WireGuard interface started successfully"
 wg show wg0
+
+# Setup intelligent routing for WireGuard traffic
+echo "Setting up WireGuard traffic routing..."
+export WG_IP_ADDRESS
+/app/wireguard/scripts/setup-routing.sh
 
 # Setup traffic mirroring iptables rules if enabled
 MIRROR_ENABLED=$(echo "$CONFIG_RESPONSE" | jq -r '.mirror.enabled')

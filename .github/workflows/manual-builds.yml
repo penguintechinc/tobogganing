@@ -1,0 +1,581 @@
+name: Manual Builds
+
+# Manual workflow trigger for building specific components on-demand
+on:
+  workflow_dispatch:
+    inputs:
+      components:
+        description: 'Components to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - go-clients
+        - mobile-apps
+        - docker-images
+        - website
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - staging
+        - production
+      platforms:
+        description: 'Target Platforms (for relevant components)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - linux
+        - windows
+        - macos
+        - android
+        - ios
+      upload_artifacts:
+        description: 'Upload build artifacts'
+        required: false
+        default: true
+        type: boolean
+      create_draft_release:
+        description: 'Create draft GitHub release (production only)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
+
+jobs:
+  # Build Go native clients
+  build-go-clients:
+    if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux' }}
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux' }}
+          # Windows builds
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+            enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'windows' }}
+          # macOS builds
+          - runner: macos-latest
+            goos: darwin
+            goarch: amd64
+            enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'macos' }}
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'macos' }}
+    
+    steps:
+    - name: Skip if platform not selected
+      if: ${{ matrix.enabled == 'false' }}
+      run: echo "Skipping ${{ matrix.goos }}-${{ matrix.goarch }} build" && exit 0
+    
+    - uses: actions/checkout@v4
+      if: ${{ matrix.enabled != 'false' }}
+    
+    - name: Set up Go
+      if: ${{ matrix.enabled != 'false' }}
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Read version from .version file
+      if: ${{ matrix.enabled != 'false' }}
+      id: version
+      shell: bash
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        
+        # Add build type suffix for non-production builds
+        if [[ "${{ github.event.inputs.build_type }}" != "production" ]]; then
+          VERSION="${VERSION}-${{ github.event.inputs.build_type }}"
+        fi
+        echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Cache Go modules
+      if: ${{ matrix.enabled != 'false' }}
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-client-
+    
+    - name: Install dependencies
+      if: ${{ matrix.enabled != 'false' }}
+      run: |
+        cd clients/native
+        go mod download
+    
+    - name: Set build configuration
+      if: ${{ matrix.enabled != 'false' }}
+      shell: bash
+      run: |
+        cd clients/native
+        
+        # Set API endpoint based on build type
+        case "${{ github.event.inputs.build_type }}" in
+          "production")
+            API_ENDPOINT="https://api.sasewaddle.com"
+            ;;
+          "staging")
+            API_ENDPOINT="https://api-staging.sasewaddle.com"
+            ;;
+          *)
+            API_ENDPOINT="https://api-dev.sasewaddle.com"
+            ;;
+        esac
+        
+        # Create build configuration
+        cat > internal/config/build_config.go << EOF
+        package config
+        
+        const (
+            BuildType   = "${{ github.event.inputs.build_type }}"
+            APIEndpoint = "${API_ENDPOINT}"
+            Version     = "${{ steps.version.outputs.full_version }}"
+        )
+        EOF
+    
+    - name: Build native client
+      if: ${{ matrix.enabled != 'false' }}
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      shell: bash
+      run: |
+        cd clients/native
+        
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          BUILD_TIME=$(powershell -Command "Get-Date -UFormat '%Y-%m-%d_%H:%M:%S'")
+        else
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+        fi
+        
+        VERSION="${{ steps.version.outputs.full_version }}"
+        GIT_COMMIT="${{ github.sha }}"
+        
+        mkdir -p build
+        
+        # Set binary name and extension
+        BINARY_NAME="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+        
+        # Build with optimizations
+        go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
+          -o build/${BINARY_NAME} ./cmd
+        
+        echo "Built: ${BINARY_NAME}"
+        ls -la build/
+    
+    - name: Test binary
+      if: ${{ matrix.enabled != 'false' && matrix.goos == runner.os }}
+      shell: bash
+      run: |
+        cd clients/native/build
+        BINARY=$(ls sasewaddle-client-* | head -1)
+        if [[ "${{ matrix.goos }}" == "windows" ]]; then
+          ./${BINARY} --version
+        else
+          ./${BINARY} --version
+        fi
+    
+    - name: Upload artifacts
+      if: ${{ matrix.enabled != 'false' && github.event.inputs.upload_artifacts == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: go-client-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: clients/native/build/*
+        retention-days: ${{ github.event.inputs.build_type == 'production' && '90' || '30' }}
+
+  # Build Go headend proxy
+  build-headend-proxy:
+    if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        
+        if [[ "${{ github.event.inputs.build_type }}" != "production" ]]; then
+          VERSION="${VERSION}-${{ github.event.inputs.build_type }}"
+        fi
+        echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-headend-${{ hashFiles('headend/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-headend-
+    
+    - name: Build headend proxy
+      run: |
+        cd headend
+        go mod download
+        
+        VERSION="${{ steps.version.outputs.full_version }}"
+        BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+        GIT_COMMIT="${{ github.sha }}"
+        
+        mkdir -p build
+        
+        # Build for multiple platforms
+        for GOOS in linux darwin; do
+          for GOARCH in amd64 arm64; do
+            echo "Building headend-proxy for ${GOOS}/${GOARCH}"
+            env GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=0 \
+              go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
+              -o build/headend-proxy-${GOOS}-${GOARCH}-${VERSION} ./proxy
+          done
+        done
+        
+        ls -la build/
+    
+    - name: Upload headend proxy artifacts
+      if: ${{ github.event.inputs.upload_artifacts == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: headend-proxy-builds
+        path: headend/build/*
+        retention-days: ${{ github.event.inputs.build_type == 'production' && '90' || '30' }}
+
+  # Trigger mobile builds
+  trigger-mobile-builds:
+    if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'mobile-apps' }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger mobile build workflow
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const platforms = '${{ github.event.inputs.platforms }}' === 'all' ? 'all' : 
+                           ['android', 'ios'].includes('${{ github.event.inputs.platforms }}') ? 
+                           '${{ github.event.inputs.platforms }}' : 'all';
+          
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'mobile-builds.yml',
+            ref: context.ref,
+            inputs: {
+              build_type: '${{ github.event.inputs.build_type }}',
+              platforms: platforms,
+              upload_to_stores: 'false'
+            }
+          });
+
+  # Build Docker images
+  build-docker-images:
+    if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'docker-images' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [manager, headend, client]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        
+        if [[ "${{ github.event.inputs.build_type }}" != "production" ]]; then
+          VERSION="${VERSION}-${{ github.event.inputs.build_type }}"
+        fi
+        echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Generate Docker tags
+      id: meta
+      run: |
+        VERSION="${{ steps.version.outputs.full_version }}"
+        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}"
+        
+        if [[ "${{ github.event.inputs.build_type }}" == "production" ]]; then
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:latest"
+        fi
+        
+        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+    
+    - name: Build and push Docker image - Manager
+      if: matrix.component == 'manager'
+      uses: docker/build-push-action@v5
+      with:
+        context: ./manager
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.full_version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+          BUILD_TYPE=${{ github.event.inputs.build_type }}
+    
+    - name: Build and push Docker image - Headend
+      if: matrix.component == 'headend'
+      uses: docker/build-push-action@v5
+      with:
+        context: ./headend
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.full_version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+          BUILD_TYPE=${{ github.event.inputs.build_type }}
+    
+    - name: Build and push Docker image - Client
+      if: matrix.component == 'client'
+      uses: docker/build-push-action@v5
+      with:
+        context: ./clients/docker
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.full_version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+          BUILD_TYPE=${{ github.event.inputs.build_type }}
+
+  # Build website
+  build-website:
+    if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'website' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: website/package.json
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Install dependencies
+      run: |
+        cd website
+        npm ci
+    
+    - name: Set build environment
+      run: |
+        cd website
+        
+        case "${{ github.event.inputs.build_type }}" in
+          "production")
+            echo "NEXT_PUBLIC_API_URL=https://api.sasewaddle.com" > .env.production
+            echo "NEXT_PUBLIC_MANAGER_URL=https://manager.sasewaddle.com" >> .env.production
+            ;;
+          "staging")
+            echo "NEXT_PUBLIC_API_URL=https://api-staging.sasewaddle.com" > .env.staging
+            echo "NEXT_PUBLIC_MANAGER_URL=https://manager-staging.sasewaddle.com" >> .env.staging
+            ;;
+          *)
+            echo "NEXT_PUBLIC_API_URL=https://api-dev.sasewaddle.com" > .env.development
+            echo "NEXT_PUBLIC_MANAGER_URL=https://manager-dev.sasewaddle.com" >> .env.development
+            ;;
+        esac
+        
+        echo "NEXT_PUBLIC_VERSION=${{ steps.version.outputs.version }}" >> .env.${{ github.event.inputs.build_type }}
+    
+    - name: Build website
+      run: |
+        cd website
+        npm run build
+    
+    - name: Upload website build
+      if: ${{ github.event.inputs.upload_artifacts == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: website-build
+        path: website/.next/
+        retention-days: 30
+
+  # Create draft release
+  create-draft-release:
+    if: ${{ github.event.inputs.create_draft_release == 'true' && github.event.inputs.build_type == 'production' }}
+    needs: [build-go-clients, build-headend-proxy, build-docker-images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Download all Go client artifacts
+      if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
+      uses: actions/download-artifact@v4
+      with:
+        pattern: go-client-*
+        path: ./artifacts
+        merge-multiple: true
+    
+    - name: Download headend proxy artifacts
+      if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: headend-proxy-builds
+        path: ./artifacts/headend
+    
+    - name: Create release packages
+      run: |
+        mkdir -p release-packages
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Package Go clients
+        if [ -d "artifacts" ]; then
+          for file in artifacts/sasewaddle-client-*; do
+            if [ -f "$file" ]; then
+              basename=$(basename "$file")
+              if [[ "$basename" == *"windows"* ]]; then
+                zip -j "release-packages/${basename%.exe}.zip" "$file"
+              else
+                tar -czf "release-packages/${basename}.tar.gz" -C "$(dirname "$file")" "$(basename "$file")"
+              fi
+            fi
+          done
+        fi
+        
+        # Package headend binaries
+        if [ -d "artifacts/headend" ]; then
+          for file in artifacts/headend/headend-proxy-*; do
+            if [ -f "$file" ]; then
+              basename=$(basename "$file")
+              tar -czf "release-packages/${basename}.tar.gz" -C "$(dirname "$file")" "$(basename "$file")"
+            fi
+          done
+        fi
+        
+        # Create checksums
+        cd release-packages
+        sha256sum * > checksums.txt
+        cd ..
+    
+    - name: Create draft release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.version.outputs.version }}-draft
+        name: "SASEWaddle v${{ steps.version.outputs.version }} (Draft)"
+        body: |
+          ## Manual Build Release - v${{ steps.version.outputs.version }}
+          
+          This is a draft release created from manual build workflow.
+          
+          **Components Built:**
+          - Components: ${{ github.event.inputs.components }}
+          - Build Type: ${{ github.event.inputs.build_type }}
+          - Platforms: ${{ github.event.inputs.platforms }}
+          
+          **Build Information:**
+          - Commit: ${{ github.sha }}
+          - Workflow Run: ${{ github.run_id }}
+          - Triggered by: ${{ github.actor }}
+          
+          ## Downloads
+          
+          See attached artifacts for compiled binaries and packages.
+          
+          ## Docker Images
+          
+          Docker images are available at:
+          - `ghcr.io/${{ github.repository }}/sasewaddle-manager:${{ steps.version.outputs.version }}`
+          - `ghcr.io/${{ github.repository }}/sasewaddle-headend:${{ steps.version.outputs.version }}`
+          - `ghcr.io/${{ github.repository }}/sasewaddle-client:${{ steps.version.outputs.version }}`
+        files: |
+          release-packages/*
+        draft: true
+        prerelease: true
+
+  # Summary job
+  build-summary:
+    if: always()
+    needs: [build-go-clients, build-headend-proxy, trigger-mobile-builds, build-docker-images, build-website, create-draft-release]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Build Summary
+      run: |
+        echo "## Manual Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Configuration:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Components: ${{ github.event.inputs.components }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Build Type: ${{ github.event.inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Platforms: ${{ github.event.inputs.platforms }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Upload Artifacts: ${{ github.event.inputs.upload_artifacts }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Create Draft Release: ${{ github.event.inputs.create_draft_release }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Results:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Go Clients: ${{ needs.build-go-clients.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Headend Proxy: ${{ needs.build-headend-proxy.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Mobile Apps: ${{ needs.trigger-mobile-builds.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Docker Images: ${{ needs.build-docker-images.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Website: ${{ needs.build-website.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Draft Release: ${{ needs.create-draft-release.result }}" >> $GITHUB_STEP_SUMMARY

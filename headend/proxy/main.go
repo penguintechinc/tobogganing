@@ -50,6 +50,7 @@ type ProxyServer struct {
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
+    wgRouter        *WireGuardRouter
     proxies         map[string]*httputil.ReverseProxy
     mu              sync.RWMutex
 }
@@ -61,6 +62,7 @@ type TCPProxy struct {
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
+    wgRouter        *WireGuardRouter
 }
 
 // UDPProxy handles raw UDP traffic with JWT authentication  
@@ -70,6 +72,7 @@ type UDPProxy struct {
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
+    wgRouter        *WireGuardRouter
 }
 
 func main() {
@@ -143,6 +146,19 @@ func initLogging() {
 
 func (s *ProxyServer) Initialize() error {
     var err error
+
+    // Initialize WireGuard router for peer-to-peer and internet routing
+    wgInterface := viper.GetString("wireguard.interface")
+    wgNetwork := viper.GetString("wireguard.network")
+    headendIP := "10.200.0.1" // Headend's IP in WireGuard network
+    
+    s.wgRouter, err = NewWireGuardRouter(wgInterface, wgNetwork, headendIP)
+    if err != nil {
+        log.Warnf("Failed to initialize WireGuard router: %v (continuing without WG routing)", err)
+        s.wgRouter = nil
+    } else {
+        log.Info("WireGuard-aware routing enabled")
+    }
 
     // Initialize auth provider - supports JWT, OAuth2, or SAML2
     authType := viper.GetString("auth.type")
@@ -552,6 +568,7 @@ func (s *ProxyServer) initializeTCPProxy() error {
         mirrorManager:   s.mirrorManager,
         firewallManager: s.firewallManager,
         syslogLogger:    s.syslogLogger,
+        wgRouter:        s.wgRouter,
     }
     
     // Start TCP proxy in goroutine
@@ -580,6 +597,7 @@ func (s *ProxyServer) initializeUDPProxy() error {
         mirrorManager:   s.mirrorManager,
         firewallManager: s.firewallManager,
         syslogLogger:    s.syslogLogger,
+        wgRouter:        s.wgRouter,
     }
     
     // Start UDP proxy in goroutine
@@ -786,7 +804,16 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
         t.syslogLogger.LogTCPAccess(user.ID, user.Name, clientConn.RemoteAddr().String(), targetHost, true)
     }
     
-    // Connect to target
+    // Use WireGuard router if available for intelligent routing
+    if t.wgRouter != nil {
+        log.Infof("Using WireGuard router for TCP traffic to %s", targetHost)
+        if err := t.wgRouter.RouteTraffic(targetHost, clientConn); err != nil {
+            log.Errorf("WireGuard routing failed for %s: %v", targetHost, err)
+        }
+        return
+    }
+    
+    // Fallback to direct connection
     targetConn, err := net.Dial("tcp", targetHost)
     if err != nil {
         log.Errorf("Failed to connect to target %s: %v", targetHost, err)
@@ -1101,7 +1128,16 @@ func (s *ProxyServer) handleDynamicTCPConnection(conn net.Conn, port int, protoc
 		s.syslogLogger.LogTCPAccess(user.ID, user.Name, conn.RemoteAddr().String(), targetHost, true)
 	}
 	
-	// Connect to target
+	// Use WireGuard router if available for intelligent routing
+	if s.wgRouter != nil {
+		log.Infof("Using WireGuard router for dynamic TCP traffic to %s on port %d", targetHost, port)
+		if err := s.wgRouter.RouteTraffic(targetHost, conn); err != nil {
+			log.Errorf("WireGuard routing failed for %s on port %d: %v", targetHost, port, err)
+		}
+		return
+	}
+	
+	// Fallback to direct connection
 	targetConn, err := net.Dial("tcp", targetHost)
 	if err != nil {
 		log.Errorf("Failed to connect to target %s from port %d: %v", targetHost, port, err)

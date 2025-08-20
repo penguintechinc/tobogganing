@@ -13,14 +13,16 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"sasewaddle/clients/native/internal/config"
-	"sasewaddle/clients/native/internal/tray"
+	"github.com/sasewaddle/clients/native/internal/config"
+	"golang.zx2c4.com/wireguard/wgctrl"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 // Manager handles WireGuard VPN connections and implements the tray.VPNManager interface
@@ -38,6 +40,10 @@ type Manager struct {
 	
 	// Connection monitoring
 	monitorTicker  *time.Ticker
+	
+	// Embedded WireGuard
+	embeddedWG     *EmbeddedWireGuard
+	useEmbedded    bool
 	monitorStop    chan struct{}
 }
 
@@ -51,14 +57,20 @@ func NewManager(cfg *config.Config) *Manager {
 		interfaceName = "SASEWaddle"
 	}
 	
-	return &Manager{
+	manager := &Manager{
 		config:        cfg,
 		ctx:           ctx,
 		cancel:        cancel,
 		interfaceName: interfaceName,
 		configPath:    cfg.GetWireGuardConfigPath(),
 		monitorStop:   make(chan struct{}),
+		useEmbedded:   true, // Use embedded WireGuard by default
 	}
+	
+	// Initialize embedded WireGuard
+	manager.embeddedWG = NewEmbeddedWireGuard(interfaceName)
+	
+	return manager
 }
 
 // Connect establishes a VPN connection
@@ -77,7 +89,7 @@ func (m *Manager) Connect() error {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 	
-	// Platform-specific connection logic
+	// Establish WireGuard connection
 	if err := m.connectWireGuard(); err != nil {
 		return fmt.Errorf("failed to establish WireGuard connection: %w", err)
 	}
@@ -166,8 +178,13 @@ func (m *Manager) Stop() error {
 
 // Platform-specific WireGuard operations
 
-// connectWireGuard establishes the WireGuard connection using platform-specific methods
+// connectWireGuard establishes the WireGuard connection
 func (m *Manager) connectWireGuard() error {
+	if m.useEmbedded {
+		return m.connectEmbedded()
+	}
+	
+	// Fallback to platform-specific methods
 	switch runtime.GOOS {
 	case "linux":
 		return m.connectLinux()
@@ -182,6 +199,11 @@ func (m *Manager) connectWireGuard() error {
 
 // disconnectWireGuard terminates the WireGuard connection
 func (m *Manager) disconnectWireGuard() error {
+	if m.useEmbedded {
+		return m.disconnectEmbedded()
+	}
+	
+	// Fallback to platform-specific methods
 	switch runtime.GOOS {
 	case "linux":
 		return m.disconnectLinux()
@@ -192,6 +214,37 @@ func (m *Manager) disconnectWireGuard() error {
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
+}
+
+// Embedded WireGuard implementations
+
+func (m *Manager) connectEmbedded() error {
+	log.Println("Starting embedded WireGuard tunnel...")
+
+	// Read configuration from file
+	configData, err := readWireGuardConfig(m.configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read WireGuard config: %w", err)
+	}
+
+	// Start embedded WireGuard
+	if err := m.embeddedWG.Start(string(configData)); err != nil {
+		return fmt.Errorf("failed to start embedded WireGuard: %w", err)
+	}
+
+	log.Printf("Embedded WireGuard tunnel '%s' started successfully", m.interfaceName)
+	return nil
+}
+
+func (m *Manager) disconnectEmbedded() error {
+	log.Println("Stopping embedded WireGuard tunnel...")
+
+	if err := m.embeddedWG.Stop(); err != nil {
+		return fmt.Errorf("failed to stop embedded WireGuard: %w", err)
+	}
+
+	log.Printf("Embedded WireGuard tunnel '%s' stopped successfully", m.interfaceName)
+	return nil
 }
 
 // Linux-specific implementations
@@ -272,7 +325,12 @@ func (m *Manager) connectWindowsFallback() error {
 	
 	// This would implement wireguard-go integration
 	// For now, return an error indicating the limitation
-	return fmt.Errorf("Windows WireGuard integration not fully implemented - requires WireGuard for Windows or administrator privileges")
+	// Use WireGuard for Windows service
+	cmd := exec.Command("wg-quick", "up", configPath)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to start WireGuard on Windows: %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) disconnectWindows() error {
@@ -467,35 +525,13 @@ func (m *Manager) checkConnection() {
 	m.mutex.Unlock()
 }
 
-// Utility methods for configuration integration
+// Utility functions for VPN management
 
-func (cfg *config.Config) GetWireGuardConfigPath() string {
-	// This would return the path to the WireGuard configuration file
-	// Implementation depends on the config package structure
-	return "/etc/wireguard/wg0.conf" // Placeholder
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
-func (cfg *config.Config) GetServerName() string {
-	// Return configured server name
-	return "SASEWaddle Server" // Placeholder
-}
-
-func (cfg *config.Config) GetServerIP() string {
-	// Return server IP address
-	return "10.0.0.1" // Placeholder
-}
-
-func (cfg *config.Config) GetPublicKey() string {
-	// Return WireGuard public key
-	return "abcdef1234567890abcdef1234567890abcdef12=" // Placeholder
-}
-
-func (cfg *config.Config) FileExists(path string) bool {
-	// Check if file exists
-	return true // Placeholder - would check actual file
-}
-
-func (cfg *config.Config) ReadFile(path string) ([]byte, error) {
-	// Read file contents
-	return []byte("[Interface]\nPrivateKey = xxx\n[Peer]\nPublicKey = yyy"), nil // Placeholder
+func readWireGuardConfig(path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
