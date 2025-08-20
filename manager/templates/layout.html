@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[[=title]]</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        .sidebar-gradient {
+            background: linear-gradient(180deg, #1e3a8a 0%, #3730a3 100%);
+        }
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-active { background-color: #10b981; }
+        .status-inactive { background-color: #ef4444; }
+        .status-warning { background-color: #f59e0b; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-64 sidebar-gradient text-white flex flex-col">
+            <!-- Logo -->
+            <div class="p-6 border-b border-blue-600">
+                <div class="flex items-center">
+                    <i class="fas fa-shield-alt text-2xl mr-3"></i>
+                    <div>
+                        <h1 class="text-xl font-bold">SASEWaddle</h1>
+                        <p class="text-blue-200 text-sm">Manager Portal</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1 p-4">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="[[=URL('dashboard')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/dashboard' else '']]">
+                            <i class="fas fa-tachometer-alt mr-3"></i>
+                            Dashboard
+                        </a>
+                    </li>
+                    [[if user_manager.has_permission(user, 'view_clusters'):]]
+                    <li>
+                        <a href="[[=URL('clusters')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/clusters' else '']]">
+                            <i class="fas fa-server mr-3"></i>
+                            Clusters
+                        </a>
+                    </li>
+                    [[pass]]
+                    [[if user_manager.has_permission(user, 'view_clients'):]]
+                    <li>
+                        <a href="[[=URL('clients')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/clients' else '']]">
+                            <i class="fas fa-laptop mr-3"></i>
+                            Clients
+                        </a>
+                    </li>
+                    [[pass]]
+                    [[if user_manager.has_permission(user, 'view_certificates'):]]
+                    <li>
+                        <a href="[[=URL('certificates')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/certificates' else '']]">
+                            <i class="fas fa-certificate mr-3"></i>
+                            Certificates
+                        </a>
+                    </li>
+                    [[pass]]
+                    [[if user_manager.has_permission(user, 'view_metrics'):]]
+                    <li>
+                        <a href="[[=URL('metrics')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/metrics' else '']]">
+                            <i class="fas fa-chart-line mr-3"></i>
+                            Metrics
+                        </a>
+                    </li>
+                    [[pass]]
+                    [[if user.role.value == 'admin':]]
+                    <li>
+                        <a href="[[=URL('users')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/users' else '']]">
+                            <i class="fas fa-users mr-3"></i>
+                            Users
+                        </a>
+                    </li>
+                    [[pass]]
+                </ul>
+            </nav>
+            
+            <!-- User Info -->
+            <div class="p-4 border-t border-blue-600">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium">[[=user.username]]</p>
+                        <p class="text-blue-200 text-sm capitalize">[[=user.role.value]]</p>
+                    </div>
+                    <form method="post" action="[[=URL('logout')]]" class="inline">
+                        <button type="submit" class="text-blue-200 hover:text-white transition-colors" title="Logout">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col">
+            <!-- Header -->
+            <header class="bg-white border-b border-gray-200 p-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-2xl font-bold text-gray-800">[[=title]]</h2>
+                    <div class="flex items-center space-x-4">
+                        <!-- Real-time status indicator -->
+                        <div class="flex items-center text-sm text-gray-600">
+                            <span class="status-indicator status-active"></span>
+                            System Online
+                        </div>
+                        <!-- Current time -->
+                        <div class="text-sm text-gray-600" x-data="{ time: new Date().toLocaleTimeString() }" x-init="setInterval(() => time = new Date().toLocaleTimeString(), 1000)">
+                            <i class="fas fa-clock mr-1"></i>
+                            <span x-text="time"></span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Content Area -->
+            <main class="flex-1 p-6 overflow-auto">
+                [[if error:]]
+                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+                    <div class="flex items-center">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        <span>[[=error]]</span>
+                    </div>
+                </div>
+                [[pass]]
+                
+                [[block content]][[end]]
+            </main>
+        </div>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+    
+    <script>
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                warning: 'bg-yellow-500',
+                info: 'bg-blue-500'
+            };
+            
+            const icons = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-exclamation-circle',
+                warning: 'fas fa-exclamation-triangle',
+                info: 'fas fa-info-circle'
+            };
+            
+            toast.className = `${colors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3 transform transition-all duration-300 translate-x-full`;
+            toast.innerHTML = `
+                <i class="${icons[type]}"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" class="ml-auto">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+        
+        // Auto-refresh stats every 30 seconds
+        if (window.location.pathname === '/dashboard') {
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/api/web/stats');
+                    if (response.ok) {
+                        const stats = await response.json();
+                        // Update dashboard stats if elements exist
+                        const elements = {
+                            'total-clusters': stats.clusters?.total,
+                            'active-clusters': stats.clusters?.active,
+                            'total-clients': stats.clients?.total,
+                            'active-clients': stats.clients?.active
+                        };
+                        
+                        Object.entries(elements).forEach(([id, value]) => {
+                            const el = document.getElementById(id);
+                            if (el && value !== undefined) {
+                                el.textContent = value;
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.log('Stats refresh failed:', e);
+                }
+            }, 30000);
+        }
+    </script>
+</body>
+</html>

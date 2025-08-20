@@ -1,0 +1,240 @@
+[[extend "layout.html"]]
+
+[[block content]]
+<div class="space-y-6">
+    <!-- Welcome Banner -->
+    <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-2xl font-bold mb-2">
+                    <i class="fas fa-hand-wave mr-2"></i>
+                    Welcome back, [[=user.username]]!
+                </h3>
+                <p class="text-blue-100">
+                    <i class="fas fa-user-tag mr-1"></i>
+                    Role: <span class="capitalize font-medium">[[=user.role.value]]</span>
+                    [[if user.last_login:]]
+                    • Last login: [[=user.last_login.strftime('%Y-%m-%d %H:%M')]]
+                    [[pass]]
+                </p>
+            </div>
+            <div class="text-right">
+                <div class="text-3xl">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <p class="text-sm text-blue-100 mt-1">SASE Manager</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Total Clusters -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-1">Total Clusters</p>
+                    <p class="text-3xl font-bold text-gray-900" id="total-clusters">[[=stats['total_clusters']]]</p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-lg">
+                    <i class="fas fa-server text-2xl text-blue-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm">
+                <span class="status-indicator status-active"></span>
+                <span class="text-green-600 font-medium" id="active-clusters">[[=stats['active_clusters']]]</span>
+                <span class="text-gray-500 ml-1">active</span>
+            </div>
+        </div>
+        
+        <!-- Total Clients -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-1">Total Clients</p>
+                    <p class="text-3xl font-bold text-gray-900" id="total-clients">[[=stats['total_clients']]]</p>
+                </div>
+                <div class="bg-green-100 p-3 rounded-lg">
+                    <i class="fas fa-laptop text-2xl text-green-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm">
+                <span class="status-indicator status-active"></span>
+                <span class="text-green-600 font-medium" id="active-clients">[[=stats['active_clients']]]</span>
+                <span class="text-gray-500 ml-1">connected</span>
+            </div>
+        </div>
+        
+        <!-- System Health -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-1">System Health</p>
+                    <p class="text-3xl font-bold text-green-600">100%</p>
+                </div>
+                <div class="bg-green-100 p-3 rounded-lg">
+                    <i class="fas fa-heartbeat text-2xl text-green-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm">
+                <span class="status-indicator status-active"></span>
+                <span class="text-green-600 font-medium">All Services</span>
+                <span class="text-gray-500 ml-1">operational</span>
+            </div>
+        </div>
+        
+        <!-- Security Score -->
+        <div class="bg-white rounded-xl shadow-sm border p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 mb-1">Security Score</p>
+                    <p class="text-3xl font-bold text-blue-600">A+</p>
+                </div>
+                <div class="bg-purple-100 p-3 rounded-lg">
+                    <i class="fas fa-shield-check text-2xl text-purple-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm">
+                <span class="status-indicator status-active"></span>
+                <span class="text-green-600 font-medium">Zero Trust</span>
+                <span class="text-gray-500 ml-1">enabled</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Clients -->
+        <div class="bg-white rounded-xl shadow-sm border">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-laptop mr-2 text-blue-500"></i>
+                        Recent Clients
+                    </h4>
+                    [[if can_manage:]]
+                    <a href="[[=URL('clients')]]" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        View All <i class="fas fa-arrow-right ml-1"></i>
+                    </a>
+                    [[pass]]
+                </div>
+            </div>
+            <div class="p-6">
+                [[if recent_clients:]]
+                <div class="space-y-4">
+                    [[for client in recent_clients:]]
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <div class="bg-blue-100 p-2 rounded-lg mr-3">
+                                <i class="fas fa-[[='desktop' if client.type == 'native' else 'docker']] text-blue-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">[[=client.name]]</p>
+                                <p class="text-sm text-gray-500 capitalize">[[=client.type]] client</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="flex items-center">
+                                <span class="status-indicator status-[[='active' if client.status == 'active' else 'inactive']]"></span>
+                                <span class="text-sm text-gray-600 capitalize">[[=client.status]]</span>
+                            </div>
+                            <p class="text-xs text-gray-400">[[=client.last_seen.strftime('%H:%M')]]</p>
+                        </div>
+                    </div>
+                    [[pass]]
+                </div>
+                [[else:]]
+                <div class="text-center py-8">
+                    <i class="fas fa-laptop text-4xl text-gray-300 mb-3"></i>
+                    <p class="text-gray-500">No clients connected yet</p>
+                </div>
+                [[pass]]
+            </div>
+        </div>
+        
+        <!-- Cluster Status -->
+        <div class="bg-white rounded-xl shadow-sm border">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-server mr-2 text-green-500"></i>
+                        Cluster Status
+                    </h4>
+                    [[if can_manage:]]
+                    <a href="[[=URL('clusters')]]" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        Manage <i class="fas fa-arrow-right ml-1"></i>
+                    </a>
+                    [[pass]]
+                </div>
+            </div>
+            <div class="p-6">
+                [[if clusters:]]
+                <div class="space-y-4">
+                    [[for cluster in clusters:]]
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <div class="bg-green-100 p-2 rounded-lg mr-3">
+                                <i class="fas fa-server text-green-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">[[=cluster.name]]</p>
+                                <p class="text-sm text-gray-500">[[=cluster.region]] • [[=cluster.datacenter]]</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="flex items-center">
+                                <span class="status-indicator status-[[=cluster.status]]"></span>
+                                <span class="text-sm text-gray-600 capitalize">[[=cluster.status]]</span>
+                            </div>
+                            <p class="text-xs text-gray-400">[[=cluster.client_count]] clients</p>
+                        </div>
+                    </div>
+                    [[pass]]
+                </div>
+                [[else:]]
+                <div class="text-center py-8">
+                    <i class="fas fa-server text-4xl text-gray-300 mb-3"></i>
+                    <p class="text-gray-500">No clusters configured</p>
+                </div>
+                [[pass]]
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    [[if can_manage:]]
+    <div class="bg-white rounded-xl shadow-sm border p-6">
+        <h4 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-bolt mr-2 text-yellow-500"></i>
+            Quick Actions
+        </h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <button class="flex items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+                <div class="text-center">
+                    <i class="fas fa-plus-circle text-2xl text-blue-600 mb-2"></i>
+                    <p class="text-sm font-medium text-blue-600">Add Cluster</p>
+                </div>
+            </button>
+            <button class="flex items-center justify-center p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
+                <div class="text-center">
+                    <i class="fas fa-user-plus text-2xl text-green-600 mb-2"></i>
+                    <p class="text-sm font-medium text-green-600">Add Client</p>
+                </div>
+            </button>
+            <button class="flex items-center justify-center p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">
+                <div class="text-center">
+                    <i class="fas fa-certificate text-2xl text-purple-600 mb-2"></i>
+                    <p class="text-sm font-medium text-purple-600">Generate Cert</p>
+                </div>
+            </button>
+            <a href="[[=URL('metrics')]]" class="flex items-center justify-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                <div class="text-center">
+                    <i class="fas fa-chart-bar text-2xl text-gray-600 mb-2"></i>
+                    <p class="text-sm font-medium text-gray-600">View Metrics</p>
+                </div>
+            </a>
+        </div>
+    </div>
+    [[pass]]
+</div>
+[[end]]

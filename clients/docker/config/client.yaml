@@ -1,0 +1,159 @@
+# SASEWaddle Docker Client Configuration
+# This is the default configuration for the Docker client
+
+# Manager service configuration
+manager:
+  # URL of the SASEWaddle Manager service
+  # Override with MANAGER_URL environment variable
+  url: "https://manager.sasewaddle.local:8000"
+  
+  # API key for initial client registration
+  # Override with API_KEY environment variable  
+  api_key: ""
+  
+  # Certificate validation
+  verify_ssl: true
+  
+  # Connection timeout in seconds
+  timeout: 30
+
+# Client identification
+client:
+  # Unique client ID (auto-generated if empty)
+  # Override with CLIENT_ID environment variable
+  id: ""
+  
+  # Client type
+  type: "docker-client"
+  
+  # Client name for display purposes
+  name: "SASEWaddle Docker Client"
+  
+  # Client version (auto-detected)
+  version: "1.0.0"
+
+# WireGuard configuration
+wireguard:
+  # Interface name
+  interface: "wg0"
+  
+  # Listen port (0 = auto-assign)
+  listen_port: 0
+  
+  # Private key (auto-generated if empty)
+  private_key: ""
+  
+  # Network configuration
+  network:
+    # DNS servers
+    dns: 
+      - "1.1.1.1"
+      - "8.8.8.8"
+    
+    # MTU size
+    mtu: 1420
+    
+    # Keep-alive interval in seconds
+    persistent_keepalive: 25
+
+# Authentication configuration
+auth:
+  # JWT token refresh interval in minutes
+  token_refresh_interval: 30
+  
+  # Certificate validation
+  validate_certificates: true
+  
+  # Authentication retry attempts
+  max_retry_attempts: 3
+  
+  # Retry backoff in seconds
+  retry_backoff: 5
+
+# Logging configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  
+  # Log format: text, json
+  format: "text"
+  
+  # Enable structured logging
+  structured: false
+  
+  # Log to file
+  file: "/var/log/sasewaddle/client.log"
+  
+  # Rotate logs
+  rotate: true
+  
+  # Max log file size in MB
+  max_size: 100
+  
+  # Max number of log files to keep
+  max_files: 10
+
+# Health monitoring
+health:
+  # Health check interval in seconds
+  check_interval: 60
+  
+  # Connection timeout for health checks
+  timeout: 10
+  
+  # Enable prometheus metrics
+  metrics: true
+  
+  # Metrics port
+  metrics_port: 9090
+
+# Advanced configuration
+advanced:
+  # Enable debug mode
+  debug: false
+  
+  # Connection retry settings
+  connection_retry:
+    # Initial retry delay in seconds
+    initial_delay: 1
+    
+    # Maximum retry delay in seconds
+    max_delay: 60
+    
+    # Retry multiplier
+    multiplier: 2
+    
+    # Maximum retry attempts (0 = unlimited)
+    max_attempts: 0
+  
+  # Performance tuning
+  performance:
+    # Buffer sizes
+    read_buffer_size: 65536
+    write_buffer_size: 65536
+    
+    # Worker threads
+    worker_threads: 4
+    
+    # Enable connection pooling
+    connection_pooling: true
+    
+    # Pool size
+    pool_size: 10
+
+# Features configuration
+features:
+  # Enable traffic monitoring
+  traffic_monitoring: true
+  
+  # Enable bandwidth limiting
+  bandwidth_limiting: false
+  
+  # Bandwidth limit in Mbps (0 = unlimited)
+  bandwidth_limit: 0
+  
+  # Enable auto-reconnection
+  auto_reconnect: true
+  
+  # Auto-reconnect delay in seconds
+  auto_reconnect_delay: 5

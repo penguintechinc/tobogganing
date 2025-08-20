@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: manager
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sasewaddle
+      app.kubernetes.io/component: manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sasewaddle
+        app.kubernetes.io/component: manager
+        app.kubernetes.io/version: "1.0.0"
+    spec:
+      serviceAccountName: sasewaddle
+      containers:
+      - name: manager
+        image: ghcr.io/your-org/sasewaddle/manager:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sasewaddle-secrets
+              key: redis-password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sasewaddle-secrets
+              key: jwt-secret
+        - name: LOG_LEVEL
+          value: "info"
+        - name: ADMIN_EMAIL
+          valueFrom:
+            configMapKeyRef:
+              name: sasewaddle-config
+              key: admin-email
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sasewaddle-secrets
+              key: admin-password
+        - name: DB_PATH
+          value: "/app/data/sasewaddle.db"
+        - name: CERT_DIR
+          value: "/app/certs"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        volumeMounts:
+        - name: manager-data
+          mountPath: /app/data
+        - name: manager-certs
+          mountPath: /app/certs
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: manager-data
+        persistentVolumeClaim:
+          claimName: manager-data-pvc
+      - name: manager-certs
+        persistentVolumeClaim:
+          claimName: manager-certs-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: manager
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: manager
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: manager
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: manager-data-pvc
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: manager
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: manager-certs-pvc
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: manager
+spec:
+  accessModes:
+  - ReadWriteMany  # Shared across manager replicas
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ""

@@ -1,7 +1,96 @@
-*.yaml
+# SASEWaddle .gitignore
+
+# Security - Never commit these
 *secret*
 id_rsa*
 *.key
+*.crt
+*.pem
+*.p12
+*.pfx
+certs/
+certificates/
+secrets/
+.secrets
+
+# Configuration files with sensitive data
+config.yaml
+config.json
+*config*.yaml
+*config*.json
+.env
+.env.local
+.env.*.local
+
+# WireGuard configuration
+*.conf
+wg*.conf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 venv/
+.venv
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+build/
+dist/
+vendor/
+
+# Node.js
+node_modules/
+npm-debug.log*
+.next/
+out/
+
+# IDE and editor files
 .idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Docker
+.dockerignore
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Build artifacts
+sasewaddle-*
+releases/
+artifacts/
 

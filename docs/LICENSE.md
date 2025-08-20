@@ -6,7 +6,30 @@ GNU AFFERO GENERAL PUBLIC LICENSE Version 3, 19 November 2007
 
 # Preamble
 
-  The GNU Affero General Public License is a free, copyleft license for
+EXCEPTIONS AND ADDITIONAL TERMS (PREFACE TO AGPLv3):
+
+The following exceptions and additional terms apply to this software, and take precedence over the AGPLv3 where they conflict:
+
+1. **Internal-Only Use:**
+  - Commercial entities may use this software only for their own internal operations.
+  - Private individuals may use this software for personal, non-commercial purposes.
+  - Use of this software as a service for third parties, or as part of a product or service offered to others, is not permitted without a separate commercial license from the code owners.
+
+2. **No Bundling or Resale:**
+  - This software may **not** be bundled, incorporated, or distributed as part of another application, product, or service.
+  - Resale, sublicensing, or redistribution of this software, in whole or in part, is strictly prohibited without an explicit license from the code owners.
+
+3. **Obtaining a Commercial License:**
+  - To use this software beyond the above limitations, including for SaaS, resale, or as part of another product, you must obtain a commercial license from the owners. Contact the maintainers for details.
+
+4. **Other Terms:**
+  - All other terms of the AGPLv3 license apply unless they conflict with the above restrictions.
+
+Copyright (c) PenguinTech Inc. All rights reserved.
+
+---
+
+The GNU Affero General Public License is a free, copyleft license for
 software and other kinds of works, specifically designed to ensure
 cooperation with the community in the case of network server software.
 

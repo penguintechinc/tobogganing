@@ -1,0 +1,185 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headend
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1  # Single replica due to WireGuard interface requirements
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sasewaddle
+      app.kubernetes.io/component: headend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sasewaddle
+        app.kubernetes.io/component: headend
+        app.kubernetes.io/version: "1.0.0"
+    spec:
+      serviceAccountName: sasewaddle
+      hostNetwork: true  # Required for WireGuard
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: headend
+        image: ghcr.io/your-org/sasewaddle/headend:latest
+        ports:
+        - containerPort: 51820
+          protocol: UDP
+          name: wireguard
+        - containerPort: 8080
+          name: proxy
+        env:
+        - name: MANAGER_API_URL
+          value: "http://manager:8000"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: CLUSTER_ID
+          valueFrom:
+            configMapKeyRef:
+              name: sasewaddle-config
+              key: cluster-id
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: TRAFFIC_MIRROR_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: sasewaddle-config
+              key: traffic-mirror-enabled
+              optional: true
+        - name: TRAFFIC_MIRROR_DESTINATIONS
+          valueFrom:
+            configMapKeyRef:
+              name: sasewaddle-config
+              key: traffic-mirror-destinations
+              optional: true
+        - name: TRAFFIC_MIRROR_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: sasewaddle-config
+              key: traffic-mirror-protocol
+              optional: true
+        volumeMounts:
+        - name: headend-data
+          mountPath: /app/data
+        - name: wireguard-config
+          mountPath: /etc/wireguard
+        - name: dev-net-tun
+          mountPath: /dev/net/tun
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - SYS_MODULE
+          privileged: true  # Required for WireGuard
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: headend-data
+        persistentVolumeClaim:
+          claimName: headend-data-pvc
+      - name: wireguard-config
+        persistentVolumeClaim:
+          claimName: headend-wg-pvc
+      - name: dev-net-tun
+        hostPath:
+          path: /dev/net/tun
+          type: CharDevice
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headend
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 51820
+    targetPort: 51820
+    protocol: UDP
+    name: wireguard
+  - port: 8080
+    targetPort: 8080
+    name: proxy
+  selector:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+  # For cloud providers, specify load balancer class
+  # loadBalancerClass: "external"  # For external load balancers
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headend-internal
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: proxy
+  selector:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: headend-data-pvc
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: headend-wg-pvc
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: headend
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: ""

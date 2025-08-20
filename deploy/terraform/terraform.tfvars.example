@@ -1,0 +1,120 @@
+# SASEWaddle Terraform Configuration Example
+# Copy this file to terraform.tfvars and modify the values
+
+# Basic Configuration
+cluster_name = "sasewaddle-prod"
+environment  = "production"
+region      = "us-west-2"
+
+# VPC Configuration
+vpc_cidr = "10.100.0.0/16"
+
+# EKS Configuration
+eks_public_access = false  # Set to false for production
+
+node_groups = {
+  general = {
+    instance_types = ["t3.large"]
+    capacity_type  = "ON_DEMAND"
+    min_size       = 2
+    max_size       = 10
+    desired_size   = 3
+    disk_size      = 100
+    labels = {
+      role = "general"
+    }
+    taints = []
+  }
+  headend = {
+    instance_types = ["c5.xlarge"]  # Higher performance for VPN termination
+    capacity_type  = "ON_DEMAND"
+    min_size       = 1
+    max_size       = 3
+    desired_size   = 2
+    disk_size      = 200
+    labels = {
+      role = "headend"
+    }
+    taints = [
+      {
+        key    = "headend"
+        value  = "true"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
+  monitoring = {
+    instance_types = ["t3.medium"]
+    capacity_type  = "SPOT"  # Cost optimization for monitoring
+    min_size       = 1
+    max_size       = 3
+    desired_size   = 1
+    disk_size      = 50
+    labels = {
+      role = "monitoring"
+    }
+    taints = []
+  }
+}
+
+# Database Configuration
+enable_rds         = true
+rds_instance_class = "db.r5.large"
+rds_allocated_storage = 100
+rds_username       = "sasewaddle"
+# rds_password should be set via environment variable or secure input
+
+# Redis Configuration
+redis_node_type = "cache.r6g.large"
+redis_num_nodes = 2
+# redis_auth_token should be set via environment variable or secure input
+
+# SSL Configuration
+ssl_certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+domain_name        = "sasewaddle.example.com"
+
+# Application Configuration
+admin_email = "admin@example.com"
+# admin_password and jwt_secret should be set via environment variables
+
+# Container Images
+manager_image = "ghcr.io/your-org/sasewaddle/manager:v1.0.0"
+headend_image = "ghcr.io/your-org/sasewaddle/headend:v1.0.0"
+client_image  = "ghcr.io/your-org/sasewaddle/client:v1.0.0"
+
+# Monitoring
+enable_monitoring = true
+# grafana_admin_password should be set via environment variable
+
+# Traffic Mirroring (for security monitoring)
+enable_traffic_mirroring    = true
+traffic_mirror_destinations = "10.100.50.100:4789,10.100.50.101:4789"
+traffic_mirror_protocol     = "VXLAN"
+
+# Backup and Compliance
+enable_backups         = true
+backup_retention_days  = 30
+
+# Performance and Scaling
+multi_az              = true
+enable_auto_scaling   = true
+enable_cluster_autoscaler = true
+
+# Security
+enable_pod_security_policies = true
+enable_network_policies      = true
+
+# Cost Optimization
+use_spot_instances = false  # Set to true for non-critical workloads
+
+# Logging
+log_level = "info"
+
+# Additional Tags
+additional_tags = {
+  Owner       = "platform-team@example.com"
+  CostCenter  = "IT-Infrastructure"
+  Compliance  = "SOC2"
+  Backup      = "Required"
+  Monitoring  = "Critical"
+}

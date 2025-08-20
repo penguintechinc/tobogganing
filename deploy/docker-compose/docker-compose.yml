@@ -1,0 +1,200 @@
+# SASEWaddle Production Docker Compose Configuration
+version: '3.8'
+
+services:
+  # Redis for session management and caching
+  redis:
+    image: redis:7-alpine
+    container_name: sasewaddle-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - sasewaddle-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Manager Service - Central orchestration
+  manager:
+    image: ghcr.io/your-org/sasewaddle/manager:${VERSION:-latest}
+    container_name: sasewaddle-manager
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${MANAGER_PORT:-8000}:8000"
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DB_PATH=/app/data/sasewaddle.db
+      - CERT_DIR=/app/certs
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - manager_data:/app/data
+      - manager_certs:/app/certs
+      - ./config/manager:/app/config:ro
+    networks:
+      - sasewaddle-internal
+      - sasewaddle-external
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Headend Server - WireGuard termination and proxy
+  headend:
+    image: ghcr.io/your-org/sasewaddle/headend:${VERSION:-latest}
+    container_name: sasewaddle-headend
+    restart: unless-stopped
+    depends_on:
+      manager:
+        condition: service_healthy
+    ports:
+      - "${WIREGUARD_PORT:-51820}:51820/udp"
+      - "${HEADEND_PROXY_PORT:-8080}:8080"
+    environment:
+      - MANAGER_API_URL=http://manager:8000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CLUSTER_ID=${CLUSTER_ID:-default}
+      - NODE_ID=headend-01
+      # Traffic mirroring configuration
+      - TRAFFIC_MIRROR_ENABLED=${TRAFFIC_MIRROR_ENABLED:-false}
+      - TRAFFIC_MIRROR_DESTINATIONS=${TRAFFIC_MIRROR_DESTINATIONS:-}
+      - TRAFFIC_MIRROR_PROTOCOL=${TRAFFIC_MIRROR_PROTOCOL:-VXLAN}
+      - TRAFFIC_MIRROR_SAMPLE_RATE=${TRAFFIC_MIRROR_SAMPLE_RATE:-100}
+    volumes:
+      - headend_data:/app/data
+      - headend_wireguard:/etc/wireguard
+      - ./config/headend:/app/config:ro
+    networks:
+      - sasewaddle-internal
+      - sasewaddle-external
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    privileged: true  # Required for WireGuard interface management
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Prometheus for metrics collection (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sasewaddle-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - sasewaddle-internal
+    profiles:
+      - monitoring
+    depends_on:
+      - manager
+      - headend
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sasewaddle-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    networks:
+      - sasewaddle-internal
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # NGINX reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: sasewaddle-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - sasewaddle-external
+    profiles:
+      - proxy
+    depends_on:
+      - manager
+      - headend
+
+# Volumes for persistent data
+volumes:
+  redis_data:
+    driver: local
+  manager_data:
+    driver: local
+  manager_certs:
+    driver: local
+  headend_data:
+    driver: local
+  headend_wireguard:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+# Networks
+networks:
+  sasewaddle-internal:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  sasewaddle-external:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
