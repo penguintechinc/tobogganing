@@ -235,25 +235,122 @@ create_avd() {
     
     local avdmanager="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
     local avd_name="SASEWaddle_Test_Device"
+    local compact_avd="SASEWaddle_Compact"
     
     # Check if AVD already exists
-    if "$avdmanager" list avd | grep -q "$avd_name"; then
+    if "$avdmanager" list avd 2>/dev/null | grep -q "$avd_name"; then
         log_info "AVD '$avd_name' already exists"
         return 0
     fi
     
-    # Create AVD
-    echo "no" | "$avdmanager" create avd \
+    # Try to create primary AVD
+    log_info "Creating primary AVD '$avd_name'..."
+    if echo "no" | "$avdmanager" create avd \
         -n "$avd_name" \
         -k "system-images;android-34;google_apis;x86_64" \
         -d "pixel_7" \
-        --force || log_warning "Failed to create AVD"
-    
-    if "$avdmanager" list avd | grep -q "$avd_name"; then
+        --force 2>/dev/null; then
         log_success "Android Virtual Device '$avd_name' created successfully"
-    else
-        log_warning "AVD creation may have failed, but continuing..."
+        return 0
     fi
+    
+    # If primary creation fails, try compact version
+    log_warning "Primary AVD creation failed, trying compact version..."
+    if echo "no" | "$avdmanager" create avd \
+        -n "$compact_avd" \
+        -k "system-images;android-34;google_apis;x86_64" \
+        -d "pixel_3a" \
+        -c 512M \
+        --force 2>/dev/null; then
+        log_success "Compact Android Virtual Device '$compact_avd' created successfully"
+    else
+        log_warning "AVD creation failed - you can create one manually in Android Studio"
+    fi
+}
+
+# Build and deploy SASEWaddle mobile app
+build_and_deploy_app() {
+    log_info "Building and deploying SASEWaddle mobile app..."
+    
+    local mobile_dir="/workspaces/SASEWaddle/clients/mobile"
+    
+    # Check if mobile project exists
+    if [ ! -d "$mobile_dir" ]; then
+        log_warning "SASEWaddle mobile project not found at $mobile_dir"
+        return 0
+    fi
+    
+    cd "$mobile_dir" || return 1
+    
+    # Check if dependencies are installed
+    if [ ! -d "node_modules" ]; then
+        log_info "Installing React Native dependencies..."
+        npm install --silent || log_warning "Failed to install dependencies"
+    fi
+    
+    # Build the Android APK
+    log_info "Building Android APK..."
+    cd android || return 1
+    
+    if ./gradlew assembleDebug --no-daemon --quiet; then
+        local apk_path="$mobile_dir/android/app/build/outputs/apk/debug/app-debug.apk"
+        
+        if [ -f "$apk_path" ]; then
+            log_success "✅ APK built successfully: $(basename "$apk_path")"
+            log_info "APK Size: $(du -h "$apk_path" | cut -f1)"
+            
+            # Check if emulator is running
+            local device_count=$(adb devices | grep -c "emulator\|device")
+            
+            if [ "$device_count" -gt 1 ]; then
+                log_info "Installing app to connected device/emulator..."
+                if adb install -r "$apk_path" 2>/dev/null; then
+                    log_success "✅ App installed successfully!"
+                    log_info "Launch the app on your device to test SASEWaddle mobile"
+                else
+                    log_warning "⚠️  App installation failed - no device connected"
+                fi
+            else
+                log_info "📱 APK ready for installation (no device connected)"
+                log_info "To install: adb install -r \"$apk_path\""
+            fi
+        else
+            log_warning "APK file not found after build"
+        fi
+    else
+        log_warning "Android build failed - check React Native configuration"
+    fi
+    
+    cd "$OLDPWD" || true
+}
+
+# Start Android emulator (optional)
+start_emulator() {
+    local avd_name="${1:-SASEWaddle_Test_Device}"
+    local compact_avd="SASEWaddle_Compact"
+    
+    log_info "Starting Android emulator..."
+    
+    # Check if emulator is already running
+    if adb devices | grep -q "emulator"; then
+        log_info "Emulator is already running"
+        return 0
+    fi
+    
+    # Try to start primary AVD
+    if $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager list avd 2>/dev/null | grep -q "$avd_name"; then
+        log_info "Starting emulator with AVD: $avd_name"
+        nohup $ANDROID_HOME/emulator/emulator -avd "$avd_name" -no-audio -gpu swiftshader_indirect -memory 2048 > /tmp/emulator.log 2>&1 &
+    elif $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager list avd 2>/dev/null | grep -q "$compact_avd"; then
+        log_info "Starting emulator with compact AVD: $compact_avd"
+        nohup $ANDROID_HOME/emulator/emulator -avd "$compact_avd" -no-audio -gpu swiftshader_indirect -memory 1024 > /tmp/emulator.log 2>&1 &
+    else
+        log_warning "No AVD found - create one with: avdmanager create avd"
+        return 1
+    fi
+    
+    log_info "Emulator starting in background (check with: adb devices)"
+    log_info "Emulator log: tail -f /tmp/emulator.log"
 }
 
 # Create desktop shortcuts and scripts
@@ -322,6 +419,36 @@ verify_installation() {
     
     if [ ${#issues[@]} -eq 0 ]; then
         log_success "Installation verification passed!"
+        
+        # Additional verification tests
+        log_info "Running additional verification tests..."
+        
+        # Test Android Studio launch
+        if timeout 5s "$INSTALL_DIR/android-studio/bin/studio.sh" --help >/dev/null 2>&1; then
+            log_success "✅ Android Studio executable works"
+        else
+            log_warning "⚠️  Android Studio requires GUI environment"
+        fi
+        
+        # Test ADB
+        if "$ANDROID_HOME/platform-tools/adb" version >/dev/null 2>&1; then
+            log_success "✅ ADB is working"
+        else
+            log_warning "⚠️  ADB has issues"
+        fi
+        
+        # Check React Native compatibility if project exists
+        if [ -d "/workspaces/SASEWaddle/clients/mobile" ]; then
+            log_info "Testing React Native environment..."
+            cd /workspaces/SASEWaddle/clients/mobile 2>/dev/null || true
+            if command -v npx >/dev/null 2>&1; then
+                if timeout 10s npx react-native doctor 2>/dev/null | grep -q "Android Studio"; then
+                    log_success "✅ React Native recognizes Android Studio"
+                else
+                    log_warning "⚠️  React Native environment needs setup"
+                fi
+            fi
+        fi
     else
         log_warning "Installation issues found:"
         for issue in "${issues[@]}"; do
@@ -350,14 +477,24 @@ print_summary() {
     echo
     log_info "Useful Commands:"
     echo "  • List AVDs: avdmanager list avd"
-    echo "  • Start emulator: emulator -avd SASEWaddle_Test_Device"
+    echo "  • Start emulator: ./scripts/setup-android-studio.sh --start-emulator"
     echo "  • ADB devices: adb devices"
+    echo "  • Build and deploy app: ./scripts/setup-android-studio.sh --build-app"
     echo "  • Build React Native: cd clients/mobile && npx react-native run-android"
+    echo "  • React Native doctor: npx react-native doctor"
+    echo "  • Build Android APK: cd clients/mobile/android && ./gradlew assembleDebug --no-daemon"
+    echo "  • Install APK: adb install -r path/to/app-debug.apk"
     echo
     log_info "Environment Variables Set:"
     echo "  • ANDROID_HOME=$ANDROID_HOME"
     echo "  • ANDROID_SDK_ROOT=$ANDROID_HOME"
     echo "  • JAVA_HOME=$JAVA_HOME"
+    echo
+    log_info "Troubleshooting:"
+    echo "  • If React Native build fails with namespace issues, update node modules"
+    echo "  • For Gradle daemon crashes, use --no-daemon flag"
+    echo "  • Verify environment: npx react-native doctor"
+    echo "  • Check ADB connection: adb devices"
     echo
 }
 
@@ -383,6 +520,7 @@ main() {
     create_avd
     create_shortcuts
     verify_installation
+    build_and_deploy_app
     cleanup
     print_summary
 }
@@ -398,9 +536,12 @@ case "${1:-}" in
         echo "  --help, -h          Show this help message"
         echo "  --verify            Only verify existing installation"
         echo "  --cleanup           Only cleanup temporary files"
+        echo "  --build-app         Only build and deploy SASEWaddle app"
+        echo "  --start-emulator    Start Android emulator"
+        echo "  --create-avd        Create Android Virtual Device only"
         echo
-        echo "This script will install Android Studio, Android SDK, and set up"
-        echo "the development environment for React Native mobile development."
+        echo "This script will install Android Studio, Android SDK, set up"
+        echo "the development environment, and deploy the SASEWaddle mobile app."
         echo
         exit 0
         ;;
@@ -410,6 +551,18 @@ case "${1:-}" in
         ;;
     --cleanup)
         cleanup
+        ;;
+    --build-app)
+        setup_environment
+        build_and_deploy_app
+        ;;
+    --start-emulator)
+        setup_environment
+        start_emulator "${2:-SASEWaddle_Test_Device}"
+        ;;
+    --create-avd)
+        setup_environment
+        create_avd
         ;;
     *)
         main
