@@ -1,0 +1,118 @@
+# SASEWaddle Manager Security Configuration
+
+# Redis configuration for rate limiting
+redis:
+  host: localhost
+  port: 6379
+  db: 1
+  
+# Rate limiting defaults
+rate_limiting:
+  # Global rate limits
+  global_enabled: true
+  
+  # Default rules (these are built into the system)
+  default_rules:
+    api_strict:
+      max_requests: 60
+      window_seconds: 60
+      block_duration: 300
+      endpoints: ["/api/"]
+      priority: 1
+    
+    auth_strict:
+      max_requests: 5
+      window_seconds: 60
+      block_duration: 900
+      endpoints: ["/api/auth/", "/login", "/api/v1/auth"]
+      priority: 1
+    
+    config_moderate:
+      max_requests: 10
+      window_seconds: 300
+      block_duration: 600
+      endpoints: ["/api/v1/clients/", "/api/analytics/record/"]
+      priority: 2
+    
+    backup_strict:
+      max_requests: 3
+      window_seconds: 300
+      block_duration: 1200
+      endpoints: ["/api/backup/"]
+      priority: 1
+    
+    analytics_moderate:
+      max_requests: 100
+      window_seconds: 60
+      block_duration: 300
+      endpoints: ["/api/analytics/"]
+      priority: 3
+    
+    web_lenient:
+      max_requests: 200
+      window_seconds: 60
+      block_duration: 60
+      priority: 10
+
+# DDoS Protection
+ddos_protection:
+  enabled: true
+  
+  # Detection thresholds
+  connection_threshold: 100
+  request_threshold: 1000
+  time_window: 60  # seconds
+  
+  # Blocked countries (ISO country codes)
+  blocked_countries: []
+  
+  # Monitored countries (higher scrutiny)
+  monitored_countries: []
+  
+  # Suspicious patterns to detect
+  suspicious_patterns:
+    - "\.php$"
+    - "wp-admin"
+    - "\.asp$"
+    - "sql"
+    - "<script"
+    - "union.*select"
+    - "etc/passwd"
+
+# Emergency mode settings
+emergency_mode:
+  # Stricter rate limits during emergency
+  rate_limit_multiplier: 0.1  # 10x stricter
+  
+  # Auto-enable conditions
+  auto_enable:
+    enabled: true
+    high_threat_threshold: 10  # High/critical events per minute
+    critical_threat_threshold: 5  # Critical events per minute
+
+# Security logging
+logging:
+  # Log all security events to database
+  database_logging: true
+  
+  # Log security events to syslog
+  syslog_logging: true
+  syslog_facility: "local0"
+  
+  # Log security events to file
+  file_logging: true
+  log_file: "/var/log/sasewaddle/security.log"
+  
+  # Retention period for security events (days)
+  retention_days: 90
+
+# Admin access
+admin:
+  # Bypass security for admin IPs (use with caution)
+  bypass_ips: []
+  
+  # Require 2FA for admin actions
+  require_2fa: false
+  
+  # Admin session timeout (minutes)
+  session_timeout: 30

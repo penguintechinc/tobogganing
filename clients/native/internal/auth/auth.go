@@ -1,3 +1,16 @@
+// Package auth implements authentication management for the SASEWaddle native client.
+//
+// The auth package provides:
+// - JWT token acquisition and renewal from Manager service
+// - X.509 certificate management and validation
+// - Dual authentication workflow coordination
+// - Token caching and automatic refresh
+// - SSO integration with external identity providers
+// - Secure credential storage and retrieval
+//
+// The authentication manager coordinates both certificate-based VPN
+// authentication and token-based application authentication, ensuring
+// seamless access to SASE resources while maintaining security best practices.
 package auth
 
 import (

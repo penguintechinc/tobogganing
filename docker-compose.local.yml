@@ -28,22 +28,57 @@ services:
     networks:
       - sasewaddle
 
-  # PostgreSQL - Production database (optional, Manager can use SQLite)
-  postgres:
-    image: postgres:15-alpine
-    container_name: sasewaddle-postgres
+  # MySQL - Primary database (PyDAL default)
+  mysql:
+    image: mysql:8.0
+    container_name: sasewaddle-mysql
     restart: unless-stopped
     environment:
-      POSTGRES_DB: sasewaddle
-      POSTGRES_USER: sasewaddle
-      POSTGRES_PASSWORD: sasewaddle-dev-password
+      MYSQL_ROOT_PASSWORD: sasewaddle-root-password
+      MYSQL_DATABASE: sasewaddle
+      MYSQL_USER: sasewaddle
+      MYSQL_PASSWORD: sasewaddle-dev-password
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/sasewaddle.cnf:ro
+    command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sasewaddle"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "sasewaddle", "-psasewaddle-dev-password"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+
+  # MySQL Read Replica (optional for high availability)
+  mysql-read:
+    image: mysql:8.0
+    container_name: sasewaddle-mysql-read
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: sasewaddle-root-password
+      MYSQL_DATABASE: sasewaddle
+      MYSQL_USER: sasewaddle
+      MYSQL_PASSWORD: sasewaddle-dev-password
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+      # Read replica configuration
+      MYSQL_REPLICATION_USER: repl_user
+      MYSQL_REPLICATION_PASSWORD: repl_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_read_data:/var/lib/mysql
+      - ./deploy/mysql/read-replica.cnf:/etc/mysql/conf.d/sasewaddle.cnf:ro
+    command: --default-authentication-plugin=mysql_native_password --read-only=1
+    depends_on:
+      - mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "sasewaddle", "-psasewaddle-dev-password"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -60,15 +95,39 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
+      mysql:
         condition: service_healthy
     ports:
       - "8000:8000"     # Web portal and API
       - "8001:8001"     # Metrics endpoint
     environment:
-      # Database Configuration
-      DATABASE_URL: postgresql://sasewaddle:sasewaddle-dev-password@postgres:5432/sasewaddle
-      # Use SQLite for simpler setup: DATABASE_URL: sqlite:///data/sasewaddle.db
+      # PyDAL Database Configuration (supports MySQL, PostgreSQL, SQLite)
+      DB_TYPE: mysql                    # mysql, postgresql, sqlite
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: sasewaddle
+      DB_PASSWORD: sasewaddle-dev-password
+      DB_NAME: sasewaddle
+      DB_POOL_SIZE: 10
+      
+      # Read Replica Configuration (optional)
+      DB_READ_REPLICA_ENABLED: "true"   # Enable read replica support
+      DB_READ_HOST: mysql-read          # Read replica host
+      DB_READ_PORT: 3306
+      DB_READ_USER: sasewaddle
+      DB_READ_PASSWORD: sasewaddle-dev-password
+      DB_READ_NAME: sasewaddle
+      DB_READ_POOL_SIZE: 5
+      
+      # Alternative database configurations (commented out):
+      # For PostgreSQL:
+      # DB_TYPE: postgresql
+      # DB_HOST: postgres
+      # DB_PORT: 5432
+      # 
+      # For SQLite (single file):
+      # DB_TYPE: sqlite
+      # DB_PATH: /data/sasewaddle.db
       
       # Redis Configuration
       REDIS_URL: redis://redis:6379/0
@@ -604,7 +663,9 @@ volumes:
   # Data persistence
   redis_data:
     driver: local
-  postgres_data:
+  mysql_data:
+    driver: local
+  mysql_read_data:
     driver: local
   prometheus_data:
     driver: local

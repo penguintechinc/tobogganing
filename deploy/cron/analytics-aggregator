@@ -1,0 +1,11 @@
+# SASEWaddle Analytics Data Aggregation Cron Jobs
+# Add these entries to your crontab or place this file in /etc/cron.d/
+
+# Run analytics aggregation every hour at minute 5
+5 * * * * sasewaddle cd /app/manager && python3 scripts/analytics_aggregator.py >> /var/log/sasewaddle/analytics.log 2>&1
+
+# Alternative: Run via Docker
+# 5 * * * * root docker exec sasewaddle-manager python3 /app/manager/scripts/analytics_aggregator.py >> /var/log/sasewaddle/analytics.log 2>&1
+
+# Cleanup old logs (daily at 2:30 AM)
+30 2 * * * sasewaddle find /var/log/sasewaddle/ -name "*.log" -mtime +30 -delete

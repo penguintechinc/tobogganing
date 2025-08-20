@@ -9,7 +9,6 @@ import (
 
     "github.com/gin-gonic/gin"
     "github.com/golang-jwt/jwt/v5"
-    log "github.com/sirupsen/logrus"
 )
 
 type SAML2Provider struct {

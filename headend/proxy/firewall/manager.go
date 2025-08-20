@@ -1,3 +1,17 @@
+// Package firewall implements a comprehensive firewall system for the SASEWaddle headend proxy.
+//
+// The firewall manager provides:
+// - Domain-based access control with wildcard support (*.example.com)
+// - IPv4 and IPv6 address filtering with CIDR support
+// - Protocol-level filtering (TCP, UDP, ICMP, etc.)
+// - Source and destination port range filtering
+// - Directional traffic control (inbound, outbound, bidirectional)
+// - Priority-based rule processing and conflict resolution
+// - Real-time rule updates from the Manager service
+// - Redis caching with randomized refresh intervals to prevent thundering herd
+//
+// The firewall integrates with the proxy's request processing pipeline to
+// enforce access controls before traffic is forwarded to destinations.
 package firewall
 
 import (

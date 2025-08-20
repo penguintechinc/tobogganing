@@ -2,7 +2,6 @@ package auth
 
 import (
     "context"
-    "encoding/json"
     "fmt"
     "net/http"
     "strings"
@@ -11,7 +10,6 @@ import (
     "github.com/coreos/go-oidc/v3/oidc"
     "github.com/gin-gonic/gin"
     "github.com/golang-jwt/jwt/v5"
-    log "github.com/sirupsen/logrus"
     "golang.org/x/oauth2"
 )
 

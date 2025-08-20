@@ -1,3 +1,18 @@
+// Package config implements configuration management for the SASEWaddle native client.
+//
+// The config package provides:
+// - Hierarchical configuration loading from multiple sources
+// - Environment variable and file-based configuration
+// - Cross-platform configuration directory management
+// - Secure storage of API keys and certificates
+// - Configuration validation and defaults
+// - Hot reloading of configuration changes
+//
+// Configuration sources are loaded in priority order:
+// 1. Command line flags
+// 2. Environment variables
+// 3. Configuration files (.yaml, .json, .toml)
+// 4. Default values
 package config
 
 import (

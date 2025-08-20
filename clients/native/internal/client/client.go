@@ -1,3 +1,18 @@
+// Package client implements the core SASEWaddle native client functionality.
+//
+// The client package provides:
+// - WireGuard VPN tunnel management and lifecycle control
+// - Manager service integration for configuration retrieval
+// - Dual authentication with X.509 certificates and JWT tokens
+// - Real-time connection monitoring and health checks
+// - Automatic reconnection and failover capabilities
+// - Certificate and configuration rotation with zero downtime
+// - Cross-platform WireGuard interface management
+// - Metrics collection and reporting to Manager service
+//
+// The client maintains persistent connections to headend servers and
+// automatically handles authentication renewal, configuration updates,
+// and network connectivity changes.
 package client
 
 import (
@@ -12,12 +27,12 @@ import (
     "strings"
     "time"
 
-    "github.com/golang-jwt/jwt/v5"
+    _ "github.com/golang-jwt/jwt/v5" // Used for JWT authentication
     "golang.zx2c4.com/wireguard/wgctrl"
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
-    "github.com/sasewaddle/native-client/internal/config"
-    "github.com/sasewaddle/native-client/internal/auth"
+    "github.com/sasewaddle/clients/native/internal/config"
+    "github.com/sasewaddle/clients/native/internal/auth"
 )
 
 // Client represents the SASEWaddle native client
@@ -336,7 +351,6 @@ func (c *Client) setupWireGuard() error {
 }
 
 func (c *Client) createWireGuardConfig(ipAddress, networkCIDR string) error {
-    interfaceName := c.getWireGuardInterface()
     configPath := c.getWireGuardConfigPath()
 
     // Extract headend connection details

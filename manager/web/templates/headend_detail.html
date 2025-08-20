@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[[=title]] - SASEWaddle Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .status-healthy { @apply bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold; }
+        .status-warning { @apply bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold; }
+        .status-critical { @apply bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold; }
+        .chart-container { position: relative; height: 200px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Headend Details</h1>
+                <p class="text-gray-600 mt-2">Headend ID: <code class="bg-gray-200 px-2 py-1 rounded">[[=headend_id]]</code></p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="/analytics" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    ← Back to Analytics
+                </a>
+                <button onclick="refreshHeadendData()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <p class="mt-4 text-gray-600">Loading headend details...</p>
+        </div>
+
+        <!-- Headend Data -->
+        <div id="headendData" class="hidden">
+            <!-- Status Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">Active Connections</p>
+                            <p id="activeConnections" class="text-2xl font-bold text-blue-600">-</p>
+                        </div>
+                        <div class="text-blue-500">
+                            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">Total Traffic</p>
+                            <p id="totalTraffic" class="text-2xl font-bold text-green-600">-</p>
+                        </div>
+                        <div class="text-green-500">
+                            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">Auth Success Rate</p>
+                            <p id="authSuccessRate" class="text-2xl font-bold text-indigo-600">-</p>
+                        </div>
+                        <div class="text-indigo-500">
+                            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">Status</p>
+                            <div class="mt-2">
+                                <span id="headendStatus" class="status-critical">Unknown</span>
+                            </div>
+                        </div>
+                        <div class="text-gray-500">
+                            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Information -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Headend Information</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Hostname:</span>
+                            <span id="headendHostname" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Region:</span>
+                            <span id="headendRegion" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Cluster:</span>
+                            <span id="headendCluster" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Version:</span>
+                            <span id="headendVersion" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Last Heartbeat:</span>
+                            <span id="lastHeartbeat" class="font-semibold">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">System Metrics</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-600">CPU Usage:</span>
+                                <span id="cpuUsage" class="font-semibold">-</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div id="cpuBar" class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-600">Memory Usage:</span>
+                                <span id="memoryUsage" class="font-semibold">-</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div id="memoryBar" class="bg-green-600 h-2 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-600">Disk Usage:</span>
+                                <span id="diskUsage" class="font-semibold">-</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div id="diskBar" class="bg-yellow-600 h-2 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Statistics -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Connection & Traffic Statistics</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-blue-600" id="totalConnections">-</p>
+                        <p class="text-sm text-gray-600">Total Connections</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-green-600" id="bytesProxied">-</p>
+                        <p class="text-sm text-gray-600">Bytes Proxied</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-purple-600" id="packetsProxied">-</p>
+                        <p class="text-sm text-gray-600">Packets Proxied</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-red-600" id="networkErrors">-</p>
+                        <p class="text-sm text-gray-600">Network Errors</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Authentication Statistics -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Authentication Statistics</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-green-600" id="authSuccesses">-</p>
+                        <p class="text-sm text-gray-600">Successful Auths</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-red-600" id="authFailures">-</p>
+                        <p class="text-sm text-gray-600">Failed Auths</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-blue-600" id="totalAuthAttempts">-</p>
+                        <p class="text-sm text-gray-600">Total Attempts</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connected Clients -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Connected Clients (<span id="connectedClientsCount">0</span>)</h3>
+                <div id="connectedClientsList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Connected clients will be populated here -->
+                </div>
+                <div id="noConnectedClients" class="text-center py-8 text-gray-500 hidden">
+                    No clients currently connected to this headend.
+                </div>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="hidden text-center py-12">
+            <div class="text-red-500 mb-4">
+                <svg class="w-12 h-12 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Headend Not Found</h3>
+            <p class="text-gray-600 mb-4">The requested headend could not be found or you don't have permission to view it.</p>
+            <a href="/analytics" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Return to Analytics
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Utility functions
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatDateTime(isoString) {
+            if (!isoString) return 'Never';
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+
+        function formatTimeAgo(isoString) {
+            if (!isoString) return 'Never';
+            
+            const now = new Date();
+            const date = new Date(isoString);
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} minutes ago`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`;
+            return `${Math.floor(diffMins / 1440)} days ago`;
+        }
+
+        // Load headend data
+        async function loadHeadendData() {
+            const headendId = '[[=headend_id]]';
+            
+            try {
+                document.getElementById('loadingState').classList.remove('hidden');
+                document.getElementById('headendData').classList.add('hidden');
+                document.getElementById('errorState').classList.add('hidden');
+                
+                const response = await fetch(`/api/analytics/headend/${headendId}/details`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    populateHeadendData(result.data);
+                    document.getElementById('loadingState').classList.add('hidden');
+                    document.getElementById('headendData').classList.remove('hidden');
+                } else {
+                    throw new Error(result.error || 'Headend not found');
+                }
+            } catch (error) {
+                console.error('Error loading headend data:', error);
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('errorState').classList.remove('hidden');
+            }
+        }
+
+        // Populate headend data
+        function populateHeadendData(data) {
+            // Summary cards
+            document.getElementById('activeConnections').textContent = data.connection_stats?.active_connections || 0;
+            document.getElementById('totalTraffic').textContent = formatBytes(data.connection_stats?.bytes_proxied || 0);
+            document.getElementById('authSuccessRate').textContent = (data.auth_stats?.success_rate || 0) + '%';
+            
+            const statusEl = document.getElementById('headendStatus');
+            statusEl.textContent = data.status || 'unknown';
+            statusEl.className = `status-${data.status || 'unknown'}`;
+
+            // Headend information
+            document.getElementById('headendHostname').textContent = data.hostname || 'Unknown';
+            document.getElementById('headendRegion').textContent = data.location_info?.region || 'Unknown';
+            document.getElementById('headendCluster').textContent = data.location_info?.cluster_id || 'Unknown';
+            document.getElementById('headendVersion').textContent = data.version || 'Unknown';
+            document.getElementById('lastHeartbeat').textContent = formatTimeAgo(data.timestamps?.last_heartbeat);
+
+            // System metrics
+            const cpuUsage = data.system_metrics?.cpu_usage_percent || 0;
+            document.getElementById('cpuUsage').textContent = cpuUsage + '%';
+            document.getElementById('cpuBar').style.width = cpuUsage + '%';
+            
+            const memoryUsage = data.system_metrics?.memory_usage_mb || 0;
+            const memoryPercent = Math.min((memoryUsage / 8192) * 100, 100); // Assume 8GB max for display
+            document.getElementById('memoryUsage').textContent = memoryUsage + ' MB';
+            document.getElementById('memoryBar').style.width = memoryPercent + '%';
+            
+            const diskUsage = data.system_metrics?.disk_usage_percent || 0;
+            document.getElementById('diskUsage').textContent = diskUsage + '%';
+            document.getElementById('diskBar').style.width = diskUsage + '%';
+
+            // Connection statistics
+            document.getElementById('totalConnections').textContent = (data.connection_stats?.total_connections || 0).toLocaleString();
+            document.getElementById('bytesProxied').textContent = formatBytes(data.connection_stats?.bytes_proxied || 0);
+            document.getElementById('packetsProxied').textContent = (data.connection_stats?.packets_proxied || 0).toLocaleString();
+            document.getElementById('networkErrors').textContent = data.error_stats?.network_errors || 0;
+
+            // Authentication statistics
+            document.getElementById('authSuccesses').textContent = (data.auth_stats?.successes || 0).toLocaleString();
+            document.getElementById('authFailures').textContent = (data.auth_stats?.failures || 0).toLocaleString();
+            document.getElementById('totalAuthAttempts').textContent = (data.auth_stats?.total_attempts || 0).toLocaleString();
+
+            // Connected clients
+            const clientsList = document.getElementById('connectedClientsList');
+            const noClientsMsg = document.getElementById('noConnectedClients');
+            const clientsCount = document.getElementById('connectedClientsCount');
+            
+            clientsCount.textContent = data.connected_clients_count || 0;
+            
+            if (data.connected_clients && data.connected_clients.length > 0) {
+                clientsList.innerHTML = '';
+                noClientsMsg.classList.add('hidden');
+                
+                data.connected_clients.forEach(client => {
+                    const clientDiv = document.createElement('div');
+                    clientDiv.className = 'border border-gray-200 rounded-lg p-4';
+                    clientDiv.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h5 class="font-semibold text-gray-900">${client.hostname || client.client_id}</h5>
+                                <p class="text-sm text-gray-600">${client.os_name || 'Unknown OS'}</p>
+                                <p class="text-sm text-gray-500">IP: ${client.ip_address || 'Unknown'}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs text-gray-500">${formatTimeAgo(client.last_seen)}</p>
+                                <a href="/analytics/client/${client.client_id}" class="text-xs text-blue-500 hover:text-blue-700">View Details</a>
+                            </div>
+                        </div>
+                    `;
+                    clientsList.appendChild(clientDiv);
+                });
+            } else {
+                clientsList.innerHTML = '';
+                noClientsMsg.classList.remove('hidden');
+            }
+        }
+
+        // Refresh headend data
+        function refreshHeadendData() {
+            loadHeadendData();
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadHeadendData();
+            
+            // Auto-refresh every 30 seconds if headend is healthy
+            setInterval(() => {
+                const statusEl = document.getElementById('headendStatus');
+                if (statusEl && statusEl.textContent === 'healthy') {
+                    loadHeadendData();
+                }
+            }, 30000);
+        });
+    </script>
+</body>
+</html>

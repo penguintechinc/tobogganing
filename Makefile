@@ -31,11 +31,11 @@ build-manager: ## Build Manager Service
 
 build-headend: ## Build Headend Server
 	@echo "🏗️  Building Headend Server..."
-	@cd headend && go mod download && go build -o build/headend ./cmd
+	@cd headend && go mod download && go build -o build/headend-proxy ./proxy
 
 build-client: ## Build Native Client
 	@echo "🏗️  Building Native Client..."
-	@cd clients/native && go mod download && make local
+	@cd clients/native && go mod download && go build -o build/sasewaddle-client ./cmd
 
 build-website: ## Build Website
 	@echo "🏗️  Building Website..."

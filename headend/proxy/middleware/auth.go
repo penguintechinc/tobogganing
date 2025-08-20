@@ -1,3 +1,13 @@
+// Package middleware implements HTTP middleware components for the SASEWaddle headend proxy.
+//
+// This file provides authentication middleware that implements SASEWaddle's
+// dual authentication architecture:
+// 1. X.509 client certificate validation (handled at TLS layer)
+// 2. JWT/SSO token validation (handled by middleware)
+//
+// The middleware integrates with various authentication providers (JWT, SAML2, OAuth2)
+// and enforces access controls before requests are proxied to backend services.
+// All authentication events are logged for security auditing.
 package middleware
 
 import (
@@ -59,9 +69,13 @@ func AuthRequired(authProvider auth.Provider) gin.HandlerFunc {
         // Store user information in context
         c.Set("user", user)
         c.Set("user_id", user.ID)
-        c.Set("permissions", user.Permissions)
         
-        log.Infof("User authenticated: %s (type: %s)", user.ID, user.Username)
+        // Extract permissions from metadata
+        if permissions, ok := user.Metadata["permissions"]; ok {
+            c.Set("permissions", permissions)
+        }
+        
+        log.Infof("User authenticated: %s (name: %s)", user.ID, user.Name)
         c.Next()
     }
 }

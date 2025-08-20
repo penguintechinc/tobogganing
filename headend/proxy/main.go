@@ -1,3 +1,15 @@
+// Package main implements the SASEWaddle headend proxy server.
+//
+// The headend proxy is a high-performance, multi-protocol proxy server that:
+// - Terminates WireGuard VPN connections from clients
+// - Provides HTTP/HTTPS/TCP/UDP proxying with authentication
+// - Implements comprehensive firewall rules and traffic filtering
+// - Supports traffic mirroring to external IDS/IPS systems
+// - Integrates with external identity providers (SAML2/OAuth2)
+// - Provides real-time metrics and monitoring capabilities
+//
+// The proxy server is designed for enterprise SASE deployments with
+// support for multiple datacenters, high availability, and scalability.
 package main
 
 import (
@@ -24,6 +36,8 @@ import (
     "github.com/sasewaddle/headend/proxy/firewall"
     "github.com/sasewaddle/headend/proxy/mirror"
     "github.com/sasewaddle/headend/proxy/middleware"
+    "github.com/sasewaddle/headend/proxy/ports"
+    "github.com/sasewaddle/headend/proxy/syslog"
 )
 
 type ProxyServer struct {
@@ -31,9 +45,11 @@ type ProxyServer struct {
     httpServer      *http.Server
     tcpProxy        *TCPProxy
     udpProxy        *UDPProxy
+    portManager     *ports.PortManager
     authProvider    auth.Provider
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
+    syslogLogger    *syslog.SyslogLogger
     proxies         map[string]*httputil.ReverseProxy
     mu              sync.RWMutex
 }
@@ -44,6 +60,7 @@ type TCPProxy struct {
     authProvider    auth.Provider
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
+    syslogLogger    *syslog.SyslogLogger
 }
 
 // UDPProxy handles raw UDP traffic with JWT authentication  
@@ -52,6 +69,7 @@ type UDPProxy struct {
     authProvider    auth.Provider
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
+    syslogLogger    *syslog.SyslogLogger
 }
 
 func main() {
@@ -95,6 +113,18 @@ func initConfig() {
     viper.SetDefault("log.level", "info")
     viper.SetDefault("wireguard.interface", "wg0")
     viper.SetDefault("wireguard.network", "10.200.0.0/16")
+    viper.SetDefault("firewall.enabled", true)
+    viper.SetDefault("firewall.manager_url", "http://manager:8000")
+    viper.SetDefault("firewall.auth_token", "headend-server-token")
+    viper.SetDefault("syslog.enabled", false)
+    viper.SetDefault("syslog.host", "")
+    viper.SetDefault("syslog.port", "514")
+    viper.SetDefault("syslog.facility", "local0")
+    viper.SetDefault("syslog.tag", "sasewaddle-headend")
+    viper.SetDefault("ports.dynamic_enabled", true)
+    viper.SetDefault("ports.headend_id", "")
+    viper.SetDefault("ports.cluster_id", "default")
+    viper.SetDefault("ports.refresh_interval", "60s")
 
     if err := viper.ReadInConfig(); err != nil {
         log.Warnf("No config file found, using environment variables: %v", err)
@@ -170,6 +200,87 @@ func (s *ProxyServer) Initialize() error {
         }
     }
 
+    // Initialize firewall manager if enabled
+    if viper.GetBool("firewall.enabled") {
+        managerURL := viper.GetString("firewall.manager_url")
+        authToken := viper.GetString("firewall.auth_token")
+        
+        s.firewallManager = firewall.NewManager(managerURL, authToken)
+        if err := s.firewallManager.Start(); err != nil {
+            return fmt.Errorf("failed to start firewall manager: %w", err)
+        }
+        log.Info("Firewall manager enabled and started")
+    } else {
+        log.Info("Firewall manager disabled")
+    }
+
+    // Initialize syslog logger if enabled
+    if viper.GetBool("syslog.enabled") {
+        syslogHost := viper.GetString("syslog.host")
+        syslogPort := viper.GetString("syslog.port")
+        
+        if syslogHost != "" {
+            s.syslogLogger = syslog.NewSyslogLogger(syslogHost, syslogPort)
+            if err := s.syslogLogger.Start(); err != nil {
+                return fmt.Errorf("failed to start syslog logger: %w", err)
+            }
+            log.Infof("Syslog logging enabled - sending to %s:%s", syslogHost, syslogPort)
+        } else {
+            log.Warn("Syslog enabled but no host configured")
+        }
+    } else {
+        log.Info("Syslog logging disabled")
+    }
+
+    // Initialize dynamic port manager if enabled
+    if viper.GetBool("ports.dynamic_enabled") {
+        headendID := viper.GetString("ports.headend_id")
+        clusterID := viper.GetString("ports.cluster_id")
+        managerURL := viper.GetString("firewall.manager_url")
+        authToken := viper.GetString("firewall.auth_token")
+        
+        if headendID == "" {
+            log.Warn("Dynamic ports enabled but no headend_id configured, using hostname")
+            if hostname, err := os.Hostname(); err == nil {
+                headendID = hostname
+            } else {
+                headendID = "headend-" + fmt.Sprintf("%d", time.Now().Unix())
+            }
+        }
+        
+        s.portManager = ports.NewPortManager()
+        
+        // Set up connection handlers
+        s.portManager.SetConnectionHandlers(
+            s.handleDynamicTCPConnection,
+            s.handleDynamicUDPPacket,
+        )
+        
+        // Fetch initial configuration
+        configClient := ports.NewConfigClient(managerURL, authToken, headendID, clusterID)
+        config, err := configClient.FetchConfig()
+        if err != nil {
+            log.Errorf("Failed to fetch initial port config: %v", err)
+            log.Info("Continuing with static port configuration")
+        } else {
+            // Parse and apply the configuration
+            if err := s.portManager.ParsePortRanges(config.TCPRanges, config.UDPRanges); err != nil {
+                log.Errorf("Failed to parse port ranges: %v", err)
+            } else {
+                if err := s.portManager.StartListening(); err != nil {
+                    log.Errorf("Failed to start dynamic port listeners: %v", err)
+                } else {
+                    log.Infof("Dynamic port manager started with %d listeners", s.portManager.GetListenerCount())
+                    
+                    // Start periodic config refresh
+                    go s.refreshPortConfig(configClient)
+                }
+            }
+        }
+    } else {
+        log.Info("Dynamic port management disabled")
+    }
+
     // Initialize TCP and UDP proxies
     if err := s.initializeTCPProxy(); err != nil {
         return fmt.Errorf("failed to initialize TCP proxy: %w", err)
@@ -231,10 +342,25 @@ func (s *ProxyServer) setupRoutes() {
 }
 
 func (s *ProxyServer) healthHandler(c *gin.Context) {
+    syslogQueueDepth := 0
+    if s.syslogLogger != nil {
+        syslogQueueDepth = s.syslogLogger.GetQueueDepth()
+    }
+    
+    portListenerCount := 0
+    if s.portManager != nil {
+        portListenerCount = s.portManager.GetListenerCount()
+    }
+    
     c.JSON(http.StatusOK, gin.H{
         "status": "healthy",
         "service": "headend-proxy",
         "mirror_enabled": s.mirrorManager != nil,
+        "firewall_enabled": s.firewallManager != nil,
+        "syslog_enabled": s.syslogLogger != nil && s.syslogLogger.IsEnabled(),
+        "syslog_queue_depth": syslogQueueDepth,
+        "dynamic_ports_enabled": s.portManager != nil,
+        "port_listeners_count": portListenerCount,
         "auth_provider": s.authProvider != nil,
         "tcp_proxy": s.tcpProxy != nil,
         "udp_proxy": s.udpProxy != nil,
@@ -314,22 +440,59 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
         return
     }
 
+    user := c.MustGet("user").(auth.User)
+    sourceIP := c.ClientIP()
+    method := c.Request.Method
+    path := c.Request.URL.Path
+    userAgent := c.GetHeader("User-Agent")
+    requestID := c.GetHeader("X-Request-ID")
+    
+    // Check firewall rules if firewall manager is enabled
+    allowed := true
+    if s.firewallManager != nil {
+        allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+        
+        if !allowed {
+            log.Warnf("Firewall blocked access for user %s to %s", user.ID, targetHost)
+            
+            // Log denied access to syslog
+            if s.syslogLogger != nil {
+                s.syslogLogger.LogHTTPAccess(user.ID, user.Name, sourceIP, targetHost, method, path, userAgent, requestID, 403, 0, false)
+            }
+            
+            c.JSON(http.StatusForbidden, gin.H{"error": "Access denied by firewall policy"})
+            return
+        }
+        
+        log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
+    }
+
     // Get or create proxy for target
     proxy := s.getOrCreateProxy(targetHost)
 
-    // Mirror traffic if enabled
-    if s.mirrorManager != nil {
-        // Create a response writer wrapper to capture response
-        mrw := &mirrorResponseWriter{
-            ResponseWriter: c.Writer,
-            mirrorManager: s.mirrorManager,
-            request:       c.Request,
-        }
-        c.Writer = mrw
+    // Create response writer wrapper for monitoring
+    wrapper := &responseWriterWrapper{
+        ResponseWriter: c.Writer,
+        mirrorManager:  s.mirrorManager,
+        syslogLogger:   s.syslogLogger,
+        request:        c.Request,
+        user:           user,
+        targetHost:     targetHost,
+        sourceIP:       sourceIP,
+        method:         method,
+        path:           path,
+        userAgent:      userAgent,
+        requestID:      requestID,
     }
+    c.Writer = wrapper
 
     // Proxy the request
     proxy.ServeHTTP(c.Writer, c.Request)
+    
+    // Ensure logging and mirroring happens
+    if wrapper, ok := c.Writer.(*responseWriterWrapper); ok {
+        wrapper.Flush()
+    }
 }
 
 func (s *ProxyServer) getOrCreateProxy(targetHost string) *httputil.ReverseProxy {
@@ -384,9 +547,11 @@ func (s *ProxyServer) initializeTCPProxy() error {
     }
     
     s.tcpProxy = &TCPProxy{
-        listener:      listener,
-        authProvider:  s.authProvider,
-        mirrorManager: s.mirrorManager,
+        listener:        listener,
+        authProvider:    s.authProvider,
+        mirrorManager:   s.mirrorManager,
+        firewallManager: s.firewallManager,
+        syslogLogger:    s.syslogLogger,
     }
     
     // Start TCP proxy in goroutine
@@ -410,9 +575,11 @@ func (s *ProxyServer) initializeUDPProxy() error {
     }
     
     s.udpProxy = &UDPProxy{
-        conn:          conn,
-        authProvider:  s.authProvider,
-        mirrorManager: s.mirrorManager,
+        conn:            conn,
+        authProvider:    s.authProvider,
+        mirrorManager:   s.mirrorManager,
+        firewallManager: s.firewallManager,
+        syslogLogger:    s.syslogLogger,
     }
     
     // Start UDP proxy in goroutine
@@ -450,6 +617,18 @@ func (s *ProxyServer) Run() error {
             s.mirrorManager.Stop()
         }
         
+        if s.firewallManager != nil {
+            s.firewallManager.Stop()
+        }
+        
+        if s.syslogLogger != nil {
+            s.syslogLogger.Stop()
+        }
+        
+        if s.portManager != nil {
+            s.portManager.Stop()
+        }
+        
         // Close TCP and UDP proxies
         if s.tcpProxy != nil && s.tcpProxy.listener != nil {
             s.tcpProxy.listener.Close()
@@ -472,26 +651,69 @@ func (s *ProxyServer) Run() error {
     return s.httpServer.ListenAndServe()
 }
 
-type mirrorResponseWriter struct {
-    http.ResponseWriter
+type responseWriterWrapper struct {
+    gin.ResponseWriter
     mirrorManager *mirror.Manager
+    syslogLogger  *syslog.SyslogLogger
     request       *http.Request
+    user          auth.User
+    targetHost    string
+    sourceIP      string
+    method        string
+    path          string
+    userAgent     string
+    requestID     string
     statusCode    int
+    bytesWritten  int64
     written       []byte
 }
 
-func (mrw *mirrorResponseWriter) WriteHeader(code int) {
-    mrw.statusCode = code
-    mrw.ResponseWriter.WriteHeader(code)
+func (w *responseWriterWrapper) WriteHeader(code int) {
+    w.statusCode = code
+    w.ResponseWriter.WriteHeader(code)
 }
 
-func (mrw *mirrorResponseWriter) Write(data []byte) (int, error) {
-    mrw.written = append(mrw.written, data...)
+func (w *responseWriterWrapper) Write(data []byte) (int, error) {
+    // Only store data for mirroring if mirror is enabled
+    if w.mirrorManager != nil {
+        w.written = append(w.written, data...)
+    }
+    w.bytesWritten += int64(len(data))
     
-    // Send to mirror asynchronously
-    go mrw.mirrorManager.MirrorHTTP(mrw.request, mrw.statusCode, mrw.written)
+    // Mirror and log are handled by worker queues for performance
+    // Just track the data here, actual work is deferred
     
-    return mrw.ResponseWriter.Write(data)
+    return w.ResponseWriter.Write(data)
+}
+
+// Flush handles final logging and mirroring when the response is complete
+func (w *responseWriterWrapper) Flush() {
+    // Send to mirror asynchronously if enabled
+    if w.mirrorManager != nil && len(w.written) > 0 {
+        go w.mirrorManager.MirrorHTTP(w.request, w.statusCode, w.written)
+    }
+    
+    // Log to syslog - uses internal worker queue for performance
+    if w.syslogLogger != nil {
+        w.syslogLogger.LogHTTPAccess(
+            w.user.ID,
+            w.user.Name,
+            w.sourceIP,
+            w.targetHost,
+            w.method,
+            w.path,
+            w.userAgent,
+            w.requestID,
+            w.statusCode,
+            w.bytesWritten,
+            true, // allowed (we wouldn't get here if not allowed)
+        )
+    }
+    
+    // Call the underlying Flush if available
+    if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+        flusher.Flush()
+    }
 }
 
 // TCP Proxy Implementation
@@ -539,6 +761,29 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
     if targetHost == "" {
         log.Error("No target host found in TCP packet")
         return
+    }
+    
+    // Check firewall rules if firewall manager is enabled
+    allowed := true
+    if t.firewallManager != nil {
+        allowed = t.firewallManager.CheckAccess(user.ID, targetHost)
+        
+        if !allowed {
+            log.Warnf("Firewall blocked TCP connection for user %s to %s", user.ID, targetHost)
+            
+            // Log denied access to syslog
+            if t.syslogLogger != nil {
+                t.syslogLogger.LogTCPAccess(user.ID, user.Name, clientConn.RemoteAddr().String(), targetHost, false)
+            }
+            
+            return
+        }
+        log.Debugf("Firewall allowed TCP connection for user %s to %s", user.ID, targetHost)
+    }
+    
+    // Log allowed access to syslog
+    if t.syslogLogger != nil {
+        t.syslogLogger.LogTCPAccess(user.ID, user.Name, clientConn.RemoteAddr().String(), targetHost, true)
     }
     
     // Connect to target
@@ -650,6 +895,29 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
         return
     }
     
+    // Check firewall rules if firewall manager is enabled
+    allowed := true
+    if u.firewallManager != nil {
+        allowed = u.firewallManager.CheckAccess(user.ID, targetHost)
+        
+        if !allowed {
+            log.Warnf("Firewall blocked UDP packet for user %s to %s", user.ID, targetHost)
+            
+            // Log denied access to syslog
+            if u.syslogLogger != nil {
+                u.syslogLogger.LogUDPAccess(user.ID, user.Name, clientAddr.String(), targetHost, false)
+            }
+            
+            return
+        }
+        log.Debugf("Firewall allowed UDP packet for user %s to %s", user.ID, targetHost)
+    }
+    
+    // Log allowed access to syslog
+    if u.syslogLogger != nil {
+        u.syslogLogger.LogUDPAccess(user.ID, user.Name, clientAddr.String(), targetHost, true)
+    }
+    
     // Connect to target
     targetAddr, err := net.ResolveUDPAddr("udp", targetHost)
     if err != nil {
@@ -720,4 +988,272 @@ func (u *UDPProxy) extractTargetFromUDPPacket(data []byte) string {
         return strings.TrimSpace(dataStr[idx+5 : idx+5+end])
     }
     return ""
+}
+
+// refreshPortConfig periodically fetches updated port configuration from the Manager
+func (s *ProxyServer) refreshPortConfig(configClient *ports.ConfigClient) {
+	refreshInterval, err := time.ParseDuration(viper.GetString("ports.refresh_interval"))
+	if err != nil {
+		refreshInterval = 60 * time.Second
+	}
+	
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			config, err := configClient.FetchConfig()
+			if err != nil {
+				log.Errorf("Failed to refresh port config: %v", err)
+				continue
+			}
+			
+			// Validate the configuration
+			if err := configClient.ValidateConfig(config); err != nil {
+				log.Errorf("Invalid port config received: %v", err)
+				continue
+			}
+			
+			// Update port manager configuration
+			if err := s.updatePortConfiguration(config); err != nil {
+				log.Errorf("Failed to update port configuration: %v", err)
+			} else {
+				log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
+			}
+		}
+	}
+}
+
+// updatePortConfiguration applies new port configuration to the port manager
+func (s *ProxyServer) updatePortConfiguration(config *ports.PortConfig) error {
+	// Stop current listeners
+	s.portManager.Stop()
+	
+	// Create new port manager with updated config
+	s.portManager = ports.NewPortManager()
+	s.portManager.SetConnectionHandlers(
+		s.handleDynamicTCPConnection,
+		s.handleDynamicUDPPacket,
+	)
+	
+	// Parse and apply new configuration
+	if err := s.portManager.ParsePortRanges(config.TCPRanges, config.UDPRanges); err != nil {
+		return fmt.Errorf("failed to parse port ranges: %w", err)
+	}
+	
+	if err := s.portManager.StartListening(); err != nil {
+		return fmt.Errorf("failed to start listeners: %w", err)
+	}
+	
+	return nil
+}
+
+// handleDynamicTCPConnection handles new TCP connections on dynamically configured ports
+func (s *ProxyServer) handleDynamicTCPConnection(conn net.Conn, port int, protocol string) {
+	defer conn.Close()
+	
+	log.Debugf("New TCP connection on dynamic port %d from %s", port, conn.RemoteAddr())
+	
+	// Read first packet to extract authentication and target information
+	buffer := make([]byte, 4096)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		log.Errorf("Failed to read from TCP connection on port %d: %v", port, err)
+		return
+	}
+	
+	// Extract JWT token and target from the packet
+	token := s.extractJWTFromTCPPacket(buffer[:n])
+	targetHost := s.extractTargetFromTCPPacket(buffer[:n])
+	
+	if token == "" || targetHost == "" {
+		log.Errorf("Missing authentication or target in TCP packet on port %d", port)
+		return
+	}
+	
+	// Authenticate using JWT
+	user, err := s.authProvider.ValidateToken(token)
+	if err != nil {
+		log.Errorf("Authentication failed for TCP connection on port %d: %v", port, err)
+		return
+	}
+	
+	log.Infof("Authenticated TCP connection on port %d for user: %s to %s", port, user.ID, targetHost)
+	
+	// Check firewall rules
+	allowed := true
+	if s.firewallManager != nil {
+		allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+		if !allowed {
+			log.Warnf("Firewall blocked TCP connection on port %d for user %s to %s", port, user.ID, targetHost)
+			
+			// Log denied access to syslog
+			if s.syslogLogger != nil {
+				s.syslogLogger.LogTCPAccess(user.ID, user.Name, conn.RemoteAddr().String(), targetHost, false)
+			}
+			return
+		}
+	}
+	
+	// Log allowed access to syslog
+	if s.syslogLogger != nil {
+		s.syslogLogger.LogTCPAccess(user.ID, user.Name, conn.RemoteAddr().String(), targetHost, true)
+	}
+	
+	// Connect to target
+	targetConn, err := net.Dial("tcp", targetHost)
+	if err != nil {
+		log.Errorf("Failed to connect to target %s from port %d: %v", targetHost, port, err)
+		return
+	}
+	defer targetConn.Close()
+	
+	// Send original packet to target
+	if _, err := targetConn.Write(buffer[:n]); err != nil {
+		log.Errorf("Failed to write to target: %v", err)
+		return
+	}
+	
+	// Mirror traffic if enabled
+	if s.mirrorManager != nil {
+		go s.mirrorManager.MirrorTCP(conn.RemoteAddr().String(), targetHost, buffer[:n])
+	}
+	
+	// Bidirectional proxy
+	go s.proxyTCPData(conn, targetConn, fmt.Sprintf("client->target (port %d)", port))
+	s.proxyTCPData(targetConn, conn, fmt.Sprintf("target->client (port %d)", port))
+}
+
+// handleDynamicUDPPacket handles new UDP packets on dynamically configured ports
+func (s *ProxyServer) handleDynamicUDPPacket(data []byte, addr *net.UDPAddr, port int) {
+	log.Debugf("New UDP packet on dynamic port %d from %s", port, addr)
+	
+	// Extract JWT token and target from the packet
+	token := s.extractJWTFromUDPPacket(data)
+	targetHost := s.extractTargetFromUDPPacket(data)
+	
+	if token == "" || targetHost == "" {
+		log.Errorf("Missing authentication or target in UDP packet on port %d", port)
+		return
+	}
+	
+	// Authenticate using JWT
+	user, err := s.authProvider.ValidateToken(token)
+	if err != nil {
+		log.Errorf("Authentication failed for UDP packet on port %d: %v", port, err)
+		return
+	}
+	
+	log.Infof("Authenticated UDP packet on port %d for user: %s to %s", port, user.ID, targetHost)
+	
+	// Check firewall rules
+	allowed := true
+	if s.firewallManager != nil {
+		allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+		if !allowed {
+			log.Warnf("Firewall blocked UDP packet on port %d for user %s to %s", port, user.ID, targetHost)
+			
+			// Log denied access to syslog
+			if s.syslogLogger != nil {
+				s.syslogLogger.LogUDPAccess(user.ID, user.Name, addr.String(), targetHost, false)
+			}
+			return
+		}
+	}
+	
+	// Log allowed access to syslog
+	if s.syslogLogger != nil {
+		s.syslogLogger.LogUDPAccess(user.ID, user.Name, addr.String(), targetHost, true)
+	}
+	
+	// Connect to target
+	targetAddr, err := net.ResolveUDPAddr("udp", targetHost)
+	if err != nil {
+		log.Errorf("Failed to resolve target %s from port %d: %v", targetHost, port, err)
+		return
+	}
+	
+	targetConn, err := net.DialUDP("udp", nil, targetAddr)
+	if err != nil {
+		log.Errorf("Failed to connect to target %s from port %d: %v", targetHost, port, err)
+		return
+	}
+	defer targetConn.Close()
+	
+	// Forward packet to target
+	if _, err := targetConn.Write(data); err != nil {
+		log.Errorf("Failed to write to target: %v", err)
+		return
+	}
+	
+	// Mirror traffic if enabled
+	if s.mirrorManager != nil {
+		go s.mirrorManager.MirrorUDP(addr.String(), targetHost, data)
+	}
+	
+	// Read response and send back (UDP response handling would need port manager support)
+	response := make([]byte, 65536)
+	targetConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	n, err := targetConn.Read(response)
+	if err != nil {
+		log.Debugf("No response from target %s (normal for UDP)", targetHost)
+		return
+	}
+	
+	log.Debugf("Received %d bytes response from target %s", n, targetHost)
+}
+
+// proxyTCPData proxies data between two TCP connections
+func (s *ProxyServer) proxyTCPData(src, dst net.Conn, direction string) {
+	buffer := make([]byte, 32768)
+	
+	for {
+		n, err := src.Read(buffer)
+		if err != nil {
+			break
+		}
+		
+		if _, err := dst.Write(buffer[:n]); err != nil {
+			break
+		}
+		
+		// Mirror additional data if enabled
+		if s.mirrorManager != nil {
+			go s.mirrorManager.MirrorTCP(src.RemoteAddr().String(), dst.RemoteAddr().String(), buffer[:n])
+		}
+	}
+}
+
+// Helper methods for extracting data from packets (reuse existing implementations)
+func (s *ProxyServer) extractJWTFromTCPPacket(data []byte) string {
+	dataStr := string(data)
+	if idx := strings.Index(dataStr, "JWT:"); idx != -1 {
+		end := strings.Index(dataStr[idx+4:], "\n")
+		if end == -1 {
+			end = len(dataStr) - idx - 4
+		}
+		return strings.TrimSpace(dataStr[idx+4 : idx+4+end])
+	}
+	return ""
+}
+
+func (s *ProxyServer) extractTargetFromTCPPacket(data []byte) string {
+	dataStr := string(data)
+	if idx := strings.Index(dataStr, "HOST:"); idx != -1 {
+		end := strings.Index(dataStr[idx+5:], "\n")
+		if end == -1 {
+			end = len(dataStr) - idx - 5
+		}
+		return strings.TrimSpace(dataStr[idx+5 : idx+5+end])
+	}
+	return ""
+}
+
+func (s *ProxyServer) extractJWTFromUDPPacket(data []byte) string {
+	return s.extractJWTFromTCPPacket(data) // Same implementation
+}
+
+func (s *ProxyServer) extractTargetFromUDPPacket(data []byte) string {
+	return s.extractTargetFromTCPPacket(data) // Same implementation
 }

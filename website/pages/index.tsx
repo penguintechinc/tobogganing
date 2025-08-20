@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import Hero from '../components/Hero';
 import Features from '../components/Features';
 import Architecture from '../components/Architecture';
+import ManagerPortal from '../components/ManagerPortal';
 import UseCases from '../components/UseCases';
 import CallToAction from '../components/CallToAction';
 
@@ -30,6 +31,9 @@ const HomePage: React.FC = () => {
 
       {/* Architecture Section */}
       <Architecture />
+
+      {/* Manager Portal Section */}
+      <ManagerPortal />
 
       {/* Use Cases Section */}
       <UseCases />

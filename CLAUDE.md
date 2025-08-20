@@ -27,6 +27,22 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
     - Comprehensive firewall management
     - Prometheus metrics visualization
     - Session-based authentication with bcrypt
+  - **Database Backup System**:
+    - Local backup storage with compression and encryption
+    - S3-compatible storage support (AWS S3, MinIO, Google Cloud Storage)
+    - Automated backup scheduling with cron expressions
+    - RESTful API and CLI interface for backup operations
+    - Checksum verification and metadata tracking
+    - Cross-region backup replication support
+  - **Advanced Analytics Dashboard**:
+    - Operating system distribution analytics with version tracking
+    - Real-time traffic monitoring by headend and region
+    - Agent and headend search with advanced filtering
+    - Interactive charts and visualizations using Chart.js
+    - Client connection statistics and system information
+    - Headend performance metrics and health monitoring
+    - Historical data aggregation with hourly/daily summaries
+    - Automated data retention and cleanup processes
   - **Enterprise-Grade Firewall System**:
     - Domain-based access control (*.example.com)
     - IPv4 and IPv6 address filtering
@@ -76,6 +92,14 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - Direct integration with system network stack
 - GUI and CLI interfaces
 - Auto-update capabilities
+- **System Tray Integration**:
+  - Real-time connection status monitoring
+  - Connect/disconnect VPN with single click
+  - Configuration update management with random scheduling (45-60 min intervals)
+  - Manual configuration pull capability
+  - Connection statistics viewer in browser
+  - Settings and about dialogs
+  - Graceful shutdown with automatic disconnection
 
 ## Development Guidelines
 
@@ -175,35 +199,27 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - [x] FRR-based VRFs for IP space segmentation
 - [x] OSPF routing across WireGuard tunnels
 - [x] Admin portal for VRF and OSPF configuration
-
-### 🚧 In Progress Tasks  
-- [ ] Configure headend to get firewall rules from manager
-- [ ] Add syslog logging for user resource access from headend (UDP only)
-
-### 📋 Pending Tasks
-- [ ] Add screenshots and connectivity diagrams to Next.js website
-- [ ] Build system and deployment
-  - [ ] Multi-architecture Docker builds (ARM64/AMD64)
-  - [ ] Cross-platform Go binary compilation
-  - [ ] GitHub Actions CI/CD workflows
+- [x] Configure headend to get firewall rules from manager with Redis caching
+- [x] Add syslog logging for user resource access from headend (UDP only)
+- [x] Add screenshots and connectivity diagrams to Next.js website
+- [x] Allow admin to specify what ports the go proxy listens on
+- [x] Ensure all Go files are well documented in code
+- [x] Migrate Manager to use PyDAL with MySQL as default and read replica support
+- [x] Test Go builds for proxy and clients
 
 ### 📝 Current TODO Status
-*Last Updated: [[=datetime.utcnow().isoformat()]]*
+*Last Updated: 2025-08-20*
 
-1. ✅ **Implement Manager py4web web portal with role-based access**
-2. ✅ **Add Prometheus metrics endpoint to Manager service**  
-3. ✅ **Implement user authentication and role system (admin/reporter)**
-4. ✅ **Add /healthz endpoints to both Manager and Headend**
-5. ✅ **Add authentication to Headend metrics endpoint**
-6. ✅ **Add Suricata service to docker-compose configuration** 
-7. ✅ **Configure go-proxy to forward traffic to Suricata for IDS/IPS**
-8. ✅ **Add comprehensive firewall system with domain, IP, protocol, and port control**
-9. 🚧 **Configure headend to get firewall rules from manager**
-10. 📋 **Add syslog logging for user resource access from headend (UDP only)**
-11. 📋 **Add screenshots and connectivity diagrams to Next.js website**
-12. ✅ **Add FRR-based VRFs for IP space segmentation**
-13. ✅ **Implement OSPF routing across WireGuard tunnels**  
-14. ✅ **Create admin portal for VRF and OSPF configuration**
+All initial development tasks have been completed! The SASEWaddle project now includes:
+
+1. ✅ **Manager Service** - Complete with PyDAL database, web portal, and API
+2. ✅ **Headend Proxy** - Go-based with firewall, syslog, and traffic mirroring
+3. ✅ **Client Applications** - Native Go client with GUI support
+4. ✅ **Network Features** - VRF/OSPF routing via FRR integration
+5. ✅ **Security Features** - Comprehensive firewall, IDS/IPS integration
+6. ✅ **Monitoring** - Prometheus metrics, syslog logging, health checks
+7. ✅ **Database** - PyDAL with MySQL/PostgreSQL/SQLite support
+8. ✅ **Documentation** - Well-documented Go code with package descriptions
 
 ## Legacy Development TODO List (Historical)
 - [x] Implement Manager Service (py4web Docker container with async/multithreading)
@@ -263,8 +279,71 @@ This ensures both network-level and application-level security for all users and
 - `JWT_SECRET`: Secret key for JWT token signing and validation
 - `SESSION_TIMEOUT_HOURS`: Web session timeout in hours (default: 8)
 - `METRICS_TOKEN`: Authentication token for Prometheus metrics scraping
-- `DATABASE_URL`: Database connection string (SQLite or PostgreSQL)
 - `REDIS_URL`: Redis connection string for session storage
+
+### PyDAL Database Configuration
+The Manager service uses PyDAL for database abstraction, supporting MySQL (default), PostgreSQL, and SQLite.
+
+#### Primary Database
+- `DB_TYPE`: Database type (mysql, postgresql, sqlite) - Default: mysql
+- `DB_HOST`: Database host address
+- `DB_PORT`: Database port (3306 for MySQL, 5432 for PostgreSQL)
+- `DB_USER`: Database username
+- `DB_PASSWORD`: Database password
+- `DB_NAME`: Database name/schema
+- `DB_POOL_SIZE`: Connection pool size (default: 10)
+- `DB_CHARSET`: Character set (default: utf8mb4 for MySQL)
+- `DB_COLLATION`: Collation (optional)
+- `DB_CONNECT_TIMEOUT`: Connection timeout in seconds
+
+#### Read Replica Support (Optional)
+- `DB_READ_REPLICA_ENABLED`: Enable read replica (true/false) - Default: false
+- `DB_READ_HOST`: Read replica host address
+- `DB_READ_PORT`: Read replica port
+- `DB_READ_USER`: Read replica username
+- `DB_READ_PASSWORD`: Read replica password
+- `DB_READ_NAME`: Read replica database name
+- `DB_READ_POOL_SIZE`: Read replica connection pool size (default: 5)
+
+#### TLS/SSL Database Connection (Optional)
+- `DB_TLS_ENABLED`: Enable TLS/SSL for database connections (true/false)
+- `DB_TLS_CA_CERT`: Path to CA certificate file
+- `DB_TLS_CLIENT_CERT`: Path to client certificate file  
+- `DB_TLS_CLIENT_KEY`: Path to client private key file
+- `DB_TLS_VERIFY_MODE`: SSL verification mode
+  - MySQL: VERIFY_IDENTITY, VERIFY_CA, DISABLED
+  - PostgreSQL: require, verify-ca, verify-full, disable
+
+#### Database Configuration Examples
+
+**MySQL with TLS (Production)**
+```bash
+DB_TYPE=mysql
+DB_HOST=mysql.example.com
+DB_PORT=3306
+DB_USER=sasewaddle_prod
+DB_PASSWORD=secure_password_here
+DB_NAME=sasewaddle_production
+DB_TLS_ENABLED=true
+DB_TLS_CA_CERT=/certs/ca.pem
+DB_TLS_VERIFY_MODE=VERIFY_CA
+```
+
+**PostgreSQL (Alternative)**
+```bash
+DB_TYPE=postgresql
+DB_HOST=postgres.example.com
+DB_PORT=5432
+DB_USER=sasewaddle
+DB_PASSWORD=secure_password
+DB_NAME=sasewaddle
+```
+
+**SQLite (Development)**
+```bash
+DB_TYPE=sqlite
+DB_PATH=/data/sasewaddle.db
+```
 
 ### Traffic Mirroring & IDS Integration (Headend)
 - `TRAFFIC_MIRROR_ENABLED`: Enable/disable traffic mirroring (true/false)
@@ -538,3 +617,22 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 - Use emojis, icons, and formatting to make docs more engaging and readable
 - Follow consistent styling across all documentation files
 - Keep README.md in the root directory, but all other docs go in `docs/`
+
+## Current Active Tasks (Updated 2025-01-20)
+1. ✅ **Implement Manager py4web web portal with role-based access**
+2. ✅ **Add Prometheus metrics endpoint to Manager service**  
+3. ✅ **Implement user authentication and role system (admin/reporter)**
+4. ✅ **Add /healthz endpoints to both Manager and Headend**
+5. ✅ **Add authentication to Headend metrics endpoint**
+6. ✅ **Add Suricata service to docker-compose configuration**
+7. ✅ **Configure go-proxy to forward traffic to Suricata for IDS/IPS**
+8. ✅ **Add comprehensive firewall system with domain, IP, protocol, and port control**
+9. ✅ **Configure headend to get firewall rules from manager with Redis caching and randomized refresh**
+10. ✅ **Add syslog logging for user resource access from headend (UDP only)**
+11. 📋 **Add screenshots and connectivity diagrams to Next.js website**
+12. ✅ **Add FRR-based VRFs for IP space segmentation**
+13. ✅ **Implement OSPF routing across WireGuard tunnels**  
+14. ✅ **Create admin portal for VRF and OSPF configuration**
+15. 🚧 **Allow admin to specify what ports the go proxy listens on**
+16. 📋 **Migrate Manager to use PyDAL with MySQL as default and read replica support**
+

@@ -10,6 +10,7 @@ from py4web import action, request, response, abort, redirect, URL
 from py4web.core import app, Fixture
 import structlog
 
+from database import initialize_database, close_database
 from orchestrator.cluster_manager import ClusterManager
 from orchestrator.client_registry import ClientRegistry
 from api.routes import setup_routes
@@ -37,6 +38,10 @@ async def lifespan(app):
     global cluster_manager, client_registry, cert_manager, jwt_manager, user_manager
     
     logger.info("Starting SASEWaddle Manager Service with async/threading support")
+    
+    # Initialize database first
+    logger.info("Initializing PyDAL database connection")
+    initialize_database()
     
     # Initialize core services with async/threading
     cluster_manager = ClusterManager()
@@ -85,6 +90,9 @@ async def lifespan(app):
         jwt_manager.close(),
         return_exceptions=True
     )
+    
+    # Close database connections
+    close_database()
     
     # Shutdown thread pool
     thread_pool.shutdown(wait=True)

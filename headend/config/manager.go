@@ -1,3 +1,16 @@
+// Package config implements configuration management for the SASEWaddle headend.
+//
+// The config manager provides:
+// - Centralized configuration retrieval from Manager service
+// - Real-time configuration updates and synchronization
+// - Configuration caching and validation
+// - Environment variable and file-based configuration fallbacks
+// - Hot reloading of configuration changes without restart
+// - Structured configuration parsing and validation
+//
+// The manager maintains current headend configuration including
+// authentication settings, proxy parameters, firewall rules,
+// and operational settings received from the central Manager service.
 package config
 
 import (

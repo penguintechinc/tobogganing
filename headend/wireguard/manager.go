@@ -1,3 +1,17 @@
+// Package wireguard implements WireGuard VPN management for the SASEWaddle headend.
+//
+// The WireGuard manager provides:
+// - VPN interface creation and lifecycle management
+// - Peer configuration and key management
+// - Dynamic peer addition and removal
+// - Integration with Manager service for configuration sync
+// - Real-time monitoring of tunnel status and metrics
+// - Support for multiple concurrent tunnels
+// - Automatic peer cleanup and garbage collection
+//
+// The manager coordinates with the Manager service to maintain up-to-date
+// peer configurations and handles the underlying WireGuard interface
+// operations for secure tunnel termination.
 package wireguard
 
 import (

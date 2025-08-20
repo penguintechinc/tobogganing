@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[[=title]] - SASEWaddle Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .status-online { @apply bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold; }
+        .status-offline { @apply bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold; }
+        .status-recently_active { @apply bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold; }
+        .status-stale { @apply bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Client Details</h1>
+                <p class="text-gray-600 mt-2">Client ID: <code class="bg-gray-200 px-2 py-1 rounded">[[=client_id]]</code></p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="/analytics" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    ← Back to Analytics
+                </a>
+                <button onclick="refreshClientData()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <p class="mt-4 text-gray-600">Loading client details...</p>
+        </div>
+
+        <!-- Client Data -->
+        <div id="clientData" class="hidden">
+            <!-- Status Card -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-900 mb-2">Client Status</h2>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <p class="text-sm text-gray-500">Hostname</p>
+                                <p id="clientHostname" class="font-semibold">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">IP Address</p>
+                                <p id="clientIP" class="font-semibold">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Connected Headend</p>
+                                <p id="clientHeadend" class="font-semibold">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Last Seen</p>
+                                <p id="clientLastSeen" class="font-semibold">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <span id="clientStatus" class="status-offline">Unknown</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Information -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">System Information</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Operating System:</span>
+                            <span id="clientOS" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">OS Version:</span>
+                            <span id="clientOSVersion" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Architecture:</span>
+                            <span id="clientArch" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Client Version:</span>
+                            <span id="clientVersion" class="font-semibold">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Connection Statistics</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Connection Duration:</span>
+                            <span id="connectionDuration" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Bytes Sent:</span>
+                            <span id="bytesSent" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Bytes Received:</span>
+                            <span id="bytesReceived" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Total Traffic:</span>
+                            <span id="totalTraffic" class="font-semibold text-blue-600">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Packets Sent:</span>
+                            <span id="packetsSent" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Packets Received:</span>
+                            <span id="packetsReceived" class="font-semibold">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Activity Timeline</h3>
+                <div class="space-y-4">
+                    <div class="flex items-start space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-2 h-2 bg-green-400 rounded-full mt-2"></div>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold">Client First Registered</p>
+                            <p id="clientCreated" class="text-sm text-gray-600">-</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-2 h-2 bg-blue-400 rounded-full mt-2"></div>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold">Last Activity</p>
+                            <p id="clientLastActivity" class="text-sm text-gray-600">-</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-2 h-2 bg-purple-400 rounded-full mt-2"></div>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold">Data Last Updated</p>
+                            <p id="clientUpdated" class="text-sm text-gray-600">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="hidden text-center py-12">
+            <div class="text-red-500 mb-4">
+                <svg class="w-12 h-12 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Client Not Found</h3>
+            <p class="text-gray-600 mb-4">The requested client could not be found or you don't have permission to view it.</p>
+            <a href="/analytics" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Return to Analytics
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Utility function to format bytes
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Utility function to format duration
+        function formatDuration(seconds) {
+            if (!seconds) return '0s';
+            
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            
+            let result = '';
+            if (days > 0) result += `${days}d `;
+            if (hours > 0) result += `${hours}h `;
+            if (minutes > 0) result += `${minutes}m `;
+            if (secs > 0 || result === '') result += `${secs}s`;
+            
+            return result.trim();
+        }
+
+        // Utility function to format time
+        function formatDateTime(isoString) {
+            if (!isoString) return 'Never';
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+
+        // Utility function to format time ago
+        function formatTimeAgo(isoString) {
+            if (!isoString) return 'Never';
+            
+            const now = new Date();
+            const date = new Date(isoString);
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} minutes ago`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`;
+            return `${Math.floor(diffMins / 1440)} days ago`;
+        }
+
+        // Load client data
+        async function loadClientData() {
+            const clientId = '[[=client_id]]';
+            
+            try {
+                document.getElementById('loadingState').classList.remove('hidden');
+                document.getElementById('clientData').classList.add('hidden');
+                document.getElementById('errorState').classList.add('hidden');
+                
+                const response = await fetch(`/api/analytics/client/${clientId}/details`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    populateClientData(result.data);
+                    document.getElementById('loadingState').classList.add('hidden');
+                    document.getElementById('clientData').classList.remove('hidden');
+                } else {
+                    throw new Error(result.error || 'Client not found');
+                }
+            } catch (error) {
+                console.error('Error loading client data:', error);
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('errorState').classList.remove('hidden');
+            }
+        }
+
+        // Populate client data
+        function populateClientData(data) {
+            // Status section
+            document.getElementById('clientHostname').textContent = data.hostname || 'Unknown';
+            document.getElementById('clientIP').textContent = data.network_info?.ip_address || 'Unknown';
+            document.getElementById('clientHeadend').textContent = data.network_info?.connected_headend || 'Not connected';
+            document.getElementById('clientLastSeen').textContent = formatTimeAgo(data.timestamps?.last_seen);
+            
+            const statusEl = document.getElementById('clientStatus');
+            statusEl.textContent = data.status || 'unknown';
+            statusEl.className = `status-${data.status || 'unknown'}`;
+
+            // System information
+            document.getElementById('clientOS').textContent = data.os_info?.name || 'Unknown';
+            document.getElementById('clientOSVersion').textContent = data.os_info?.version || 'Unknown';
+            document.getElementById('clientArch').textContent = data.os_info?.architecture || 'Unknown';
+            document.getElementById('clientVersion').textContent = data.client_version || 'Unknown';
+
+            // Connection statistics
+            document.getElementById('connectionDuration').textContent = formatDuration(data.connection_stats?.duration || 0);
+            document.getElementById('bytesSent').textContent = formatBytes(data.connection_stats?.bytes_sent || 0);
+            document.getElementById('bytesReceived').textContent = formatBytes(data.connection_stats?.bytes_received || 0);
+            document.getElementById('totalTraffic').textContent = formatBytes(data.connection_stats?.total_bytes || 0);
+            document.getElementById('packetsSent').textContent = (data.connection_stats?.packets_sent || 0).toLocaleString();
+            document.getElementById('packetsReceived').textContent = (data.connection_stats?.packets_received || 0).toLocaleString();
+
+            // Timeline
+            document.getElementById('clientCreated').textContent = formatDateTime(data.timestamps?.created_at);
+            document.getElementById('clientLastActivity').textContent = formatDateTime(data.timestamps?.last_seen);
+            document.getElementById('clientUpdated').textContent = formatDateTime(data.timestamps?.updated_at);
+        }
+
+        // Refresh client data
+        function refreshClientData() {
+            loadClientData();
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadClientData();
+            
+            // Auto-refresh every 30 seconds if client is online
+            setInterval(() => {
+                const statusEl = document.getElementById('clientStatus');
+                if (statusEl && statusEl.textContent === 'online') {
+                    loadClientData();
+                }
+            }, 30000);
+        });
+    </script>
+</body>
+</html>

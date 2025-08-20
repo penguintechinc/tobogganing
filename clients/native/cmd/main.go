@@ -1,3 +1,17 @@
+// Package main implements the SASEWaddle native client application.
+//
+// The native client provides cross-platform SASE connectivity with:
+// - WireGuard VPN tunnel establishment and management
+// - Dual authentication (X.509 certificates + JWT/SSO tokens)
+// - GUI interface with system tray integration
+// - CLI mode for automation and headless deployments
+// - Automatic configuration retrieval from Manager service
+// - Real-time connection monitoring and health checks
+// - Certificate and key rotation with zero downtime
+// - Multi-platform support (Windows, macOS, Linux)
+//
+// The client supports both attended (GUI) and unattended (CLI) operation
+// modes, making it suitable for end-user devices and server deployments.
 package main
 
 import (

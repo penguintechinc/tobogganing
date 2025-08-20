@@ -16,6 +16,7 @@ from web.auth import (
 from auth.user_manager import UserRole
 from firewall.access_control import access_control_manager, AccessRule, AccessType, RuleType
 from network.vrf_manager import vrf_manager, VRFConfiguration, VRFStatus, OSPFArea, OSPFAreaType
+from network.port_manager import port_config_manager, PortRange, PortProtocol
 from cache.redis_cache import get_cache, get_firewall_cache
 import structlog
 
@@ -868,3 +869,93 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
             logger.error("Get user firewall rules error", user_id=user_id, error=str(e))
             response.status = 500
             return {"error": "Failed to get user firewall rules"}
+    
+    # Headend port configuration endpoints
+    @action("api/v1/headend/<headend_id>/ports", method=["GET"])
+    @action.uses("json")
+    async def get_headend_port_config(headend_id):
+        """Get port configuration for a specific headend (headend-to-manager API)"""
+        try:
+            # Authenticate headend server
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Bearer token required"}
+            
+            token = auth_header[7:]
+            headend_token = os.getenv('HEADEND_API_TOKEN', 'headend-server-token')
+            
+            if token != headend_token:
+                response.status = 401
+                return {"error": "Invalid headend token"}
+            
+            # Get port configuration for this headend
+            config = await port_config_manager.get_headend_config(headend_id)
+            
+            if not config:
+                # Set default configuration if none exists
+                cluster_id = request.query.get('cluster_id', f'cluster-{headend_id}')
+                await port_config_manager.set_default_config(headend_id, cluster_id)
+                config = await port_config_manager.get_headend_config(headend_id)
+            
+            if not config:
+                response.status = 404
+                return {"error": "No port configuration found"}
+            
+            return {
+                "headend_id": config.headend_id,
+                "cluster_id": config.cluster_id,
+                "tcp_ranges": config.get_tcp_range_string(),
+                "udp_ranges": config.get_udp_range_string(),
+                "tcp_ranges_detail": [pr.to_dict() for pr in config.tcp_ranges],
+                "udp_ranges_detail": [pr.to_dict() for pr in config.udp_ranges],
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+            }
+            
+        except Exception as e:
+            logger.error("Get headend port config error", headend_id=headend_id, error=str(e))
+            response.status = 500
+            return {"error": "Failed to get port configuration"}
+    
+    @action("api/v1/ports/all", method=["GET"])
+    @action.uses("json")
+    async def get_all_port_configs():
+        """Get all port configurations for all headends (headend-to-manager API)"""
+        try:
+            # Authenticate headend server
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Bearer token required"}
+            
+            token = auth_header[7:]
+            headend_token = os.getenv('HEADEND_API_TOKEN', 'headend-server-token')
+            
+            if token != headend_token:
+                response.status = 401
+                return {"error": "Invalid headend token"}
+            
+            # Get all port configurations
+            all_configs = await port_config_manager.get_all_configs()
+            
+            response_data = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "configs_count": len(all_configs),
+                "configurations": {}
+            }
+            
+            for headend_id, config in all_configs.items():
+                response_data["configurations"][headend_id] = {
+                    "headend_id": config.headend_id,
+                    "cluster_id": config.cluster_id,
+                    "tcp_ranges": config.get_tcp_range_string(),
+                    "udp_ranges": config.get_udp_range_string(),
+                    "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+                }
+            
+            return response_data
+            
+        except Exception as e:
+            logger.error("Get all port configs error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to get port configurations"}

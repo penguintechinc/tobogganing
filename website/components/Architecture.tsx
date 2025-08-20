@@ -25,79 +25,20 @@ const Architecture: React.FC = () => {
 
         {/* Architecture Diagram */}
         <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-12 mb-16">
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-center">
-            
-            {/* Clients */}
-            <div className="lg:col-span-1">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 mb-4">
-                  <DevicePhoneMobileIcon className="h-12 w-12 text-white mx-auto" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Client Applications</h3>
-                <div className="space-y-1 text-sm text-gray-600">
-                  <p>• Native Apps (Mac/Win/Linux)</p>
-                  <p>• Docker Containers</p>
-                  <p>• Mobile Support</p>
-                  <p>• GUI & CLI</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Arrow 1 */}
-            <div className="lg:col-span-1 flex justify-center">
-              <div className="flex flex-col items-center">
-                <ArrowRightIcon className="h-8 w-8 text-primary-600 hidden lg:block" />
-                <div className="lg:hidden w-full h-px bg-primary-600 my-4"></div>
-                <div className="text-center text-xs text-gray-500 mt-2">
-                  <p>WireGuard VPN</p>
-                  <p>+ JWT Auth</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Headend */}
-            <div className="lg:col-span-1">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-6 mb-4">
-                  <ServerIcon className="h-12 w-12 text-white mx-auto" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Headend Server</h3>
-                <div className="space-y-1 text-sm text-gray-600">
-                  <p>• WireGuard Termination</p>
-                  <p>• Multi-Protocol Proxy</p>
-                  <p>• Traffic Mirroring</p>
-                  <p>• External IdP</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Arrow 2 */}
-            <div className="lg:col-span-1 flex justify-center">
-              <div className="flex flex-col items-center">
-                <ArrowRightIcon className="h-8 w-8 text-primary-600 hidden lg:block" />
-                <div className="lg:hidden w-full h-px bg-primary-600 my-4"></div>
-                <div className="text-center text-xs text-gray-500 mt-2">
-                  <p>REST API</p>
-                  <p>Config Sync</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Manager */}
-            <div className="lg:col-span-1">
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 mb-4">
-                  <CloudIcon className="h-12 w-12 text-white mx-auto" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Manager Service</h3>
-                <div className="space-y-1 text-sm text-gray-600">
-                  <p>• Central Orchestration</p>
-                  <p>• Certificate Management</p>
-                  <p>• Client Registration</p>
-                  <p>• Web Interface</p>
-                </div>
-              </div>
-            </div>
+          <div className="flex justify-center">
+            <img 
+              src="/images/diagrams/connectivity-flow.svg" 
+              alt="SASEWaddle Connectivity Flow Diagram"
+              className="max-w-full h-auto"
+              style={{ maxHeight: '600px' }}
+            />
+          </div>
+          <div className="mt-8 text-center">
+            <p className="text-sm text-gray-600 max-w-4xl mx-auto">
+              Complete connectivity flow showing how users and services connect through SASEWaddle's 
+              Zero Trust architecture with WireGuard VPN tunnels, headend proxy servers, 
+              centralized management, and comprehensive security monitoring.
+            </p>
           </div>
         </div>
 

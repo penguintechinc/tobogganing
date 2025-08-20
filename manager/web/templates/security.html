@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Management - SASEWaddle Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-normal { background-color: #10b981; }
+        .status-warning { background-color: #f59e0b; }
+        .status-critical { background-color: #ef4444; }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Security Management</h1>
+            <p class="text-gray-600">Monitor and manage security systems, rate limiting, and DDoS protection</p>
+        </div>
+
+        <!-- Status Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-blue-100 rounded-lg">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Security Status</p>
+                        <p id="security-status" class="text-2xl font-bold text-gray-900">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-red-100 rounded-lg">
+                        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Blocked IPs</p>
+                        <p id="blocked-ips-count" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-yellow-100 rounded-lg">
+                        <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 14.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Emergency Mode</p>
+                        <p id="emergency-mode-status" class="text-2xl font-bold text-gray-900">Off</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-green-100 rounded-lg">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Recent Events</p>
+                        <p id="recent-events-count" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Tabs -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onclick="showTab('blocked-ips')" class="tab-button border-blue-500 text-blue-600 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Blocked IPs
+                    </button>
+                    <button onclick="showTab('rate-limits')" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Rate Limit Rules
+                    </button>
+                    <button onclick="showTab('security-events')" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Security Events
+                    </button>
+                    <button onclick="showTab('metrics')" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Metrics
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Blocked IPs Tab -->
+            <div id="blocked-ips-tab" class="tab-content p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Currently Blocked IP Addresses</h2>
+                    <div class="flex space-x-3">
+                        <button onclick="toggleEmergencyMode()" id="emergency-toggle-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            Enable Emergency Mode
+                        </button>
+                        <button onclick="refreshBlockedIPs()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div id="blocked-ips-table-container">
+                    <div class="text-center py-8">
+                        <p class="text-gray-500">Loading blocked IPs...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rate Limit Rules Tab -->
+            <div id="rate-limits-tab" class="tab-content p-6 hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Rate Limiting Rules</h2>
+                    <button onclick="showCreateRuleModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                        Create New Rule
+                    </button>
+                </div>
+
+                <div id="rate-limits-table-container">
+                    <div class="text-center py-8">
+                        <p class="text-gray-500">Loading rate limit rules...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Events Tab -->
+            <div id="security-events-tab" class="tab-content p-6 hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Security Events</h2>
+                    <div class="flex space-x-3">
+                        <select id="event-type-filter" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Event Types</option>
+                            <option value="rate_limit_violation">Rate Limit Violations</option>
+                            <option value="ddos_attack">DDoS Attacks</option>
+                            <option value="admin_action">Admin Actions</option>
+                        </select>
+                        <select id="severity-filter" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Severities</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <button onclick="loadSecurityEvents()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Apply Filters
+                        </button>
+                    </div>
+                </div>
+
+                <div id="security-events-table-container">
+                    <div class="text-center py-8">
+                        <p class="text-gray-500">Loading security events...</p>
+                    </div>
+                </div>
+
+                <div id="events-pagination" class="mt-6 flex justify-center">
+                    <!-- Pagination will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Metrics Tab -->
+            <div id="metrics-tab" class="tab-content p-6 hidden">
+                <h2 class="text-xl font-semibold text-gray-900 mb-6">Security Metrics</h2>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Event Types (Last 24h)</h3>
+                        <canvas id="event-types-chart" width="400" height="200"></canvas>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Event Timeline (Last 7 days)</h3>
+                        <canvas id="event-timeline-chart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Top IP Addresses by Security Events</h3>
+                    <div id="top-ips-container">
+                        <div class="text-center py-4">
+                            <p class="text-gray-500">Loading metrics...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Rule Modal -->
+    <div id="create-rule-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-overlay fixed inset-0" onclick="hideCreateRuleModal()"></div>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Create Rate Limit Rule</h3>
+                    
+                    <form id="create-rule-form" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Rule Name</label>
+                            <input type="text" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Max Requests</label>
+                                <input type="number" name="max_requests" required min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Window (seconds)</label>
+                                <input type="number" name="window_seconds" required min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Block Duration (seconds)</label>
+                                <input type="number" name="block_duration" value="300" min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                                <input type="number" name="priority" value="10" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Endpoints (one per line)</label>
+                            <textarea name="endpoints" rows="3" placeholder="/api/&#10;/admin/" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Exempt IPs (one per line)</label>
+                            <textarea name="exempt_ips" rows="3" placeholder="192.168.1.1&#10;10.0.0.0/8" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"></textarea>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <input type="checkbox" name="enabled" checked class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <label class="ml-2 block text-sm text-gray-700">Enabled</label>
+                        </div>
+                    </form>
+                    
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button onclick="hideCreateRuleModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                            Cancel
+                        </button>
+                        <button onclick="createRateLimitRule()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Create Rule
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let currentTab = 'blocked-ips';
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSecurityStatus();
+            loadBlockedIPs();
+            loadRateLimitRules();
+            loadSecurityEvents();
+            loadMetrics();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadSecurityStatus, 30000);
+        });
+
+        // Tab management
+        function showTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.className = 'tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm';
+            });
+            event.target.className = 'tab-button border-blue-500 text-blue-600 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm';
+            
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.remove('hidden');
+            currentTab = tabName;
+            
+            // Load tab-specific data
+            if (tabName === 'blocked-ips') {
+                loadBlockedIPs();
+            } else if (tabName === 'rate-limits') {
+                loadRateLimitRules();
+            } else if (tabName === 'security-events') {
+                loadSecurityEvents();
+            } else if (tabName === 'metrics') {
+                loadMetrics();
+            }
+        }
+
+        // Security status
+        async function loadSecurityStatus() {
+            try {
+                const response = await fetch('/api/security/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.data;
+                    
+                    // Update status indicators
+                    document.getElementById('blocked-ips-count').textContent = stats.blocked_ips_count;
+                    document.getElementById('recent-events-count').textContent = stats.recent_security_events;
+                    document.getElementById('emergency-mode-status').textContent = stats.emergency_mode ? 'ON' : 'OFF';
+                    
+                    // Update security status
+                    const statusEl = document.getElementById('security-status');
+                    if (stats.emergency_mode) {
+                        statusEl.innerHTML = '<span class="status-indicator status-critical"></span>Emergency';
+                        statusEl.className = 'text-2xl font-bold text-red-600';
+                    } else if (stats.blocked_ips_count > 0) {
+                        statusEl.innerHTML = '<span class="status-indicator status-warning"></span>Active';
+                        statusEl.className = 'text-2xl font-bold text-yellow-600';
+                    } else {
+                        statusEl.innerHTML = '<span class="status-indicator status-normal"></span>Normal';
+                        statusEl.className = 'text-2xl font-bold text-green-600';
+                    }
+                    
+                    // Update emergency mode button
+                    const emergencyBtn = document.getElementById('emergency-toggle-btn');
+                    if (stats.emergency_mode) {
+                        emergencyBtn.textContent = 'Disable Emergency Mode';
+                        emergencyBtn.className = 'px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors';
+                    } else {
+                        emergencyBtn.textContent = 'Enable Emergency Mode';
+                        emergencyBtn.className = 'px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load security status:', error);
+            }
+        }
+
+        // Blocked IPs
+        async function loadBlockedIPs() {
+            try {
+                const response = await fetch('/api/security/blocked-ips');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('blocked-ips-table-container');
+                    
+                    if (data.data.blocked_ips.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-gray-500">No IPs currently blocked</p>
+                            </div>
+                        `;
+                    } else {
+                        let tableHTML = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Blocked Until</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                        `;
+                        
+                        data.data.blocked_ips.forEach(ip => {
+                            const blockedUntil = new Date(ip.blocked_until).toLocaleString();
+                            const remainingMinutes = Math.ceil(ip.remaining_seconds / 60);
+                            
+                            tableHTML += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${ip.ip_address}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${blockedUntil}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${remainingMinutes} min</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button onclick="unblockIP('${ip.ip_address}')" class="text-red-600 hover:text-red-900">Unblock</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tableHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        container.innerHTML = tableHTML;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load blocked IPs:', error);
+            }
+        }
+
+        async function unblockIP(ipAddress) {
+            if (!confirm(`Are you sure you want to unblock ${ipAddress}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/security/blocked-ips/${ipAddress}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('IP unblocked successfully');
+                    loadBlockedIPs();
+                    loadSecurityStatus();
+                } else {
+                    alert('Failed to unblock IP: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to unblock IP:', error);
+                alert('Failed to unblock IP');
+            }
+        }
+
+        async function refreshBlockedIPs() {
+            loadBlockedIPs();
+        }
+
+        // Emergency mode
+        async function toggleEmergencyMode() {
+            try {
+                const statusResponse = await fetch('/api/security/status');
+                const statusData = await statusResponse.json();
+                const isCurrentlyActive = statusData.data.emergency_mode;
+                
+                if (isCurrentlyActive) {
+                    // Disable emergency mode
+                    const response = await fetch('/api/security/emergency-mode', {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        alert('Emergency mode disabled');
+                    } else {
+                        alert('Failed to disable emergency mode: ' + data.error);
+                    }
+                } else {
+                    // Enable emergency mode
+                    const duration = prompt('Enter duration in seconds (default: 3600):', '3600');
+                    if (duration === null) return;
+                    
+                    const response = await fetch('/api/security/emergency-mode', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            duration: parseInt(duration) || 3600
+                        })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        alert('Emergency mode enabled');
+                    } else {
+                        alert('Failed to enable emergency mode: ' + data.error);
+                    }
+                }
+                
+                loadSecurityStatus();
+            } catch (error) {
+                console.error('Failed to toggle emergency mode:', error);
+                alert('Failed to toggle emergency mode');
+            }
+        }
+
+        // Rate limit rules
+        async function loadRateLimitRules() {
+            try {
+                const response = await fetch('/api/security/rate-limit-rules');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('rate-limits-table-container');
+                    
+                    if (data.data.rules.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-gray-500">No rate limit rules configured</p>
+                            </div>
+                        `;
+                    } else {
+                        let tableHTML = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Limits</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Endpoints</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                        `;
+                        
+                        data.data.rules.forEach(rule => {
+                            const limits = `${rule.max_requests}/${rule.window_seconds}s`;
+                            const endpoints = rule.endpoints ? rule.endpoints.join(', ') : 'All';
+                            const statusBadge = rule.enabled ? 
+                                '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Enabled</span>' :
+                                '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Disabled</span>';
+                            
+                            const actions = rule.built_in ? 
+                                '<span class="text-gray-400">Built-in</span>' :
+                                `<button onclick="deleteRateLimitRule(${rule.id})" class="text-red-600 hover:text-red-900">Delete</button>`;
+                            
+                            tableHTML += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${rule.name}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${limits}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">${endpoints}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${statusBadge}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${actions}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tableHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        container.innerHTML = tableHTML;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load rate limit rules:', error);
+            }
+        }
+
+        function showCreateRuleModal() {
+            document.getElementById('create-rule-modal').classList.remove('hidden');
+        }
+
+        function hideCreateRuleModal() {
+            document.getElementById('create-rule-modal').classList.add('hidden');
+            document.getElementById('create-rule-form').reset();
+        }
+
+        async function createRateLimitRule() {
+            const form = document.getElementById('create-rule-form');
+            const formData = new FormData(form);
+            
+            const ruleData = {
+                name: formData.get('name'),
+                max_requests: parseInt(formData.get('max_requests')),
+                window_seconds: parseInt(formData.get('window_seconds')),
+                block_duration: parseInt(formData.get('block_duration')),
+                priority: parseInt(formData.get('priority')),
+                enabled: formData.get('enabled') === 'on'
+            };
+            
+            // Parse endpoints
+            const endpointsText = formData.get('endpoints').trim();
+            if (endpointsText) {
+                ruleData.endpoints = endpointsText.split('\n').map(e => e.trim()).filter(e => e);
+            }
+            
+            // Parse exempt IPs
+            const exemptIpsText = formData.get('exempt_ips').trim();
+            if (exemptIpsText) {
+                ruleData.exempt_ips = exemptIpsText.split('\n').map(e => e.trim()).filter(e => e);
+            }
+            
+            try {
+                const response = await fetch('/api/security/rate-limit-rules', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(ruleData)
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Rate limit rule created successfully');
+                    hideCreateRuleModal();
+                    loadRateLimitRules();
+                } else {
+                    alert('Failed to create rule: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to create rate limit rule:', error);
+                alert('Failed to create rule');
+            }
+        }
+
+        async function deleteRateLimitRule(ruleId) {
+            if (!confirm('Are you sure you want to delete this rate limit rule?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/security/rate-limit-rules/${ruleId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Rate limit rule deleted successfully');
+                    loadRateLimitRules();
+                } else {
+                    alert('Failed to delete rule: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to delete rate limit rule:', error);
+                alert('Failed to delete rule');
+            }
+        }
+
+        // Security events
+        async function loadSecurityEvents(page = 1) {
+            const eventType = document.getElementById('event-type-filter').value;
+            const severity = document.getElementById('severity-filter').value;
+            
+            let url = `/api/security/events?page=${page}&limit=20`;
+            if (eventType) url += `&event_type=${eventType}`;
+            if (severity) url += `&severity=${severity}`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('security-events-table-container');
+                    
+                    if (data.data.events.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-gray-500">No security events found</p>
+                            </div>
+                        `;
+                    } else {
+                        let tableHTML = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Endpoint</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                        `;
+                        
+                        data.data.events.forEach(event => {
+                            const timestamp = new Date(event.timestamp).toLocaleString();
+                            const severityBadge = getSeverityBadge(event.severity);
+                            const details = JSON.stringify(event.details, null, 2);
+                            
+                            tableHTML += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timestamp}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${event.event_type}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${event.ip_address}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">${event.endpoint}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${severityBadge}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">
+                                        <button onclick="showEventDetails('${event.id}', '${details.replace(/'/g, "\\'")}', '${event.user_agent}')" class="text-blue-600 hover:text-blue-900">View</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tableHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        container.innerHTML = tableHTML;
+                    }
+                    
+                    // Update pagination
+                    updateEventsPagination(data.data.pagination);
+                    currentPage = page;
+                }
+            } catch (error) {
+                console.error('Failed to load security events:', error);
+            }
+        }
+
+        function getSeverityBadge(severity) {
+            const badges = {
+                low: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Low</span>',
+                medium: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Medium</span>',
+                high: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">High</span>',
+                critical: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Critical</span>'
+            };
+            return badges[severity] || badges.medium;
+        }
+
+        function updateEventsPagination(pagination) {
+            const container = document.getElementById('events-pagination');
+            
+            if (pagination.total_pages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            let paginationHTML = '<div class="flex items-center space-x-2">';
+            
+            // Previous button
+            if (pagination.page > 1) {
+                paginationHTML += `<button onclick="loadSecurityEvents(${pagination.page - 1})" class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Previous</button>`;
+            }
+            
+            // Page numbers
+            for (let i = Math.max(1, pagination.page - 2); i <= Math.min(pagination.total_pages, pagination.page + 2); i++) {
+                const isActive = i === pagination.page;
+                const buttonClass = isActive ? 
+                    'px-3 py-2 bg-blue-600 text-white rounded-lg' :
+                    'px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50';
+                
+                paginationHTML += `<button onclick="loadSecurityEvents(${i})" class="${buttonClass}">${i}</button>`;
+            }
+            
+            // Next button
+            if (pagination.page < pagination.total_pages) {
+                paginationHTML += `<button onclick="loadSecurityEvents(${pagination.page + 1})" class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Next</button>`;
+            }
+            
+            paginationHTML += '</div>';
+            container.innerHTML = paginationHTML;
+        }
+
+        function showEventDetails(eventId, details, userAgent) {
+            alert(`Event Details:\n\nUser Agent: ${userAgent}\n\nDetails:\n${details}`);
+        }
+
+        // Metrics
+        async function loadMetrics() {
+            try {
+                const response = await fetch('/api/security/metrics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const metrics = data.data.metrics;
+                    
+                    // Event types chart
+                    const eventTypesCtx = document.getElementById('event-types-chart').getContext('2d');
+                    new Chart(eventTypesCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(metrics.last_24h.event_counts),
+                            datasets: [{
+                                data: Object.values(metrics.last_24h.event_counts),
+                                backgroundColor: [
+                                    '#ef4444',
+                                    '#f59e0b',
+                                    '#10b981',
+                                    '#3b82f6',
+                                    '#8b5cf6'
+                                ]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    
+                    // Top IPs
+                    const topIpsContainer = document.getElementById('top-ips-container');
+                    if (metrics.last_24h.top_ips.length === 0) {
+                        topIpsContainer.innerHTML = '<p class="text-gray-500">No security events in the last 24 hours</p>';
+                    } else {
+                        let topIpsHTML = '<div class="space-y-2">';
+                        metrics.last_24h.top_ips.forEach((ip, index) => {
+                            topIpsHTML += `
+                                <div class="flex justify-between items-center p-3 bg-white rounded-lg border">
+                                    <span class="font-medium">${ip.ip_address}</span>
+                                    <span class="text-sm text-gray-500">${ip.event_count} events</span>
+                                </div>
+                            `;
+                        });
+                        topIpsHTML += '</div>';
+                        topIpsContainer.innerHTML = topIpsHTML;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load metrics:', error);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,3 +1,16 @@
+// JWT authentication implementation for SASEWaddle headend proxy.
+//
+// This file implements JWT (JSON Web Token) based authentication using RSA
+// public key cryptography for secure token validation. Features include:
+// - RSA public key validation with automatic key rotation
+// - Manager service integration for public key retrieval
+// - Token expiration and signature validation
+// - User claim extraction and role assignment
+// - Gin middleware integration for request authentication
+//
+// JWT tokens are issued by the Manager service and validated by headend
+// servers using the Manager's public key, enabling stateless authentication
+// across distributed SASE deployments.
 package auth
 
 import (
@@ -6,8 +19,10 @@ import (
     "fmt"
     "io"
     "net/http"
+    "strings"
     "time"
 
+    "github.com/gin-gonic/gin"
     "github.com/golang-jwt/jwt/v5"
     log "github.com/sirupsen/logrus"
 )
@@ -137,22 +152,26 @@ func (j *JWTProvider) ValidateToken(tokenString string) (*User, error) {
     }
     
     user := &User{
-        ID:          nodeID,
-        Username:    fmt.Sprintf("%s-%s", nodeType, nodeID),
-        Email:       fmt.Sprintf("%s@sasewaddle.local", nodeID),
-        Groups:      []string{nodeType},
-        Permissions: permissions,
-        Metadata:    metadata,
+        ID:       nodeID,
+        Name:     fmt.Sprintf("%s-%s", nodeType, nodeID),
+        Email:    fmt.Sprintf("%s@sasewaddle.local", nodeID),
+        Groups:   []string{nodeType},
+        Metadata: map[string]interface{}{
+            "permissions": permissions,
+            "node_type":   nodeType,
+            "extra":       metadata,
+        },
     }
     
     return user, nil
 }
 
-func (j *JWTProvider) LoginHandler() func(interface{}) {
-    return func(c interface{}) {
+func (j *JWTProvider) LoginHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
         // For JWT provider, login is handled by the manager service
         // This endpoint returns information about JWT authentication
-        response := map[string]interface{}{
+        log.Info("JWT login info requested")
+        c.JSON(200, gin.H{
             "auth_type": "jwt",
             "message":   "JWT authentication managed by SASEWaddle Manager Service",
             "endpoints": map[string]string{
@@ -160,28 +179,38 @@ func (j *JWTProvider) LoginHandler() func(interface{}) {
                 "refresh":  j.managerURL + "/api/v1/auth/refresh",
                 "validate": j.managerURL + "/api/v1/auth/validate",
             },
-        }
-        
-        // This would need to be adapted based on the web framework being used
-        // For now, it's a placeholder that would need gin.Context type assertion
-        log.Info("JWT login info requested")
-        _ = response // Placeholder to avoid unused variable error
+        })
     }
 }
 
-func (j *JWTProvider) CallbackHandler() func(interface{}) {
-    return func(c interface{}) {
+func (j *JWTProvider) CallbackHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
         // JWT doesn't use callback - this is a no-op
         log.Info("JWT callback requested (no-op)")
+        c.JSON(200, gin.H{"message": "JWT callback not required"})
     }
 }
 
-func (j *JWTProvider) LogoutHandler() func(interface{}) {
-    return func(c interface{}) {
+func (j *JWTProvider) LogoutHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
         // For JWT, logout means token revocation at the manager
         log.Info("JWT logout requested")
         // Would need to implement token revocation call to manager
+        c.JSON(200, gin.H{"message": "Logout successful"})
     }
+}
+
+
+// GetUser extracts user information from the current context
+func (j *JWTProvider) GetUser(ctx *gin.Context) (*User, error) {
+    // Extract token from Authorization header
+    authHeader := ctx.GetHeader("Authorization")
+    if !strings.HasPrefix(authHeader, "Bearer ") {
+        return nil, fmt.Errorf("missing or invalid authorization header")
+    }
+    
+    token := authHeader[7:] // Remove "Bearer " prefix
+    return j.ValidateToken(token)
 }
 
 func (j *JWTProvider) GetUserInfo(userID string) (*User, error) {

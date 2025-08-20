@@ -1,3 +1,17 @@
+// Package mirror implements traffic mirroring capabilities for the SASEWaddle headend proxy.
+//
+// The mirror manager provides:
+// - Real-time packet duplication to external security tools
+// - Support for multiple mirror destinations
+// - Protocol support: VXLAN, GRE, ERSPAN
+// - Integration with IDS/IPS systems (Suricata, Snort, etc.)
+// - High-performance zero-copy mirroring
+// - Buffered queue with configurable size for performance
+// - Connection pooling and automatic reconnection
+// - Traffic statistics and monitoring
+//
+// The mirror system operates independently of the main proxy flow to ensure
+// that mirroring does not impact application performance or availability.
 package mirror
 
 import (
@@ -7,12 +21,9 @@ import (
     "fmt"
     "net"
     "net/http"
-    "strings"
     "sync"
     "time"
 
-    "github.com/google/gopacket"
-    "github.com/google/gopacket/layers"
     log "github.com/sirupsen/logrus"
 )
 
