@@ -3,9 +3,11 @@ package mirror
 import (
     "bytes"
     "encoding/binary"
+    "encoding/json"
     "fmt"
     "net"
     "net/http"
+    "strings"
     "sync"
     "time"
 
@@ -15,15 +17,19 @@ import (
 )
 
 type Manager struct {
-    destinations []string
-    protocol     string
-    bufferSize   int
-    queue        chan *MirrorPacket
-    wg           sync.WaitGroup
-    stopCh       chan struct{}
-    connections  map[string]net.Conn
-    mu           sync.RWMutex
-    stats        *Stats
+    destinations    []string
+    protocol        string
+    bufferSize      int
+    queue           chan *MirrorPacket
+    wg              sync.WaitGroup
+    stopCh          chan struct{}
+    connections     map[string]net.Conn
+    mu              sync.RWMutex
+    stats           *Stats
+    suricataEnabled bool
+    suricataHost    string
+    suricataPort    string
+    suricataConn    net.Conn
 }
 
 type MirrorPacket struct {
@@ -59,6 +65,25 @@ func NewManager(destinations []string, protocol string, bufferSize int) *Manager
     }
 }
 
+func NewManagerWithSuricata(destinations []string, protocol string, bufferSize int, suricataHost, suricataPort string) *Manager {
+    if protocol == "" {
+        protocol = "VXLAN"
+    }
+    
+    return &Manager{
+        destinations:    destinations,
+        protocol:        protocol,
+        bufferSize:      bufferSize,
+        queue:           make(chan *MirrorPacket, bufferSize),
+        stopCh:          make(chan struct{}),
+        connections:     make(map[string]net.Conn),
+        stats:           &Stats{},
+        suricataEnabled: suricataHost != "" && suricataPort != "",
+        suricataHost:    suricataHost,
+        suricataPort:    suricataPort,
+    }
+}
+
 func (m *Manager) Start() error {
     log.Infof("Starting mirror manager with protocol %s to %v", m.protocol, m.destinations)
     
@@ -72,7 +97,19 @@ func (m *Manager) Start() error {
         m.connections[dest] = conn
     }
     
-    if len(m.connections) == 0 {
+    // Initialize Suricata connection if enabled
+    if m.suricataEnabled {
+        suricataAddr := fmt.Sprintf("%s:%s", m.suricataHost, m.suricataPort)
+        conn, err := net.Dial("tcp", suricataAddr)
+        if err != nil {
+            log.Errorf("Failed to connect to Suricata at %s: %v", suricataAddr, err)
+        } else {
+            m.suricataConn = conn
+            log.Infof("Connected to Suricata IDS/IPS at %s", suricataAddr)
+        }
+    }
+    
+    if len(m.connections) == 0 && !m.suricataEnabled {
         return fmt.Errorf("no mirror destinations available")
     }
     
@@ -102,6 +139,13 @@ func (m *Manager) Stop() {
         conn.Close()
         delete(m.connections, dest)
     }
+    
+    // Close Suricata connection
+    if m.suricataConn != nil {
+        m.suricataConn.Close()
+        m.suricataConn = nil
+    }
+    
     m.mu.Unlock()
 }
 
@@ -248,6 +292,7 @@ func (m *Manager) sendPacket(packet *MirrorPacket) {
     m.mu.RLock()
     defer m.mu.RUnlock()
     
+    // Send to regular mirror destinations
     for dest, conn := range m.connections {
         if _, err := conn.Write(encapsulated); err != nil {
             log.Errorf("Failed to send to mirror destination %s: %v", dest, err)
@@ -257,6 +302,20 @@ func (m *Manager) sendPacket(packet *MirrorPacket) {
             go m.reconnect(dest)
         } else {
             m.stats.incrementSent(uint64(len(encapsulated)))
+        }
+    }
+    
+    // Send to Suricata if enabled
+    if m.suricataEnabled && m.suricataConn != nil {
+        suricataData := m.prepareSuricataData(packet)
+        if _, err := m.suricataConn.Write(suricataData); err != nil {
+            log.Errorf("Failed to send to Suricata: %v", err)
+            m.stats.incrementErrors()
+            
+            // Try to reconnect to Suricata
+            go m.reconnectSuricata()
+        } else {
+            m.stats.incrementSent(uint64(len(suricataData)))
         }
     }
 }
@@ -381,4 +440,65 @@ func (s *Stats) incrementErrors() {
     s.mu.Lock()
     s.Errors++
     s.mu.Unlock()
+}
+
+// prepareSuricataData formats packet data for Suricata consumption
+func (m *Manager) prepareSuricataData(packet *MirrorPacket) []byte {
+    // Create JSON envelope for Suricata with metadata
+    envelope := map[string]interface{}{
+        "timestamp":  packet.Timestamp.Format(time.RFC3339Nano),
+        "protocol":   packet.Protocol,
+        "metadata":   packet.Metadata,
+        "data_size":  len(packet.Data),
+    }
+    
+    // Add source/destination if available
+    if packet.Source != nil {
+        envelope["src_ip"] = packet.Source.String()
+    }
+    if packet.Destination != nil {
+        envelope["dst_ip"] = packet.Destination.String()
+    }
+    
+    // Create Suricata EVE JSON format
+    eveLog := map[string]interface{}{
+        "timestamp":    packet.Timestamp.Format(time.RFC3339Nano),
+        "flow_id":      fmt.Sprintf("%x", packet.Timestamp.UnixNano()),
+        "event_type":   "mirror",
+        "mirror":       envelope,
+        "sasewaddle": map[string]interface{}{
+            "cluster": packet.Metadata["cluster_id"],
+            "user":    packet.Metadata["user_id"],
+        },
+    }
+    
+    jsonData, err := json.Marshal(eveLog)
+    if err != nil {
+        log.Errorf("Failed to marshal Suricata data: %v", err)
+        return packet.Data // Fallback to raw data
+    }
+    
+    // Append newline for EVE JSON format
+    return append(jsonData, '\n')
+}
+
+// reconnectSuricata attempts to reconnect to Suricata
+func (m *Manager) reconnectSuricata() {
+    m.mu.Lock()
+    defer m.mu.Unlock()
+    
+    if m.suricataConn != nil {
+        m.suricataConn.Close()
+        m.suricataConn = nil
+    }
+    
+    suricataAddr := fmt.Sprintf("%s:%s", m.suricataHost, m.suricataPort)
+    conn, err := net.Dial("tcp", suricataAddr)
+    if err != nil {
+        log.Errorf("Failed to reconnect to Suricata at %s: %v", suricataAddr, err)
+        return
+    }
+    
+    m.suricataConn = conn
+    log.Infof("Reconnected to Suricata IDS/IPS at %s", suricataAddr)
 }

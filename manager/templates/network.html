@@ -1,0 +1,788 @@
+[[extend 'layout.html']]
+
+<div class="p-6 space-y-6" x-data="networkManager()">
+    <!-- Header with Actions -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h3 class="text-lg font-medium text-gray-900">🌐 Network Management - VRF & OSPF</h3>
+            <p class="text-sm text-gray-600">Configure Virtual Routing and Forwarding with OSPF routing</p>
+        </div>
+        <div class="flex space-x-3">
+            <button 
+                @click="showAddVRFModal = true"
+                class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-plus mr-2"></i>
+                Add VRF
+            </button>
+            <button 
+                @click="refreshVRFs()"
+                class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
+                <i class="fas fa-sync mr-2"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+    
+    [[if error:]]
+    <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div class="flex items-center">
+            <i class="fas fa-exclamation-triangle text-red-500 mr-3"></i>
+            <p class="text-red-700">[[=error]]</p>
+        </div>
+    </div>
+    [[pass]]
+    
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-2 bg-blue-100 rounded-lg">
+                    <i class="fas fa-sitemap text-blue-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-600">Total VRFs</p>
+                    <p class="text-2xl font-bold text-gray-900" x-text="vrfs.length">[[=len(vrfs)]]</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-2 bg-green-100 rounded-lg">
+                    <i class="fas fa-check-circle text-green-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-600">Active VRFs</p>
+                    <p class="text-2xl font-bold text-gray-900" x-text="vrfs.filter(v => v.status === 'active').length">
+                        [[=len([v for v in vrfs if v.status.value == 'active'])]]
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-2 bg-purple-100 rounded-lg">
+                    <i class="fas fa-route text-purple-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-600">OSPF Enabled</p>
+                    <p class="text-2xl font-bold text-gray-900" x-text="vrfs.filter(v => v.ospf_enabled).length">
+                        [[=len([v for v in vrfs if v.ospf_enabled])]]
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-2 bg-orange-100 rounded-lg">
+                    <i class="fas fa-globe text-orange-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-600">IP Ranges</p>
+                    <p class="text-2xl font-bold text-gray-900">
+                        [[=sum(len(v.ip_ranges) for v in vrfs)]]
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- VRF Table -->
+    <div class="bg-white rounded-lg shadow-sm border">
+        <div class="p-6 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h4 class="text-lg font-medium text-gray-900">Virtual Routing and Forwarding (VRF) Instances</h4>
+                <div class="flex items-center space-x-4">
+                    <!-- Filter by status -->
+                    <select x-model="selectedStatus" @change="filterVRFs()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="text-left p-4 font-medium text-gray-700">VRF Name</th>
+                        <th class="text-left p-4 font-medium text-gray-700">Status</th>
+                        <th class="text-left p-4 font-medium text-gray-700">Route Distinguisher</th>
+                        <th class="text-left p-4 font-medium text-gray-700">IP Ranges</th>
+                        <th class="text-left p-4 font-medium text-gray-700">OSPF</th>
+                        <th class="text-left p-4 font-medium text-gray-700">Created</th>
+                        <th class="text-left p-4 font-medium text-gray-700">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="vrf in filteredVRFs" :key="vrf.id">
+                        <tr class="border-t border-gray-200 hover:bg-gray-50">
+                            <td class="p-4">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                        <i class="fas fa-sitemap text-blue-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-900" x-text="vrf.name"></p>
+                                        <p class="text-sm text-gray-500" x-text="vrf.description"></p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="p-4">
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full"
+                                      :class="{
+                                          'bg-green-100 text-green-800': vrf.status === 'active',
+                                          'bg-gray-100 text-gray-800': vrf.status === 'inactive',
+                                          'bg-yellow-100 text-yellow-800': vrf.status === 'pending',
+                                          'bg-red-100 text-red-800': vrf.status === 'error'
+                                      }"
+                                      x-text="vrf.status.toUpperCase()">
+                                </span>
+                            </td>
+                            <td class="p-4">
+                                <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono" x-text="vrf.rd"></code>
+                            </td>
+                            <td class="p-4">
+                                <div class="flex flex-wrap gap-1">
+                                    <template x-for="range in vrf.ip_ranges" :key="range">
+                                        <span class="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded" x-text="range"></span>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="p-4">
+                                <div class="flex items-center">
+                                    <span :class="vrf.ospf_enabled ? 'text-green-600' : 'text-gray-400'">
+                                        <i :class="vrf.ospf_enabled ? 'fas fa-check-circle' : 'fas fa-times-circle'" class="mr-1"></i>
+                                        <span x-text="vrf.ospf_enabled ? 'Enabled' : 'Disabled'"></span>
+                                    </span>
+                                    <template x-if="vrf.ospf_enabled && vrf.ospf_router_id">
+                                        <span class="ml-2 text-xs text-gray-500" x-text="'(' + vrf.ospf_router_id + ')'"></span>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="p-4">
+                                <span class="text-sm text-gray-500" x-text="formatDate(vrf.created_at)"></span>
+                            </td>
+                            <td class="p-4">
+                                <div class="flex items-center space-x-2">
+                                    <button 
+                                        @click="configureOSPF(vrf)"
+                                        class="text-blue-600 hover:text-blue-800 transition-colors"
+                                        title="Configure OSPF">
+                                        <i class="fas fa-route"></i>
+                                    </button>
+                                    <button 
+                                        @click="showVRFConfig(vrf.id)"
+                                        class="text-green-600 hover:text-green-800 transition-colors"
+                                        title="View FRR Config">
+                                        <i class="fas fa-code"></i>
+                                    </button>
+                                    <button 
+                                        @click="showOSPFNeighbors(vrf.id)"
+                                        class="text-purple-600 hover:text-purple-800 transition-colors"
+                                        title="View OSPF Neighbors">
+                                        <i class="fas fa-network-wired"></i>
+                                    </button>
+                                    <button 
+                                        @click="deleteVRF(vrf.id)"
+                                        class="text-red-600 hover:text-red-800 transition-colors"
+                                        title="Delete VRF">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            
+            <template x-if="filteredVRFs.length === 0">
+                <div class="p-12 text-center">
+                    <i class="fas fa-sitemap text-4xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-500 text-lg">No VRFs configured</p>
+                    <p class="text-gray-400 text-sm">Create your first VRF to segment IP spaces</p>
+                </div>
+            </template>
+        </div>
+    </div>
+    
+    <!-- Add VRF Modal -->
+    <div x-show="showAddVRFModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="showAddVRFModal = false"></div>
+            <div class="bg-white rounded-lg shadow-xl max-w-lg w-full z-10">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-medium text-gray-900">Create New VRF</h3>
+                        <button @click="showAddVRFModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="createVRF()" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">VRF Name</label>
+                            <input 
+                                type="text" 
+                                x-model="newVRF.name" 
+                                required 
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                placeholder="customer-a">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <input 
+                                type="text" 
+                                x-model="newVRF.description" 
+                                required 
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                placeholder="Customer A VRF">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Route Distinguisher</label>
+                            <input 
+                                type="text" 
+                                x-model="newVRF.rd" 
+                                required 
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                placeholder="65000:100 or 10.0.0.1:100">
+                            <p class="text-xs text-gray-500 mt-1">Format: ASN:value or IP:value</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">IP Ranges (CIDR)</label>
+                            <textarea 
+                                x-model="newVRF.ip_ranges_text" 
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                rows="3"
+                                placeholder="10.1.0.0/16&#10;192.168.100.0/24&#10;2001:db8:1::/48"></textarea>
+                            <p class="text-xs text-gray-500 mt-1">One CIDR per line</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Route Targets Import</label>
+                            <input 
+                                type="text" 
+                                x-model="newVRF.rt_import_text" 
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                placeholder="65000:100,65000:200">
+                            <p class="text-xs text-gray-500 mt-1">Comma-separated route targets</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Route Targets Export</label>
+                            <input 
+                                type="text" 
+                                x-model="newVRF.rt_export_text" 
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                placeholder="65000:100,65000:300">
+                            <p class="text-xs text-gray-500 mt-1">Comma-separated route targets</p>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3 pt-4">
+                            <button type="button" @click="showAddVRFModal = false" class="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                                Cancel
+                            </button>
+                            <button type="submit" :disabled="isSubmitting" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                                <span x-show="!isSubmitting">Create VRF</span>
+                                <span x-show="isSubmitting">Creating...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Configure OSPF Modal -->
+    <div x-show="showOSPFModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="showOSPFModal = false"></div>
+            <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full z-10">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-medium text-gray-900">Configure OSPF for VRF: <span x-text="selectedVRF.name"></span></h3>
+                        <button @click="showOSPFModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="updateOSPF()" class="space-y-6">
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="ospfConfig.ospf_enabled" class="rounded border-gray-300 text-blue-600 mr-2">
+                                <span class="text-sm font-medium text-gray-700">Enable OSPF for this VRF</span>
+                            </label>
+                        </div>
+                        
+                        <template x-if="ospfConfig.ospf_enabled">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Router ID</label>
+                                    <input 
+                                        type="text" 
+                                        x-model="ospfConfig.router_id" 
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                        placeholder="1.1.1.1">
+                                    <p class="text-xs text-gray-500 mt-1">Usually the highest loopback IP</p>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Networks</label>
+                                    <div class="space-y-2">
+                                        <template x-for="(network, index) in ospfConfig.networks" :key="index">
+                                            <div class="flex space-x-2">
+                                                <input 
+                                                    type="text" 
+                                                    x-model="network.network" 
+                                                    class="flex-1 border border-gray-300 rounded-lg px-3 py-2"
+                                                    placeholder="10.1.0.0/24">
+                                                <input 
+                                                    type="text" 
+                                                    x-model="network.area" 
+                                                    class="w-24 border border-gray-300 rounded-lg px-3 py-2"
+                                                    placeholder="0.0.0.0">
+                                                <button 
+                                                    type="button" 
+                                                    @click="ospfConfig.networks.splice(index, 1)"
+                                                    class="px-2 py-2 text-red-600 hover:text-red-800">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <button 
+                                            type="button" 
+                                            @click="ospfConfig.networks.push({network: '', area: '0.0.0.0'})"
+                                            class="text-blue-600 hover:text-blue-800 text-sm">
+                                            <i class="fas fa-plus mr-1"></i>Add Network
+                                        </button>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-1">Network/CIDR and OSPF Area ID</p>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">OSPF Areas</label>
+                                    <div class="space-y-2">
+                                        <template x-for="(area, index) in ospfConfig.areas" :key="index">
+                                            <div class="flex space-x-2 p-3 border rounded-lg">
+                                                <div class="flex-1">
+                                                    <input 
+                                                        type="text" 
+                                                        x-model="area.area_id" 
+                                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2"
+                                                        placeholder="0.0.0.0">
+                                                    <select x-model="area.area_type" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                                        <option value="normal">Normal Area</option>
+                                                        <option value="stub">Stub Area</option>
+                                                        <option value="nssa">NSSA Area</option>
+                                                        <option value="backbone">Backbone Area</option>
+                                                    </select>
+                                                </div>
+                                                <button 
+                                                    type="button" 
+                                                    @click="ospfConfig.areas.splice(index, 1)"
+                                                    class="px-2 py-2 text-red-600 hover:text-red-800">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <button 
+                                            type="button" 
+                                            @click="ospfConfig.areas.push({area_id: '0.0.0.0', area_type: 'normal'})"
+                                            class="text-blue-600 hover:text-blue-800 text-sm">
+                                            <i class="fas fa-plus mr-1"></i>Add Area
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <div class="flex justify-end space-x-3 pt-4">
+                            <button type="button" @click="showOSPFModal = false" class="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                                Cancel
+                            </button>
+                            <button type="submit" :disabled="isUpdatingOSPF" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                                <span x-show="!isUpdatingOSPF">Update OSPF</span>
+                                <span x-show="isUpdatingOSPF">Updating...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- FRR Config Modal -->
+    <div x-show="showConfigModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="showConfigModal = false"></div>
+            <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full z-10">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-medium text-gray-900">FRR Configuration</h3>
+                        <button @click="showConfigModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg overflow-x-auto">
+                        <pre x-text="frrConfig"></pre>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button @click="copyConfig()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            <i class="fas fa-copy mr-2"></i>Copy Configuration
+                        </button>
+                        <button @click="showConfigModal = false" class="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- OSPF Neighbors Modal -->
+    <div x-show="showNeighborsModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="showNeighborsModal = false"></div>
+            <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full z-10">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-medium text-gray-900">OSPF Neighbors</h3>
+                        <button @click="showNeighborsModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="text-left p-3 font-medium text-gray-700">Neighbor ID</th>
+                                    <th class="text-left p-3 font-medium text-gray-700">IP Address</th>
+                                    <th class="text-left p-3 font-medium text-gray-700">Interface</th>
+                                    <th class="text-left p-3 font-medium text-gray-700">Area</th>
+                                    <th class="text-left p-3 font-medium text-gray-700">State</th>
+                                    <th class="text-left p-3 font-medium text-gray-700">Priority</th>
+                                    <th class="text-left p-3 font-medium text-gray-700">Last Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="neighbor in ospfNeighbors" :key="neighbor.neighbor_id">
+                                    <tr class="border-t border-gray-200">
+                                        <td class="p-3 font-mono text-sm" x-text="neighbor.neighbor_id"></td>
+                                        <td class="p-3" x-text="neighbor.neighbor_ip"></td>
+                                        <td class="p-3" x-text="neighbor.interface"></td>
+                                        <td class="p-3" x-text="neighbor.area_id"></td>
+                                        <td class="p-3">
+                                            <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full"
+                                                  :class="{
+                                                      'bg-green-100 text-green-800': neighbor.state === 'Full',
+                                                      'bg-yellow-100 text-yellow-800': neighbor.state === '2-Way',
+                                                      'bg-red-100 text-red-800': neighbor.state === 'Down'
+                                                  }"
+                                                  x-text="neighbor.state">
+                                            </span>
+                                        </td>
+                                        <td class="p-3" x-text="neighbor.priority"></td>
+                                        <td class="p-3 text-sm text-gray-500" x-text="neighbor.last_seen ? formatDate(neighbor.last_seen) : 'Never'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        
+                        <template x-if="ospfNeighbors.length === 0">
+                            <div class="p-8 text-center text-gray-500">
+                                No OSPF neighbors found
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <div class="flex justify-end pt-4">
+                        <button @click="showNeighborsModal = false" class="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notifications -->
+<div id="toast-container" class="fixed top-4 right-4 z-50"></div>
+
+<script>
+function networkManager() {
+    return {
+        vrfs: [[=json.dumps([{
+            'id': v.id,
+            'name': v.name,
+            'description': v.description,
+            'rd': v.rd,
+            'rt_import': v.rt_import,
+            'rt_export': v.rt_export,
+            'ip_ranges': v.ip_ranges,
+            'status': v.status.value,
+            'ospf_enabled': v.ospf_enabled,
+            'ospf_router_id': v.ospf_router_id,
+            'ospf_areas': v.ospf_areas,
+            'ospf_networks': v.ospf_networks,
+            'created_at': v.created_at.isoformat()
+        } for v in vrfs])]],
+        filteredVRFs: [],
+        selectedStatus: '',
+        showAddVRFModal: false,
+        showOSPFModal: false,
+        showConfigModal: false,
+        showNeighborsModal: false,
+        isSubmitting: false,
+        isUpdatingOSPF: false,
+        newVRF: {
+            name: '',
+            description: '',
+            rd: '',
+            ip_ranges_text: '',
+            rt_import_text: '',
+            rt_export_text: ''
+        },
+        selectedVRF: {},
+        ospfConfig: {
+            ospf_enabled: false,
+            router_id: '',
+            areas: [],
+            networks: []
+        },
+        frrConfig: '',
+        ospfNeighbors: [],
+        
+        init() {
+            this.filterVRFs();
+        },
+        
+        filterVRFs() {
+            this.filteredVRFs = this.vrfs.filter(vrf => {
+                if (this.selectedStatus && vrf.status !== this.selectedStatus) return false;
+                return true;
+            });
+        },
+        
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString();
+        },
+        
+        async createVRF() {
+            this.isSubmitting = true;
+            try {
+                const data = {
+                    name: this.newVRF.name,
+                    description: this.newVRF.description,
+                    rd: this.newVRF.rd,
+                    ip_ranges: this.newVRF.ip_ranges_text.split('\n').filter(r => r.trim()),
+                    rt_import: this.newVRF.rt_import_text.split(',').map(t => t.trim()).filter(t => t),
+                    rt_export: this.newVRF.rt_export_text.split(',').map(t => t.trim()).filter(t => t)
+                };
+                
+                const response = await fetch('/api/web/network/vrf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    this.vrfs.push(result.vrf);
+                    this.filterVRFs();
+                    this.showToast('VRF created successfully!', 'success');
+                    this.showAddVRFModal = false;
+                    this.resetNewVRF();
+                } else {
+                    this.showToast(result.error || 'Failed to create VRF', 'error');
+                }
+            } catch (error) {
+                this.showToast('Network error', 'error');
+            }
+            this.isSubmitting = false;
+        },
+        
+        async deleteVRF(vrfId) {
+            if (!confirm('Are you sure you want to delete this VRF? This will remove all associated configuration.')) return;
+            
+            try {
+                const response = await fetch(`/api/web/network/vrf/${vrfId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.vrfs = this.vrfs.filter(v => v.id !== vrfId);
+                    this.filterVRFs();
+                    this.showToast('VRF deleted successfully!', 'success');
+                } else {
+                    this.showToast(data.error || 'Failed to delete VRF', 'error');
+                }
+            } catch (error) {
+                this.showToast('Network error', 'error');
+            }
+        },
+        
+        configureOSPF(vrf) {
+            this.selectedVRF = vrf;
+            this.ospfConfig = {
+                ospf_enabled: vrf.ospf_enabled || false,
+                router_id: vrf.ospf_router_id || '',
+                areas: vrf.ospf_areas || [],
+                networks: vrf.ospf_networks || []
+            };
+            this.showOSPFModal = true;
+        },
+        
+        async updateOSPF() {
+            this.isUpdatingOSPF = true;
+            try {
+                const response = await fetch(`/api/web/network/vrf/${this.selectedVRF.id}/ospf`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(this.ospfConfig)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Update local VRF data
+                    const vrfIndex = this.vrfs.findIndex(v => v.id === this.selectedVRF.id);
+                    if (vrfIndex !== -1) {
+                        this.vrfs[vrfIndex].ospf_enabled = this.ospfConfig.ospf_enabled;
+                        this.vrfs[vrfIndex].ospf_router_id = this.ospfConfig.router_id;
+                        this.vrfs[vrfIndex].ospf_areas = this.ospfConfig.areas;
+                        this.vrfs[vrfIndex].ospf_networks = this.ospfConfig.networks;
+                    }
+                    
+                    this.showToast('OSPF configuration updated successfully!', 'success');
+                    this.showOSPFModal = false;
+                } else {
+                    this.showToast(result.error || 'Failed to update OSPF configuration', 'error');
+                }
+            } catch (error) {
+                this.showToast('Network error', 'error');
+            }
+            this.isUpdatingOSPF = false;
+        },
+        
+        async showVRFConfig(vrfId) {
+            try {
+                const response = await fetch(`/api/web/network/vrf/${vrfId}/config`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    this.frrConfig = result.config;
+                    this.showConfigModal = true;
+                } else {
+                    this.showToast(result.error || 'Failed to generate configuration', 'error');
+                }
+            } catch (error) {
+                this.showToast('Network error', 'error');
+            }
+        },
+        
+        async showOSPFNeighbors(vrfId) {
+            try {
+                const response = await fetch(`/api/web/network/vrf/${vrfId}/neighbors`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    this.ospfNeighbors = result.neighbors;
+                    this.showNeighborsModal = true;
+                } else {
+                    this.showToast(result.error || 'Failed to get OSPF neighbors', 'error');
+                }
+            } catch (error) {
+                this.showToast('Network error', 'error');
+            }
+        },
+        
+        async refreshVRFs() {
+            // In a real implementation, this would fetch fresh data
+            this.showToast('VRFs refreshed', 'info');
+        },
+        
+        copyConfig() {
+            navigator.clipboard.writeText(this.frrConfig).then(() => {
+                this.showToast('Configuration copied to clipboard!', 'success');
+            }).catch(() => {
+                this.showToast('Failed to copy configuration', 'error');
+            });
+        },
+        
+        resetNewVRF() {
+            this.newVRF = {
+                name: '',
+                description: '',
+                rd: '',
+                ip_ranges_text: '',
+                rt_import_text: '',
+                rt_export_text: ''
+            };
+        },
+        
+        showToast(message, type = 'info') {
+            const toast = {
+                id: Date.now(),
+                message: message,
+                type: type
+            };
+            
+            // Create toast element
+            const toastEl = document.createElement('div');
+            toastEl.className = `mb-2 p-4 rounded-lg shadow-lg max-w-sm ${
+                type === 'success' ? 'bg-green-600 text-white' :
+                type === 'error' ? 'bg-red-600 text-white' :
+                'bg-blue-600 text-white'
+            }`;
+            toastEl.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas ${
+                            type === 'success' ? 'fa-check-circle' :
+                            type === 'error' ? 'fa-exclamation-circle' :
+                            'fa-info-circle'
+                        } mr-3"></i>
+                        <p>${message}</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 hover:opacity-75">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('toast-container').appendChild(toastEl);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (toastEl.parentElement) {
+                    toastEl.remove();
+                }
+            }, 5000);
+        }
+    };
+}
+</script>
+
+<style>
+[x-cloak] { display: none !important; }
+</style>

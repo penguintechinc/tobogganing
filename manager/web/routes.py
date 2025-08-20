@@ -5,6 +5,7 @@ py4web-based web interface with role-based access control
 
 import asyncio
 import json
+import os
 from datetime import datetime
 from py4web import action, request, response, redirect, URL, abort
 from web.auth import (
@@ -13,6 +14,9 @@ from web.auth import (
     user_manager
 )
 from auth.user_manager import UserRole
+from firewall.access_control import access_control_manager, AccessRule, AccessType, RuleType
+from network.vrf_manager import vrf_manager, VRFConfiguration, VRFStatus, OSPFArea, OSPFAreaType
+from cache.redis_cache import get_cache, get_firewall_cache
 import structlog
 
 logger = structlog.get_logger()
@@ -271,6 +275,65 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
                 "error": "Failed to load metrics"
             }
     
+    @action("firewall")
+    @action.uses("firewall.html")
+    @require_role(UserRole.ADMIN)
+    async def firewall():
+        """Firewall and access control management page"""
+        user = request.user
+        
+        try:
+            all_rules = await access_control_manager.get_all_rules()
+            users = await user_manager.list_users()
+            
+            return {
+                "title": "Firewall & Access Control",
+                "user": user,
+                "rules": all_rules,
+                "users": users,
+                "rule_types": [rule_type.value for rule_type in RuleType],
+                "access_types": [access_type.value for access_type in AccessType]
+            }
+            
+        except Exception as e:
+            logger.error("Firewall page error", error=str(e))
+            return {
+                "title": "Firewall & Access Control",
+                "user": user,
+                "rules": [],
+                "users": [],
+                "error": "Failed to load firewall rules"
+            }
+    
+    @action("network")
+    @action.uses("network.html")
+    @require_role(UserRole.ADMIN)
+    async def network():
+        """Network management page - VRF and OSPF configuration"""
+        user = request.user
+        
+        try:
+            vrfs = await vrf_manager.list_vrfs()
+            
+            return {
+                "title": "Network Management - VRF & OSPF",
+                "user": user,
+                "vrfs": vrfs,
+                "vrf_statuses": [status.value for status in VRFStatus],
+                "ospf_area_types": [area_type.value for area_type in OSPFAreaType]
+            }
+            
+        except Exception as e:
+            logger.error("Network page error", error=str(e))
+            return {
+                "title": "Network Management - VRF & OSPF", 
+                "user": user,
+                "vrfs": [],
+                "vrf_statuses": [],
+                "ospf_area_types": [],
+                "error": "Failed to load network configuration"
+            }
+    
     # API endpoints for AJAX requests
     @action("api/web/cluster/<cluster_id>/status", method=["POST"])
     @action.uses("json")
@@ -398,3 +461,410 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
             logger.error("Get stats error", error=str(e))
             response.status = 500
             return {"error": "Failed to get statistics"}
+    
+    # Firewall API endpoints
+    @action("api/web/firewall/rule", method=["POST"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def create_firewall_rule():
+        """Create new firewall rule (AJAX)"""
+        try:
+            data = request.json
+            user_id = data.get('user_id', '').strip()
+            rule_type_str = data.get('rule_type', '').strip()
+            access_type_str = data.get('access_type', '').strip()
+            pattern = data.get('pattern', '').strip()
+            priority = int(data.get('priority', 100))
+            description = data.get('description', '').strip()
+            
+            if not all([user_id, rule_type_str, access_type_str, pattern]):
+                response.status = 400
+                return {"error": "All fields required"}
+            
+            try:
+                rule_type = RuleType(rule_type_str)
+                access_type = AccessType(access_type_str)
+            except ValueError:
+                response.status = 400
+                return {"error": "Invalid rule or access type"}
+            
+            # Generate rule ID
+            import uuid
+            rule_id = str(uuid.uuid4())
+            
+            rule = AccessRule(
+                id=rule_id,
+                user_id=user_id,
+                rule_type=rule_type,
+                access_type=access_type,
+                pattern=pattern,
+                priority=priority,
+                description=description if description else None
+            )
+            
+            success = await access_control_manager.add_rule(rule)
+            
+            if success:
+                # Invalidate cache for this user and all rules
+                firewall_cache = await get_firewall_cache()
+                await firewall_cache.invalidate_user(user_id)
+                logger.debug(f"Invalidated firewall cache for user {user_id}")
+                
+                return {
+                    "success": True,
+                    "rule": {
+                        "id": rule.id,
+                        "user_id": rule.user_id,
+                        "rule_type": rule.rule_type.value,
+                        "access_type": rule.access_type.value,
+                        "pattern": rule.pattern,
+                        "priority": rule.priority,
+                        "description": rule.description,
+                        "created_at": rule.created_at.isoformat()
+                    }
+                }
+            else:
+                response.status = 500
+                return {"error": "Failed to create rule"}
+                
+        except Exception as e:
+            logger.error("Create firewall rule error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to create firewall rule"}
+    
+    @action("api/web/firewall/rule/<rule_id>", method=["DELETE"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def delete_firewall_rule(rule_id):
+        """Delete firewall rule (AJAX)"""
+        try:
+            success = await access_control_manager.remove_rule(rule_id)
+            
+            if success:
+                # Invalidate all firewall caches since we don't know which user this rule belonged to
+                firewall_cache = await get_firewall_cache()
+                await firewall_cache.invalidate_all()
+                logger.debug("Invalidated all firewall caches after rule deletion")
+            
+            return {"success": success}
+            
+        except Exception as e:
+            logger.error("Delete firewall rule error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to delete firewall rule"}
+    
+    @action("api/web/firewall/user/<user_id>/rules", method=["GET"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def get_user_firewall_rules(user_id):
+        """Get firewall rules for specific user (AJAX)"""
+        try:
+            rules = await access_control_manager.get_user_rules(user_id)
+            
+            rules_data = []
+            for rule in rules:
+                rules_data.append({
+                    "id": rule.id,
+                    "rule_type": rule.rule_type.value,
+                    "access_type": rule.access_type.value,
+                    "pattern": rule.pattern,
+                    "priority": rule.priority,
+                    "description": rule.description,
+                    "created_at": rule.created_at.isoformat(),
+                    "is_active": rule.is_active
+                })
+            
+            return {"rules": rules_data}
+            
+        except Exception as e:
+            logger.error("Get user firewall rules error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to get user firewall rules"}
+    
+    @action("api/web/firewall/check", method=["POST"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def check_firewall_access():
+        """Test firewall access for user and target (AJAX)"""
+        try:
+            data = request.json
+            user_id = data.get('user_id', '').strip()
+            target = data.get('target', '').strip()
+            
+            if not all([user_id, target]):
+                response.status = 400
+                return {"error": "User ID and target required"}
+            
+            allowed = await access_control_manager.check_access(user_id, target)
+            
+            return {
+                "user_id": user_id,
+                "target": target,
+                "allowed": allowed,
+                "result": "ALLOW" if allowed else "DENY"
+            }
+            
+        except Exception as e:
+            logger.error("Check firewall access error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to check firewall access"}
+    
+    @action("api/web/firewall/user/<user_id>/export", method=["GET"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def export_user_firewall_rules(user_id):
+        """Export user firewall rules for headend consumption (AJAX)"""
+        try:
+            export_data = await access_control_manager.export_user_rules(user_id)
+            return export_data
+            
+        except Exception as e:
+            logger.error("Export user firewall rules error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to export user firewall rules"}
+    
+    # Network/VRF API endpoints
+    @action("api/web/network/vrf", method=["POST"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def create_vrf():
+        """Create new VRF (AJAX)"""
+        try:
+            data = request.json
+            name = data.get('name', '').strip()
+            description = data.get('description', '').strip()
+            rd = data.get('rd', '').strip()
+            rt_import = data.get('rt_import', [])
+            rt_export = data.get('rt_export', [])
+            ip_ranges = data.get('ip_ranges', [])
+            
+            if not all([name, description, rd]):
+                response.status = 400
+                return {"error": "Name, description, and RD required"}
+            
+            # Generate VRF ID
+            import uuid
+            vrf_id = str(uuid.uuid4())
+            
+            vrf = VRFConfiguration(
+                id=vrf_id,
+                name=name,
+                description=description,
+                rd=rd,
+                rt_import=rt_import if isinstance(rt_import, list) else [],
+                rt_export=rt_export if isinstance(rt_export, list) else [],
+                ip_ranges=ip_ranges if isinstance(ip_ranges, list) else []
+            )
+            
+            success = await vrf_manager.create_vrf(vrf)
+            
+            if success:
+                return {
+                    "success": True,
+                    "vrf": {
+                        "id": vrf.id,
+                        "name": vrf.name,
+                        "description": vrf.description,
+                        "rd": vrf.rd,
+                        "status": vrf.status.value,
+                        "created_at": vrf.created_at.isoformat()
+                    }
+                }
+            else:
+                response.status = 500
+                return {"error": "Failed to create VRF"}
+                
+        except Exception as e:
+            logger.error("Create VRF error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to create VRF"}
+    
+    @action("api/web/network/vrf/<vrf_id>", method=["DELETE"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def delete_vrf(vrf_id):
+        """Delete VRF (AJAX)"""
+        try:
+            success = await vrf_manager.delete_vrf(vrf_id)
+            return {"success": success}
+            
+        except Exception as e:
+            logger.error("Delete VRF error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to delete VRF"}
+    
+    @action("api/web/network/vrf/<vrf_id>/ospf", method=["PUT"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def configure_vrf_ospf(vrf_id):
+        """Configure OSPF for VRF (AJAX)"""
+        try:
+            data = request.json
+            ospf_enabled = data.get('ospf_enabled', False)
+            router_id = data.get('router_id', '').strip()
+            areas = data.get('areas', [])
+            networks = data.get('networks', [])
+            
+            vrf = await vrf_manager.get_vrf(vrf_id)
+            if not vrf:
+                response.status = 404
+                return {"error": "VRF not found"}
+            
+            vrf.ospf_enabled = ospf_enabled
+            vrf.ospf_router_id = router_id if router_id else None
+            vrf.ospf_areas = areas
+            vrf.ospf_networks = networks
+            
+            success = await vrf_manager.update_vrf(vrf)
+            
+            return {"success": success}
+            
+        except Exception as e:
+            logger.error("Configure VRF OSPF error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to configure OSPF"}
+    
+    @action("api/web/network/vrf/<vrf_id>/config", method=["GET"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def get_vrf_frr_config(vrf_id):
+        """Get FRR configuration for VRF (AJAX)"""
+        try:
+            config = await vrf_manager.generate_frr_config(vrf_id)
+            
+            return {
+                "vrf_id": vrf_id,
+                "config": config
+            }
+            
+        except Exception as e:
+            logger.error("Get VRF FRR config error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to generate FRR config"}
+    
+    @action("api/web/network/vrf/<vrf_id>/neighbors", method=["GET"])
+    @action.uses("json")
+    @require_role(UserRole.ADMIN)
+    async def get_vrf_ospf_neighbors(vrf_id):
+        """Get OSPF neighbors for VRF (AJAX)"""
+        try:
+            neighbors = await vrf_manager.get_ospf_neighbors(vrf_id)
+            
+            neighbors_data = []
+            for neighbor in neighbors:
+                neighbors_data.append({
+                    "neighbor_id": neighbor.neighbor_id,
+                    "neighbor_ip": neighbor.neighbor_ip,
+                    "interface": neighbor.interface,
+                    "area_id": neighbor.area_id,
+                    "state": neighbor.state,
+                    "priority": neighbor.priority,
+                    "last_seen": neighbor.last_seen.isoformat() if neighbor.last_seen else None
+                })
+            
+            return {"neighbors": neighbors_data}
+            
+        except Exception as e:
+            logger.error("Get OSPF neighbors error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to get OSPF neighbors"}
+    
+    # Headend integration endpoints
+    @action("api/v1/firewall/rules", method=["GET"])
+    @action.uses("json")
+    async def get_all_firewall_rules():
+        """Get all firewall rules for headend consumption (headend-to-manager API)"""
+        try:
+            # Authenticate headend server
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Bearer token required"}
+            
+            token = auth_header[7:]
+            # In production, validate this is a legitimate headend token
+            headend_token = os.getenv('HEADEND_API_TOKEN', 'headend-server-token')
+            
+            if token != headend_token:
+                response.status = 401
+                return {"error": "Invalid headend token"}
+            
+            # Try to get cached rules first
+            firewall_cache = await get_firewall_cache()
+            cached_rules = await firewall_cache.get_all_rules()
+            
+            if cached_rules:
+                logger.debug("Serving firewall rules from cache")
+                return cached_rules
+            
+            # Get all active users and their firewall rules
+            users = await user_manager.list_users()
+            all_rules = {}
+            
+            for user in users:
+                if user.is_active:
+                    user_rules = await access_control_manager.export_user_rules(user.id)
+                    all_rules[user.id] = user_rules
+            
+            rules_response = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "rules_count": len(all_rules),
+                "user_rules": all_rules
+            }
+            
+            # Cache the response for fast headend retrieval (3 minute TTL)
+            await firewall_cache.set_all_rules(rules_response, ttl=180)
+            logger.debug(f"Cached firewall rules for {len(all_rules)} users")
+            
+            return rules_response
+            
+        except Exception as e:
+            logger.error("Get all firewall rules error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to get firewall rules"}
+    
+    @action("api/v1/firewall/user/<user_id>/rules", method=["GET"])
+    @action.uses("json")
+    async def get_user_firewall_rules_headend(user_id):
+        """Get firewall rules for specific user (headend-to-manager API)"""
+        try:
+            # Authenticate headend server
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Bearer token required"}
+            
+            token = auth_header[7:]
+            headend_token = os.getenv('HEADEND_API_TOKEN', 'headend-server-token')
+            
+            if token != headend_token:
+                response.status = 401
+                return {"error": "Invalid headend token"}
+            
+            # Verify user exists and is active
+            user = await user_manager.get_user(user_id)
+            if not user or not user.is_active:
+                response.status = 404
+                return {"error": "User not found or inactive"}
+            
+            # Try to get cached rules first
+            firewall_cache = await get_firewall_cache()
+            cached_rules = await firewall_cache.get_user_rules(user_id)
+            
+            if cached_rules:
+                logger.debug(f"Serving firewall rules from cache for user {user_id}")
+                return cached_rules
+            
+            # Export rules for this user
+            user_rules = await access_control_manager.export_user_rules(user_id)
+            
+            # Cache the user rules (5 minute TTL)
+            await firewall_cache.set_user_rules(user_id, user_rules, ttl=300)
+            logger.debug(f"Cached firewall rules for user {user_id}")
+            
+            return user_rules
+            
+        except Exception as e:
+            logger.error("Get user firewall rules error", user_id=user_id, error=str(e))
+            response.status = 500
+            return {"error": "Failed to get user firewall rules"}

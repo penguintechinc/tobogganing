@@ -20,7 +20,22 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
   - Certificate lifecycle management
   - Client registration and configuration
   - API key generation for initial client setup
-  - Web-based management interface
+  - **Advanced Web Management Portal**:
+    - Role-based access control (Admin/Reporter)
+    - Real-time dashboard with live statistics
+    - User management interface
+    - Comprehensive firewall management
+    - Prometheus metrics visualization
+    - Session-based authentication with bcrypt
+  - **Enterprise-Grade Firewall System**:
+    - Domain-based access control (*.example.com)
+    - IPv4 and IPv6 address filtering
+    - Protocol-level filtering (TCP, UDP, ICMP)
+    - Source and destination port ranges
+    - Directional traffic control (inbound/outbound/both)
+    - Priority-based rule processing
+    - Real-time access testing
+    - Export rules for headend consumption
 
 ### Headend Server (Docker)
 - **Purpose**: Terminate WireGuard connections and proxy authenticated traffic
@@ -35,11 +50,17 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
   - Traffic routing between clients
   - Internet gateway functionality
   - External IdP integration
-  - **Traffic Mirroring**: Optional traffic duplication to external security tools (IDS/IPS)
-    - Configurable via environment variables
-    - Supports multiple mirror destinations
-    - Preserves original packet metadata
+  - **Advanced Traffic Mirroring & IDS Integration**:
+    - Suricata IDS/IPS integration with EVE JSON format
+    - Multiple mirror destinations (VXLAN, GRE, ERSPAN)
+    - Real-time threat detection and alerting
     - Zero-copy mirroring for performance
+    - Configurable sample rates and filtering
+  - **Comprehensive Security Logging**:
+    - UDP syslog integration for compliance
+    - User resource access tracking
+    - Connection audit trails
+    - Structured logging with metadata
 
 ### Client Applications
 
@@ -94,11 +115,15 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 /workspaces/SASEWaddle/
 ├── manager/                 # Manager service code
 │   ├── api/                # REST API endpoints
-│   ├── web/                # py4web frontend
+│   ├── web/                # py4web frontend with role-based access
+│   ├── auth/               # User authentication and JWT management
+│   ├── firewall/           # Advanced firewall and access control
+│   ├── metrics/            # Prometheus metrics collection
 │   ├── certs/              # Certificate management
 │   └── orchestrator/       # Client coordination
 ├── headend/                # Headend server code
-│   ├── proxy/              # Golang proxy
+│   ├── proxy/              # Golang proxy with traffic mirroring
+│   │   └── mirror/         # Traffic mirroring to Suricata IDS
 │   ├── wireguard/          # WireGuard configuration
 │   └── auth/               # IdP integration
 ├── clients/                # Client applications
@@ -109,6 +134,10 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 │   ├── components/         # React components
 │   ├── public/             # Static assets
 │   └── functions/          # Cloudflare Workers functions
+├── deploy/                 # Deployment configurations
+│   ├── suricata/           # Suricata IDS configuration
+│   ├── prometheus/         # Prometheus configuration
+│   └── grafana/            # Grafana dashboards
 ├── .github/workflows/      # GitHub Actions
 ├── tests/                  # Test suites
 └── docs/                   # Documentation
@@ -122,6 +151,61 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - **Build**: `make build` or use GitHub Actions
 
 ## Development TODO List
+
+### ✅ Completed Tasks
+- [x] Implement Manager Service (py4web Docker container with async/multithreading)
+- [x] JWT token management and validation
+- [x] WireGuard certificate generation and lifecycle management  
+- [x] REST API endpoints for client/node registration
+- [x] Authentication endpoints for headend validation
+- [x] Multi-thousand request handling with async/threading
+- [x] py4web frontend for cluster management with role-based access (Admin/Reporter)
+- [x] Configuration distribution API for headend/clients
+- [x] Comprehensive Prometheus metrics endpoints with authentication
+- [x] Health endpoints (/health, /healthz) for Kubernetes compatibility
+- [x] Advanced firewall system with domain, IP, protocol, and port control
+- [x] Implement Headend Server (Go multi-protocol proxy + WireGuard)
+- [x] WireGuard tunnel termination for authenticated nodes
+- [x] Multi-protocol proxy (TCP, UDP, HTTPS) with dual authentication
+- [x] Traffic mirroring to Suricata IDS/IPS (VXLAN/GRE/ERSPAN)
+- [x] Node-to-node communication routing through proxy
+- [x] Docker containerization with proper entrypoint
+- [x] Docker client (ARM64/AMD64) with WireGuard and auto-config
+- [x] Native Go client for Mac Universal, Windows, Linux
+- [x] FRR-based VRFs for IP space segmentation
+- [x] OSPF routing across WireGuard tunnels
+- [x] Admin portal for VRF and OSPF configuration
+
+### 🚧 In Progress Tasks  
+- [ ] Configure headend to get firewall rules from manager
+- [ ] Add syslog logging for user resource access from headend (UDP only)
+
+### 📋 Pending Tasks
+- [ ] Add screenshots and connectivity diagrams to Next.js website
+- [ ] Build system and deployment
+  - [ ] Multi-architecture Docker builds (ARM64/AMD64)
+  - [ ] Cross-platform Go binary compilation
+  - [ ] GitHub Actions CI/CD workflows
+
+### 📝 Current TODO Status
+*Last Updated: [[=datetime.utcnow().isoformat()]]*
+
+1. ✅ **Implement Manager py4web web portal with role-based access**
+2. ✅ **Add Prometheus metrics endpoint to Manager service**  
+3. ✅ **Implement user authentication and role system (admin/reporter)**
+4. ✅ **Add /healthz endpoints to both Manager and Headend**
+5. ✅ **Add authentication to Headend metrics endpoint**
+6. ✅ **Add Suricata service to docker-compose configuration** 
+7. ✅ **Configure go-proxy to forward traffic to Suricata for IDS/IPS**
+8. ✅ **Add comprehensive firewall system with domain, IP, protocol, and port control**
+9. 🚧 **Configure headend to get firewall rules from manager**
+10. 📋 **Add syslog logging for user resource access from headend (UDP only)**
+11. 📋 **Add screenshots and connectivity diagrams to Next.js website**
+12. ✅ **Add FRR-based VRFs for IP space segmentation**
+13. ✅ **Implement OSPF routing across WireGuard tunnels**  
+14. ✅ **Create admin portal for VRF and OSPF configuration**
+
+## Legacy Development TODO List (Historical)
 - [x] Implement Manager Service (py4web Docker container with async/multithreading)
   - [x] JWT token management and validation
   - [x] WireGuard certificate generation and lifecycle management  
@@ -175,26 +259,246 @@ This ensures both network-level and application-level security for all users and
 - `IDP_TYPE`: SAML2 or OAUTH2
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR
 
-### Traffic Mirroring (Headend)
+### Manager Service Authentication & Security
+- `JWT_SECRET`: Secret key for JWT token signing and validation
+- `SESSION_TIMEOUT_HOURS`: Web session timeout in hours (default: 8)
+- `METRICS_TOKEN`: Authentication token for Prometheus metrics scraping
+- `DATABASE_URL`: Database connection string (SQLite or PostgreSQL)
+- `REDIS_URL`: Redis connection string for session storage
+
+### Traffic Mirroring & IDS Integration (Headend)
 - `TRAFFIC_MIRROR_ENABLED`: Enable/disable traffic mirroring (true/false)
 - `TRAFFIC_MIRROR_DESTINATIONS`: Comma-separated list of mirror destinations (e.g., "10.0.0.100:4789,10.0.0.101:4789")
 - `TRAFFIC_MIRROR_PROTOCOL`: Mirror protocol (ERSPAN, VXLAN, GRE)
 - `TRAFFIC_MIRROR_FILTER`: BPF filter for selective mirroring (optional)
 - `TRAFFIC_MIRROR_SAMPLE_RATE`: Sample rate for mirroring (1-100, default: 100)
 - `TRAFFIC_MIRROR_BUFFER_SIZE`: Buffer size for mirror queue (default: 1000)
+- `TRAFFIC_MIRROR_SURICATA_ENABLED`: Enable Suricata IDS/IPS integration (true/false)
+- `TRAFFIC_MIRROR_SURICATA_HOST`: Suricata host address (e.g., "172.20.0.100")
+- `TRAFFIC_MIRROR_SURICATA_PORT`: Suricata management port (default: 9999)
+
+### Syslog Integration (Headend)
+- `HEADEND_SYSLOG_ENABLED`: Enable syslog logging for user access (true/false)
+- `HEADEND_SYSLOG_SERVER`: Syslog server address (UDP only, e.g., "syslog.example.com:514")
+- `HEADEND_SYSLOG_FACILITY`: Syslog facility (e.g., "local0")
+- `HEADEND_SYSLOG_TAG`: Syslog tag prefix (e.g., "sasewaddle-headend")
 
 ## API Endpoints
 
 ### Manager API
+
+#### Core Management
 - `POST /api/v1/clients/register` - Register new client
 - `GET /api/v1/clients/{id}/config` - Get client configuration
 - `POST /api/v1/certs/generate` - Generate certificates
 - `GET /api/v1/status` - System status
+- `GET /health` - Detailed health check
+- `GET /healthz` - Kubernetes-style health check
+- `GET /metrics` - Prometheus metrics (authenticated)
+
+#### Web Portal API
+- `POST /api/web/user` - Create new user (Admin only)
+- `POST /api/web/user/{id}/toggle` - Enable/disable user (Admin only)
+- `GET /api/web/stats` - Real-time dashboard statistics
+- `POST /api/web/client/{id}/revoke` - Revoke client access
+
+#### Firewall Management API
+- `POST /api/web/firewall/rule` - Create firewall rule
+- `DELETE /api/web/firewall/rule/{id}` - Delete firewall rule
+- `GET /api/web/firewall/user/{id}/rules` - Get user's firewall rules
+- `POST /api/web/firewall/check` - Test access for user/target
+- `GET /api/web/firewall/user/{id}/export` - Export rules for headend
+
+#### Network/VRF Management API  
+- `POST /api/web/network/vrf` - Create new VRF
+- `DELETE /api/web/network/vrf/{id}` - Delete VRF
+- `PUT /api/web/network/vrf/{id}/ospf` - Configure OSPF for VRF
+- `GET /api/web/network/vrf/{id}/config` - Get FRR configuration
+- `GET /api/web/network/vrf/{id}/neighbors` - Get OSPF neighbors
 
 ### Headend API
 - `POST /api/v1/auth` - Authenticate user/service
 - `GET /api/v1/tunnels` - List active tunnels
 - `POST /api/v1/routes` - Configure routing
+- `GET /health` - Detailed health check
+- `GET /healthz` - Kubernetes-style health check
+- `GET /metrics` - Prometheus metrics (authenticated)
+
+## 🌐 Advanced Network Management - VRF & OSPF
+
+SASEWaddle includes enterprise-grade network segmentation and routing capabilities using FRR (Free Range Routing):
+
+### Virtual Routing and Forwarding (VRF) Features
+
+#### VRF Configuration Management
+- **Multi-tenant isolation**: Separate routing tables per customer/environment
+- **Route Distinguisher (RD)**: Support for ASN:value and IP:value formats
+- **Route Targets**: Import/Export route target communities for BGP
+- **IP Range Assignment**: CIDR block allocation per VRF
+- **Web-based management**: Beautiful admin interface for VRF lifecycle
+
+#### OSPF Routing Integration
+- **Dynamic routing**: OSPF over WireGuard tunnels
+- **Area-based design**: Support for Normal, Stub, NSSA, and Backbone areas
+- **Multi-VRF OSPF**: Independent OSPF instances per VRF
+- **Neighbor monitoring**: Real-time OSPF neighbor state tracking
+- **Authentication**: MD5 and simple password authentication
+
+### FRR Integration Features
+
+#### Supported Protocols
+- **OSPFv2**: IPv4 dynamic routing
+- **OSPFv3**: IPv6 dynamic routing (future)
+- **BGP**: Border Gateway Protocol for VRF route exchange
+- **Static Routes**: Manual route configuration
+- **Route Redistribution**: Between OSPF areas and protocols
+
+#### Network Topologies Supported
+- **Hub-and-Spoke**: Centralized routing through main sites
+- **Full Mesh**: Direct OSPF peering between all sites
+- **Hybrid**: Mixed topologies with area-based design
+- **Multi-Area OSPF**: Scalable hierarchical routing
+
+### Example VRF Configurations
+
+#### Customer Isolation VRF
+```bash
+vrf customer-a
+ description Customer A Private Network
+ rd 65000:100
+ import rt 65000:100
+ export rt 65000:100
+ exit
+
+router ospf vrf customer-a
+ router-id 10.1.1.1
+ network 10.1.0.0/16 area 0.0.0.0
+ network 192.168.100.0/24 area 0.0.0.1
+ exit
+```
+
+#### Multi-Site Corporate VRF  
+```bash
+vrf corporate-wan
+ description Corporate Wide Area Network
+ rd 10.0.0.1:200
+ import rt 65000:200,65000:300
+ export rt 65000:200
+ exit
+
+router ospf vrf corporate-wan
+ router-id 10.0.0.1
+ network 10.0.0.0/8 area 0.0.0.0
+ area 0.0.0.1 stub
+ area 0.0.0.2 nssa
+ exit
+```
+
+### OSPF Area Design Examples
+
+#### Backbone Area (Area 0)
+- **Purpose**: Central routing hub
+- **Networks**: Core infrastructure subnets
+- **Characteristics**: Full LSA flooding, no external routes
+
+#### Stub Areas  
+- **Purpose**: Branch offices with single uplink
+- **Characteristics**: No external LSAs, default route injection
+- **Benefits**: Reduced routing table size, lower memory usage
+
+#### NSSA (Not-So-Stubby Area)
+- **Purpose**: Stub areas with limited external connectivity  
+- **Characteristics**: Type-7 LSA support for external routes
+- **Use case**: Branch offices with local internet breakout
+
+### Network Management Interface
+
+#### VRF Management Features
+- 📊 **Real-time Dashboard**: VRF status, OSPF neighbor states
+- 🔧 **Configuration Generator**: Automatic FRR config generation
+- 📈 **Route Monitoring**: Live routing table inspection
+- 🔍 **Neighbor Discovery**: OSPF adjacency troubleshooting
+- 📋 **Export/Import**: Configuration backup and restore
+- 🚨 **Alerting**: OSPF neighbor state change notifications
+
+#### OSPF Configuration UI
+- **Area Management**: Create and configure OSPF areas
+- **Network Assignment**: Drag-and-drop network-to-area assignment
+- **Authentication Setup**: MD5 key management per area
+- **Timer Configuration**: Hello, dead, LSA refresh intervals
+- **Route Redistribution**: Configure route filtering and redistribution
+
+## 🔥 Advanced Firewall System
+
+SASEWaddle includes a comprehensive firewall system for granular access control:
+
+### Rule Types Supported
+
+#### Domain Rules
+- `*.example.com` - Wildcard subdomain matching
+- `example.com` - Exact domain matching
+- Works with both HTTP and HTTPS traffic
+
+#### IP Address Rules
+- `192.168.1.1` - Exact IPv4 address
+- `2001:db8::1` - Exact IPv6 address
+- Supports both source and destination filtering
+
+#### IP Range Rules
+- `192.168.1.0/24` - IPv4 CIDR notation
+- `10.0.0.0/8` - Large network ranges
+- `2001:db8::/32` - IPv6 network ranges
+
+#### Protocol Rules (Advanced)
+- **Format**: `protocol:src_ip:src_port->dst_ip:dst_port:direction`
+- **Examples**:
+  - `tcp:*:*->192.168.1.1:80` - Allow TCP to specific server on port 80
+  - `udp:192.168.1.0/24:*->8.8.8.8:53` - Allow DNS from specific network
+  - `icmp:*->*` - Allow all ICMP traffic
+  - `tcp:10.0.1.5:*->*:443:outbound` - HTTPS from specific host
+
+#### URL Pattern Rules
+- Regular expressions for complex URL matching
+- `https://.*\.secure\.example\.com/api/.*` - API endpoints only
+- Case-insensitive matching supported
+
+### Rule Processing
+- **Priority-based**: Lower numbers processed first (1 = highest priority)
+- **First-match wins**: Processing stops at first matching rule
+- **Default policy**: Deny if no rules match
+
+### Access Control Features
+- **Per-user rules**: Individual firewall policies
+- **Real-time testing**: Test access before deploying rules
+- **Rule export**: Headend servers fetch rules from manager
+- **Web interface**: Beautiful admin panel for rule management
+- **Audit logging**: All access decisions logged
+
+### Example Firewall Configuration
+
+```json
+{
+  "user_id": "user123",
+  "rules": {
+    "allow_domains": [
+      {"pattern": "*.company.com", "priority": 10},
+      {"pattern": "github.com", "priority": 20}
+    ],
+    "deny_domains": [
+      {"pattern": "*.social-media.com", "priority": 5}
+    ],
+    "allow_protocol_rules": [
+      {
+        "protocol": "tcp",
+        "dst_ip": "10.0.0.0/8",
+        "dst_port": "22,80,443",
+        "direction": "outbound",
+        "priority": 15
+      }
+    ]
+  }
+}
+```
 
 ## Deployment
 

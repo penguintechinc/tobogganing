@@ -86,6 +86,18 @@
                             Users
                         </a>
                     </li>
+                    <li>
+                        <a href="[[=URL('firewall')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/firewall' else '']]">
+                            <i class="fas fa-firewall mr-3"></i>
+                            Firewall
+                        </a>
+                    </li>
+                    <li>
+                        <a href="[[=URL('network')]]" class="flex items-center p-3 rounded-lg hover:bg-blue-600 transition-colors [[='bg-blue-600' if request.path_info == '/network' else '']]">
+                            <i class="fas fa-network-wired mr-3"></i>
+                            Network
+                        </a>
+                    </li>
                     [[pass]]
                 </ul>
             </nav>

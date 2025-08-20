@@ -21,33 +21,37 @@ import (
     "github.com/spf13/viper"
 
     "github.com/sasewaddle/headend/proxy/auth"
+    "github.com/sasewaddle/headend/proxy/firewall"
     "github.com/sasewaddle/headend/proxy/mirror"
     "github.com/sasewaddle/headend/proxy/middleware"
 )
 
 type ProxyServer struct {
-    router        *gin.Engine
-    httpServer    *http.Server
-    tcpProxy      *TCPProxy
-    udpProxy      *UDPProxy
-    authProvider  auth.Provider
-    mirrorManager *mirror.Manager
-    proxies       map[string]*httputil.ReverseProxy
-    mu            sync.RWMutex
+    router          *gin.Engine
+    httpServer      *http.Server
+    tcpProxy        *TCPProxy
+    udpProxy        *UDPProxy
+    authProvider    auth.Provider
+    mirrorManager   *mirror.Manager
+    firewallManager *firewall.Manager
+    proxies         map[string]*httputil.ReverseProxy
+    mu              sync.RWMutex
 }
 
 // TCPProxy handles raw TCP traffic with JWT authentication
 type TCPProxy struct {
-    listener      net.Listener
-    authProvider  auth.Provider
-    mirrorManager *mirror.Manager
+    listener        net.Listener
+    authProvider    auth.Provider
+    mirrorManager   *mirror.Manager
+    firewallManager *firewall.Manager
 }
 
 // UDPProxy handles raw UDP traffic with JWT authentication  
 type UDPProxy struct {
-    conn          *net.UDPConn
-    authProvider  auth.Provider
-    mirrorManager *mirror.Manager
+    conn            *net.UDPConn
+    authProvider    auth.Provider
+    mirrorManager   *mirror.Manager
+    firewallManager *firewall.Manager
 }
 
 func main() {
@@ -85,6 +89,9 @@ func initConfig() {
     viper.SetDefault("auth.manager_url", "http://manager:8000")
     viper.SetDefault("mirror.enabled", false)
     viper.SetDefault("mirror.buffer_size", 1000)
+    viper.SetDefault("mirror.suricata_enabled", false)
+    viper.SetDefault("mirror.suricata_host", "")
+    viper.SetDefault("mirror.suricata_port", "9999")
     viper.SetDefault("log.level", "info")
     viper.SetDefault("wireguard.interface", "wg0")
     viper.SetDefault("wireguard.network", "10.200.0.0/16")
@@ -137,17 +144,30 @@ func (s *ProxyServer) Initialize() error {
     // Initialize traffic mirroring if enabled
     if viper.GetBool("mirror.enabled") {
         destinations := viper.GetStringSlice("mirror.destinations")
-        s.mirrorManager = mirror.NewManager(
-            destinations,
-            viper.GetString("mirror.protocol"),
-            viper.GetInt("mirror.buffer_size"),
-        )
+        
+        // Check if Suricata is enabled
+        suricataEnabled := viper.GetBool("mirror.suricata_enabled")
+        if suricataEnabled {
+            s.mirrorManager = mirror.NewManagerWithSuricata(
+                destinations,
+                viper.GetString("mirror.protocol"),
+                viper.GetInt("mirror.buffer_size"),
+                viper.GetString("mirror.suricata_host"),
+                viper.GetString("mirror.suricata_port"),
+            )
+            log.Info("Traffic mirroring with Suricata IDS/IPS enabled")
+        } else {
+            s.mirrorManager = mirror.NewManager(
+                destinations,
+                viper.GetString("mirror.protocol"),
+                viper.GetInt("mirror.buffer_size"),
+            )
+            log.Info("Traffic mirroring enabled")
+        }
         
         if err := s.mirrorManager.Start(); err != nil {
             return fmt.Errorf("failed to start mirror manager: %w", err)
         }
-        
-        log.Info("Traffic mirroring enabled")
     }
 
     // Initialize TCP and UDP proxies
