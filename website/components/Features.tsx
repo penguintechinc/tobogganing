@@ -176,6 +176,10 @@ const Features: React.FC = () => {
                 </li>
                 <li className="flex items-center">
                   <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
+                  React Native mobile apps
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
                   Docker containers
                 </li>
                 <li className="flex items-center">
@@ -185,10 +189,6 @@ const Features: React.FC = () => {
                 <li className="flex items-center">
                   <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
                   Auto-configuration
-                </li>
-                <li className="flex items-center">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                  GUI & CLI interfaces
                 </li>
               </ul>
             </div>

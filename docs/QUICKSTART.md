@@ -51,6 +51,10 @@ docker-compose -f docker-compose.local.yml logs -f
 ### Build All Components
 
 ```bash
+# Quick build all React applications + screenshots
+./scripts/build-apps.sh
+
+# Or build everything with make
 make build
 ```
 
@@ -68,6 +72,33 @@ make build-client
 
 # Website
 make build-website
+
+# Mobile app only
+./scripts/build-apps.sh --mobile-only
+
+# Website only  
+./scripts/build-apps.sh --website-only
+
+# Screenshots only
+./scripts/build-apps.sh --screenshots-only
+```
+
+### Mobile Development Setup
+
+For Android development and testing:
+
+```bash
+# Install Android Studio and SDK
+./scripts/setup-android-studio.sh
+
+# Build and deploy mobile app
+./scripts/deploy-mobile.sh
+
+# Start Android emulator
+./scripts/setup-android-studio.sh --start-emulator
+
+# Open SASEWaddle project in Android Studio
+~/open-sasewaddle-mobile.sh
 ```
 
 ## Testing
@@ -146,6 +177,19 @@ chmod +x sasewaddle-client
 # Download from releases page
 # Run with administrator privileges
 sasewaddle-client.exe --config config.yaml
+```
+
+### Mobile Client (Android)
+
+```bash
+# Build APK from source
+./scripts/deploy-mobile.sh
+
+# Install to connected device
+adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+# Or download from releases page
+# Install APK on Android device
 ```
 
 ## Configuration

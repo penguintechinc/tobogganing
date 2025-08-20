@@ -22,7 +22,7 @@ const Hero: React.FC = () => {
           {/* Description */}
           <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto leading-relaxed">
             SASEWaddle implements Zero Trust Network Architecture (ZTNA) with enterprise-grade security, 
-            high-performance WireGuard VPN, and seamless multi-platform client support. 
+            high-performance WireGuard VPN, React Native mobile apps, and seamless multi-platform client support. 
             Deploy anywhere, scale everywhere.
           </p>
 
@@ -115,7 +115,7 @@ const Hero: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-semibold text-gray-900">Client Applications</h3>
-              <p className="text-sm text-gray-600 mt-1">Multi-platform native & Docker</p>
+              <p className="text-sm text-gray-600 mt-1">Native, mobile, Docker & embedded</p>
             </div>
           </div>
         </div>

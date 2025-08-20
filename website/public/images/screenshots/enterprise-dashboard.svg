@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1400" height="900" viewBox="0 0 1400 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1400" height="900" fill="#F9FAFB"/>
+  
+  <!-- Header -->
+  <rect x="0" y="0" width="1400" height="80" fill="#1F2937"/>
+  <text x="30" y="35" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="20" font-weight="bold">SASEWaddle</text>
+  <text x="30" y="55" fill="#9CA3AF" font-family="Arial, sans-serif" font-size="12">Enterprise Management Portal</text>
+  
+  <!-- User Menu -->
+  <circle cx="1320" cy="40" r="20" fill="#3B82F6"/>
+  <text x="1312" y="48" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="16">👤</text>
+  <text x="1250" y="45" fill="#E5E7EB" font-family="Arial, sans-serif" font-size="14">admin@company.com</text>
+  
+  <!-- Sidebar -->
+  <rect x="0" y="80" width="250" height="820" fill="#374151"/>
+  
+  <!-- Navigation -->
+  <rect x="20" y="100" width="210" height="40" rx="8" fill="#3B82F6"/>
+  <text x="30" y="125" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14">📊 Dashboard</text>
+  
+  <rect x="20" y="150" width="210" height="40" rx="8" fill="transparent"/>
+  <text x="30" y="175" fill="#D1D5DB" font-family="Arial, sans-serif" font-size="14">🖥️ Clusters</text>
+  
+  <rect x="20" y="200" width="210" height="40" rx="8" fill="transparent"/>
+  <text x="30" y="225" fill="#D1D5DB" font-family="Arial, sans-serif" font-size="14">💻 Clients</text>
+  
+  <rect x="20" y="250" width="210" height="40" rx="8" fill="transparent"/>
+  <text x="30" y="275" fill="#D1D5DB" font-family="Arial, sans-serif" font-size="14">📜 Certificates</text>
+  
+  <rect x="20" y="300" width="210" height="40" rx="8" fill="transparent"/>
+  <text x="30" y="325" fill="#D1D5DB" font-family="Arial, sans-serif" font-size="14">👥 Users</text>
+  
+  <rect x="20" y="350" width="210" height="40" rx="8" fill="transparent"/>
+  <text x="30" y="375" fill="#D1D5DB" font-family="Arial, sans-serif" font-size="14">📈 Analytics</text>
+  
+  <rect x="20" y="400" width="210" height="40" rx="8" fill="transparent"/>
+  <text x="30" y="425" fill="#D1D5DB" font-family="Arial, sans-serif" font-size="14">🔧 Settings</text>
+  
+  <!-- Main Content Area -->
+  <rect x="250" y="80" width="1150" height="820" fill="#F9FAFB"/>
+  
+  <!-- Welcome Section -->
+  <text x="280" y="120" fill="#111827" font-family="Arial, sans-serif" font-size="24" font-weight="bold">Welcome back, Administrator! 👋</text>
+  <text x="280" y="145" fill="#6B7280" font-family="Arial, sans-serif" font-size="14">Here's what's happening with your SASEWaddle deployment today.</text>
+  
+  <!-- Stats Cards Row -->
+  <rect x="280" y="170" width="250" height="120" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <circle cx="320" cy="210" r="20" fill="#EFF6FF"/>
+  <text x="312" y="218" fill="#3B82F6" font-family="Arial, sans-serif" font-size="16">🏢</text>
+  <text x="355" y="205" fill="#111827" font-family="Arial, sans-serif" font-size="16" font-weight="semibold">Active Clusters</text>
+  <text x="355" y="225" fill="#3B82F6" font-family="Arial, sans-serif" font-size="32" font-weight="bold">12</text>
+  <text x="355" y="245" fill="#059669" font-family="Arial, sans-serif" font-size="12">+2 this week</text>
+  <text x="355" y="265" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Across 6 regions</text>
+  
+  <rect x="550" y="170" width="250" height="120" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <circle cx="590" cy="210" r="20" fill="#F0FDF4"/>
+  <text x="582" y="218" fill="#10B981" font-family="Arial, sans-serif" font-size="16">👥</text>
+  <text x="625" y="205" fill="#111827" font-family="Arial, sans-serif" font-size="16" font-weight="semibold">Connected Users</text>
+  <text x="625" y="225" fill="#10B981" font-family="Arial, sans-serif" font-size="32" font-weight="bold">1,247</text>
+  <text x="625" y="245" fill="#059669" font-family="Arial, sans-serif" font-size="12">+156 today</text>
+  <text x="625" y="265" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">98.5% uptime</text>
+  
+  <rect x="820" y="170" width="250" height="120" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <circle cx="860" cy="210" r="20" fill="#FEF3C7"/>
+  <text x="852" y="218" fill="#F59E0B" font-family="Arial, sans-serif" font-size="16">🛡️</text>
+  <text x="895" y="205" fill="#111827" font-family="Arial, sans-serif" font-size="16" font-weight="semibold">Security Events</text>
+  <text x="895" y="225" fill="#F59E0B" font-family="Arial, sans-serif" font-size="32" font-weight="bold">23</text>
+  <text x="895" y="245" fill="#DC2626" font-family="Arial, sans-serif" font-size="12">3 high priority</text>
+  <text x="895" y="265" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Last 24 hours</text>
+  
+  <rect x="1090" y="170" width="250" height="120" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <circle cx="1130" cy="210" r="20" fill="#FAF5FF"/>
+  <text x="1122" y="218" fill="#8B5CF6" font-family="Arial, sans-serif" font-size="16">📊</text>
+  <text x="1165" y="205" fill="#111827" font-family="Arial, sans-serif" font-size="16" font-weight="semibold">Data Processed</text>
+  <text x="1165" y="225" fill="#8B5CF6" font-family="Arial, sans-serif" font-size="32" font-weight="bold">2.4TB</text>
+  <text x="1165" y="245" fill="#059669" font-family="Arial, sans-serif" font-size="12">+12% vs yesterday</text>
+  <text x="1165" y="265" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Avg 100MB/s</text>
+  
+  <!-- Charts Section -->
+  <rect x="280" y="310" width="520" height="300" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="300" y="340" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="semibold">Connection Activity (Last 7 Days)</text>
+  
+  <!-- Chart Bars -->
+  <rect x="320" y="500" width="30" height="80" fill="#3B82F6" rx="4"/>
+  <rect x="360" y="480" width="30" height="100" fill="#3B82F6" rx="4"/>
+  <rect x="400" y="460" width="30" height="120" fill="#3B82F6" rx="4"/>
+  <rect x="440" y="440" width="30" height="140" fill="#3B82F6" rx="4"/>
+  <rect x="480" y="430" width="30" height="150" fill="#10B981" rx="4"/>
+  <rect x="520" y="450" width="30" height="130" fill="#3B82F6" rx="4"/>
+  <rect x="560" y="470" width="30" height="110" fill="#3B82F6" rx="4"/>
+  
+  <!-- Chart Labels -->
+  <text x="330" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Mon</text>
+  <text x="370" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Tue</text>
+  <text x="410" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Wed</text>
+  <text x="450" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Thu</text>
+  <text x="490" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Fri</text>
+  <text x="530" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Sat</text>
+  <text x="570" y="595" fill="#6B7280" font-family="Arial, sans-serif" font-size="10">Sun</text>
+  
+  <!-- Recent Activity -->
+  <rect x="820" y="310" width="520" height="300" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="840" y="340" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="semibold">Recent Activity</text>
+  
+  <!-- Activity Items -->
+  <circle cx="860" cy="370" r="8" fill="#10B981"/>
+  <text x="880" y="375" fill="#111827" font-family="Arial, sans-serif" font-size="14">New client connected: mobile-user-1247</text>
+  <text x="1200" y="375" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">2 min ago</text>
+  
+  <circle cx="860" cy="400" r="8" fill="#3B82F6"/>
+  <text x="880" y="405" fill="#111827" font-family="Arial, sans-serif" font-size="14">Certificate renewed: us-east-headend-01</text>
+  <text x="1200" y="405" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">15 min ago</text>
+  
+  <circle cx="860" cy="430" r="8" fill="#F59E0B"/>
+  <text x="880" y="435" fill="#111827" font-family="Arial, sans-serif" font-size="14">High latency detected: eu-west cluster</text>
+  <text x="1200" y="435" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">32 min ago</text>
+  
+  <circle cx="860" cy="460" r="8" fill="#10B981"/>
+  <text x="880" y="465" fill="#111827" font-family="Arial, sans-serif" font-size="14">User login: admin@company.com</text>
+  <text x="1200" y="465" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">1 hour ago</text>
+  
+  <circle cx="860" cy="490" r="8" fill="#8B5CF6"/>
+  <text x="880" y="495" fill="#111827" font-family="Arial, sans-serif" font-size="14">Security scan completed: All systems clean</text>
+  <text x="1200" y="495" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">2 hours ago</text>
+  
+  <circle cx="860" cy="520" r="8" fill="#EF4444"/>
+  <text x="880" y="525" fill="#111827" font-family="Arial, sans-serif" font-size="14">Failed authentication attempt blocked</text>
+  <text x="1200" y="525" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">3 hours ago</text>
+  
+  <circle cx="860" cy="550" r="8" fill="#10B981"/>
+  <text x="880" y="555" fill="#111827" font-family="Arial, sans-serif" font-size="14">Backup completed successfully</text>
+  <text x="1200" y="555" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">6 hours ago</text>
+  
+  <!-- Global Map Section -->
+  <rect x="280" y="630" width="1060" height="250" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="300" y="660" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="semibold">Global Infrastructure Status</text>
+  
+  <!-- World Map Representation -->
+  <rect x="300" y="680" width="1020" height="180" fill="#F3F4F6" rx="8"/>
+  
+  <!-- North America -->
+  <circle cx="450" cy="740" r="25" fill="#10B981" fill-opacity="0.8"/>
+  <text x="442" y="747" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" font-weight="bold">US</text>
+  <text x="430" y="775" fill="#111827" font-family="Arial, sans-serif" font-size="10">4 clusters</text>
+  <text x="430" y="790" fill="#10B981" font-family="Arial, sans-serif" font-size="10">Healthy</text>
+  
+  <!-- Europe -->
+  <circle cx="650" cy="720" r="20" fill="#3B82F6" fill-opacity="0.8"/>
+  <text x="644" y="727" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" font-weight="bold">EU</text>
+  <text x="630" y="750" fill="#111827" font-family="Arial, sans-serif" font-size="10">3 clusters</text>
+  <text x="630" y="765" fill="#3B82F6" font-family="Arial, sans-serif" font-size="10">Normal</text>
+  
+  <!-- Asia -->
+  <circle cx="950" cy="760" r="22" fill="#F59E0B" fill-opacity="0.8"/>
+  <text x="942" y="767" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" font-weight="bold">AP</text>
+  <text x="930" y="790" fill="#111827" font-family="Arial, sans-serif" font-size="10">3 clusters</text>
+  <text x="930" y="805" fill="#F59E0B" font-family="Arial, sans-serif" font-size="10">Degraded</text>
+  
+  <!-- Australia -->
+  <circle cx="1100" cy="820" r="15" fill="#8B5CF6" fill-opacity="0.8"/>
+  <text x="1094" y="827" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" font-weight="bold">AU</text>
+  <text x="1080" y="845" fill="#111827" font-family="Arial, sans-serif" font-size="10">2 clusters</text>
+  <text x="1080" y="860" fill="#8B5CF6" font-family="Arial, sans-serif" font-size="10">Healthy</text>
+  
+  <!-- Legend -->
+  <rect x="1200" y="700" width="120" height="80" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1" rx="4"/>
+  <text x="1210" y="720" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Status Legend</text>
+  <circle cx="1220" cy="735" r="5" fill="#10B981"/>
+  <text x="1235" y="740" fill="#111827" font-family="Arial, sans-serif" font-size="10">Healthy</text>
+  <circle cx="1220" cy="750" r="5" fill="#3B82F6"/>
+  <text x="1235" y="755" fill="#111827" font-family="Arial, sans-serif" font-size="10">Normal</text>
+  <circle cx="1220" cy="765" r="5" fill="#F59E0B"/>
+  <text x="1235" y="770" fill="#111827" font-family="Arial, sans-serif" font-size="10">Degraded</text>
+</svg>
