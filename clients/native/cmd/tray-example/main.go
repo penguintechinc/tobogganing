@@ -20,9 +20,11 @@ func main() {
 	log.Println("Starting SASEWaddle Client with System Tray...")
 
 	// Load configuration
-	cfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+	cfg := config.DefaultConfig()
+	if *configPath != "" {
+		if err := config.LoadFromFile(cfg, *configPath); err != nil {
+			log.Fatalf("Failed to load configuration from %s: %v", *configPath, err)
+		}
 	}
 
 	// Create VPN manager

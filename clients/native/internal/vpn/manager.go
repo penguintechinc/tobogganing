@@ -22,8 +22,6 @@ import (
 
 	"github.com/sasewaddle/clients/native/internal/config"
 	"github.com/sasewaddle/clients/native/internal/tray"
-	"golang.zx2c4.com/wireguard/wgctrl"
-	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 // Manager handles WireGuard VPN connections and implements the tray.VPNManager interface
@@ -359,7 +357,7 @@ func (m *Manager) validateConfig() error {
 	}
 	
 	// Validate config content (basic check)
-	content, err := m.config.ReadFile(m.configPath)
+	content, err := os.ReadFile(m.configPath)
 	if err != nil {
 		return fmt.Errorf("cannot read configuration file: %w", err)
 	}

@@ -32,6 +32,21 @@ import (
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
+// Config represents the WireGuard manager configuration
+type Config struct {
+    InterfaceName string
+    ListenPort    int
+    PrivateKey    string
+    Network       string
+    ManagerURL    string
+}
+
+// WireGuardManager alias for Manager for backward compatibility
+type WireGuardManager = Manager
+
+// PeerConfig alias for wgtypes.PeerConfig for backward compatibility  
+type PeerConfig = wgtypes.PeerConfig
+
 // Manager handles WireGuard interface configuration and peer management
 type Manager struct {
     interfaceName string
@@ -53,8 +68,13 @@ type Peer struct {
     Endpoint    string `json:"endpoint,omitempty"`
 }
 
-// NewManager creates a new WireGuard manager
-func NewManager(interfaceName, managerURL string, listenPort int, network string) (*Manager, error) {
+// NewManager creates a new WireGuard manager from a Config
+func NewManager(config *Config) (*Manager, error) {
+    return NewManagerWithParams(config.InterfaceName, config.ManagerURL, config.ListenPort, config.Network)
+}
+
+// NewManagerWithParams creates a new WireGuard manager with explicit parameters
+func NewManagerWithParams(interfaceName, managerURL string, listenPort int, network string) (*Manager, error) {
     client, err := wgctrl.New()
     if err != nil {
         return nil, fmt.Errorf("failed to create WireGuard client: %w", err)

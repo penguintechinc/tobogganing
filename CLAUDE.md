@@ -107,6 +107,10 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - **Python**: Follow PEP 8, use type hints, async/await patterns
 - **Golang**: Follow Go formatting standards, use modules
 - **Docker**: Multi-stage builds for security and size optimization
+- **Go Development**: ALWAYS run lint check and build test after creating or modifying Go packages:
+  - `golangci-lint run` for linting
+  - `go build ./...` for build verification
+  - Fix all linting errors before committing code
 
 ### Testing Requirements
 - Unit tests for all components
