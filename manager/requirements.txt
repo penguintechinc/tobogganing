@@ -10,7 +10,7 @@ httpx==0.25.2
 
 # Authentication and security
 bcrypt>=4.1.2
-cryptography==41.0.7
+cryptography==44.0.1
 pyjwt>=2.8.0
 
 # Database
