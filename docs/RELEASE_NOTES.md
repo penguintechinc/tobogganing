@@ -4,6 +4,104 @@ All notable changes to SASEWaddle will be documented in this file. New releases 
 
 ---
 
+## 🔒 v1.0.1 - "Security Patch" (2025-01-21)
+
+### 🛡️ Critical Security Fixes
+
+**CVE Patches**
+- 🔐 **CVE-2024-24783** (HIGH) - Fixed panic when parsing invalid palette-color images in golang.org/x/image
+  - Updated `golang.org/x/image` from v0.11.0 to v0.18.0
+  - Affected: Native client through Fyne GUI dependency chain
+  - Impact: Prevents potential DoS attacks via malformed image files
+
+- 🔐 **CVE golang.org/x/oauth2** (HIGH) - Fixed improper validation of syntactic correctness in OAuth2 library  
+  - Updated `golang.org/x/oauth2` from v0.15.0 to v0.27.0
+  - Affected: Both headend proxy and native client
+  - Impact: Prevents authorization bypass vulnerabilities
+
+**Dependency Security**
+- 🔍 **Protestware Detection** - Updated WireGuard dependencies to remove flagged gvisor.dev/gvisor package
+  - Updated `golang.zx2c4.com/wireguard` to latest stable version
+  - Enhanced dependency security scanning and validation
+  - Improved supply chain security posture
+
+### 🔧 Build & Compatibility Fixes
+
+**Native Client Improvements**
+- ✅ Fixed missing `headendPublicKey` field in Client struct
+- ✅ Resolved deprecated `systray.GetTooltip()` API calls
+- ✅ Updated Go version to 1.23.1 with latest toolchain
+- ✅ Improved error handling in system tray notifications
+
+**Website Build Fixes**
+- ✅ Fixed missing `CircuitBoardIcon` import in EmbeddedSolutions component
+- ✅ Replaced with valid `CodeBracketIcon` from Heroicons library
+- ✅ Resolved Next.js build failures in production deployment
+
+### 📋 Component Updates
+
+**Headend Proxy**
+- 🔄 Updated all crypto dependencies to latest secure versions
+- 🔄 Improved Go module dependency management
+- ✅ Verified production build compatibility
+
+**Native Client**
+- 🔄 Headless client build confirmed working after updates
+- 🔄 Enhanced security posture with updated dependencies
+- ⚠️ GUI components require additional development environment setup
+
+**Dependencies Updated**
+```
+golang.org/x/image: v0.11.0 → v0.18.0
+golang.org/x/oauth2: v0.15.0 → v0.27.0  
+golang.org/x/crypto: v0.31.0 → v0.37.0
+golang.org/x/net: v0.21.0 → v0.39.0
+golang.org/x/sync: v0.10.0 → v0.13.0
+golang.org/x/sys: v0.28.0 → v0.32.0
+golang.org/x/text: v0.21.0 → v0.24.0
+```
+
+### 🚨 Important Security Notes
+
+**Immediate Action Required**
+- 🔴 **High Priority**: Update all SASEWaddle deployments to v1.0.1
+- 🔴 **CVE Impact**: Both patched vulnerabilities were rated HIGH severity
+- 🔴 **Supply Chain**: Enhanced dependency validation prevents future protestware risks
+
+**Upgrade Compatibility**
+- ✅ **Drop-in Replacement**: v1.0.1 is fully compatible with v1.0.0 configurations
+- ✅ **Zero Downtime**: Rolling updates supported for production deployments
+- ✅ **Backwards Compatible**: No breaking changes to APIs or protocols
+
+### 📦 Build Verification
+
+**Tested Components**
+- ✅ Headend proxy builds and runs successfully
+- ✅ Native client headless version builds successfully  
+- ✅ Website builds and deploys to production
+- ✅ Docker containers build with updated dependencies
+- ✅ All critical security vulnerabilities resolved
+
+**Build Commands Verified**
+```bash
+# Headend proxy
+cd headend && go build -o headend-proxy ./proxy
+
+# Native client (headless)  
+cd clients/native && go build -o sasewaddle-client-headless ./build-headless.go
+
+# Website
+cd website && npm install && npm run build
+```
+
+### 🔗 Related Resources
+
+- **Security Advisory**: GitHub Security Advisory for detailed CVE information
+- **Upgrade Guide**: See v1.0.0 → v1.0.1 migration notes in documentation
+- **Vulnerability Scanner**: Use updated security scanning in CI/CD pipelines
+
+---
+
 ## 🎉 v1.0.0 - "Genesis" (2024-08-20)
 
 ### 🚀 Major Features

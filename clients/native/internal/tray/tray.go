@@ -383,14 +383,11 @@ func (m *Manager) handlePullConfig() {
 	m.updateConfigStatus()
 	
 	// Show success message temporarily in tooltip
-	originalTooltip := systray.GetTooltip()
 	systray.SetTooltip("SASEWaddle - Configuration updated successfully")
 	
 	go func() {
 		time.Sleep(3 * time.Second)
-		if originalTooltip != "" {
-			systray.SetTooltip(originalTooltip)
-		}
+		systray.SetTooltip("SASEWaddle - Ready")
 	}()
 }
 
@@ -749,15 +746,12 @@ func (m *Manager) showError(message string) {
 	log.Printf("Error: %s", message)
 	
 	// Update tray tooltip to show error temporarily
-	originalTooltip := systray.GetTooltip()
 	systray.SetTooltip(fmt.Sprintf("SASEWaddle - Error: %s", message))
 	
 	// Reset tooltip after 5 seconds
 	go func() {
 		time.Sleep(5 * time.Second)
-		if originalTooltip != "" {
-			systray.SetTooltip(originalTooltip)
-		}
+		systray.SetTooltip("SASEWaddle - Ready")
 	}()
 }
 

@@ -43,12 +43,13 @@ type Client struct {
     httpClient   *http.Client
     
     // Current connection state
-    clientID     string
-    accessToken  string
-    refreshToken string
-    headendURL   string
-    wgPrivateKey wgtypes.Key
-    wgPublicKey  wgtypes.Key
+    clientID       string
+    accessToken    string
+    refreshToken   string
+    headendURL     string
+    wgPrivateKey   wgtypes.Key
+    wgPublicKey    wgtypes.Key
+    headendPublicKey wgtypes.Key
 }
 
 // ConnectionStatus represents the current connection status
