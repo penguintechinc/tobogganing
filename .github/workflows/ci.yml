@@ -17,7 +17,7 @@ env:
 jobs:
   # Test Manager Service (Python)
   test-manager:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: [3.12]
@@ -69,7 +69,7 @@ jobs:
 
   # Test Headend Server (Go)
   test-headend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         go-version: [1.23]
@@ -115,7 +115,7 @@ jobs:
 
   # Test Native Client (Go)
   test-client:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         go-version: [1.23]
@@ -178,7 +178,7 @@ jobs:
   # Build and push Docker images
   build-images:
     needs: [test-manager, test-headend, test-client]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -282,11 +282,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: amd64
             binary_suffix: ""
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: arm64
             binary_suffix: ""
@@ -367,7 +367,7 @@ jobs:
   create-release:
     if: github.event_name == 'release'
     needs: [build-images, build-native-client]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     
@@ -405,7 +405,7 @@ jobs:
 
   # Security scanning
   security-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -430,7 +430,7 @@ jobs:
   # Integration tests
   integration-test:
     needs: [build-images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       redis:
         image: redis:7

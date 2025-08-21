@@ -111,6 +111,7 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 ## Development Guidelines
 
 ### Development Requirements
+- **Operating System**: Ubuntu 24.04 LTS (standardized for all Debian/Ubuntu development and CI/CD)
 - **Go 1.23+** - All Go components (headend server and native clients)
 - **Python 3.12+** - Manager service and web portal
 - **Node.js 18+** - Website and React Native mobile applications

@@ -20,7 +20,7 @@ env:
 jobs:
   build-manager:
     name: Build Manager Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -68,7 +68,7 @@ jobs:
 
   build-headend:
     name: Build Headend Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -116,7 +116,7 @@ jobs:
 
   build-docker-client:
     name: Build Docker Client Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write

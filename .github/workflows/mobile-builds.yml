@@ -48,7 +48,7 @@ env:
 jobs:
   # Test React Native code
   test-mobile:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     
@@ -83,7 +83,7 @@ jobs:
   build-android:
     needs: [test-mobile]
     if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'android' || github.event.inputs.platforms == null }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     
@@ -392,7 +392,7 @@ jobs:
   create-mobile-release:
     if: github.event_name == 'release'
     needs: [build-android, build-ios]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -508,7 +508,7 @@ jobs:
   notify-completion:
     if: always()
     needs: [build-android, build-ios]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Notify build completion
       run: |

@@ -14,7 +14,7 @@ env:
 jobs:
   # Build and test before release
   pre-release-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     
@@ -58,7 +58,7 @@ jobs:
   # Build release Docker images
   build-release-images:
     needs: [pre-release-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -157,11 +157,11 @@ jobs:
       matrix:
         include:
           # Linux builds
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: amd64
             binary: sasewaddle-client-linux-amd64
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: arm64
             binary: sasewaddle-client-linux-arm64
@@ -284,7 +284,7 @@ jobs:
   # Create release packages
   create-release:
     needs: [build-release-images, build-native-clients, create-macos-universal]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     
@@ -640,7 +640,7 @@ EOF
   # Security scan of release images
   security-scan-release:
     needs: [build-release-images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         component: [manager, headend, client]
