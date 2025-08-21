@@ -1,0 +1,334 @@
+# Security Feeds and Scanning Configuration for SASEWaddle
+
+# Global Security Settings
+security:
+  enabled: true
+  log_level: INFO
+  cache_ttl: 300  # 5 minutes
+  max_indicators: 1000000  # 1 million indicators max
+  cleanup_interval: 86400  # 24 hours
+  
+# Threat Intelligence Feeds Configuration
+threat_feeds:
+  # Blackweb - Open source blacklist
+  blackweb:
+    enabled: true
+    domains_url: "https://raw.githubusercontent.com/maravento/blackweb/master/blackweb.txt"
+    ips_url: "https://raw.githubusercontent.com/maravento/blackweb/master/blackip.txt" 
+    update_interval: 3600  # 1 hour
+    confidence: 85
+    timeout: 300  # 5 minutes
+    retry_attempts: 3
+    retry_delay: 60  # 1 minute
+    
+  # Spamhaus - Commercial anti-spam service
+  spamhaus:
+    enabled: true
+    drop_url: "https://www.spamhaus.org/drop/drop.txt"
+    edrop_url: "https://www.spamhaus.org/drop/edrop.txt"
+    pbl_url: "https://www.spamhaus.org/pbl/pbl.txt"
+    update_interval: 1800  # 30 minutes
+    confidence: 95
+    timeout: 300
+    retry_attempts: 3
+    retry_delay: 60
+    
+  # IPVoid - Commercial IP reputation service
+  ipvoid:
+    enabled: false  # Requires API key
+    api_url: "https://endpoint.apivoid.com/iprep/v1/pay-as-you-go/"
+    api_key: "${IPVOID_API_KEY}"
+    update_interval: 3600  # 1 hour
+    confidence: 90
+    timeout: 30
+    rate_limit: 1000  # requests per day
+    
+  # DNSBL - DNS-based blacklists
+  dnsbl:
+    enabled: true
+    providers:
+      - "zen.spamhaus.org"
+      - "bl.spamcop.net" 
+      - "dnsbl.sorbs.net"
+      - "cbl.abuseat.org"
+      - "b.barracudacentral.org"
+      - "rbl.interserver.net"
+    update_interval: 1800  # 30 minutes
+    confidence: 80
+    timeout: 10
+    
+  # STIX/TAXII - Structured threat intelligence
+  stix_taxii:
+    enabled: false  # Requires configuration
+    servers:
+      - url: "https://cti-taxii.mitre.org/stix/collections/"
+        username: ""
+        password: ""
+        collections: []
+    update_interval: 7200  # 2 hours
+    confidence: 88
+    timeout: 120
+
+# Security Scanning Configuration
+security_scanning:
+  enabled: true
+  
+  # Vulnerability Scanning
+  vulnerability_scan:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    timeout: 3600  # 1 hour
+    tools:
+      - name: "trivy"
+        enabled: true
+        config:
+          format: "json"
+          severity: "HIGH,CRITICAL"
+          timeout: 300
+      - name: "grype"
+        enabled: false
+        config:
+          output: "json"
+          scope: "all-layers"
+      - name: "clair"
+        enabled: false
+        config:
+          api_url: "http://localhost:6060"
+    targets:
+      - type: "containers"
+        patterns: ["*"]
+        limit: 10
+      - type: "filesystem"
+        paths: ["/workspaces/SASEWaddle"]
+        exclude: ["node_modules", ".git", "*.log"]
+        
+  # Port Scanning
+  port_scan:
+    enabled: true
+    schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+    timeout: 1800  # 30 minutes
+    tools:
+      - name: "nmap"
+        enabled: true
+        config:
+          arguments: "-sV -sC --script vuln"
+          timeout: 300
+    targets:
+      - "127.0.0.1"
+      - "localhost"
+    ports:
+      common: [22, 80, 443, 3306, 6379, 8080, 8443, 9090]
+      dangerous: [22, 3306, 6379, 5432, 27017]
+      
+  # Dependency Scanning
+  dependency_scan:
+    enabled: true
+    schedule: "0 1 * * *"  # Daily at 1 AM
+    timeout: 900  # 15 minutes
+    tools:
+      - name: "safety"
+        enabled: true
+        config:
+          format: "json"
+          ignore: []
+      - name: "npm_audit" 
+        enabled: true
+        config:
+          audit_level: "moderate"
+          production_only: true
+      - name: "govulncheck"
+        enabled: true
+        config:
+          verbose: false
+    paths:
+      python: ["/workspaces/SASEWaddle/manager"]
+      nodejs: ["/workspaces/SASEWaddle/website"]
+      golang: ["/workspaces/SASEWaddle/headend", "/workspaces/SASEWaddle/clients"]
+      
+  # Container Scanning
+  container_scan:
+    enabled: true
+    schedule: "0 4 * * *"  # Daily at 4 AM
+    timeout: 1800  # 30 minutes
+    tools:
+      - name: "trivy"
+        enabled: true
+        config:
+          scan_type: "image"
+          format: "json"
+      - name: "docker_bench"
+        enabled: true
+        config:
+          skip_checks: []
+    registries:
+      - "local"  # Local Docker images
+      - "docker.io"  # If pulling from Docker Hub
+      
+  # Configuration Scanning
+  configuration_scan:
+    enabled: true
+    schedule: "0 5 * * 0"  # Weekly on Sunday at 5 AM
+    timeout: 900  # 15 minutes
+    tools:
+      - name: "kube_bench"
+        enabled: false  # Enable if using Kubernetes
+        config:
+          benchmark: "cis-1.20"
+      - name: "inspec"
+        enabled: false
+        config:
+          profiles: ["linux-baseline"]
+      - name: "custom_checks"
+        enabled: true
+        config:
+          check_ssh: true
+          check_permissions: true
+          check_services: true
+    checks:
+      ssh_config:
+        enabled: true
+        secure_settings:
+          - "PermitRootLogin no"
+          - "PasswordAuthentication no"
+          - "PubkeyAuthentication yes"
+      file_permissions:
+        enabled: true
+        critical_files:
+          - "/etc/passwd"
+          - "/etc/shadow"
+          - "/etc/ssh/sshd_config"
+      service_config:
+        enabled: true
+        monitor_services:
+          - "ssh"
+          - "nginx"
+          - "mysql"
+          - "redis"
+          
+  # Threat Intelligence Scanning
+  threat_intel_scan:
+    enabled: true
+    schedule: "*/15 * * * *"  # Every 15 minutes
+    timeout: 300  # 5 minutes
+    log_sources:
+      - path: "/var/log/auth.log"
+        enabled: true
+        max_lines: 1000
+      - path: "/var/log/nginx/access.log"
+        enabled: true
+        max_lines: 5000
+      - path: "/var/log/sasewaddle/proxy.log"
+        enabled: true
+        max_lines: 2000
+      - path: "/var/log/sasewaddle/manager.log"
+        enabled: true
+        max_lines: 1000
+    extraction:
+      ip_regex: "\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b"
+      domain_regex: "\\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}\\b"
+      exclude_ips:
+        - "127.0.0.1"
+        - "::1"
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "192.168.0.0/16"
+      exclude_domains:
+        - "localhost"
+        - "example.com"
+        - "example.org"
+        
+  # Compliance Scanning
+  compliance_scan:
+    enabled: true
+    schedule: "0 6 * * 0"  # Weekly on Sunday at 6 AM
+    timeout: 1800  # 30 minutes
+    frameworks:
+      - name: "CIS"
+        enabled: true
+        controls:
+          - "1.1.1.1"  # Filesystem mounting
+          - "2.2.1.1"  # Time synchronization
+          - "5.1.1"    # Cron daemon
+      - name: "NIST"
+        enabled: true
+        controls:
+          - "AC-2"     # Account Management
+          - "AC-3"     # Access Enforcement
+          - "AU-2"     # Audit Events
+      - name: "SOC2"
+        enabled: true
+        controls:
+          - "CC6.1"    # Logical and Physical Access
+          - "CC6.7"    # Transmission of Data
+          - "CC7.1"    # System Operations
+
+# Alert and Notification Settings
+alerts:
+  enabled: true
+  
+  # Alert thresholds
+  thresholds:
+    critical_findings: 1
+    high_findings: 5
+    threat_detections_per_hour: 10
+    scan_failures: 3
+    
+  # Notification channels
+  notifications:
+    email:
+      enabled: false
+      smtp_server: "localhost"
+      smtp_port: 587
+      username: ""
+      password: ""
+      recipients: []
+      
+    slack:
+      enabled: false
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      channel: "#security"
+      
+    webhook:
+      enabled: false
+      url: "${WEBHOOK_URL}"
+      headers:
+        Authorization: "Bearer ${WEBHOOK_TOKEN}"
+        
+    syslog:
+      enabled: true
+      server: "localhost"
+      port: 514
+      facility: "local0"
+
+# Performance and Resource Limits
+performance:
+  max_concurrent_scans: 3
+  max_concurrent_feeds: 5
+  memory_limit: "2GB"
+  cpu_limit: "50%"
+  disk_cleanup:
+    enabled: true
+    max_log_size: "1GB"
+    retention_days: 30
+    
+# Integration Settings
+integrations:
+  # Manager database integration
+  database:
+    cleanup_old_records: true
+    retention_periods:
+      threat_indicators: 90  # days
+      threat_detections: 30  # days
+      security_findings: 180  # days
+      scan_results: 60  # days
+      
+  # Redis integration
+  redis:
+    cache_prefix: "security:"
+    cache_ttl: 300  # 5 minutes
+    
+  # Audit logging integration
+  audit:
+    log_all_events: true
+    log_level: "INFO"
+    include_metadata: true

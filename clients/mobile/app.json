@@ -1,0 +1,9 @@
+{
+  "name": "SASEWaddleMobile",
+  "displayName": "SASEWaddle",
+  "version": "1.0.0",
+  "minSdkVersion": 24,
+  "compileSdkVersion": 34,
+  "targetSdkVersion": 34,
+  "ndkVersion": "25.1.8937393"
+}

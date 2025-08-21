@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#F9FAFB"/>
+  
+  <!-- Title -->
+  <text x="600" y="40" fill="#111827" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle">SASEWaddle Architecture Overview</text>
+  <text x="600" y="65" fill="#6B7280" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Zero Trust Network Architecture with Multi-Platform Support</text>
+  
+  <!-- Clients Section -->
+  <rect x="50" y="120" width="280" height="500" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+  <text x="190" y="150" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle">Clients</text>
+  
+  <!-- Native Client -->
+  <rect x="70" y="180" width="240" height="80" rx="8" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1"/>
+  <circle cx="100" cy="210" r="15" fill="#3B82F6"/>
+  <text x="92" y="218" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="16">💻</text>
+  <text x="130" y="210" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold">Native Apps</text>
+  <text x="130" y="230" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">macOS, Windows, Linux</text>
+  <text x="130" y="245" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Go-based WireGuard client</text>
+  
+  <!-- Mobile Client -->
+  <rect x="70" y="280" width="240" height="80" rx="8" fill="#F0FDF4" stroke="#10B981" stroke-width="1"/>
+  <circle cx="100" cy="310" r="15" fill="#10B981"/>
+  <text x="92" y="318" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="16">📱</text>
+  <text x="130" y="310" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold">Mobile Apps</text>
+  <text x="130" y="330" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Android, iOS (planned)</text>
+  <text x="130" y="345" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">React Native + WireGuard</text>
+  
+  <!-- Docker Client -->
+  <rect x="70" y="380" width="240" height="80" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1"/>
+  <circle cx="100" cy="410" r="15" fill="#F59E0B"/>
+  <text x="92" y="418" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="16">🐳</text>
+  <text x="130" y="410" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold">Docker Containers</text>
+  <text x="130" y="430" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Containerized deployment</text>
+  <text x="130" y="445" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Auto-configuration</text>
+  
+  <!-- Embedded -->
+  <rect x="70" y="480" width="240" height="80" rx="8" fill="#FAF5FF" stroke="#8B5CF6" stroke-width="1"/>
+  <circle cx="100" cy="510" r="15" fill="#8B5CF6"/>
+  <text x="92" y="518" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="16">🔌</text>
+  <text x="130" y="510" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold">Embedded Solutions</text>
+  <text x="130" y="530" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">IoT, Industrial, Automotive</text>
+  <text x="130" y="545" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Custom firmware</text>
+  
+  <!-- Headend Section -->
+  <rect x="460" y="120" width="280" height="500" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+  <text x="600" y="150" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle">Headend Server</text>
+  
+  <!-- WireGuard -->
+  <rect x="480" y="180" width="240" height="60" rx="8" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1"/>
+  <text x="600" y="205" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">WireGuard VPN</text>
+  <text x="600" y="220" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Tunnel Termination</text>
+  <text x="600" y="230" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">ChaCha20Poly1305 Encryption</text>
+  
+  <!-- Proxy -->
+  <rect x="480" y="260" width="240" height="60" rx="8" fill="#DCFCE7" stroke="#10B981" stroke-width="1"/>
+  <text x="600" y="285" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Multi-Protocol Proxy</text>
+  <text x="600" y="300" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">HTTP/HTTPS, TCP, UDP, WebSocket</text>
+  <text x="600" y="310" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Go-based high performance</text>
+  
+  <!-- Authentication -->
+  <rect x="480" y="340" width="240" height="60" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1"/>
+  <text x="600" y="365" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Dual Authentication</text>
+  <text x="600" y="380" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">X.509 Certificates + JWT</text>
+  <text x="600" y="390" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">SAML2/OAuth2 Integration</text>
+  
+  <!-- Traffic Mirroring -->
+  <rect x="480" y="420" width="240" height="60" rx="8" fill="#FAF5FF" stroke="#8B5CF6" stroke-width="1"/>
+  <text x="600" y="445" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Traffic Mirroring</text>
+  <text x="600" y="460" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">VXLAN/GRE/ERSPAN</text>
+  <text x="600" y="470" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">IDS/IPS Integration</text>
+  
+  <!-- Security -->
+  <rect x="480" y="500" width="240" height="60" rx="8" fill="#FEE2E2" stroke="#EF4444" stroke-width="1"/>
+  <text x="600" y="525" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Security Features</text>
+  <text x="600" y="540" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Firewall, Rate Limiting</text>
+  <text x="600" y="550" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Threat Intelligence</text>
+  
+  <!-- Manager Section -->
+  <rect x="870" y="120" width="280" height="500" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+  <text x="1010" y="150" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle">Manager Service</text>
+  
+  <!-- Web Portal -->
+  <rect x="890" y="180" width="240" height="60" rx="8" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1"/>
+  <text x="1010" y="205" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Web Portal</text>
+  <text x="1010" y="220" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">py4web + React UI</text>
+  <text x="1010" y="230" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Role-based Access Control</text>
+  
+  <!-- Certificate Management -->
+  <rect x="890" y="260" width="240" height="60" rx="8" fill="#F0FDF4" stroke="#10B981" stroke-width="1"/>
+  <text x="1010" y="285" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Certificate Management</text>
+  <text x="1010" y="300" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Root CA + Intermediate CA</text>
+  <text x="1010" y="310" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Automated Lifecycle</text>
+  
+  <!-- Orchestration -->
+  <rect x="890" y="340" width="240" height="60" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1"/>
+  <text x="1010" y="365" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Multi-Datacenter</text>
+  <text x="1010" y="380" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Client Orchestration</text>
+  <text x="1010" y="390" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Global Load Balancing</text>
+  
+  <!-- API -->
+  <rect x="890" y="420" width="240" height="60" rx="8" fill="#FAF5FF" stroke="#8B5CF6" stroke-width="1"/>
+  <text x="1010" y="445" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">REST API</text>
+  <text x="1010" y="460" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Client Configuration</text>
+  <text x="1010" y="470" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Monitoring & Metrics</text>
+  
+  <!-- Database -->
+  <rect x="890" y="500" width="240" height="60" rx="8" fill="#FEE2E2" stroke="#EF4444" stroke-width="1"/>
+  <text x="1010" y="525" fill="#111827" font-family="Arial, sans-serif" font-size="14" font-weight="semibold" text-anchor="middle">Database & Storage</text>
+  <text x="1010" y="540" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">MySQL/PostgreSQL + Redis</text>
+  <text x="1010" y="550" fill="#6B7280" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Encrypted Configuration</text>
+  
+  <!-- Connections -->
+  <!-- Clients to Headend -->
+  <line x1="330" y1="220" x2="460" y2="220" stroke="#3B82F6" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <text x="395" y="215" fill="#3B82F6" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">WireGuard</text>
+  
+  <!-- Headend to Manager -->
+  <line x1="740" y1="280" x2="870" y2="280" stroke="#10B981" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <text x="805" y="275" fill="#10B981" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">REST API</text>
+  
+  <!-- Clients to Manager (API) -->
+  <path d="M 190 120 Q 190 80 600 80 Q 1010 80 1010 120" stroke="#F59E0B" stroke-width="2" fill="none" stroke-dasharray="5,5" marker-end="url(#arrowhead-dashed)"/>
+  <text x="600" y="75" fill="#F59E0B" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Initial Setup API</text>
+  
+  <!-- Security Labels -->
+  <rect x="50" y="680" width="1100" height="80" rx="8" fill="#F3F4F6" stroke="#D1D5DB" stroke-width="1"/>
+  <text x="600" y="705" fill="#111827" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">🔒 Zero Trust Security Layers</text>
+  
+  <text x="150" y="730" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Layer 1:</text>
+  <text x="200" y="730" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">WireGuard Encryption</text>
+  
+  <text x="400" y="730" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Layer 2:</text>
+  <text x="450" y="730" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">X.509 Certificates</text>
+  
+  <text x="650" y="730" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Layer 3:</text>
+  <text x="700" y="730" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">JWT Tokens</text>
+  
+  <text x="850" y="730" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Layer 4:</text>
+  <text x="900" y="730" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Application Auth</text>
+  
+  <text x="150" y="750" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Layer 5:</text>
+  <text x="200" y="750" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Traffic Analysis</text>
+  
+  <text x="400" y="750" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Monitoring:</text>
+  <text x="470" y="750" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Prometheus + Grafana</text>
+  
+  <text x="650" y="750" fill="#111827" font-family="Arial, sans-serif" font-size="12" font-weight="semibold">Deployment:</text>
+  <text x="720" y="750" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Kubernetes, Docker, Cloud</text>
+  
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6"/>
+    </marker>
+    <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B"/>
+    </marker>
+  </defs>
+</svg>

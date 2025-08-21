@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: sasewaddle-manager
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sasewaddle
+      app.kubernetes.io/component: manager
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: sasewaddle-headend
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sasewaddle
+      app.kubernetes.io/component: headend
+  endpoints:
+  - port: proxy
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sasewaddle-dashboard
+  namespace: sasewaddle
+  labels:
+    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/component: dashboard
+    grafana_dashboard: "1"
+data:
+  sasewaddle.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "SASEWaddle Overview",
+        "description": "Monitoring dashboard for SASEWaddle SASE solution",
+        "tags": ["sasewaddle", "sase", "vpn"],
+        "style": "dark",
+        "timezone": "",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "title": "Manager API Requests",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{service=\"manager\"}[5m])",
+                "legendFormat": "{{method}} {{code}}"
+              }
+            ]
+          },
+          {
+            "title": "Active WireGuard Connections",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "wireguard_active_connections",
+                "legendFormat": "Connections"
+              }
+            ]
+          },
+          {
+            "title": "Headend Proxy Traffic",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(proxy_bytes_total[5m])",
+                "legendFormat": "{{direction}}"
+              }
+            ]
+          },
+          {
+            "title": "Certificate Validity",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "certificate_expiry_days",
+                "legendFormat": "{{type}}"
+              }
+            ]
+          }
+        ]
+      }
+    }

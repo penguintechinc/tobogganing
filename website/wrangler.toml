@@ -1,0 +1,186 @@
+name = "sasewaddle-website"
+main = "functions/_middleware.js"
+compatibility_date = "2024-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+[build]
+command = "npm run pages:build"
+
+[build.upload]
+format = "modules"
+
+[env.production]
+name = "sasewaddle-website"
+
+[env.staging]
+name = "sasewaddle-website-staging"
+
+# Custom domains (configure these in Cloudflare Pages dashboard)
+[[env.production.routes]]
+pattern = "sasewaddle.com/*"
+
+[[env.production.routes]]
+pattern = "www.sasewaddle.com/*"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+SITE_URL = "https://sasewaddle.com"
+GITHUB_URL = "https://github.com/your-org/sasewaddle"
+DOCS_URL = "https://docs.sasewaddle.com"
+SALES_EMAIL = "sales@penguintech.io"
+VERSION = "1.0.0"
+BUILD_TYPE = "production"
+
+# KV Namespaces (for caching and analytics)
+[[kv_namespaces]]
+binding = "CACHE"
+id = "your-cache-namespace-id"
+preview_id = "your-cache-preview-namespace-id"
+
+[[kv_namespaces]]
+binding = "ANALYTICS"
+id = "your-analytics-namespace-id"
+preview_id = "your-analytics-preview-namespace-id"
+
+# Durable Objects (for real-time features if needed)
+# [[durable_objects]]
+# name = "WEBSOCKET_HANDLER"
+# class_name = "WebSocketHandler"
+# script_name = "websocket-handler"
+
+# R2 Buckets (for file storage if needed)
+# [[r2_buckets]]
+# binding = "ASSETS"
+# bucket_name = "sasewaddle-assets"
+
+# Custom headers for security and performance
+[[rules]]
+pattern = "/*"
+custom_headers = [
+  { name = "X-Frame-Options", value = "DENY" },
+  { name = "X-Content-Type-Options", value = "nosniff" },
+  { name = "X-XSS-Protection", value = "1; mode=block" },
+  { name = "Referrer-Policy", value = "strict-origin-when-cross-origin" },
+  { name = "Permissions-Policy", value = "camera=(), microphone=(), geolocation=()" },
+  { name = "Strict-Transport-Security", value = "max-age=31536000; includeSubDomains; preload" }
+]
+
+# Cache settings
+[[rules]]
+pattern = "/api/*"
+cache_level = "none"
+
+[[rules]]
+pattern = "/static/*"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "/images/*"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "/images/screenshots/*"
+cache_level = "cache_everything"
+edge_cache_ttl = 604800  # 7 days (shorter for dynamic content)
+
+[[rules]]
+pattern = "*.css"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "*.js"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "*.svg"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "*.png"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "*.jpg"
+cache_level = "cache_everything"
+edge_cache_ttl = 2592000  # 30 days
+
+[[rules]]
+pattern = "*.woff2"
+cache_level = "cache_everything"
+edge_cache_ttl = 31536000  # 1 year
+
+# Redirects
+[[redirects]]
+from = "/github"
+to = "https://github.com/your-org/sasewaddle"
+status = 301
+
+[[redirects]]
+from = "/docs"
+to = "/docs/overview"
+status = 301
+
+[[redirects]]
+from = "/download"
+to = "/downloads"
+status = 301
+
+[[redirects]]
+from = "/discord"
+to = "https://discord.gg/sasewaddle"
+status = 301
+
+[[redirects]]
+from = "/mobile"
+to = "/#showcase"
+status = 301
+
+[[redirects]]
+from = "/enterprise"
+to = "/#pricing"
+status = 301
+
+[[redirects]]
+from = "/embedded"
+to = "/#embedded"
+status = 301
+
+[[redirects]]
+from = "/sales"
+to = "mailto:sales@penguintech.io"
+status = 301
+
+[[redirects]]
+from = "/pricing"
+to = "/#pricing"
+status = 301
+
+# Development settings
+[env.development]
+name = "sasewaddle-website-dev"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+SITE_URL = "https://sasewaddle-website-dev.pages.dev"
+GITHUB_URL = "https://github.com/your-org/sasewaddle"
+DOCS_URL = "https://docs-dev.sasewaddle.com"
+SALES_EMAIL = "sales@penguintech.io"
+VERSION = "1.0.0-dev"
+BUILD_TYPE = "development"
+
+# Staging environment variables
+[env.staging.vars]
+ENVIRONMENT = "staging"
+SITE_URL = "https://sasewaddle-website-staging.pages.dev"
+GITHUB_URL = "https://github.com/your-org/sasewaddle"
+DOCS_URL = "https://docs-staging.sasewaddle.com"
+SALES_EMAIL = "sales@penguintech.io"
+VERSION = "1.0.0-staging"
+BUILD_TYPE = "staging"

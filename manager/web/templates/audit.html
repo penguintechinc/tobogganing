@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit & Compliance - SASEWaddle Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .severity-badge { 
+            display: inline-block; 
+            padding: 0.25rem 0.5rem; 
+            border-radius: 0.375rem; 
+            font-size: 0.75rem; 
+            font-weight: 500; 
+        }
+        .severity-debug { background-color: #e5e7eb; color: #374151; }
+        .severity-info { background-color: #dbeafe; color: #1e40af; }
+        .severity-warning { background-color: #fef3c7; color: #d97706; }
+        .severity-error { background-color: #fee2e2; color: #dc2626; }
+        .severity-critical { background-color: #fecaca; color: #991b1b; }
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Audit & Compliance</h1>
+            <p class="text-gray-600">Monitor audit events and generate compliance reports</p>
+        </div>
+
+        <!-- Statistics Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-blue-100 rounded-lg">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Events (30d)</p>
+                        <p id="total-events" class="text-2xl font-bold text-gray-900">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-red-100 rounded-lg">
+                        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 14.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">High Risk Events</p>
+                        <p id="high-risk-events" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-yellow-100 rounded-lg">
+                        <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Failed Events</p>
+                        <p id="failed-events" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="p-2 bg-green-100 rounded-lg">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Compliance Reports</p>
+                        <p id="compliance-reports-count" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Tabs -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onclick="showTab('audit-events')" id="audit-events-tab-btn" class="border-blue-500 text-blue-600 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Audit Events
+                    </button>
+                    <button onclick="showTab('compliance-reports')" id="compliance-reports-tab-btn" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Compliance Reports
+                    </button>
+                    <button onclick="showTab('audit-integrity')" id="audit-integrity-tab-btn" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Audit Integrity
+                    </button>
+                    <button onclick="showTab('analytics')" id="analytics-tab-btn" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                        Analytics
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Audit Events Tab -->
+            <div id="audit-events-tab" class="tab-content active p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Audit Events</h2>
+                    <div class="flex space-x-3">
+                        <input type="date" id="events-start-date" class="px-3 py-2 border border-gray-300 rounded-lg">
+                        <input type="date" id="events-end-date" class="px-3 py-2 border border-gray-300 rounded-lg">
+                        <select id="events-severity-filter" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Severities</option>
+                            <option value="debug">Debug</option>
+                            <option value="info">Info</option>
+                            <option value="warning">Warning</option>
+                            <option value="error">Error</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <select id="events-compliance-filter" class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">All Frameworks</option>
+                            <option value="soc2">SOC 2</option>
+                            <option value="gdpr">GDPR</option>
+                            <option value="hipaa">HIPAA</option>
+                            <option value="pci_dss">PCI DSS</option>
+                        </select>
+                        <button onclick="loadAuditEvents()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Filter
+                        </button>
+                    </div>
+                </div>
+
+                <div id="audit-events-container">
+                    <div class="text-center py-8">
+                        <p class="text-gray-500">Loading audit events...</p>
+                    </div>
+                </div>
+
+                <div id="events-pagination" class="mt-6 flex justify-center">
+                    <!-- Pagination will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Compliance Reports Tab -->
+            <div id="compliance-reports-tab" class="tab-content p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Compliance Reports</h2>
+                    <button onclick="showGenerateReportModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                        Generate Report
+                    </button>
+                </div>
+
+                <div id="compliance-reports-container">
+                    <div class="text-center py-8">
+                        <p class="text-gray-500">Loading compliance reports...</p>
+                    </div>
+                </div>
+
+                <div id="reports-pagination" class="mt-6 flex justify-center">
+                    <!-- Pagination will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Audit Integrity Tab -->
+            <div id="audit-integrity-tab" class="tab-content p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Audit Trail Integrity</h2>
+                    <button onclick="showVerifyIntegrityModal()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                        Verify Integrity
+                    </button>
+                </div>
+
+                <div id="integrity-results-container">
+                    <div class="text-center py-8">
+                        <p class="text-gray-500">Run integrity verification to see results</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div id="analytics-tab" class="tab-content p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-6">Audit Analytics</h2>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Event Types (Last 30 Days)</h3>
+                        <canvas id="event-types-chart" width="400" height="200"></canvas>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Event Severity Distribution</h3>
+                        <canvas id="severity-chart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Event Timeline (Last 7 Days)</h3>
+                    <canvas id="timeline-chart" width="800" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Report Modal -->
+    <div id="generate-report-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-overlay fixed inset-0" onclick="hideGenerateReportModal()"></div>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div class="p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Generate Compliance Report</h3>
+                    
+                    <form id="generate-report-form" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Framework</label>
+                            <select name="framework" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Select Framework</option>
+                                <option value="SOC2">SOC 2</option>
+                                <option value="GDPR">GDPR</option>
+                                <option value="HIPAA">HIPAA</option>
+                                <option value="PCI_DSS">PCI DSS</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                            <input type="date" name="start_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                            <input type="date" name="end_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </form>
+                    
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button onclick="hideGenerateReportModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                            Cancel
+                        </button>
+                        <button onclick="generateComplianceReport()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Generate Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Verify Integrity Modal -->
+    <div id="verify-integrity-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-overlay fixed inset-0" onclick="hideVerifyIntegrityModal()"></div>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div class="p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Verify Audit Integrity</h3>
+                    
+                    <form id="verify-integrity-form" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                            <input type="date" name="start_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                            <input type="date" name="end_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </form>
+                    
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button onclick="hideVerifyIntegrityModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                            Cancel
+                        </button>
+                        <button onclick="verifyAuditIntegrity()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                            Verify Integrity
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let currentReportsPage = 1;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatistics();
+            loadAuditEvents();
+            loadComplianceReports();
+            
+            // Set default date filters to last 7 days
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 7);
+            
+            document.getElementById('events-start-date').value = startDate.toISOString().split('T')[0];
+            document.getElementById('events-end-date').value = endDate.toISOString().split('T')[0];
+            
+            // Auto-refresh statistics every 60 seconds
+            setInterval(loadStatistics, 60000);
+        });
+
+        // Tab management
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Reset all tab buttons
+            document.querySelectorAll('[id$="-tab-btn"]').forEach(btn => {
+                btn.className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm';
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            document.getElementById(tabName + '-tab-btn').className = 'border-blue-500 text-blue-600 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm';
+            
+            // Load tab-specific data
+            if (tabName === 'audit-events') {
+                loadAuditEvents();
+            } else if (tabName === 'compliance-reports') {
+                loadComplianceReports();
+            } else if (tabName === 'analytics') {
+                loadAnalytics();
+            }
+        }
+
+        // Statistics
+        async function loadStatistics() {
+            try {
+                const response = await fetch('/api/audit/statistics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.data;
+                    
+                    document.getElementById('total-events').textContent = stats.total_events;
+                    document.getElementById('high-risk-events').textContent = stats.high_risk_events;
+                    document.getElementById('failed-events').textContent = stats.failed_events;
+                    
+                    // Get compliance reports count
+                    const reportsResponse = await fetch('/api/audit/compliance/reports?limit=1');
+                    const reportsData = await reportsResponse.json();
+                    if (reportsData.success) {
+                        document.getElementById('compliance-reports-count').textContent = reportsData.data.pagination.total_count;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load statistics:', error);
+            }
+        }
+
+        // Audit Events
+        async function loadAuditEvents(page = 1) {
+            try {
+                const startDate = document.getElementById('events-start-date').value;
+                const endDate = document.getElementById('events-end-date').value;
+                const severity = document.getElementById('events-severity-filter').value;
+                const framework = document.getElementById('events-compliance-filter').value;
+                
+                let url = `/api/audit/events?page=${page}&limit=20`;
+                if (startDate) url += `&start_date=${startDate}T00:00:00Z`;
+                if (endDate) url += `&end_date=${endDate}T23:59:59Z`;
+                if (severity) url += `&severity=${severity}`;
+                if (framework) url += `&compliance_framework=${framework}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('audit-events-container');
+                    
+                    if (data.data.events.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-gray-500">No audit events found</p>
+                            </div>
+                        `;
+                    } else {
+                        let tableHTML = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                        `;
+                        
+                        data.data.events.forEach(event => {
+                            const timestamp = new Date(event.timestamp).toLocaleString();
+                            const severityBadge = getSeverityBadge(event.severity);
+                            const riskColor = event.risk_score >= 7 ? 'text-red-600' : event.risk_score >= 5 ? 'text-yellow-600' : 'text-green-600';
+                            
+                            tableHTML += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timestamp}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${event.event_type}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${event.user_email || event.user_id || 'System'}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">${event.action}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${severityBadge}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm ${riskColor} font-medium">${event.risk_score}/10</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">
+                                        <button onclick="showEventDetails('${event.event_id}', '${escape(JSON.stringify(event.details))}')" class="text-blue-600 hover:text-blue-900">View</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tableHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        container.innerHTML = tableHTML;
+                    }
+                    
+                    // Update pagination
+                    updateEventsPagination(data.data.pagination);
+                    currentPage = page;
+                }
+            } catch (error) {
+                console.error('Failed to load audit events:', error);
+            }
+        }
+
+        function getSeverityBadge(severity) {
+            const badges = {
+                debug: '<span class="severity-badge severity-debug">Debug</span>',
+                info: '<span class="severity-badge severity-info">Info</span>',
+                warning: '<span class="severity-badge severity-warning">Warning</span>',
+                error: '<span class="severity-badge severity-error">Error</span>',
+                critical: '<span class="severity-badge severity-critical">Critical</span>'
+            };
+            return badges[severity] || badges.info;
+        }
+
+        function updateEventsPagination(pagination) {
+            const container = document.getElementById('events-pagination');
+            
+            if (pagination.total_pages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            let paginationHTML = '<div class="flex items-center space-x-2">';
+            
+            // Previous button
+            if (pagination.page > 1) {
+                paginationHTML += `<button onclick="loadAuditEvents(${pagination.page - 1})" class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Previous</button>`;
+            }
+            
+            // Page numbers
+            for (let i = Math.max(1, pagination.page - 2); i <= Math.min(pagination.total_pages, pagination.page + 2); i++) {
+                const isActive = i === pagination.page;
+                const buttonClass = isActive ? 
+                    'px-3 py-2 bg-blue-600 text-white rounded-lg' :
+                    'px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50';
+                
+                paginationHTML += `<button onclick="loadAuditEvents(${i})" class="${buttonClass}">${i}</button>`;
+            }
+            
+            // Next button
+            if (pagination.page < pagination.total_pages) {
+                paginationHTML += `<button onclick="loadAuditEvents(${pagination.page + 1})" class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Next</button>`;
+            }
+            
+            paginationHTML += '</div>';
+            container.innerHTML = paginationHTML;
+        }
+
+        function showEventDetails(eventId, details) {
+            try {
+                const detailsObj = JSON.parse(unescape(details));
+                const formattedDetails = JSON.stringify(detailsObj, null, 2);
+                alert(`Event Details (${eventId}):\n\n${formattedDetails}`);
+            } catch (error) {
+                alert(`Event Details (${eventId}):\n\n${details}`);
+            }
+        }
+
+        // Compliance Reports
+        async function loadComplianceReports(page = 1) {
+            try {
+                const response = await fetch(`/api/audit/compliance/reports?page=${page}&limit=20`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('compliance-reports-container');
+                    
+                    if (data.data.reports.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-gray-500">No compliance reports found</p>
+                            </div>
+                        `;
+                    } else {
+                        let tableHTML = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Framework</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Generated By</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                        `;
+                        
+                        data.data.reports.forEach(report => {
+                            const startDate = new Date(report.start_date).toLocaleDateString();
+                            const endDate = new Date(report.end_date).toLocaleDateString();
+                            const createdAt = new Date(report.created_at).toLocaleString();
+                            const statusBadge = getStatusBadge(report.status);
+                            
+                            tableHTML += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${report.framework}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${startDate} - ${endDate}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${report.generated_by}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${createdAt}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${statusBadge}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button onclick="viewComplianceReport('${report.report_id}')" class="text-blue-600 hover:text-blue-900 mr-3">View</button>
+                                        <a href="/api/audit/compliance/reports/${report.report_id}/download" class="text-green-600 hover:text-green-900">Download</a>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tableHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        container.innerHTML = tableHTML;
+                    }
+                    
+                    // Update pagination
+                    updateReportsPagination(data.data.pagination);
+                    currentReportsPage = page;
+                }
+            } catch (error) {
+                console.error('Failed to load compliance reports:', error);
+            }
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                completed: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Completed</span>',
+                pending: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>',
+                failed: '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Failed</span>'
+            };
+            return badges[status] || badges.pending;
+        }
+
+        function updateReportsPagination(pagination) {
+            const container = document.getElementById('reports-pagination');
+            
+            if (pagination.total_pages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            let paginationHTML = '<div class="flex items-center space-x-2">';
+            
+            if (pagination.page > 1) {
+                paginationHTML += `<button onclick="loadComplianceReports(${pagination.page - 1})" class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Previous</button>`;
+            }
+            
+            for (let i = Math.max(1, pagination.page - 2); i <= Math.min(pagination.total_pages, pagination.page + 2); i++) {
+                const isActive = i === pagination.page;
+                const buttonClass = isActive ? 
+                    'px-3 py-2 bg-blue-600 text-white rounded-lg' :
+                    'px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50';
+                
+                paginationHTML += `<button onclick="loadComplianceReports(${i})" class="${buttonClass}">${i}</button>`;
+            }
+            
+            if (pagination.page < pagination.total_pages) {
+                paginationHTML += `<button onclick="loadComplianceReports(${pagination.page + 1})" class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Next</button>`;
+            }
+            
+            paginationHTML += '</div>';
+            container.innerHTML = paginationHTML;
+        }
+
+        async function viewComplianceReport(reportId) {
+            try {
+                const response = await fetch(`/api/audit/compliance/reports/${reportId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const report = data.data;
+                    const summary = JSON.stringify(report.summary, null, 2);
+                    
+                    alert(`Compliance Report (${report.framework})\n\nPeriod: ${report.start_date} to ${report.end_date}\nGenerated by: ${report.generated_by}\n\nSummary:\n${summary}`);
+                } else {
+                    alert('Failed to load report: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to view compliance report:', error);
+                alert('Failed to load report');
+            }
+        }
+
+        // Modals
+        function showGenerateReportModal() {
+            document.getElementById('generate-report-modal').classList.remove('hidden');
+        }
+
+        function hideGenerateReportModal() {
+            document.getElementById('generate-report-modal').classList.add('hidden');
+            document.getElementById('generate-report-form').reset();
+        }
+
+        async function generateComplianceReport() {
+            const form = document.getElementById('generate-report-form');
+            const formData = new FormData(form);
+            
+            const reportData = {
+                framework: formData.get('framework'),
+                start_date: formData.get('start_date') + 'T00:00:00Z',
+                end_date: formData.get('end_date') + 'T23:59:59Z'
+            };
+            
+            try {
+                const response = await fetch('/api/audit/compliance/reports', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(reportData)
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Compliance report generated successfully!');
+                    hideGenerateReportModal();
+                    loadComplianceReports();
+                } else {
+                    alert('Failed to generate report: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to generate compliance report:', error);
+                alert('Failed to generate report');
+            }
+        }
+
+        function showVerifyIntegrityModal() {
+            document.getElementById('verify-integrity-modal').classList.remove('hidden');
+        }
+
+        function hideVerifyIntegrityModal() {
+            document.getElementById('verify-integrity-modal').classList.add('hidden');
+            document.getElementById('verify-integrity-form').reset();
+        }
+
+        async function verifyAuditIntegrity() {
+            const form = document.getElementById('verify-integrity-form');
+            const formData = new FormData(form);
+            
+            const verifyData = {
+                start_date: formData.get('start_date') + 'T00:00:00Z',
+                end_date: formData.get('end_date') + 'T23:59:59Z'
+            };
+            
+            try {
+                const response = await fetch('/api/audit/integrity/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(verifyData)
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const result = data.data;
+                    const container = document.getElementById('integrity-results-container');
+                    
+                    const statusColor = result.integrity_status === 'passed' ? 'text-green-600' : 'text-red-600';
+                    const statusIcon = result.integrity_status === 'passed' ? '✓' : '✗';
+                    
+                    container.innerHTML = `
+                        <div class="bg-white border rounded-lg p-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Integrity Verification Results</h3>
+                            
+                            <div class="mb-4">
+                                <p class="text-lg font-medium ${statusColor}">
+                                    ${statusIcon} Status: ${result.integrity_status.toUpperCase()}
+                                </p>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div class="text-center">
+                                    <p class="text-2xl font-bold text-green-600">${result.verified_dates.length}</p>
+                                    <p class="text-sm text-gray-600">Verified Days</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-2xl font-bold text-red-600">${result.failed_dates.length}</p>
+                                    <p class="text-sm text-gray-600">Failed Days</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-2xl font-bold text-yellow-600">${result.missing_dates.length}</p>
+                                    <p class="text-sm text-gray-600">Missing Days</p>
+                                </div>
+                            </div>
+                            
+                            <div class="text-sm text-gray-600">
+                                <p><strong>Total Events Verified:</strong> ${result.total_events_verified}</p>
+                            </div>
+                            
+                            ${result.failed_dates.length > 0 ? `
+                                <div class="mt-4 p-4 bg-red-50 rounded-lg">
+                                    <p class="text-sm font-medium text-red-800">Failed Dates:</p>
+                                    <p class="text-sm text-red-600">${result.failed_dates.join(', ')}</p>
+                                </div>
+                            ` : ''}
+                            
+                            ${result.missing_dates.length > 0 ? `
+                                <div class="mt-4 p-4 bg-yellow-50 rounded-lg">
+                                    <p class="text-sm font-medium text-yellow-800">Missing Dates:</p>
+                                    <p class="text-sm text-yellow-600">${result.missing_dates.join(', ')}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    
+                    hideVerifyIntegrityModal();
+                } else {
+                    alert('Failed to verify integrity: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to verify audit integrity:', error);
+                alert('Failed to verify integrity');
+            }
+        }
+
+        // Analytics
+        async function loadAnalytics() {
+            try {
+                const response = await fetch('/api/audit/statistics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.data;
+                    
+                    // Event Types Chart
+                    const eventTypesCtx = document.getElementById('event-types-chart').getContext('2d');
+                    new Chart(eventTypesCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(stats.event_type_counts),
+                            datasets: [{
+                                data: Object.values(stats.event_type_counts),
+                                backgroundColor: [
+                                    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+                                    '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+                                ]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    
+                    // Severity Chart
+                    const severityCtx = document.getElementById('severity-chart').getContext('2d');
+                    new Chart(severityCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: Object.keys(stats.severity_counts),
+                            datasets: [{
+                                label: 'Count',
+                                data: Object.values(stats.severity_counts),
+                                backgroundColor: [
+                                    '#e5e7eb', '#dbeafe', '#fef3c7', '#fee2e2', '#fecaca'
+                                ]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load analytics:', error);
+            }
+        }
+    </script>
+</body>
+</html>

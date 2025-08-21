@@ -1,0 +1,85 @@
+# Kustomization file for SASEWaddle deployment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: sasewaddle
+  annotations:
+    config.kubernetes.io/local-config: "true"
+
+# Namespace for all resources
+namespace: sasewaddle
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: sasewaddle
+  app.kubernetes.io/instance: production
+  app.kubernetes.io/part-of: sase-platform
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+- namespace.yaml
+- configmap.yaml
+- secrets.yaml
+- redis.yaml
+- manager.yaml
+- headend.yaml
+- ingress.yaml
+- hpa.yaml
+- monitoring.yaml
+
+# Image transformations
+images:
+- name: ghcr.io/your-org/sasewaddle/manager
+  newTag: latest
+- name: ghcr.io/your-org/sasewaddle/headend
+  newTag: latest
+
+# Patches for environment-specific customizations
+patchesStrategicMerge:
+# Uncomment and modify for environment-specific overrides
+# - patches/production.yaml
+
+# ConfigMap and Secret generators
+configMapGenerator:
+- name: sasewaddle-env-config
+  literals:
+  - ENVIRONMENT=production
+  - DEPLOYMENT_TYPE=kubernetes
+  - MONITORING_ENABLED=true
+
+# Replica overrides for production
+replicas:
+- name: manager
+  count: 3
+- name: redis
+  count: 1  # Redis should remain single instance unless using clustering
+
+# Resource patches
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: manager
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "512Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "1Gi"
+
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: headend
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "512Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "2Gi"

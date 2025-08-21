@@ -1,0 +1,60 @@
+# Fastfile for SASEWaddle Mobile iOS builds
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Upload to TestFlight"
+  lane :upload_to_testflight do
+    # Get the IPA file from the build directory
+    ipa_path = Dir.glob("build/*.ipa").first
+    
+    if ipa_path.nil?
+      UI.error("No IPA file found in build directory")
+      next
+    end
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      ipa: ipa_path,
+      skip_submission: true,
+      skip_waiting_for_build_processing: false,
+      apple_id: ENV["APPLE_ID"],
+      app_identifier: "com.sasewaddle.mobile",
+      distribute_external: false,
+      changelog: "Manual build upload via GitHub Actions"
+    )
+  end
+
+  desc "Build for App Store"
+  lane :build_appstore do
+    # Increment build number
+    increment_build_number(xcodeproj: "SASEWaddleMobile.xcodeproj")
+    
+    # Build the app
+    build_app(
+      scheme: "SASEWaddleMobile",
+      configuration: "Release",
+      export_method: "app-store",
+      export_options: "ExportOptions-AppStore.plist",
+      output_directory: "./build",
+      output_name: "SASEWaddleMobile.ipa",
+      include_bitcode: false,
+      include_symbols: true
+    )
+  end
+
+  desc "Build for Development"
+  lane :build_development do
+    # Build the app
+    build_app(
+      scheme: "SASEWaddleMobile", 
+      configuration: "Debug",
+      export_method: "development",
+      export_options: "ExportOptions-Debug.plist",
+      output_directory: "./build",
+      output_name: "SASEWaddleMobile-Debug.ipa",
+      include_bitcode: false,
+      include_symbols: true
+    )
+  end
+end

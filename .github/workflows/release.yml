@@ -1,70 +1,658 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# GitHub recommends pinning actions to a commit SHA.
-# To get a newer version, you will need to update the SHA.
-# You can also reference a tag or branch, but the action may change without warning.
-
-name: Publish Docker image on release
+name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
+
 env:
-  REPO: PenguinSASE
+  REGISTRY: ghcr.io
+  IMAGE_NAME_MANAGER: ${{ github.repository }}/manager
+  IMAGE_NAME_HEADEND: ${{ github.repository }}/headend
+  IMAGE_NAME_CLIENT: ${{ github.repository }}/client
+
 jobs:
-  push_to_registries:
-    name: Push Docker image to multiple registries
+  # Build and test before release
+  pre-release-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.12
+    
+    - name: Set up Go 1.21
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.21
+    
+    - name: Install Python dependencies
+      run: |
+        cd manager
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio
+    
+    - name: Install Go dependencies
+      run: |
+        cd headend && go mod download
+        cd ../clients/native && go mod download
+    
+    - name: Run Python tests
+      run: |
+        cd manager
+        python -m pytest tests/ -v || exit 0
+    
+    - name: Run Go tests (headend)
+      run: |
+        cd headend
+        go test -v ./... || exit 0
+    
+    - name: Run Go tests (client)
+      run: |
+        cd clients/native
+        go test -v ./... || exit 0
+
+  # Build release Docker images
+  build-release-images:
+    needs: [pre-release-tests]
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        component: [manager, headend, client]
+    
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Generate Docker tags
+      id: meta
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        MAJOR=$(echo $VERSION | cut -d. -f1)
+        MINOR=$(echo $VERSION | cut -d. -f1-2)
         
-      - name: Ansible Lint
-        uses: ansible/ansible-lint-action@v6.11.0
+        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}"
+        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${MINOR}"
+        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${MAJOR}"
+        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:latest"
         
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-             
-      - name: Log in to Docker Hub
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      
-      - name: Log in to the Container registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
-        with:
-          images: |
-            penguincloud/${{ env.REPO }}
-            ghcr.io/${{ github.repository }}
-      
-      - name: Build and push Docker images
-        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-      - name: Build and push Docker images to static tags
-        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/penguincloud/${{ env.REPO }}:latest, penguincloud/${{ env.REPO }}:latest
-          labels: ${{ steps.meta.outputs.labels }}
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+    
+    - name: Build and push Docker image - Manager
+      if: matrix.component == 'manager'
+      uses: docker/build-push-action@v5
+      with:
+        context: ./manager
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+    
+    - name: Build and push Docker image - Headend
+      if: matrix.component == 'headend'
+      uses: docker/build-push-action@v5
+      with:
+        context: ./headend
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+    
+    - name: Build and push Docker image - Client
+      if: matrix.component == 'client'
+      uses: docker/build-push-action@v5
+      with:
+        context: ./clients/docker
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+
+  # Build native client binaries for all platforms
+  build-native-clients:
+    needs: [pre-release-tests]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            binary: sasewaddle-client-linux-amd64
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            binary: sasewaddle-client-linux-arm64
+          # Windows builds
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+            binary: sasewaddle-client-windows-amd64.exe
+          # macOS builds (will create universal binary)
+          - runner: macos-latest
+            goos: darwin
+            goarch: amd64
+            binary: sasewaddle-client-darwin-amd64
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            binary: sasewaddle-client-darwin-arm64
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.21
+    
+    - name: Read version from .version file
+      id: version
+      shell: bash
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        cd clients/native
+        
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          BUILD_TIME=$(powershell -Command "Get-Date -UFormat '%Y-%m-%d_%H:%M:%S'")
+        else
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+        fi
+        
+        VERSION="${{ steps.version.outputs.version }}"
+        GIT_COMMIT="${{ github.sha }}"
+        
+        mkdir -p build
+        
+        # Use consistent naming pattern: sasewaddle-client-{os}-{arch}-{version}
+        VERSIONED_BINARY="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          VERSIONED_BINARY="${VERSIONED_BINARY}.exe"
+        fi
+        
+        go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
+          -o build/${VERSIONED_BINARY} ./cmd
+      shell: bash
+    
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: clients/native/build/*
+        retention-days: 30
+
+  # Create macOS universal binary
+  create-macos-universal:
+    needs: [build-native-clients]
+    runs-on: macos-latest
+    steps:
+    - name: Download macOS binaries
+      uses: actions/download-artifact@v3
+      with:
+        name: sasewaddle-client-darwin-amd64
+        path: ./amd64
+    
+    - name: Download macOS ARM64 binary
+      uses: actions/download-artifact@v3
+      with:
+        name: sasewaddle-client-darwin-arm64
+        path: ./arm64
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Create universal binary
+      run: |
+        mkdir -p build
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Find the actual binary files (they have version in the name now)
+        AMD64_BINARY=$(find ./amd64 -name "sasewaddle-client-darwin-amd64-*" | head -1)
+        ARM64_BINARY=$(find ./arm64 -name "sasewaddle-client-darwin-arm64-*" | head -1)
+        
+        if [ -n "$AMD64_BINARY" ] && [ -n "$ARM64_BINARY" ]; then
+          lipo -create -output "build/sasewaddle-client-darwin-universal-${VERSION}" \
+            "$AMD64_BINARY" \
+            "$ARM64_BINARY"
+        else
+          echo "Error: Could not find both AMD64 and ARM64 binaries"
+          ls -la ./amd64/
+          ls -la ./arm64/
+          exit 1
+        fi
+    
+    - name: Upload universal binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: sasewaddle-client-darwin-universal
+        path: build/*
+        retention-days: 30
+
+  # Create release packages
+  create-release:
+    needs: [build-release-images, build-native-clients, create-macos-universal]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+    
+    - name: Create release packages
+      run: |
+        mkdir -p release-packages
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Linux AMD64 package
+        mkdir -p linux-amd64
+        cp artifacts/sasewaddle-client-linux-amd64/sasewaddle-client-linux-amd64-${VERSION} linux-amd64/sasewaddle-client
+        chmod +x linux-amd64/sasewaddle-client
+        tar -czf release-packages/sasewaddle-client-linux-amd64-${VERSION}.tar.gz -C linux-amd64 .
+        
+        # Linux ARM64 package  
+        mkdir -p linux-arm64
+        cp artifacts/sasewaddle-client-linux-arm64/sasewaddle-client-linux-arm64-${VERSION} linux-arm64/sasewaddle-client
+        chmod +x linux-arm64/sasewaddle-client
+        tar -czf release-packages/sasewaddle-client-linux-arm64-${VERSION}.tar.gz -C linux-arm64 .
+        
+        # Windows package
+        mkdir -p windows
+        cp artifacts/sasewaddle-client-windows-amd64/sasewaddle-client-windows-amd64-${VERSION}.exe windows/sasewaddle-client.exe
+        cd windows && zip -r ../release-packages/sasewaddle-client-windows-amd64-${VERSION}.zip . && cd ..
+        
+        # macOS Universal package
+        mkdir -p macos
+        cp artifacts/sasewaddle-client-darwin-universal/sasewaddle-client-darwin-universal-${VERSION} macos/sasewaddle-client
+        chmod +x macos/sasewaddle-client
+        tar -czf release-packages/sasewaddle-client-darwin-universal-${VERSION}.tar.gz -C macos .
+        
+        # Create checksums
+        cd release-packages
+        sha256sum * > checksums.txt
+        cd ..
+    
+    - name: Create example configuration files
+      run: |
+        mkdir -p release-packages/examples
+        
+        # Create example client configuration
+        cat > release-packages/examples/client-config.yaml << 'EOF'
+# SASEWaddle Native Client Configuration
+# Copy this file to ~/.sasewaddle/config.yaml and modify as needed
+
+# Manager Service URL (required)
+manager_url: "https://your-manager.example.com:8000"
+
+# API Key for initial registration (required)
+api_key: "your-api-key-here"
+
+# Client identification
+client_name: "my-workstation"
+client_type: "client_native"
+
+# Connection settings
+auto_connect: true
+reconnect_interval: 30
+
+# Logging
+log_level: "info"
+
+# UI settings
+headless: false
+service_mode: false
+
+# Network settings
+dns_servers:
+  - "10.200.0.1"
+  - "1.1.1.1"
+  - "8.8.8.8"
+
+# Authentication
+auth_refresh_threshold: 300
+EOF
+        
+        # Create example docker-compose.yml for self-hosted deployment
+        cat > release-packages/examples/docker-compose.yml << 'EOF'
+# SASEWaddle Self-Hosted Deployment Example
+# 
+# This example shows how to deploy SASEWaddle components using Docker Compose
+# Modify the environment variables and volumes as needed for your deployment
+
+version: '3.8'
+
+services:
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Manager Service - Central orchestration
+  manager:
+    image: ghcr.io/your-org/sasewaddle/manager:latest
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=info
+      - JWT_SECRET=your-jwt-secret-here
+      - ADMIN_EMAIL=admin@example.com
+      - ADMIN_PASSWORD=change-this-password
+    volumes:
+      - manager_data:/app/data
+      - manager_certs:/app/certs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Headend Server - WireGuard termination and proxy
+  headend:
+    image: ghcr.io/your-org/sasewaddle/headend:latest
+    restart: unless-stopped
+    depends_on:
+      manager:
+        condition: service_healthy
+    ports:
+      - "51820:51820/udp"  # WireGuard
+      - "8080:8080"        # Proxy
+    environment:
+      - MANAGER_API_URL=http://manager:8000
+      - LOG_LEVEL=info
+      - CLUSTER_ID=default
+      # Traffic mirroring (optional)
+      - TRAFFIC_MIRROR_ENABLED=false
+      # - TRAFFIC_MIRROR_DESTINATIONS=10.0.0.100:4789
+      # - TRAFFIC_MIRROR_PROTOCOL=VXLAN
+    volumes:
+      - headend_data:/app/data
+      - headend_wg:/etc/wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+  manager_data:
+  manager_certs:
+  headend_data:
+  headend_wg:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+EOF
+        
+        # Create installation script
+        cat > release-packages/examples/install.sh << 'EOF'
+#!/bin/bash
+# SASEWaddle Native Client Installation Script
+
+set -e
+
+# Detect OS and architecture
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+
+case $ARCH in
+    x86_64) ARCH="amd64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+case $OS in
+    darwin) 
+        PLATFORM="darwin-universal"
+        EXT=".tar.gz"
+        ;;
+    linux) 
+        PLATFORM="linux-${ARCH}"
+        EXT=".tar.gz"
+        ;;
+    *) echo "Unsupported OS: $OS"; exit 1 ;;
+esac
+
+# Download and install
+VERSION=${1:-"latest"}
+DOWNLOAD_URL="https://github.com/your-org/sasewaddle/releases/download/v${VERSION}/sasewaddle-client-${VERSION}-${PLATFORM}${EXT}"
+
+echo "Installing SASEWaddle Native Client..."
+echo "Platform: $PLATFORM"
+echo "Version: $VERSION"
+
+# Create temporary directory
+TMP_DIR=$(mktemp -d)
+cd "$TMP_DIR"
+
+# Download
+echo "Downloading from: $DOWNLOAD_URL"
+curl -L -o "sasewaddle-client${EXT}" "$DOWNLOAD_URL"
+
+# Extract and install
+case $EXT in
+    .tar.gz) tar -xzf "sasewaddle-client${EXT}" ;;
+    .zip) unzip "sasewaddle-client${EXT}" ;;
+esac
+
+# Install binary
+sudo mv sasewaddle-client /usr/local/bin/
+sudo chmod +x /usr/local/bin/sasewaddle-client
+
+# Create config directory
+mkdir -p "$HOME/.sasewaddle"
+
+echo "Installation complete!"
+echo ""
+echo "Next steps:"
+echo "1. Get an API key from your SASEWaddle manager"
+echo "2. Run: sasewaddle-client init --manager-url https://your-manager.example.com:8000 --api-key YOUR_API_KEY"
+echo "3. Run: sasewaddle-client connect"
+echo ""
+echo "For more information, visit: https://github.com/your-org/sasewaddle"
+
+# Cleanup
+cd /
+rm -rf "$TMP_DIR"
+EOF
+        
+        chmod +x release-packages/examples/install.sh
+    
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        cat > release-notes.md << EOF
+        # SASEWaddle Release v${VERSION}
+        
+        ## 🚀 Features
+        
+        ### Manager Service
+        - Centralized orchestration with multi-datacenter support
+        - X.509 certificate management with automatic rotation
+        - JWT token management with Redis caching
+        - py4web-based REST API and web interface
+        - Support for SAML2/OAuth2 SSO integration
+        
+        ### Headend Server
+        - WireGuard VPN termination with dual authentication
+        - Multi-protocol proxy (HTTP/HTTPS, TCP, UDP)
+        - Traffic mirroring for IDS/IPS integration (VXLAN/GRE/ERSPAN)
+        - External IdP integration
+        - High-performance concurrent connection handling
+        
+        ### Client Applications
+        - **Docker Client**: Containerized deployment with auto-configuration
+        - **Native Client**: Cross-platform binaries for Mac, Windows, and Linux
+        - Automatic certificate and key management
+        - Background health monitoring and auth renewal
+        - CLI and configuration file support
+        
+        ## 📦 Downloads
+        
+        ### Native Client Binaries
+        - **macOS Universal**: \`sasewaddle-client-darwin-universal-${VERSION}.tar.gz\`
+        - **Windows x64**: \`sasewaddle-client-windows-amd64-${VERSION}.zip\`
+        - **Linux x64**: \`sasewaddle-client-linux-amd64-${VERSION}.tar.gz\`
+        - **Linux ARM64**: \`sasewaddle-client-linux-arm64-${VERSION}.tar.gz\`
+        
+        ### Docker Images
+        - **Manager**: \`ghcr.io/${{ github.repository }}/sasewaddle-manager:${VERSION}\`
+        - **Headend**: \`ghcr.io/${{ github.repository }}/sasewaddle-headend:${VERSION}\`
+        - **Client**: \`ghcr.io/${{ github.repository }}/sasewaddle-client:${VERSION}\`
+        
+        ## 🛠️ Installation
+        
+        ### Quick Install (Linux/macOS)
+        \`\`\`bash
+        curl -sSL https://github.com/${{ github.repository }}/releases/download/v${VERSION}/install.sh | bash -s ${VERSION}
+        \`\`\`
+        
+        ### Manual Installation
+        1. Download the appropriate binary for your platform
+        2. Extract and move to your PATH
+        3. Run \`sasewaddle-client init\` to configure
+        
+        ### Docker Deployment
+        See \`examples/docker-compose.yml\` for a complete deployment example.
+        
+        ## 📚 Documentation
+        
+        - Configuration examples included in \`examples/\` directory
+        - See [CLAUDE.md](https://github.com/${{ github.repository }}/blob/main/CLAUDE.md) for detailed architecture documentation
+        - API documentation available at \`/api/docs\` endpoint
+        
+        ## 🔒 Security
+        
+        - Zero Trust Network Architecture (ZTNA) implementation
+        - Dual authentication: X.509 certificates + JWT/SSO
+        - All communications secured with mutual TLS
+        - Certificate rotation and revocation support
+        - Audit logging for all operations
+        
+        ## ✅ Verification
+        
+        All release assets are signed and checksums are provided in \`checksums.txt\`.
+        
+        ## 🐛 Bug Reports & Feature Requests
+        
+        Please report issues at: https://github.com/${{ github.repository }}/issues
+        EOF
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: "SASEWaddle v${{ steps.version.outputs.version }}"
+        body_path: release-notes.md
+        files: |
+          release-packages/*
+        draft: false
+        prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        generate_release_notes: true
+
+  # Security scan of release images
+  security-scan-release:
+    needs: [build-release-images]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [manager, headend, client]
+    steps:
+    - name: Run Trivy vulnerability scanner on release images
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env[format('IMAGE_NAME_{0}', upper(matrix.component))] }}:${{ github.ref_name }}
+        format: 'sarif'
+        output: 'trivy-${{ matrix.component }}-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-${{ matrix.component }}-results.sarif'

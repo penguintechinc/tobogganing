@@ -1,0 +1,235 @@
+<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e2e8f0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="userGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="headendGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="serviceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="internetGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Arrow marker -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+            refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280" />
+    </marker>
+    
+    <!-- VPN tunnel pattern -->
+    <pattern id="vpnTunnel" patternUnits="userSpaceOnUse" width="10" height="10">
+      <rect width="10" height="10" fill="none"/>
+      <path d="M 0 5 L 10 5" stroke="#22c55e" stroke-width="2" stroke-dasharray="3,2"/>
+    </pattern>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGradient)"/>
+  
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#1f2937">
+    SASEWaddle Connectivity Architecture
+  </text>
+  
+  <!-- Remote Users Section -->
+  <g id="users">
+    <text x="60" y="80" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#374151">Remote Users</text>
+    
+    <!-- User 1 -->
+    <g transform="translate(20, 100)">
+      <circle cx="25" cy="25" r="20" fill="url(#userGradient)"/>
+      <path d="M15 20 Q15 15 20 15 Q25 15 25 15 Q30 15 35 15 Q35 20 35 25 Q35 30 30 35 L20 35 Q15 30 15 25 Z" fill="white"/>
+      <circle cx="25" cy="20" r="4" fill="url(#userGradient)"/>
+      <path d="M18 30 Q25 25 32 30" stroke="url(#userGradient)" stroke-width="2" fill="none"/>
+      <text x="25" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Mobile User</text>
+    </g>
+    
+    <!-- User 2 -->
+    <g transform="translate(20, 180)">
+      <rect x="5" y="10" width="40" height="30" rx="5" fill="url(#userGradient)"/>
+      <rect x="8" y="13" width="34" height="20" fill="white"/>
+      <rect x="10" y="15" width="30" height="12" fill="#e5e7eb"/>
+      <circle cx="38" cy="35" r="3" fill="#ef4444"/>
+      <text x="25" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Laptop User</text>
+    </g>
+    
+    <!-- User 3 -->
+    <g transform="translate(20, 260)">
+      <rect x="10" y="5" width="30" height="40" rx="8" fill="url(#userGradient)"/>
+      <rect x="13" y="8" width="24" height="30" fill="white"/>
+      <rect x="15" y="10" width="20" height="26" fill="#e5e7eb"/>
+      <circle cx="25" cy="42" r="2" fill="white"/>
+      <text x="25" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Mobile Device</text>
+    </g>
+  </g>
+  
+  <!-- VPN Tunnels -->
+  <g id="vpnTunnels">
+    <!-- Tunnel lines -->
+    <path d="M 80 125 Q 200 125 280 200" stroke="url(#vpnTunnel)" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+    <path d="M 80 205 Q 200 205 280 200" stroke="url(#vpnTunnel)" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+    <path d="M 80 285 Q 200 285 280 200" stroke="url(#vpnTunnel)" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+    
+    <!-- VPN Labels -->
+    <text x="180" y="110" font-family="Arial, sans-serif" font-size="10" fill="#059669" font-weight="bold">WireGuard + JWT</text>
+    <text x="180" y="190" font-family="Arial, sans-serif" font-size="10" fill="#059669" font-weight="bold">Encrypted Tunnel</text>
+    <text x="180" y="270" font-family="Arial, sans-serif" font-size="10" fill="#059669" font-weight="bold">Zero Trust</text>
+  </g>
+  
+  <!-- Headend Servers -->
+  <g id="headends">
+    <text x="350" y="80" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#374151">Headend Servers</text>
+    
+    <!-- US East Headend -->
+    <g transform="translate(300, 120)">
+      <rect x="0" y="0" width="80" height="60" rx="8" fill="url(#headendGradient)"/>
+      <rect x="5" y="5" width="70" height="40" fill="white" opacity="0.9"/>
+      <text x="40" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#065f46">Headend</text>
+      <text x="40" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#065f46">US-East</text>
+      <text x="40" y="40" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#065f46">8443/8444/8445</text>
+      <text x="40" y="75" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Primary</text>
+    </g>
+    
+    <!-- EU West Headend -->
+    <g transform="translate(300, 220)">
+      <rect x="0" y="0" width="80" height="60" rx="8" fill="url(#headendGradient)"/>
+      <rect x="5" y="5" width="70" height="40" fill="white" opacity="0.9"/>
+      <text x="40" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#065f46">Headend</text>
+      <text x="40" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#065f46">EU-West</text>
+      <text x="40" y="40" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#065f46">Dynamic Ports</text>
+      <text x="40" y="75" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Secondary</text>
+    </g>
+  </g>
+  
+  <!-- Manager Service -->
+  <g id="manager" transform="translate(300, 320)">
+    <rect x="0" y="0" width="80" height="80" rx="12" fill="#1e40af"/>
+    <rect x="5" y="5" width="70" height="60" fill="white" opacity="0.9"/>
+    <text x="40" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#1e40af">Manager</text>
+    <text x="40" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#1e40af">Service</text>
+    <text x="40" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#1e40af">• Certificate CA</text>
+    <text x="40" y="53" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#1e40af">• Firewall Rules</text>
+    <text x="40" y="61" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#1e40af">• VRF/OSPF Config</text>
+    <text x="40" y="95" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Central Control</text>
+  </g>
+  
+  <!-- Management connections -->
+  <path d="M 340 280 L 340 320" stroke="#1e40af" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 340 220 L 340 180" stroke="#1e40af" stroke-width="2" fill="none"/>
+  <text x="350" y="195" font-family="Arial, sans-serif" font-size="9" fill="#1e40af">Config Sync</text>
+  <text x="350" y="305" font-family="Arial, sans-serif" font-size="9" fill="#1e40af">API Control</text>
+  
+  <!-- Services in Datacenters -->
+  <g id="services">
+    <text x="550" y="80" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#374151">Datacenter Services</text>
+    
+    <!-- Internal Services -->
+    <g transform="translate(500, 120)">
+      <rect x="0" y="0" width="120" height="100" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="60" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#92400e">Internal Services</text>
+      
+      <!-- Service boxes -->
+      <rect x="10" y="30" width="30" height="20" fill="url(#serviceGradient)" rx="3"/>
+      <text x="25" y="42" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="white">API</text>
+      
+      <rect x="45" y="30" width="30" height="20" fill="url(#serviceGradient)" rx="3"/>
+      <text x="60" y="42" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="white">DB</text>
+      
+      <rect x="80" y="30" width="30" height="20" fill="url(#serviceGradient)" rx="3"/>
+      <text x="95" y="42" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="white">App</text>
+      
+      <rect x="10" y="55" width="30" height="20" fill="url(#serviceGradient)" rx="3"/>
+      <text x="25" y="67" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="white">File</text>
+      
+      <rect x="45" y="55" width="30" height="20" fill="url(#serviceGradient)" rx="3"/>
+      <text x="60" y="67" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="white">Mail</text>
+      
+      <rect x="80" y="55" width="30" height="20" fill="url(#serviceGradient)" rx="3"/>
+      <text x="95" y="67" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="white">DNS</text>
+      
+      <text x="60" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#92400e">10.0.0.0/8 Networks</text>
+    </g>
+    
+    <!-- Service-to-Service Communication -->
+    <g transform="translate(500, 240)">
+      <rect x="0" y="0" width="120" height="60" rx="8" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="60" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#5b21b6">Service Mesh</text>
+      <text x="60" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#5b21b6">Inter-service routing</text>
+      <text x="60" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#5b21b6">via OSPF + VRF</text>
+    </g>
+  </g>
+  
+  <!-- Traffic flows to services -->
+  <path d="M 380 150 Q 450 150 500 150" stroke="#6b7280" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 380 250 Q 450 250 500 250" stroke="#6b7280" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  
+  <!-- Internet Gateway -->
+  <g id="internet" transform="translate(650, 120)">
+    <ellipse cx="60" cy="60" rx="50" ry="40" fill="url(#internetGradient)"/>
+    <text x="60" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">Internet</text>
+    <text x="60" y="70" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">Gateway</text>
+    
+    <!-- Cloud icons -->
+    <path d="M 40 25 Q 35 20 45 20 Q 50 15 60 20 Q 70 15 75 20 Q 80 20 75 25 Q 80 30 70 30 L 45 30 Q 35 30 40 25 Z" fill="white" opacity="0.8"/>
+    <path d="M 45 35 Q 40 30 50 30 Q 55 25 65 30 Q 75 25 80 30 Q 85 30 80 35 Q 85 40 75 40 L 50 40 Q 40 40 45 35 Z" fill="white" opacity="0.6"/>
+  </g>
+  
+  <!-- Internet access flow -->
+  <path d="M 620 170 Q 650 150 650 150" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="630" y="165" font-family="Arial, sans-serif" font-size="9" fill="#8b5cf6">Internet Access</text>
+  
+  <!-- Security Features Box -->
+  <g id="security" transform="translate(450, 350)">
+    <rect x="0" y="0" width="300" height="120" rx="12" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+    <text x="150" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#dc2626">🛡️ Security Features</text>
+    
+    <g transform="translate(20, 30)">
+      <text x="0" y="15" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#dc2626">• Zero Trust Architecture</text>
+      <text x="0" y="28" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Continuous verification</text>
+      <text x="0" y="40" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Principle of least privilege</text>
+      
+      <text x="0" y="60" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#dc2626">• Advanced Firewall</text>
+      <text x="0" y="73" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Domain/IP/Protocol rules</text>
+      <text x="0" y="85" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Real-time policy enforcement</text>
+    </g>
+    
+    <g transform="translate(160, 30)">
+      <text x="0" y="15" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#dc2626">• Traffic Monitoring</text>
+      <text x="0" y="28" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Suricata IDS/IPS integration</text>
+      <text x="0" y="40" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Real-time threat detection</text>
+      
+      <text x="0" y="60" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#dc2626">• Audit & Compliance</text>
+      <text x="0" y="73" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Comprehensive logging</text>
+      <text x="0" y="85" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">  - Syslog integration</text>
+    </g>
+  </g>
+  
+  <!-- Network Segmentation Indicator -->
+  <g id="vrf" transform="translate(100, 450)">
+    <rect x="0" y="0" width="250" height="80" rx="8" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text x="125" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#047857">🌐 VRF Network Segmentation</text>
+    <text x="125" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#065f46">Customer A: VRF-100 (10.1.0.0/16)</text>
+    <text x="125" y="48" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#065f46">Customer B: VRF-200 (10.2.0.0/16)</text>
+    <text x="125" y="61" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#065f46">Corporate: VRF-300 (10.3.0.0/16)</text>
+  </g>
+  
+  <!-- Legend -->
+  <g id="legend" transform="translate(20, 500)">
+    <text x="0" y="15" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#374151">Legend:</text>
+    <line x1="0" y1="25" x2="15" y2="25" stroke="url(#vpnTunnel)" stroke-width="3"/>
+    <text x="20" y="29" font-family="Arial, sans-serif" font-size="9" fill="#6b7280">WireGuard VPN Tunnel</text>
+    <line x1="0" y1="40" x2="15" y2="40" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <text x="20" y="44" font-family="Arial, sans-serif" font-size="9" fill="#6b7280">Traffic Flow</text>
+  </g>
+</svg>

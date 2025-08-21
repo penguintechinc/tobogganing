@@ -1,0 +1,263 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sidebarGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a8a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3730a3;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f8fafc;stop-opacity:1" />
+    </linearGradient>
+    <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#00000020"/>
+    </filter>
+    <filter id="cardShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000015"/>
+    </filter>
+  </defs>
+  
+  <!-- Browser Window Frame -->
+  <rect width="1200" height="800" rx="8" fill="#e5e7eb" filter="url(#dropShadow)"/>
+  
+  <!-- Browser Header -->
+  <rect x="0" y="0" width="1200" height="40" rx="8" fill="#f3f4f6"/>
+  <rect x="0" y="32" width="1200" height="8" fill="#f3f4f6"/>
+  
+  <!-- Browser Controls -->
+  <circle cx="20" cy="20" r="6" fill="#ef4444"/>
+  <circle cx="40" cy="20" r="6" fill="#f59e0b"/>
+  <circle cx="60" cy="20" r="6" fill="#10b981"/>
+  
+  <!-- URL Bar -->
+  <rect x="100" y="10" width="400" height="20" rx="10" fill="white" stroke="#d1d5db"/>
+  <text x="110" y="23" font-family="monospace" font-size="10" fill="#6b7280">https://manager.sasewaddle.local</text>
+  
+  <!-- Main Content Area -->
+  <rect x="0" y="40" width="1200" height="760" fill="#f8fafc"/>
+  
+  <!-- Sidebar -->
+  <rect x="0" y="40" width="250" height="760" fill="url(#sidebarGradient)"/>
+  
+  <!-- Logo Area -->
+  <g transform="translate(20, 70)">
+    <circle cx="20" cy="20" r="15" fill="white" opacity="0.2"/>
+    <text x="20" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">🛡️</text>
+    <text x="50" y="20" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="white">SASEWaddle</text>
+    <text x="50" y="35" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">Manager Portal</text>
+  </g>
+  
+  <!-- Navigation Menu -->
+  <g id="navigation" transform="translate(0, 130)">
+    <!-- Dashboard (Active) -->
+    <rect x="15" y="0" width="220" height="40" rx="8" fill="#3730a3"/>
+    <text x="25" y="15" font-family="Arial, sans-serif" font-size="12" fill="white">📊</text>
+    <text x="50" y="25" font-family="Arial, sans-serif" font-size="14" font-weight="500" fill="white">Dashboard</text>
+    
+    <!-- Clusters -->
+    <text x="25" y="65" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">🖥️</text>
+    <text x="50" y="65" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Clusters</text>
+    
+    <!-- Clients -->
+    <text x="25" y="95" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">💻</text>
+    <text x="50" y="95" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Clients</text>
+    
+    <!-- Certificates -->
+    <text x="25" y="125" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">🔐</text>
+    <text x="50" y="125" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Certificates</text>
+    
+    <!-- Firewall -->
+    <text x="25" y="155" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">🔥</text>
+    <text x="50" y="155" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Firewall</text>
+    
+    <!-- Network -->
+    <text x="25" y="185" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">🌐</text>
+    <text x="50" y="185" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Network</text>
+    
+    <!-- Metrics -->
+    <text x="25" y="215" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">📈</text>
+    <text x="50" y="215" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Metrics</text>
+    
+    <!-- Users -->
+    <text x="25" y="245" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">👥</text>
+    <text x="50" y="245" font-family="Arial, sans-serif" font-size="14" fill="#d1d5db">Users</text>
+  </g>
+  
+  <!-- User Info -->
+  <g transform="translate(15, 720)">
+    <rect x="0" y="0" width="220" height="50" rx="8" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+    <circle cx="20" cy="25" r="12" fill="#10b981"/>
+    <text x="20" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="white">AD</text>
+    <text x="40" y="20" font-family="Arial, sans-serif" font-size="12" font-weight="500" fill="white">admin</text>
+    <text x="40" y="35" font-family="Arial, sans-serif" font-size="10" fill="#a5b4fc">Administrator</text>
+    <text x="200" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#a5b4fc">🚪</text>
+  </g>
+  
+  <!-- Main Content Header -->
+  <rect x="250" y="40" width="950" height="80" fill="url(#headerGradient)" stroke="#e5e7eb" stroke-width="1"/>
+  
+  <g transform="translate(270, 60)">
+    <text x="0" y="25" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#1f2937">Dashboard</text>
+    <text x="0" y="45" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">Welcome back! Here's what's happening with your SASE infrastructure.</text>
+    
+    <!-- Status Indicator -->
+    <g transform="translate(750, 5)">
+      <circle cx="8" cy="8" r="4" fill="#10b981"/>
+      <text x="20" y="12" font-family="Arial, sans-serif" font-size="12" fill="#374151">System Online</text>
+    </g>
+    
+    <!-- Time -->
+    <text x="750" y="35" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">🕐 14:32:15 UTC</text>
+  </g>
+  
+  <!-- Dashboard Content -->
+  <g transform="translate(270, 140)">
+    
+    <!-- Stats Cards Row -->
+    <g id="statsCards">
+      <!-- Total Clusters Card -->
+      <rect x="0" y="0" width="180" height="100" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="15" y="25" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#374151">Total Clusters</text>
+      <text x="15" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#1e40af">3</text>
+      <text x="15" y="75" font-family="Arial, sans-serif" font-size="12" fill="#10b981">↗ +1 this month</text>
+      <text x="150" y="30" font-family="Arial, sans-serif" font-size="24" fill="#3b82f6">🖥️</text>
+      
+      <!-- Active Clients Card -->
+      <rect x="200" y="0" width="180" height="100" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="215" y="25" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#374151">Active Clients</text>
+      <text x="215" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#059669">247</text>
+      <text x="215" y="75" font-family="Arial, sans-serif" font-size="12" fill="#10b981">↗ +12 today</text>
+      <text x="350" y="30" font-family="Arial, sans-serif" font-size="24" fill="#10b981">💻</text>
+      
+      <!-- Total Traffic Card -->
+      <rect x="400" y="0" width="180" height="100" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="415" y="25" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#374151">Traffic (24h)</text>
+      <text x="415" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#7c3aed">1.2TB</text>
+      <text x="415" y="75" font-family="Arial, sans-serif" font-size="12" fill="#10b981">↗ +5.2% vs yesterday</text>
+      <text x="550" y="30" font-family="Arial, sans-serif" font-size="24" fill="#8b5cf6">📊</text>
+      
+      <!-- Security Events Card -->
+      <rect x="600" y="0" width="180" height="100" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="615" y="25" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#374151">Security Events</text>
+      <text x="615" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#dc2626">23</text>
+      <text x="615" y="75" font-family="Arial, sans-serif" font-size="12" fill="#ef4444">↗ +8 this hour</text>
+      <text x="750" y="30" font-family="Arial, sans-serif" font-size="24" fill="#ef4444">🛡️</text>
+    </g>
+    
+    <!-- Charts Row -->
+    <g transform="translate(0, 130)">
+      <!-- Traffic Chart -->
+      <rect x="0" y="0" width="480" height="280" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="20" y="30" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#374151">Traffic Analytics</text>
+      <text x="20" y="50" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">Real-time network traffic across all headends</text>
+      
+      <!-- Mock Chart Area -->
+      <rect x="20" y="70" width="440" height="180" fill="#f8fafc" stroke="#e5e7eb" rx="4"/>
+      
+      <!-- Chart Lines -->
+      <path d="M 40 200 Q 120 180 200 160 Q 280 140 360 120 Q 420 110 440 100" 
+            stroke="#3b82f6" stroke-width="3" fill="none"/>
+      <path d="M 40 220 Q 120 210 200 190 Q 280 170 360 150 Q 420 140 440 130" 
+            stroke="#10b981" stroke-width="3" fill="none"/>
+      <path d="M 40 240 Q 120 230 200 220 Q 280 200 360 180 Q 420 170 440 160" 
+            stroke="#f59e0b" stroke-width="3" fill="none"/>
+      
+      <!-- Chart Legend -->
+      <g transform="translate(30, 260)">
+        <circle cx="0" cy="0" r="4" fill="#3b82f6"/>
+        <text x="10" y="4" font-family="Arial, sans-serif" font-size="10" fill="#374151">HTTP/HTTPS</text>
+        
+        <circle cx="80" cy="0" r="4" fill="#10b981"/>
+        <text x="90" y="4" font-family="Arial, sans-serif" font-size="10" fill="#374151">TCP</text>
+        
+        <circle cx="130" cy="0" r="4" fill="#f59e0b"/>
+        <text x="140" y="4" font-family="Arial, sans-serif" font-size="10" fill="#374151">UDP</text>
+      </g>
+      
+      <!-- VRF Status Panel -->
+      <rect x="500" y="0" width="280" height="280" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="520" y="30" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#374151">VRF Status</text>
+      <text x="520" y="50" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">Virtual routing and forwarding configurations</text>
+      
+      <!-- VRF List -->
+      <g transform="translate(520, 70)">
+        <!-- VRF 1 -->
+        <rect x="0" y="0" width="240" height="50" rx="6" fill="#f0f9ff" stroke="#0ea5e9"/>
+        <circle cx="20" cy="25" r="6" fill="#0ea5e9"/>
+        <text x="35" y="20" font-family="Arial, sans-serif" font-size="12" font-weight="500" fill="#0c4a6e">Customer-A-VRF</text>
+        <text x="35" y="35" font-family="Arial, sans-serif" font-size="10" fill="#0369a1">10.1.0.0/16 • 45 routes</text>
+        <text x="200" y="25" font-family="Arial, sans-serif" font-size="10" fill="#059669" font-weight="500">ACTIVE</text>
+        
+        <!-- VRF 2 -->
+        <rect x="0" y="60" width="240" height="50" rx="6" fill="#f0fdf4" stroke="#22c55e"/>
+        <circle cx="20" cy="85" r="6" fill="#22c55e"/>
+        <text x="35" y="80" font-family="Arial, sans-serif" font-size="12" font-weight="500" fill="#14532d">Corporate-WAN</text>
+        <text x="35" y="95" font-family="Arial, sans-serif" font-size="10" fill="#166534">10.0.0.0/8 • 123 routes</text>
+        <text x="200" y="85" font-family="Arial, sans-serif" font-size="10" fill="#059669" font-weight="500">ACTIVE</text>
+        
+        <!-- VRF 3 -->
+        <rect x="0" y="120" width="240" height="50" rx="6" fill="#fefce8" stroke="#eab308"/>
+        <circle cx="20" cy="145" r="6" fill="#eab308"/>
+        <text x="35" y="140" font-family="Arial, sans-serif" font-size="12" font-weight="500" fill="#713f12">Dev-Environment</text>
+        <text x="35" y="155" font-family="Arial, sans-serif" font-size="10" fill="#a16207">192.168.0.0/16 • 12 routes</text>
+        <text x="200" y="145" font-family="Arial, sans-serif" font-size="10" fill="#f59e0b" font-weight="500">CONFIG</text>
+        
+        <!-- Add VRF Button -->
+        <rect x="0" y="185" width="240" height="35" rx="6" fill="#f8fafc" stroke="#d1d5db" stroke-dasharray="5,5"/>
+        <text x="120" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#6b7280">+ Add New VRF</text>
+      </g>
+    </g>
+    
+    <!-- Recent Activity -->
+    <g transform="translate(0, 440)">
+      <rect x="0" y="0" width="780" height="200" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb"/>
+      <text x="20" y="30" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#374151">Recent Activity</text>
+      <text x="20" y="50" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">Latest events and system changes</text>
+      
+      <!-- Activity List -->
+      <g transform="translate(20, 70)">
+        <!-- Activity 1 -->
+        <g transform="translate(0, 0)">
+          <circle cx="8" cy="8" r="4" fill="#10b981"/>
+          <text x="20" y="7" font-family="Arial, sans-serif" font-size="11" fill="#374151" font-weight="500">New client connected</text>
+          <text x="20" y="19" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">laptop-user-42 joined via headend-us-east</text>
+          <text x="650" y="12" font-family="Arial, sans-serif" font-size="10" fill="#9ca3af">2 min ago</text>
+        </g>
+        
+        <!-- Activity 2 -->
+        <g transform="translate(0, 30)">
+          <circle cx="8" cy="8" r="4" fill="#f59e0b"/>
+          <text x="20" y="7" font-family="Arial, sans-serif" font-size="11" fill="#374151" font-weight="500">Firewall rule updated</text>
+          <text x="20" y="19" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Domain access rule for user group 'developers' modified</text>
+          <text x="650" y="12" font-family="Arial, sans-serif" font-size="10" fill="#9ca3af">5 min ago</text>
+        </g>
+        
+        <!-- Activity 3 -->
+        <g transform="translate(0, 60)">
+          <circle cx="8" cy="8" r="4" fill="#3b82f6"/>
+          <text x="20" y="7" font-family="Arial, sans-serif" font-size="11" fill="#374151" font-weight="500">Certificate renewed</text>
+          <text x="20" y="19" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Headend-eu-west certificate automatically renewed</text>
+          <text x="650" y="12" font-family="Arial, sans-serif" font-size="10" fill="#9ca3af">1 hour ago</text>
+        </g>
+        
+        <!-- Activity 4 -->
+        <g transform="translate(0, 90)">
+          <circle cx="8" cy="8" r="4" fill="#dc2626"/>
+          <text x="20" y="7" font-family="Arial, sans-serif" font-size="11" fill="#374151" font-weight="500">Security event detected</text>
+          <text x="20" y="19" font-family="Arial, sans-serif" font-size="10" fill="#6b7280">Suricata detected suspicious traffic from 192.168.1.105</text>
+          <text x="650" y="12" font-family="Arial, sans-serif" font-size="10" fill="#9ca3af">2 hours ago</text>
+        </g>
+        
+        <!-- View All Link -->
+        <text x="0" y="135" font-family="Arial, sans-serif" font-size="12" fill="#3b82f6" text-decoration="underline">View all activity →</text>
+      </g>
+    </g>
+  </g>
+  
+  <!-- Notification Bell -->
+  <g transform="translate(1120, 60)">
+    <circle cx="20" cy="20" r="15" fill="white" stroke="#e5e7eb"/>
+    <text x="20" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">🔔</text>
+    <circle cx="28" cy="12" r="4" fill="#ef4444"/>
+    <text x="28" y="15" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="white">3</text>
+  </g>
+</svg>

@@ -1,0 +1,157 @@
+# SASEWaddle Development Docker Compose Configuration
+version: '3.8'
+
+services:
+  # Redis for development
+  redis:
+    image: redis:7-alpine
+    container_name: sasewaddle-dev-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass devpassword --appendonly yes
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - sasewaddle-dev
+
+  # Manager Service - Development
+  manager:
+    image: ghcr.io/your-org/sasewaddle/manager:dev
+    container_name: sasewaddle-dev-manager
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://:devpassword@redis:6379
+      - JWT_SECRET=dev-jwt-secret-not-for-production
+      - LOG_LEVEL=debug
+      - ADMIN_EMAIL=dev@example.com
+      - ADMIN_PASSWORD=devpassword
+      - DB_PATH=/app/data/sasewaddle.db
+      - CERT_DIR=/app/certs
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - DEBUG=true
+    volumes:
+      - manager_dev_data:/app/data
+      - manager_dev_certs:/app/certs
+      # Mount source code for development (if building locally)
+      # - ../../manager:/app:ro
+    networks:
+      - sasewaddle-dev
+
+  # Headend Server - Development
+  headend:
+    image: ghcr.io/your-org/sasewaddle/headend:dev
+    container_name: sasewaddle-dev-headend
+    restart: unless-stopped
+    depends_on:
+      - manager
+    ports:
+      - "51820:51820/udp"
+      - "8080:8080"
+    environment:
+      - MANAGER_API_URL=http://manager:8000
+      - LOG_LEVEL=debug
+      - CLUSTER_ID=dev-cluster
+      - NODE_ID=headend-dev-01
+      - TRAFFIC_MIRROR_ENABLED=false
+    volumes:
+      - headend_dev_data:/app/data
+      - headend_dev_wireguard:/etc/wireguard
+      # Mount source code for development (if building locally)
+      # - ../../headend:/app:ro
+    networks:
+      - sasewaddle-dev
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    privileged: true
+
+  # Client container for testing
+  client:
+    image: ghcr.io/your-org/sasewaddle/client:dev
+    container_name: sasewaddle-dev-client
+    restart: "no"  # Manual start for testing
+    environment:
+      - MANAGER_URL=http://manager:8000
+      - API_KEY=dev-api-key-12345
+      - CLIENT_NAME=dev-client-01
+      - LOG_LEVEL=debug
+      - AUTO_CONNECT=false
+    volumes:
+      - client_dev_data:/app/data
+    networks:
+      - sasewaddle-dev
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    privileged: true
+    depends_on:
+      - manager
+      - headend
+    profiles:
+      - testing
+
+  # Development tools
+  adminer:
+    image: adminer:latest
+    container_name: sasewaddle-dev-adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks:
+      - sasewaddle-dev
+    profiles:
+      - tools
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: sasewaddle-dev-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8082:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:devpassword
+    networks:
+      - sasewaddle-dev
+    profiles:
+      - tools
+
+  # Mailhog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: sasewaddle-dev-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - sasewaddle-dev
+    profiles:
+      - tools
+
+volumes:
+  redis_dev_data:
+  manager_dev_data:
+  manager_dev_certs:
+  headend_dev_data:
+  headend_dev_wireguard:
+  client_dev_data:
+
+networks:
+  sasewaddle-dev:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

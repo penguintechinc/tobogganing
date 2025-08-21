@@ -1,0 +1,80 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+
+/**
+ * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ */
+def enableProguardInReleaseBuilds = false
+
+/**
+ * The preferred build flavor of JavaScriptCore (JSC)
+ */
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+/**
+ * Hermes engine configuration
+ */
+def hermesEnabled = false
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    compileSdkVersion rootProject.ext.compileSdkVersion
+
+    namespace "com.sasewaddle.mobile"
+    
+    buildFeatures {
+        buildConfig true
+    }
+    
+    defaultConfig {
+        applicationId "com.sasewaddle.mobile"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0.0"
+        multiDexEnabled true
+        
+        // Build config fields for runtime configuration
+        buildConfigField "String", "BUILD_TYPE", "\"development\""
+        buildConfigField "String", "API_ENDPOINT", "\"https://api-dev.sasewaddle.com\""
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.10.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
+    
+    // For network security
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    
+    // For biometric authentication
+    implementation 'androidx.biometric:biometric:1.1.0'
+
+    implementation jscFlavor
+}
+
+// Temporarily disabled for testing
+// apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)

@@ -1,7 +1,148 @@
-*.yaml
+# SASEWaddle .gitignore
+
+# Security - Never commit these
 *secret*
 id_rsa*
 *.key
+*.crt
+*.pem
+*.p12
+*.pfx
+certs/
+certificates/
+secrets/
+.secrets
+
+# Configuration files with sensitive data
+config.yaml
+config.json
+*config*.yaml
+*config*.json
+.env
+.env.local
+.env.*.local
+
+# WireGuard configuration
+*.conf
+wg*.conf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 venv/
+.venv
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+build/
+dist/
+vendor/
+
+# Node.js
+node_modules/
+npm-debug.log*
+.next/
+out/
+node_modules/
+ios/build/
+android/app/build/
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.xcuserstate
+*.xcworkspace
+*.xcodeproj
+*.swp
+*.DS_Store
+*.log
+*.env
+*.gradle
+android/.gradle/
+android/.idea/
+android/local.properties
+android/.cxx/
+android/.settings/
+android/build/
+*.iml
+
+# Go
+
+# IDE and editor files
 .idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+bin/
+obj/
+*.exe
+*.test
+*.out
+*.a
+*.so
+*.dll
+*.dylib
+*.cgo1.go
+*.cgo2.c
+*.coverprofile
+*.log
+*.tmp
+vendor/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+Gemfile.lock
+Pipfile.lock
+poetry.lock
+Cargo.lock
+composer.lock
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Docker
+.dockerignore
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Build artifacts
+sasewaddle-*
+releases/
+artifacts/
 
