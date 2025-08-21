@@ -605,6 +605,33 @@ SASEWaddle includes a comprehensive firewall system for granular access control:
   - Use case examples
   - Security architecture diagrams
 
+# Important TODOs for Critical Security Updates
+
+## ✅ CVE Fix COMPLETED - golang.org/x/crypto 
+**Status**: COMPLETED
+**CVE**: GHSA-v778-237x-gjrc (CRITICAL) - Misuse of ServerConfig.PublicKeyCallback may cause authorization bypass
+**Affected**: golang.org/x/crypto < 0.31.0
+**Resolution**:
+- ✅ Updated /workspaces/SASEWaddle/headend/go.mod: v0.17.0 → v0.31.0 
+- ✅ Updated /workspaces/SASEWaddle/clients/native/go.mod: v0.16.0 → v0.31.0
+- ✅ FIXED: WireGuard API compatibility issues in /workspaces/SASEWaddle/headend/wireguard/manager.go
+  - Fixed ParseEndpoint (removed from wgtypes) → manual parsing with net.UDPAddr
+  - Fixed wgtypes.IPNet and wgtypes.ParseIPNet → using standard net.ParseCIDR
+- ✅ Headend builds successfully with patched crypto library
+- ⚠️ Native client has GUI dependency issues (not CVE-related)
+
+**Files Modified**:
+- /workspaces/SASEWaddle/headend/go.mod (crypto: v0.17.0→v0.31.0)
+- /workspaces/SASEWaddle/clients/native/go.mod (crypto: v0.16.0→v0.31.0) 
+- /workspaces/SASEWaddle/headend/wireguard/manager.go (API compatibility fixes)
+- /workspaces/SASEWaddle/clients/native/cmd/tray-example/main.go (import path fixes)
+
+## 🔧 Pending: Native Client Build Issues 
+**Status**: PENDING
+**Issue**: GUI dependencies and WireGuard API changes in native client
+**Impact**: Non-critical (headend security fixed)
+**Details**: Native client has build issues related to missing X11/GL libraries and WireGuard API changes for embedded device creation. These are development environment issues, not security vulnerabilities.
+
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.

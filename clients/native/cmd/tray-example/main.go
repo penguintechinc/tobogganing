@@ -8,9 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"sasewaddle/clients/native/internal/config"
-	"sasewaddle/clients/native/internal/tray"
-	"sasewaddle/clients/native/internal/vpn"
+	"github.com/sasewaddle/clients/native/internal/config"
+	"github.com/sasewaddle/clients/native/internal/tray"
+	"github.com/sasewaddle/clients/native/internal/vpn"
 )
 
 func main() {

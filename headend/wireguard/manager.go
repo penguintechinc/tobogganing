@@ -19,9 +19,11 @@ import (
     "encoding/json"
     "fmt"
     "io/ioutil"
+    "net"
     "net/http"
     "os"
     "os/exec"
+    "strconv"
     "strings"
     "time"
     
@@ -217,11 +219,27 @@ func (m *Manager) syncPeers() error {
         
         // Set endpoint if provided
         if peer.Endpoint != "" {
-            endpoint, err := wgtypes.ParseEndpoint(peer.Endpoint)
-            if err != nil {
-                log.Errorf("Invalid endpoint for peer %s: %v", peer.NodeID, err)
+            // Parse endpoint manually since wgtypes.ParseEndpoint was removed
+            parts := strings.Split(peer.Endpoint, ":")
+            if len(parts) == 2 {
+                host := parts[0]
+                port, err := strconv.Atoi(parts[1])
+                if err != nil {
+                    log.Errorf("Invalid endpoint port for peer %s: %v", peer.NodeID, err)
+                } else {
+                    ip := net.ParseIP(host)
+                    if ip != nil {
+                        endpoint := &net.UDPAddr{
+                            IP:   ip,
+                            Port: port,
+                        }
+                        peerConfig.Endpoint = endpoint
+                    } else {
+                        log.Errorf("Invalid endpoint IP for peer %s: %s", peer.NodeID, host)
+                    }
+                }
             } else {
-                peerConfig.Endpoint = &endpoint
+                log.Errorf("Invalid endpoint format for peer %s: %s", peer.NodeID, peer.Endpoint)
             }
         }
         
@@ -280,8 +298,8 @@ func (m *Manager) fetchPeersFromManager() ([]Peer, error) {
     return response.Peers, nil
 }
 
-func (m *Manager) parseAllowedIPs(allowedIPsStr string) ([]wgtypes.IPNet, error) {
-    var allowedIPs []wgtypes.IPNet
+func (m *Manager) parseAllowedIPs(allowedIPsStr string) ([]net.IPNet, error) {
+    var allowedIPs []net.IPNet
     
     for _, ipStr := range strings.Split(allowedIPsStr, ",") {
         ipStr = strings.TrimSpace(ipStr)
@@ -289,12 +307,13 @@ func (m *Manager) parseAllowedIPs(allowedIPsStr string) ([]wgtypes.IPNet, error)
             continue
         }
         
-        ipNet, err := wgtypes.ParseIPNet(ipStr)
+        // Parse using standard net package since wgtypes.ParseIPNet was removed
+        _, ipNet, err := net.ParseCIDR(ipStr)
         if err != nil {
             return nil, fmt.Errorf("invalid IP network %s: %w", ipStr, err)
         }
         
-        allowedIPs = append(allowedIPs, ipNet)
+        allowedIPs = append(allowedIPs, *ipNet)
     }
     
     return allowedIPs, nil
