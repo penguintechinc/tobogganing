@@ -1,10 +1,13 @@
 name = "sasewaddle-website"
-main = "functions/_middleware.js"
 compatibility_date = "2024-01-15"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "out"
+
+# Pages Functions (optional - remove if not using)
+# main = "functions/_middleware.js"
 
 [build]
-command = "npm run pages:build"
+command = "npm run build && npm run export"
 
 [build.upload]
 format = "modules"

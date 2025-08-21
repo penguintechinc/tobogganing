@@ -2,7 +2,7 @@ import React from 'react';
 import {
   CpuChipIcon,
   ShieldCheckIcon,
-  CircuitBoardIcon,
+  CodeBracketIcon,
   CloudIcon,
   EnvelopeIcon,
   PhoneIcon,
@@ -24,7 +24,7 @@ const embeddedFeatures = [
   {
     name: 'API-First Architecture',
     description: 'RESTful APIs and libraries for seamless integration into existing software platforms.',
-    icon: CircuitBoardIcon,
+    icon: CodeBracketIcon,
     color: 'bg-purple-500',
   },
   {

@@ -1,6 +1,18 @@
 # SASEWaddle .gitignore
 
 # Security - Never commit these
+# Next.js
+.next/
+out/
+# Next.js (in website/)
+website/.next/
+website/out/
+website/.vercel/
+website/next-env.d.ts
+website/coverage/
+.vercel/
+next-env.d.ts
+coverage/
 *secret*
 id_rsa*
 *.key

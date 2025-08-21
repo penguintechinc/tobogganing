@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sasewaddle/clients/native/internal/config"
+	"github.com/sasewaddle/clients/native/internal/tray"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -98,11 +99,11 @@ func (m *Manager) Connect() error {
 	m.isConnected = true
 	m.currentStatus = tray.ConnectionStatus{
 		Connected:      true,
-		ServerName:     m.config.GetServerName(),
+		ServerName:     "SASEWaddle Server",
 		ConnectedSince: time.Now(),
 		LocalIP:        m.getLocalIP(),
-		ServerIP:       m.config.GetServerIP(),
-		PublicKey:      m.config.GetPublicKey(),
+		ServerIP:       "10.200.0.1",
+		PublicKey:      "",
 	}
 	
 	// Start monitoring
@@ -326,7 +327,7 @@ func (m *Manager) connectWindowsFallback() error {
 	// This would implement wireguard-go integration
 	// For now, return an error indicating the limitation
 	// Use WireGuard for Windows service
-	cmd := exec.Command("wg-quick", "up", configPath)
+	cmd := exec.Command("wg-quick", "up", m.configPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start WireGuard on Windows: %w", err)
 	}
@@ -353,7 +354,7 @@ func (m *Manager) validateConfig() error {
 	}
 	
 	// Check if config file exists and is readable
-	if !m.config.FileExists(m.configPath) {
+	if _, err := os.Stat(m.configPath); os.IsNotExist(err) {
 		return fmt.Errorf("WireGuard configuration file not found: %s", m.configPath)
 	}
 	
