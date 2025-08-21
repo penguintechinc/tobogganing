@@ -23,10 +23,10 @@ jobs:
       with:
         python-version: 3.12
     
-    - name: Set up Go 1.21
+    - name: Set up Go 1.23
       uses: actions/setup-go@v4
       with:
-        go-version: 1.21
+        go-version: 1.23
     
     - name: Install Python dependencies
       run: |
@@ -186,7 +186,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: 1.21
+        go-version: 1.23
     
     - name: Read version from .version file
       id: version

@@ -7,6 +7,7 @@
 
 - [🔒 Security Features](#-security-features)
 - [🌐 Network Features](#-network-features)
+- [🖥️ Client Applications](#️-client-applications)
 - [💼 Management Features](#-management-features)
 - [📊 Analytics & Monitoring](#-analytics--monitoring)
 - [🚀 Deployment Features](#-deployment-features)
@@ -127,6 +128,161 @@ Administrators can configure proxy listening ports through the web interface:
 - **UDP Port Ranges**: Configure multiple UDP port ranges
 - **Real-time Updates**: Changes applied without restart
 - **Web UI Management**: Beautiful interface for port configuration
+
+---
+
+## 🖥️ Client Applications
+
+SASEWaddle provides two distinct client types optimized for different deployment scenarios and user experiences:
+
+### 🖼️ **Desktop GUI Clients**
+**Perfect for end users who want the best experience**
+
+#### Supported Platforms
+| Platform | Binary Name | Features |
+|----------|-------------|----------|
+| **macOS Universal** | `sasewaddle-client-darwin-universal` | Intel + Apple Silicon support |
+| **macOS Intel** | `sasewaddle-client-darwin-amd64` | Optimized for Intel Macs |
+| **macOS Apple Silicon** | `sasewaddle-client-darwin-arm64` | M1/M2/M3 native performance |
+| **Linux AMD64** | `sasewaddle-client-linux-amd64` | Desktop Linux distributions |
+| **Linux ARM64** | `sasewaddle-client-linux-arm64` | ARM64 Linux systems |
+| **Windows** | `sasewaddle-client-windows-amd64.exe` | Windows 10/11 support |
+
+#### System Tray Integration Features
+- ✅ **Native System Tray Icon** - Platform-specific tray integration
+- ✅ **One-Click Connect/Disconnect** - Toggle VPN with single click
+- ✅ **Real-Time Connection Status** - Visual indicators for connection state
+- ✅ **Statistics Viewer** - Connection performance metrics in browser
+- ✅ **Configuration Management** - Auto-update with random scheduling (45-60 min)
+- ✅ **Settings Access** - Easy access to configuration and preferences
+- ✅ **Graceful Shutdown** - Automatic disconnection on application exit
+
+#### Installation & Usage
+```bash
+# Quick GUI installation
+curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+
+# Manual installation
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
+chmod +x sasewaddle-client
+
+# Start with system tray
+./sasewaddle-client gui --auto-connect
+```
+
+### 🖥️ **Headless Clients**
+**Optimized for servers, containers, and automation**
+
+#### Supported Platforms
+| Platform | Binary Name | Use Case |
+|----------|-------------|----------|
+| **Desktop Platforms** | `*-headless` variants | Server deployments |
+| **Linux ARM v7** | `sasewaddle-client-linux-armv7-headless` | Raspberry Pi 4/5 |
+| **Linux ARM v6** | `sasewaddle-client-linux-armv6-headless` | Raspberry Pi Zero/1 |
+| **Linux MIPS** | `sasewaddle-client-linux-mips-headless` | Router firmware |
+| **Linux MIPSLE** | `sasewaddle-client-linux-mipsle-headless` | Little-endian MIPS |
+
+#### Command-Line Features
+- ✅ **CLI Interface Only** - No GUI dependencies required
+- ✅ **Daemon Mode** - Background operation for servers
+- ✅ **Docker Ready** - Perfect for containerized environments
+- ✅ **Automation Friendly** - Script and systemd integration
+- ✅ **Small Footprint** - Minimal resource usage
+- ✅ **Cross-Platform** - Wide embedded platform support
+
+#### Installation & Usage
+```bash
+# Quick headless installation
+curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
+
+# Connect as daemon
+./sasewaddle-client connect --daemon
+
+# Check status
+./sasewaddle-client status
+```
+
+### 🐳 **Docker Container Client**
+
+**Enterprise-ready containerized deployment**
+
+```bash
+# Official Docker image
+docker run -d \
+  --name sasewaddle-client \
+  --cap-add NET_ADMIN \
+  --device /dev/net/tun \
+  -e MANAGER_URL=https://manager.example.com \
+  -e API_KEY=your-api-key \
+  ghcr.io/penguintechinc/sasewaddle-client:latest
+```
+
+**Container Features:**
+- ✅ **Multi-Architecture** - ARM64 and AMD64 support
+- ✅ **Health Checks** - Kubernetes-compatible health monitoring
+- ✅ **Auto-Configuration** - Pulls config from manager automatically
+- ✅ **Certificate Management** - Automatic rotation and renewal
+- ✅ **Resource Efficient** - Minimal container footprint
+
+### 📱 **Mobile Applications**
+
+**React Native apps for iOS and Android**
+
+#### Mobile Features
+- ✅ **Native Mobile Experience** - Platform-specific UI/UX
+- ✅ **WireGuard Integration** - Native VPN protocols
+- ✅ **Biometric Authentication** - Fingerprint/Face ID support
+- ✅ **Background Connectivity** - Persistent VPN connections
+- ✅ **Data Usage Monitoring** - Real-time bandwidth tracking
+- ✅ **Server Selection** - Choose optimal headend location
+
+#### Installation
+```bash
+# Build from source
+./scripts/deploy-mobile.sh
+
+# Install to device
+adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### 🔧 **Client Configuration**
+
+#### Universal Configuration
+```yaml
+# ~/.sasewaddle/config.yaml
+manager:
+  url: "https://manager.example.com:8000"
+  api_key: "your-api-key"
+  timeout: "30s"
+
+client:
+  log_level: "info"
+  auto_connect: true
+  auto_update: true
+  update_interval: "1h"
+  system_tray: true  # GUI builds only
+
+wireguard:
+  interface: "wg-sasewaddle"
+  dns: ["1.1.1.1", "8.8.8.8"]
+  mtu: 1420
+```
+
+#### Environment Variables
+```bash
+# Core configuration
+export SASEWADDLE_MANAGER_URL="https://manager.example.com:8000"
+export SASEWADDLE_API_KEY="your-api-key"
+export SASEWADDLE_LOG_LEVEL="info"
+
+# GUI-specific (GUI builds only)
+export SASEWADDLE_SYSTEM_TRAY="true"
+export SASEWADDLE_AUTO_UPDATE="true"
+
+# Headless-specific
+export SASEWADDLE_DAEMON_MODE="true"
+export SASEWADDLE_PID_FILE="/var/run/sasewaddle.pid"
+```
 
 ---
 

@@ -5,7 +5,7 @@
 ## 📋 Prerequisites
 
 - **Docker & Docker Compose** (Latest version)
-- **Go 1.21+** (for building from source)
+- **Go 1.23+** (for building from source)
 - **Python 3.12+** (for Manager development)
 - **Node.js 18+** (for website development)
 
@@ -104,6 +104,61 @@ Password: (check container logs for generated password)
 2. Create VRF: `customer-a` with RD `65000:100`
 3. Configure OSPF areas and authentication
 4. Monitor OSPF neighbors in real-time
+
+## 🖥️ Client Installation
+
+### Desktop Users (Recommended)
+
+#### 🖼️ **GUI Client with System Tray**
+```bash
+# macOS (Universal - Intel + Apple Silicon)
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
+chmod +x sasewaddle-client
+
+# Linux
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
+chmod +x sasewaddle-client
+
+# Windows
+# Download: sasewaddle-client-windows-amd64.exe
+
+# Initialize and start GUI
+./sasewaddle-client init --manager-url http://localhost:8000 --api-key YOUR_API_KEY
+./sasewaddle-client gui
+```
+
+**GUI Features:**
+- ✅ System tray icon with real-time status
+- ✅ One-click connect/disconnect
+- ✅ Connection statistics viewer
+- ✅ Automatic configuration updates
+- ✅ Cross-platform native experience
+
+### Server Deployments
+
+#### 🖥️ **Headless Client for Automation**
+```bash
+# Download headless version
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
+chmod +x sasewaddle-client
+
+# Configure and run as daemon
+./sasewaddle-client init --manager-url http://localhost:8000 --api-key YOUR_API_KEY
+./sasewaddle-client connect --daemon
+```
+
+#### 🐳 **Docker Container**
+```bash
+docker run -d \
+  --name sasewaddle-client \
+  --cap-add NET_ADMIN \
+  --device /dev/net/tun \
+  -e MANAGER_URL=http://localhost:8000 \
+  -e API_KEY=YOUR_API_KEY \
+  ghcr.io/penguintechinc/sasewaddle-client:latest
+```
+
+**📖 For detailed installation instructions, see [Client Installation Guide](./CLIENT_INSTALLATION.md)**
 
 ## Building from Source
 

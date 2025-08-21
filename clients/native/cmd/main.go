@@ -18,7 +18,6 @@ import (
     "context"
     "fmt"
     "os"
-    "os/exec"
     "os/signal"
     "runtime"
     "syscall"
@@ -31,7 +30,7 @@ import (
 )
 
 var (
-    version   = "1.0.0"
+    version   = "1.1.0"
     buildTime = "unknown"
     gitCommit = "unknown"
 )

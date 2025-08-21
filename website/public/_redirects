@@ -1,0 +1,15 @@
+# Redirects for Cloudflare Pages
+/github https://github.com/penguintechinc/SASEWaddle 301
+/docs /docs/overview 301
+/download /downloads 301
+/discord https://discord.gg/sasewaddle 301
+/mobile /#showcase 301
+/enterprise /#pricing 301
+/embedded /#embedded 301
+/pricing /#pricing 301
+
+# API redirects (if needed)
+/api/* https://api.sasewaddle.com/:splat 200
+
+# Fallback for SPA routing
+/* /index.html 200

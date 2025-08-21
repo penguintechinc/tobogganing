@@ -162,7 +162,7 @@ cd website && npm install && npm run build
   - Web-based administration interface
   - REST API for client management
 
-- ✅ **Headend Server** - Go 1.21 with concurrent architecture
+- ✅ **Headend Server** - Go 1.23 with concurrent architecture
   - WireGuard VPN termination
   - Multi-protocol proxy (HTTP/HTTPS, TCP, UDP)
   - Traffic mirroring for IDS/IPS integration
@@ -254,7 +254,7 @@ cd website && npm install && npm run build
 - Certificates: Complete PKI infrastructure
 - Web UI: Administration interface
 
-**Headend Server (Go 1.21)**
+**Headend Server (Go 1.23)**
 - WireGuard: Native integration with kernel module
 - Proxy: HTTP/HTTPS, TCP, UDP with authentication
 - Performance: Concurrent connection handling

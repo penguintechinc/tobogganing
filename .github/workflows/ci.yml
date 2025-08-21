@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [1.21]
+        go-version: [1.23]
     
     steps:
     - uses: actions/checkout@v4
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [1.21]
+        go-version: [1.23]
     
     steps:
     - uses: actions/checkout@v4
@@ -136,6 +136,15 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-client-
     
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libayatana-appindicator3-dev \
+          libgtk-3-dev \
+          libwebkit2gtk-4.0-dev \
+          pkg-config
+    
     - name: Install dependencies
       run: |
         cd clients/native
@@ -146,11 +155,12 @@ jobs:
       with:
         version: latest
         working-directory: clients/native
+        args: --build-tags=nogui
     
     - name: Test with go test
       run: |
         cd clients/native
-        go test -v -race -coverprofile=coverage.out ./... || exit 0
+        go test -tags=nogui -v -race -coverprofile=coverage.out ./... || exit 0
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
@@ -300,7 +310,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: 1.21
+        go-version: 1.23
     
     - name: Cache Go modules
       uses: actions/cache@v3

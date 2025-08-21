@@ -102,7 +102,7 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 - **Analytics Engine**: Real-time metrics collection and aggregation
 - **Backup System**: Local and S3-compatible storage with encryption
 
-### Headend Server (Go 1.21)
+### Headend Server (Go 1.23)
 - **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
 - **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
 - **Traffic Security**: Firewall rules with domain/IP/protocol/port filtering
@@ -144,26 +144,67 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 
 ### Native Client Installation
 
-#### Quick Install (Linux/macOS)
+SASEWaddle provides two types of client applications optimized for different use cases:
+
+#### 🖼️ **Desktop GUI Clients** (Recommended for End Users)
+**Full system tray integration with one-click connect/disconnect**
+
 ```bash
-curl -sSL https://github.com/your-org/sasewaddle/releases/latest/download/install.sh | bash
+# Quick install with GUI support
+curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+
+# Manual download
+# macOS (Universal - Intel + Apple Silicon)
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
+
+# Linux (AMD64)
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
+
+# Windows (AMD64)
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64.exe -o sasewaddle-client.exe
 ```
 
-#### Manual Installation
-1. Download the appropriate binary from [Releases](https://github.com/your-org/sasewaddle/releases)
-2. Extract and move to your PATH
-3. Run `sasewaddle-client init` to configure
+**GUI Features:**
+- ✅ System tray icon with real-time status
+- ✅ Connect/disconnect with single click  
+- ✅ Connection statistics and monitoring
+- ✅ Automatic configuration updates
+- ✅ Settings and about dialogs
+- ✅ Cross-platform native experience
 
-#### Configuration
+#### 🖥️ **Headless Clients** (For Servers & Automation)
+**CLI-only for Docker containers, servers, and embedded systems**
+
 ```bash
-# Initialize client configuration
-sasewaddle-client init --manager-url https://your-manager.example.com:8000 --api-key YOUR_API_KEY
+# Quick install headless version
+curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
 
-# Connect to the network
-sasewaddle-client connect
+# Manual download - add "-headless" to any platform name
+curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
+```
+
+**Headless Features:**
+- ✅ Command-line interface only
+- ✅ Perfect for automation and scripts
+- ✅ Docker container friendly
+- ✅ Embedded system support (ARM, MIPS)
+- ✅ Smaller binary size
+- ✅ No GUI dependencies
+
+#### Configuration & Usage
+
+```bash
+# Initialize client (both GUI and headless)
+./sasewaddle-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
+
+# GUI Mode - Start with system tray
+./sasewaddle-client gui
+
+# Headless Mode - Connect as daemon
+./sasewaddle-client connect --daemon
 
 # Check connection status
-sasewaddle-client status
+./sasewaddle-client status
 ```
 
 ## 📖 Documentation
@@ -177,7 +218,7 @@ sasewaddle-client status
 ## 🛠️ Development
 
 ### Prerequisites
-- Go 1.21+ (for headend and client)
+- Go 1.23+ (for headend and client)
 - Python 3.12+ (for manager)
 - Node.js 18+ (for website)
 - Docker (for containerized development)

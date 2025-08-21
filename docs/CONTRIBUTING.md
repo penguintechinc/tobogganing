@@ -20,7 +20,7 @@ Thank you for your interest in contributing to SASEWaddle! We welcome contributi
 ### Prerequisites
 
 - 🐍 **Python 3.12+** for Manager service
-- 🐹 **Go 1.21+** for Headend server and native clients
+- 🐹 **Go 1.23+** for Headend server and native clients
 - 🟢 **Node.js 18+** for website development
 - 🐳 **Docker** for containerized development
 - 📦 **Git** for version control

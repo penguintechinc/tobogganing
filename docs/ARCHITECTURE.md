@@ -161,7 +161,7 @@ sequenceDiagram
 
 ### 🌐 Headend Server
 
-> **🔧 Technology**: Go 1.21 + WireGuard + goroutines
+> **🔧 Technology**: Go 1.23 + WireGuard + goroutines
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -204,7 +204,7 @@ sequenceDiagram
 
 ### 👤 Client Applications
 
-> **🔧 Technology**: Go 1.21 + Cross-platform UI
+> **🔧 Technology**: Go 1.23 + Cross-platform UI
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

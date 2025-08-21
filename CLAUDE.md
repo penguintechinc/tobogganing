@@ -87,12 +87,13 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - Containerized deployment for easy scaling
 
 #### Native Golang Client
-- **Platforms**: Mac Universal, Linux, Windows
-- Lightweight and efficient
-- Direct integration with system network stack
-- GUI and CLI interfaces
-- Auto-update capabilities
-- **System Tray Integration**:
+- **Platforms**: Mac Universal, Linux, Windows (GUI), plus ARM/MIPS/embedded (headless)
+- **Dual Build Architecture** with Go build tags for conditional compilation:
+  - **GUI Builds** (`//go:build !nogui`): Full desktop experience with system tray
+  - **Headless Builds** (`//go:build nogui`): CLI-only for servers and automation
+- Lightweight and efficient with direct system network stack integration
+- Auto-update capabilities and certificate management
+- **System Tray Integration** (GUI Builds Only):
   - Real-time connection status monitoring
   - Connect/disconnect VPN with single click
   - Configuration update management with random scheduling (45-60 min intervals)
@@ -100,8 +101,20 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
   - Connection statistics viewer in browser
   - Settings and about dialogs
   - Graceful shutdown with automatic disconnection
+- **Headless Features** (Server/Embedded):
+  - Command-line interface only
+  - Daemon mode for background operation
+  - Docker and systemd integration
+  - Wide platform support (ARM, MIPS, embedded systems)
+  - Minimal resource footprint
 
 ## Development Guidelines
+
+### Development Requirements
+- **Go 1.23+** - All Go components (headend server and native clients)
+- **Python 3.12+** - Manager service and web portal
+- **Node.js 18+** - Website and React Native mobile applications
+- **Docker** - Containerized development and deployment
 
 ### Coding Standards
 - **Python**: Follow PEP 8, use type hints, async/await patterns
@@ -111,6 +124,10 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
   - `golangci-lint run` for linting
   - `go build ./...` for build verification
   - Fix all linting errors before committing code
+- **Build Tags**: Use conditional compilation for GUI vs headless builds:
+  - GUI builds: Default behavior, requires CGO and system dependencies
+  - Headless builds: Use `-tags="nogui"` flag for static compilation
+  - Test both variants when modifying client code
 
 ### Testing Requirements
 - Unit tests for all components
@@ -124,6 +141,18 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - Semantic versioning (starting at 1.0.0)
 - Automated Docker image publishing
 - Cross-platform binary compilation for Go clients
+- **Dual Client Architecture**: GUI vs Headless builds using Go build tags
+  - **GUI Builds** (Default for Desktop): System tray integration using github.com/getlantern/systray
+    - macOS: Universal binaries (Intel + Apple Silicon)
+    - Linux: Native system tray with libayatana-appindicator
+    - Windows: Native system tray integration
+    - Build with CGO enabled for GUI dependencies
+    - Primary user experience for end users
+  - **Headless Builds** (Servers/Embedded): CLI-only, no GUI dependencies
+    - Static compilation with CGO_ENABLED=0
+    - Minimal resource footprint
+    - Perfect for Docker containers and automation
+    - Wide platform support (ARM, MIPS, embedded systems)
 
 ### Security Considerations
 - Zero Trust principles throughout

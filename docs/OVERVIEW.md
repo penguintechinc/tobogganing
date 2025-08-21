@@ -34,10 +34,10 @@ SASEWaddle consists of three main components working together to provide compreh
   - Redis caching for performance
   - Backup and restore functionality with S3 support
 
-### 🌐 Headend Server (Go 1.21)
+### 🌐 Headend Server (Go 1.23)
 **WireGuard termination and intelligent proxy**
 
-- **Technology**: Go 1.21 + WireGuard kernel module + goroutines
+- **Technology**: Go 1.23 + WireGuard kernel module + goroutines
 - **Features**:
   - WireGuard VPN tunnel termination
   - Multi-protocol proxy (HTTP/HTTPS, TCP, UDP, WebSocket)
