@@ -18,7 +18,7 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "net"
     "net/http"
     "os"
@@ -103,7 +103,7 @@ func (m *Manager) initializeKeys() error {
     keyPath := fmt.Sprintf("/etc/wireguard/%s.key", m.interfaceName)
     
     // Try to load existing private key
-    if data, err := ioutil.ReadFile(keyPath); err == nil {
+    if data, err := os.ReadFile(keyPath); err == nil {
         key, err := wgtypes.ParseKey(strings.TrimSpace(string(data)))
         if err == nil {
             m.privateKey = key
@@ -127,7 +127,7 @@ func (m *Manager) initializeKeys() error {
         return fmt.Errorf("failed to create /etc/wireguard directory: %w", err)
     }
     
-    if err := ioutil.WriteFile(keyPath, []byte(privateKey.String()), 0600); err != nil {
+    if err := os.WriteFile(keyPath, []byte(privateKey.String()), 0600); err != nil {
         return fmt.Errorf("failed to save private key: %w", err)
     }
     
@@ -301,7 +301,7 @@ func (m *Manager) fetchPeersFromManager() ([]Peer, error) {
         return nil, fmt.Errorf("manager returned status %d", resp.StatusCode)
     }
     
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }

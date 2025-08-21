@@ -385,12 +385,7 @@ func (s *ProxyServer) healthHandler(c *gin.Context) {
 
 func (s *ProxyServer) healthzHandler(c *gin.Context) {
     // Kubernetes-style health check
-    healthy := true
-    
-    // Check auth provider
-    if s.authProvider == nil {
-        healthy = false
-    }
+    healthy := s.authProvider != nil
     
     // Check proxies
     if s.tcpProxy == nil || s.udpProxy == nil {
@@ -464,11 +459,14 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
     requestID := c.GetHeader("X-Request-ID")
     
     // Check firewall rules if firewall manager is enabled
-    allowed := true
+    var allowed bool
     if s.firewallManager != nil {
         allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+    } else {
+        allowed = true
+    }
         
-        if !allowed {
+    if !allowed {
             log.Warnf("Firewall blocked access for user %s to %s", user.ID, targetHost)
             
             // Log denied access to syslog
@@ -478,10 +476,9 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
             
             c.JSON(http.StatusForbidden, gin.H{"error": "Access denied by firewall policy"})
             return
-        }
-        
-        log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
     }
+        
+    log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
 
     // Get or create proxy for target
     proxy := s.getOrCreateProxy(targetHost)
@@ -782,11 +779,14 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
     }
     
     // Check firewall rules if firewall manager is enabled
-    allowed := true
+    var allowed bool
     if t.firewallManager != nil {
         allowed = t.firewallManager.CheckAccess(user.ID, targetHost)
+    } else {
+        allowed = true
+    }
         
-        if !allowed {
+    if !allowed {
             log.Warnf("Firewall blocked TCP connection for user %s to %s", user.ID, targetHost)
             
             // Log denied access to syslog
@@ -795,9 +795,9 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
             }
             
             return
-        }
-        log.Debugf("Firewall allowed TCP connection for user %s to %s", user.ID, targetHost)
     }
+        
+    log.Debugf("Firewall allowed TCP connection for user %s to %s", user.ID, targetHost)
     
     // Log allowed access to syslog
     if t.syslogLogger != nil {
@@ -923,11 +923,14 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
     }
     
     // Check firewall rules if firewall manager is enabled
-    allowed := true
+    var allowed bool
     if u.firewallManager != nil {
         allowed = u.firewallManager.CheckAccess(user.ID, targetHost)
+    } else {
+        allowed = true
+    }
         
-        if !allowed {
+    if !allowed {
             log.Warnf("Firewall blocked UDP packet for user %s to %s", user.ID, targetHost)
             
             // Log denied access to syslog
@@ -936,9 +939,9 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
             }
             
             return
-        }
-        log.Debugf("Firewall allowed UDP packet for user %s to %s", user.ID, targetHost)
     }
+        
+    log.Debugf("Firewall allowed UDP packet for user %s to %s", user.ID, targetHost)
     
     // Log allowed access to syslog
     if u.syslogLogger != nil {

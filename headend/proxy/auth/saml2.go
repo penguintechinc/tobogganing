@@ -9,6 +9,7 @@ import (
 
     "github.com/gin-gonic/gin"
     "github.com/golang-jwt/jwt/v5"
+    log "github.com/sirupsen/logrus"
 )
 
 type SAML2Provider struct {
@@ -65,7 +66,11 @@ func (p *SAML2Provider) loadMetadata() error {
     if err != nil {
         return fmt.Errorf("failed to fetch IDP metadata: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        if err := resp.Body.Close(); err != nil {
+            log.Warnf("Failed to close response body: %v", err)
+        }
+    }()
     
     var metadata IDPMetadata
     if err := xml.NewDecoder(resp.Body).Decode(&metadata); err != nil {

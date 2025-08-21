@@ -243,6 +243,13 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 ### 📝 Current TODO Status
 *Last Updated: 2025-08-21*
 
+## 🔄 Ongoing Security & Quality Tasks
+
+1. 🚧 **Add input validation to all network-facing functions in Go code** - Ensure functions receiving data from outside via network connections perform basic input validation
+2. 🚧 **Clean up lint warnings in headend** - Fix remaining golangci-lint issues for clean CI/CD pipeline
+
+## ✅ Development Completion Status
+
 All initial development tasks have been completed! The SASEWaddle project now includes:
 
 **🎉 Version v1.1.0 Features Complete:**

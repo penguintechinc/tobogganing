@@ -16,7 +16,7 @@ package config
 import (
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "net/http"
     "os"
     "time"
@@ -152,14 +152,18 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
     if err != nil {
         return nil, fmt.Errorf("failed to fetch config: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        if err := resp.Body.Close(); err != nil {
+            log.Warnf("Failed to close response body: %v", err)
+        }
+    }()
     
     if resp.StatusCode != http.StatusOK {
-        body, _ := ioutil.ReadAll(resp.Body)
+        body, _ := io.ReadAll(resp.Body)
         return nil, fmt.Errorf("manager returned status %d: %s", resp.StatusCode, string(body))
     }
     
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
