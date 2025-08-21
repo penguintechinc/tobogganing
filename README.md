@@ -32,48 +32,90 @@
 - **Never Trust, Always Verify**: Every connection authenticated and authorized
 - **Certificate Management**: Automated certificate lifecycle management
 - **Multi-Factor Authentication**: Support for various authentication methods
+- **Advanced Firewall System**: Domain, IP, protocol, and port-based access control
+- **Real-time Access Testing**: Test access rules before deployment
 
 ### High Performance
 - **WireGuard VPN**: Modern, fast, and secure VPN protocol
 - **Concurrent Architecture**: Go-based headend with concurrent connection handling
 - **Async Python**: Manager service built with Python asyncio for high throughput
 - **Optimized Protocols**: Support for HTTP/HTTPS, TCP, and UDP traffic
+- **Dynamic Port Configuration**: Admin-configurable proxy listening ports
+- **PyDAL Database**: MySQL/PostgreSQL/SQLite with read replica support
 
 ### Enterprise Ready
-- **Multi-Platform**: Native clients for Mac, Windows, and Linux
+- **Multi-Platform**: Native clients for Mac, Windows, and Linux with system tray integration
 - **Cloud Native**: Kubernetes-ready with auto-scaling and monitoring
-- **Traffic Mirroring**: Integration with IDS/IPS systems (VXLAN/GRE/ERSPAN)
-- **Compliance**: Audit logging and compliance-ready features
+- **Traffic Mirroring**: Suricata IDS/IPS integration (VXLAN/GRE/ERSPAN)
+- **Compliance**: Syslog audit logging and compliance reporting
 - **High Availability**: Multi-datacenter orchestration with failover
+- **VRF & OSPF Support**: Enterprise network segmentation with FRR integration
+- **Database Backup System**: Local and S3-compatible storage with encryption
+
+### Advanced Management
+- **Web Management Portal**: Beautiful py4web interface with role-based access (Admin/Reporter)
+- **Real-time Analytics**: Operating system distribution, traffic monitoring, and performance metrics
+- **Interactive Dashboards**: Chart.js visualizations with hourly/daily aggregations
+- **Comprehensive API**: RESTful API with OpenAPI documentation
+- **Prometheus Metrics**: Built-in metrics with authenticated endpoints
+- **Health Monitoring**: Kubernetes-compatible health checks (/health, /healthz)
 
 ### Easy Deployment
-- **Infrastructure as Code**: Complete Terraform, Kubernetes, and Docker Compose configurations
-- **Multiple Deployment Options**: Kubernetes, Docker, cloud providers, or bare metal
-- **Automated CI/CD**: GitHub Actions for testing, building, and releasing
-- **Monitoring**: Built-in Prometheus metrics and Grafana dashboards
+- **Multi-Architecture Support**: ARM64 and AMD64 Docker images
+- **Cross-Platform Binaries**: Native builds for all major platforms including embedded devices
+- **Automated CI/CD**: Complete GitHub Actions workflows for building, testing, and releasing
+- **Infrastructure as Code**: Terraform, Kubernetes, and Docker Compose configurations
+- **Next.js Marketing Website**: Cloudflare Pages deployment with Workers
 
 ## 🏗️ Architecture
 
-SASEWaddle consists of three main components:
+SASEWaddle implements a comprehensive SASE architecture with three main components:
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Clients       │    │   Headend        │    │   Manager       │
-│                 │    │   Server         │    │   Service       │
-│ • Native Apps   │◄──►│ • WireGuard      │◄──►│ • Orchestration │
-│ • Docker        │    │ • Proxy          │    │ • Certificates  │
-│ • Multi-platform│    │ • Authentication │    │ • Web Interface │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           SASEWADDLE ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌──────────────┐        ┌──────────────┐        ┌──────────────┐    │
+│   │   CLIENTS    │        │   HEADEND    │        │   MANAGER    │    │
+│   │              │        │   SERVER     │        │   SERVICE    │    │
+│   │ • Native GUI │◄──────►│ • WireGuard  │◄──────►│ • Web Portal │    │
+│   │ • Docker     │        │ • Go Proxy   │        │ • REST API   │    │
+│   │ • Mobile     │        │ • Firewall   │        │ • PyDAL DB   │    │
+│   │ • Embedded   │        │ • IDS/IPS    │        │ • Metrics    │    │
+│   └──────────────┘        └──────────────┘        └──────────────┘    │
+│         ▲                        ▲                        ▲            │
+│         │                        │                        │            │
+│   ┌─────▼──────────────────────▼────────────────────────▼─────┐      │
+│   │               SUPPORTING INFRASTRUCTURE                     │      │
+│   │  • Redis Cache  • MySQL/PostgreSQL  • Prometheus/Grafana   │      │
+│   │  • Suricata IDS • FRR (VRF/OSPF)   • Syslog Server        │      │
+│   └─────────────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Manager Service (Python 3.12)
-Central orchestration with certificate management, client registration, and multi-datacenter coordination.
+- **Web Management Portal**: py4web-based interface with role-based access control
+- **Certificate Authority**: Automated X.509 certificate generation and lifecycle management
+- **Database Backend**: PyDAL with MySQL/PostgreSQL/SQLite and read replica support
+- **API Gateway**: RESTful API for client registration and configuration distribution
+- **Analytics Engine**: Real-time metrics collection and aggregation
+- **Backup System**: Local and S3-compatible storage with encryption
 
 ### Headend Server (Go 1.21)
-WireGuard termination point with multi-protocol proxy, traffic mirroring, and external IdP integration.
+- **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
+- **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
+- **Traffic Security**: Firewall rules with domain/IP/protocol/port filtering
+- **IDS/IPS Integration**: Traffic mirroring to Suricata via VXLAN/GRE/ERSPAN
+- **Authentication**: JWT validation and external IdP integration (SAML2/OAuth2)
+- **Network Routing**: VRF and OSPF support through FRR integration
 
 ### Client Applications
-Cross-platform native applications and Docker containers with automatic configuration and health monitoring.
+- **Native Desktop**: Go-based clients for Windows, macOS, and Linux with system tray
+- **Docker Container**: Containerized client for Kubernetes and Docker deployments
+- **Mobile Apps**: React Native applications for iOS and Android
+- **Embedded Support**: Lightweight clients for ARM, MIPS, and IoT devices
+- **Auto-Configuration**: Automatic certificate rotation and configuration updates
 
 ## 🚀 Quick Start
 

@@ -1,13 +1,15 @@
-# SASEWaddle Quick Start Guide
+# 🚀 SASEWaddle Quick Start Guide
 
-## Prerequisites
+> Get up and running with SASEWaddle in under 10 minutes!
 
-- Docker and Docker Compose
-- Go 1.21+ (for building from source)
-- Python 3.12+ (for Manager development)
-- Node.js 18+ (for website development)
+## 📋 Prerequisites
 
-## Quick Start with Docker Compose
+- **Docker & Docker Compose** (Latest version)
+- **Go 1.21+** (for building from source)
+- **Python 3.12+** (for Manager development)
+- **Node.js 18+** (for website development)
+
+## 🐳 Quick Start with Docker Compose
 
 ### 1. Clone the Repository
 
@@ -21,30 +23,87 @@ cd SASEWaddle
 Copy the example environment file and adjust settings:
 
 ```bash
-cp .env.example .env
-# Edit .env with your settings
+cp deploy/docker-compose/.env.example deploy/docker-compose/.env
+# Edit .env with your database passwords and secrets
 ```
 
-### 3. Start the Stack
+**Key Environment Variables:**
+```bash
+# Database Configuration
+DB_TYPE=mysql
+DB_ROOT_PASSWORD=secure_root_password
+DB_PASSWORD=secure_app_password
+
+# JWT & Security
+JWT_SECRET=your-super-secret-jwt-key
+METRICS_TOKEN=prometheus-scraping-token
+
+# Headend Configuration
+HEADEND_AUTH_TYPE=jwt
+TRAFFIC_MIRROR_ENABLED=true
+HEADEND_SYSLOG_ENABLED=true
+```
+
+### 3. Start the Complete Stack
 
 ```bash
-# Start all services
-docker-compose -f docker-compose.local.yml up -d
+cd deploy/docker-compose
+
+# Start all services (includes Suricata IDS, FRR, Redis)
+docker-compose -f docker-compose.yml up -d
 
 # Check status
-docker-compose -f docker-compose.local.yml ps
+docker-compose ps
 
 # View logs
-docker-compose -f docker-compose.local.yml logs -f
+docker-compose logs -f manager headend
 ```
 
 ### 4. Access Services
 
-- **Manager Portal**: http://localhost:8000
-  - Default admin credentials are shown in logs on first startup
+#### 🎛️ **Manager Web Portal**
+- **URL**: http://localhost:8000
+- **Features**: 
+  - User management with role-based access
+  - Real-time analytics dashboard
+  - Firewall rule configuration
+  - VRF and OSPF management
+  - Port configuration interface
+
+**Default Admin Account:**
+```
+Username: admin
+Password: (check container logs for generated password)
+```
+
+#### 📊 **Monitoring Stack**
 - **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000
-  - Default: admin/admin
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **SASEWaddle Metrics**: http://localhost:8000/metrics
+
+#### 🔍 **Security Monitoring**
+- **Suricata IDS Logs**: Available in container logs
+- **Syslog Server**: UDP port 514 (configurable)
+
+### 5. Initial Configuration
+
+#### Create Your First User
+1. Access the Manager Portal at http://localhost:8000
+2. Log in with admin credentials
+3. Navigate to "Users" → "Create User"
+4. Assign appropriate role (Admin/Reporter)
+
+#### Configure Firewall Rules
+1. Go to "Firewall" section
+2. Create domain rules: `*.yourcompany.com`
+3. Add protocol rules for specific services
+4. Test access with the built-in testing tool
+
+#### Set Up VRF Network Segmentation
+1. Navigate to "Network" → "VRF Management"
+2. Create VRF: `customer-a` with RD `65000:100`
+3. Configure OSPF areas and authentication
+4. Monitor OSPF neighbors in real-time
 
 ## Building from Source
 

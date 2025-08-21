@@ -212,9 +212,11 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - [x] Test Go builds for proxy and clients
 
 ### 📝 Current TODO Status
-*Last Updated: 2025-08-20*
+*Last Updated: 2025-08-21*
 
 All initial development tasks have been completed! The SASEWaddle project now includes:
+
+**🎉 Version v1.1.0 Features Complete:**
 
 1. ✅ **Manager Service** - Complete with PyDAL database, web portal, and API
 2. ✅ **Headend Proxy** - Go-based with firewall, syslog, and traffic mirroring
@@ -649,7 +651,7 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 - Follow consistent styling across all documentation files
 - Keep README.md in the root directory, but all other docs go in `docs/`
 
-## Current Active Tasks (Updated 2025-01-20)
+## Current Active Tasks (Updated 2025-08-21)
 1. ✅ **Implement Manager py4web web portal with role-based access**
 2. ✅ **Add Prometheus metrics endpoint to Manager service**  
 3. ✅ **Implement user authentication and role system (admin/reporter)**
@@ -660,10 +662,13 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 8. ✅ **Add comprehensive firewall system with domain, IP, protocol, and port control**
 9. ✅ **Configure headend to get firewall rules from manager with Redis caching and randomized refresh**
 10. ✅ **Add syslog logging for user resource access from headend (UDP only)**
-11. 📋 **Add screenshots and connectivity diagrams to Next.js website**
+11. ✅ **Add screenshots and connectivity diagrams to Next.js website**
 12. ✅ **Add FRR-based VRFs for IP space segmentation**
 13. ✅ **Implement OSPF routing across WireGuard tunnels**  
 14. ✅ **Create admin portal for VRF and OSPF configuration**
-15. 🚧 **Allow admin to specify what ports the go proxy listens on**
-16. 📋 **Migrate Manager to use PyDAL with MySQL as default and read replica support**
+15. ✅ **Allow admin to specify what ports the go proxy listens on**
+16. ✅ **Migrate Manager to use PyDAL with MySQL as default and read replica support**
+17. ✅ **Create multi-architecture Docker builds (ARM64/AMD64)**
+18. ✅ **Set up cross-platform Go binary compilation**
+19. ✅ **Create GitHub Actions CI/CD workflows**
 

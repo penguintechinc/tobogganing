@@ -959,3 +959,90 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
             logger.error("Get all port configs error", error=str(e))
             response.status = 500
             return {"error": "Failed to get port configurations"}
+    
+    # Web admin endpoints for port configuration
+    @action("api/web/ports/headend/<headend_id>", method=["GET"])
+    @action.uses(require_auth, "json")
+    async def web_get_headend_ports(headend_id):
+        """Get port configuration for a headend (web admin API)"""
+        try:
+            user = get_current_user()
+            if not user or user['role'] != 'admin':
+                response.status = 403
+                return {"error": "Admin access required"}
+            
+            config = await port_config_manager.get_headend_config(headend_id)
+            
+            if not config:
+                return {
+                    "headend_id": headend_id,
+                    "tcp_ranges": "8080-8090,9000",
+                    "udp_ranges": "5000-5100",
+                    "tcp_ranges_detail": [],
+                    "udp_ranges_detail": [],
+                }
+            
+            return {
+                "headend_id": config.headend_id,
+                "cluster_id": config.cluster_id,
+                "tcp_ranges": config.get_tcp_range_string(),
+                "udp_ranges": config.get_udp_range_string(),
+                "tcp_ranges_detail": [pr.to_dict() for pr in config.tcp_ranges],
+                "udp_ranges_detail": [pr.to_dict() for pr in config.udp_ranges],
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+            }
+        except Exception as e:
+            logger.error("Web get headend ports error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to get port configuration"}
+    
+    @action("api/web/ports/headend/<headend_id>", method=["POST"])
+    @action.uses(require_auth, "json")
+    async def web_update_headend_ports(headend_id):
+        """Update port configuration for a headend (web admin API)"""
+        try:
+            user = get_current_user()
+            if not user or user['role'] != 'admin':
+                response.status = 403
+                return {"error": "Admin access required"}
+            
+            data = await request.json()
+            tcp_ranges = data.get('tcp_ranges', '')
+            udp_ranges = data.get('udp_ranges', '')
+            cluster_id = data.get('cluster_id', f'cluster-{headend_id}')
+            
+            # Validate port ranges
+            tcp_parsed = port_config_manager.parse_port_ranges(tcp_ranges, PortProtocol.TCP)
+            udp_parsed = port_config_manager.parse_port_ranges(udp_ranges, PortProtocol.UDP)
+            
+            if not tcp_parsed and not udp_parsed:
+                response.status = 400
+                return {"error": "At least one port range must be specified"}
+            
+            # Update configuration
+            success = await port_config_manager.update_headend_config(
+                headend_id=headend_id,
+                cluster_id=cluster_id,
+                tcp_ranges=tcp_parsed,
+                udp_ranges=udp_parsed
+            )
+            
+            if not success:
+                response.status = 500
+                return {"error": "Failed to update port configuration"}
+            
+            logger.info("Port configuration updated", 
+                       headend_id=headend_id,
+                       tcp_ranges=tcp_ranges,
+                       udp_ranges=udp_ranges,
+                       admin_user=user['username'])
+            
+            return {"success": True, "message": "Port configuration updated"}
+            
+        except ValueError as e:
+            response.status = 400
+            return {"error": f"Invalid port range format: {str(e)}"}
+        except Exception as e:
+            logger.error("Web update headend ports error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to update port configuration"}

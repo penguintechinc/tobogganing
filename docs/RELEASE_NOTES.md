@@ -4,6 +4,47 @@ All notable changes to SASEWaddle will be documented in this file. New releases 
 
 ---
 
+## 🚀 v1.1.0 - "Enterprise Features" (2025-08-21)
+
+### 🎉 Major New Features
+
+**Advanced Management Portal**
+- 🎛️ **Dynamic Port Configuration** - Admin interface for configuring proxy listening ports
+- 🔥 **Enhanced Firewall System** - Domain, IP, protocol, and port-based access control with real-time testing
+- 🌐 **VRF & OSPF Support** - Enterprise network segmentation with FRR integration
+- 📊 **Real-Time Analytics Dashboard** - Interactive charts with Chart.js and historical data aggregation
+
+**Security & Monitoring**
+- 🚨 **Suricata IDS/IPS Integration** - Traffic mirroring with VXLAN/GRE/ERSPAN protocols
+- 📝 **Syslog Audit Logging** - UDP syslog integration for compliance and security monitoring
+- 🔒 **Advanced Authentication** - Enhanced JWT management and session security
+
+**Database & Infrastructure**
+- 🗄️ **PyDAL Database Layer** - MySQL/PostgreSQL/SQLite support with read replica capability
+- 💾 **Database Backup System** - Local and S3-compatible storage with encryption
+- 🔄 **Redis Caching** - Session management and firewall rule caching
+
+**Deployment & CI/CD**
+- 🐳 **Multi-Architecture Docker** - ARM64 and AMD64 builds with GitHub Actions
+- 🏗️ **Cross-Platform Binaries** - Native builds for Windows, macOS, Linux, and embedded devices
+- 🔄 **Complete CI/CD Pipeline** - Automated testing, building, and releasing
+
+### 📚 Documentation Updates
+
+- 📖 **Comprehensive API Documentation** - Complete REST API reference with examples
+- 🏗️ **Updated Architecture Guide** - Enhanced with all new components and features  
+- 🚀 **Improved Quick Start** - Step-by-step setup with all new services
+- ✨ **Feature Documentation** - Detailed guides for all enterprise features
+
+### 🔧 Technical Improvements
+
+- **Performance**: Enhanced async processing and database connection pooling
+- **Security**: Multi-layer authentication and real-time threat detection
+- **Scalability**: Read replica support and horizontal scaling capabilities
+- **Monitoring**: Prometheus metrics and Grafana dashboard integration
+
+---
+
 ## 🔒 v1.0.1 - "Security Patch" (2025-01-21)
 
 ### 🛡️ Critical Security Fixes
