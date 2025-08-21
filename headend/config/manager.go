@@ -227,14 +227,11 @@ func (cm *Manager) WatchConfig(refreshInterval time.Duration) {
         ticker := time.NewTicker(refreshInterval)
         defer ticker.Stop()
         
-        for {
-            select {
-            case <-ticker.C:
-                if _, err := cm.RefreshConfig(); err != nil {
-                    log.Errorf("Failed to refresh config: %v", err)
-                } else {
-                    log.Debug("Configuration refreshed successfully")
-                }
+        for range ticker.C {
+            if _, err := cm.RefreshConfig(); err != nil {
+                log.Errorf("Failed to refresh config: %v", err)
+            } else {
+                log.Debug("Configuration refreshed successfully")
             }
         }
     }()

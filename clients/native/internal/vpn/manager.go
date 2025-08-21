@@ -20,15 +20,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sasewaddle/clients/native/internal/client"
 	"github.com/sasewaddle/clients/native/internal/config"
-	"github.com/sasewaddle/clients/native/internal/tray"
 )
 
 // Manager handles WireGuard VPN connections and implements the tray.VPNManager interface
 type Manager struct {
 	config         *config.Config
 	isConnected    bool
-	currentStatus  tray.ConnectionStatus
+	currentStatus  client.ConnectionStatus
 	ctx            context.Context
 	cancel         context.CancelFunc
 	mutex          sync.RWMutex
@@ -95,19 +95,21 @@ func (m *Manager) Connect() error {
 	
 	// Update status
 	m.isConnected = true
-	m.currentStatus = tray.ConnectionStatus{
-		Connected:      true,
-		ServerName:     "SASEWaddle Server",
+	m.currentStatus = client.ConnectionStatus{
+		State:          "connected",
+		ClientID:       m.config.ClientName,
+		WireGuardIP:    m.getLocalIP(),
+		HeadendURL:     m.config.ManagerURL,
 		ConnectedSince: time.Now(),
-		LocalIP:        m.getLocalIP(),
-		ServerIP:       "10.200.0.1",
-		PublicKey:      "",
+		BytesReceived:  0,
+		BytesSent:      0,
+		LastHandshake:  time.Now(),
 	}
 	
 	// Start monitoring
 	m.startMonitoring()
 	
-	log.Printf("VPN connected successfully to %s", m.currentStatus.ServerName)
+	log.Printf("VPN connected successfully to %s", m.config.ManagerURL)
 	return nil
 }
 
@@ -132,8 +134,8 @@ func (m *Manager) Disconnect() error {
 	
 	// Update status
 	m.isConnected = false
-	m.currentStatus = tray.ConnectionStatus{
-		Connected: false,
+	m.currentStatus = client.ConnectionStatus{
+		State: "disconnected",
 	}
 	
 	log.Println("VPN disconnected successfully")
@@ -148,15 +150,15 @@ func (m *Manager) IsConnected() bool {
 }
 
 // GetStatus returns detailed connection status
-func (m *Manager) GetStatus() tray.ConnectionStatus {
+func (m *Manager) GetStatus() client.ConnectionStatus {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	
 	if m.isConnected {
 		// Update statistics if connected
 		stats := m.getInterfaceStatistics()
-		m.currentStatus.BytesSent = stats.BytesSent
-		m.currentStatus.BytesReceived = stats.BytesReceived
+		m.currentStatus.BytesSent = int64(stats.BytesSent)
+		m.currentStatus.BytesReceived = int64(stats.BytesReceived)
 		m.currentStatus.LastHandshake = stats.LastHandshake
 	}
 	
@@ -507,7 +509,7 @@ func (m *Manager) checkConnection() {
 		log.Printf("WireGuard interface %s not found, marking as disconnected", m.interfaceName)
 		m.mutex.Lock()
 		m.isConnected = false
-		m.currentStatus.Connected = false
+		m.currentStatus.State = "disconnected"
 		m.mutex.Unlock()
 		return
 	}

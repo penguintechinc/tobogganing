@@ -96,10 +96,11 @@ jobs:
         go mod download
     
     - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
         working-directory: headend
+        args: --timeout=5m --out-format=colored-line-number
     
     - name: Test with go test
       run: |
@@ -157,11 +158,11 @@ jobs:
         go mod download
     
     - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
         working-directory: clients/native
-        args: --build-tags=nogui
+        args: --build-tags=nogui --timeout=5m --out-format=colored-line-number
     
     - name: Test with go test
       run: |

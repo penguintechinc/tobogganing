@@ -71,7 +71,11 @@ func (wr *WireGuardRouter) routeToPeer(targetIP string, sourceConn net.Conn) err
 	if err != nil {
 		return fmt.Errorf("failed to connect to peer %s: %w", targetIP, err)
 	}
-	defer targetConn.Close()
+	defer func() {
+		if err := targetConn.Close(); err != nil {
+			log.Debugf("Error closing target connection: %v", err)
+		}
+	}()
 
 	// Mark this traffic as authenticated for iptables
 	if err := wr.markTrafficAuthenticated(sourceConn); err != nil {
@@ -94,7 +98,11 @@ func (wr *WireGuardRouter) routeToInternet(targetHost string, sourceConn net.Con
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", targetHost, err)
 	}
-	defer targetConn.Close()
+	defer func() {
+		if err := targetConn.Close(); err != nil {
+			log.Debugf("Error closing target connection: %v", err)
+		}
+	}()
 
 	// Mark this traffic as authenticated for iptables
 	if err := wr.markTrafficAuthenticated(sourceConn); err != nil {
@@ -148,7 +156,11 @@ func (wr *WireGuardRouter) markTrafficAuthenticated(conn net.Conn) error {
 		if err != nil {
 			return fmt.Errorf("failed to get connection file descriptor: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				log.Debugf("Error closing file descriptor: %v", err)
+			}
+		}()
 
 		// Use iptables to mark packets from this connection
 		// This is a simplified approach - in production, would use netlink sockets

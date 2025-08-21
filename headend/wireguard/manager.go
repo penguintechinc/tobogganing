@@ -295,7 +295,11 @@ func (m *Manager) fetchPeersFromManager() ([]Peer, error) {
     if err != nil {
         return nil, fmt.Errorf("failed to fetch peers: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        if err := resp.Body.Close(); err != nil {
+            log.Debugf("Error closing response body: %v", err)
+        }
+    }()
     
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("manager returned status %d", resp.StatusCode)
