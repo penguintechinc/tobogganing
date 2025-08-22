@@ -71,8 +71,9 @@ docker buildx build --platform linux/arm64,linux/amd64 \
 
 **Enhanced GitHub Actions**
 - **Linux Builds**: Architecture-specific Docker containers (Dockerfile.gui-amd64, Dockerfile.gui-arm64)
-- **macOS/Windows**: Added GUI compilation verification steps
-- **ARM64 Support**: Native ARM64 builds on all platforms
+- **macOS Builds**: Native runners (macos-13 for Intel, macos-latest for Apple Silicon)
+- **Windows Builds**: Added GUI compilation verification steps for both AMD64/ARM64
+- **ARM64 CGO Fix**: Eliminates assembly errors by using appropriate native runners
 - **Linting Integration**: Matches local development workflow
 
 **Complete Build Matrix**

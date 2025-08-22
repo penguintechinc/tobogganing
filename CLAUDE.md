@@ -264,6 +264,9 @@ CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build ./cmd/gu
 
 **Troubleshooting GUI Builds**
 - **"undefined: app.App" error**: Check type declaration uses `fyne.App` not `app.App`
+- **ARM64 CGO assembly errors**: Use native runners for each architecture instead of cross-compilation
+  - macOS: Use `macos-13` for Intel AMD64, `macos-latest` for Apple Silicon ARM64
+  - Linux: Use architecture-specific Docker containers with proper toolchains
 - **Missing GUI dependencies**: Use Docker container builds for consistent environment
 - **CGO compilation errors**: Ensure CGO_ENABLED=1 for GUI builds
 - **Cross-compilation issues**: Use Docker Buildx with QEMU for ARM builds

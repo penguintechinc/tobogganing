@@ -5,10 +5,12 @@
 # Key implementation notes:
 # - Linux builds use architecture-specific Docker containers for optimal builds
 # - AMD64: Dockerfile.gui-amd64 with native compilation
-# - ARM64: Dockerfile.gui-arm64 with cross-compilation toolchain
-# - macOS and Windows builds run natively with linting verification
+# - ARM64: Dockerfile.gui-arm64 with cross-compilation toolchain  
+# - macOS builds use native runners (macos-13 for Intel, macos-latest for Apple Silicon)
+# - Windows builds run natively with linting verification
 # - All builds include golangci-lint checks and GUI package compilation tests
 # - Fixed Fyne type declaration: uses fyne.App instead of app.App
+# - Eliminates ARM64 CGO assembly errors by using appropriate native runners
 
 name: GUI Client Build
 
@@ -27,14 +29,16 @@ on:
 jobs:
   build-macos-gui:
     name: Build macOS GUI Client
-    runs-on: macos-latest
     strategy:
       matrix:
         include:
           - goarch: amd64
             binary_name: sasewaddle-client-darwin-amd64
+            runner: macos-13  # Intel runner for AMD64
           - goarch: arm64
             binary_name: sasewaddle-client-darwin-arm64
+            runner: macos-latest  # Apple Silicon runner for ARM64
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout code
@@ -70,9 +74,9 @@ jobs:
       - name: Build GUI binary
         working-directory: ./clients/native
         env:
-          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
         run: |
+          # Build natively on the appropriate architecture runner
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../../dist/${{ matrix.binary_name }} \
             ./cmd/gui
