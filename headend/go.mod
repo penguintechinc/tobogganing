@@ -1,4 +1,4 @@
-module github.com/sasewaddle/headend
+module github.com/tobogganing/headend
 
 go 1.23.1
 

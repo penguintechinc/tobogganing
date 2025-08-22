@@ -1,6 +1,6 @@
-# 🚀 SASEWaddle Quick Start Guide
+# 🚀 Tobogganing Quick Start Guide
 
-> Get up and running with SASEWaddle in under 10 minutes!
+> Get up and running with Tobogganing in under 10 minutes!
 
 ## 📋 Prerequisites
 
@@ -14,8 +14,8 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/SASEWaddle.git
-cd SASEWaddle
+git clone https://github.com/yourusername/Tobogganing.git
+cd Tobogganing
 ```
 
 ### 2. Configure Environment
@@ -79,7 +79,7 @@ Password: (check container logs for generated password)
 #### 📊 **Monitoring Stack**
 - **Prometheus**: http://localhost:9090
 - **Grafana**: http://localhost:3000 (admin/admin)
-- **SASEWaddle Metrics**: http://localhost:8000/metrics
+- **Tobogganing Metrics**: http://localhost:8000/metrics
 
 #### 🔍 **Security Monitoring**
 - **Suricata IDS Logs**: Available in container logs
@@ -112,19 +112,19 @@ Password: (check container logs for generated password)
 #### 🖼️ **GUI Client with System Tray**
 ```bash
 # macOS (Universal - Intel + Apple Silicon)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
-chmod +x sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal -o tobogganing-client
+chmod +x tobogganing-client
 
 # Linux
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
-chmod +x sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o tobogganing-client
+chmod +x tobogganing-client
 
 # Windows
-# Download: sasewaddle-client-windows-amd64.exe
+# Download: tobogganing-client-windows-amd64.exe
 
 # Initialize and start GUI
-./sasewaddle-client init --manager-url http://localhost:8000 --api-key YOUR_API_KEY
-./sasewaddle-client gui
+./tobogganing-client init --manager-url http://localhost:8000 --api-key YOUR_API_KEY
+./tobogganing-client gui
 ```
 
 **GUI Features:**
@@ -139,23 +139,23 @@ chmod +x sasewaddle-client
 #### 🖥️ **Headless Client for Automation**
 ```bash
 # Download headless version
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
-chmod +x sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64-headless -o tobogganing-client
+chmod +x tobogganing-client
 
 # Configure and run as daemon
-./sasewaddle-client init --manager-url http://localhost:8000 --api-key YOUR_API_KEY
-./sasewaddle-client connect --daemon
+./tobogganing-client init --manager-url http://localhost:8000 --api-key YOUR_API_KEY
+./tobogganing-client connect --daemon
 ```
 
 #### 🐳 **Docker Container**
 ```bash
 docker run -d \
-  --name sasewaddle-client \
+  --name tobogganing-client \
   --cap-add NET_ADMIN \
   --device /dev/net/tun \
   -e MANAGER_URL=http://localhost:8000 \
   -e API_KEY=YOUR_API_KEY \
-  ghcr.io/penguintechinc/sasewaddle-client:latest
+  ghcr.io/penguintechinc/tobogganing-client:latest
 ```
 
 **📖 For detailed installation instructions, see [Client Installation Guide](./CLIENT_INSTALLATION.md)**
@@ -211,8 +211,8 @@ For Android development and testing:
 # Start Android emulator
 ./scripts/setup-android-studio.sh --start-emulator
 
-# Open SASEWaddle project in Android Studio
-~/open-sasewaddle-mobile.sh
+# Open Tobogganing project in Android Studio
+~/open-tobogganing-mobile.sh
 ```
 
 ## Testing
@@ -242,7 +242,7 @@ make test-python
 kubectl apply -f deploy/kubernetes/
 
 # Check deployment status
-kubectl get pods -n sasewaddle
+kubectl get pods -n tobogganing
 ```
 
 ### Production with Docker Swarm
@@ -252,7 +252,7 @@ kubectl get pods -n sasewaddle
 docker swarm init
 
 # Deploy stack
-docker stack deploy -c docker-compose.production.yml sasewaddle
+docker stack deploy -c docker-compose.production.yml tobogganing
 
 # Check services
 docker service ls
@@ -264,12 +264,12 @@ docker service ls
 
 ```bash
 docker run -d \
-  --name sasewaddle-client \
+  --name tobogganing-client \
   --cap-add NET_ADMIN \
   --device /dev/net/tun \
   -e MANAGER_URL=https://manager.example.com \
   -e API_KEY=your-api-key \
-  sasewaddle/client:latest
+  tobogganing/client:latest
 ```
 
 ### Native Client
@@ -278,11 +278,11 @@ docker run -d \
 
 ```bash
 # Download binary
-curl -L https://github.com/yourusername/SASEWaddle/releases/latest/download/sasewaddle-client-$(uname -s)-$(uname -m) -o sasewaddle-client
-chmod +x sasewaddle-client
+curl -L https://github.com/yourusername/Tobogganing/releases/latest/download/tobogganing-client-$(uname -s)-$(uname -m) -o tobogganing-client
+chmod +x tobogganing-client
 
 # Run with config
-./sasewaddle-client --config config.yaml
+./tobogganing-client --config config.yaml
 ```
 
 #### Windows
@@ -290,7 +290,7 @@ chmod +x sasewaddle-client
 ```powershell
 # Download from releases page
 # Run with administrator privileges
-sasewaddle-client.exe --config config.yaml
+tobogganing-client.exe --config config.yaml
 ```
 
 ### Mobile Client (Android)
@@ -317,9 +317,9 @@ Configuration via environment variables:
 DB_TYPE=mysql                    # mysql, postgresql, sqlite
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=sasewaddle
+DB_USER=tobogganing
 DB_PASSWORD=secure_password
-DB_NAME=sasewaddle
+DB_NAME=tobogganing
 
 # Redis
 REDIS_URL=redis://localhost:6379
@@ -409,7 +409,7 @@ environment:
 ## Getting Help
 
 - Documentation: [docs/](../docs/)
-- Issues: [GitHub Issues](https://github.com/yourusername/SASEWaddle/issues)
+- Issues: [GitHub Issues](https://github.com/yourusername/Tobogganing/issues)
 - Community: [Discord/Slack]
 
 ## Next Steps

@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sasewaddle/clients/native/internal/client"
-	"github.com/sasewaddle/clients/native/internal/config"
+	"github.com/tobogganing/clients/native/internal/client"
+	"github.com/tobogganing/clients/native/internal/config"
 )
 
 const (

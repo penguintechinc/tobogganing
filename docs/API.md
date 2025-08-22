@@ -1,4 +1,4 @@
-# 📚 SASEWaddle API Documentation
+# 📚 Tobogganing API Documentation
 
 > **Version**: 1.1.0  
 > **Last Updated**: 2025-08-21
@@ -561,10 +561,10 @@ X-RateLimit-Reset: 1692619200
 ## 📖 Additional Resources
 
 - [OpenAPI Specification](/api/docs)
-- [Postman Collection](https://github.com/your-org/sasewaddle/tree/main/docs/postman)
+- [Postman Collection](https://github.com/penguintechinc/tobogganing/tree/main/docs/postman)
 - [SDK Documentation](./SDK.md)
 - [Webhook Events](./WEBHOOKS.md)
 
 ---
 
-*For support and questions, contact the development team or open an issue on [GitHub](https://github.com/your-org/sasewaddle)*
+*For support and questions, contact the development team or open an issue on [GitHub](https://github.com/penguintechinc/tobogganing)*

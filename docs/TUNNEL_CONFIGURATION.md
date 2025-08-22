@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-SASEWaddle supports both **full tunnel** and **split tunnel** configurations for client connections. This allows administrators to control which traffic flows through the VPN tunnel and which traffic goes directly to the internet.
+Tobogganing supports both **full tunnel** and **split tunnel** configurations for client connections. This allows administrators to control which traffic flows through the VPN tunnel and which traffic goes directly to the internet.
 
 ## 🎯 Tunnel Modes
 
@@ -147,9 +147,9 @@ Response includes:
 ### Metrics
 
 Monitor tunnel usage through Prometheus metrics:
-- `sasewaddle_client_bytes_sent` - Bytes sent through tunnel
-- `sasewaddle_client_bytes_received` - Bytes received through tunnel
-- `sasewaddle_client_connection_uptime_seconds` - Tunnel uptime
+- `tobogganing_client_bytes_sent` - Bytes sent through tunnel
+- `tobogganing_client_bytes_received` - Bytes received through tunnel
+- `tobogganing_client_connection_uptime_seconds` - Tunnel uptime
 
 ## 🎭 Use Cases
 

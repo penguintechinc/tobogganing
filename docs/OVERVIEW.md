@@ -1,12 +1,12 @@
-# SASEWaddle Overview
+# Tobogganing Overview
 
-## 🐧 What is SASEWaddle?
+## 🛷 What is Tobogganing?
 
-SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. Built with modern technologies like WireGuard, Go, and Python, it provides enterprise-grade network security with the flexibility of open source.
+Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. Built with modern technologies like WireGuard, Go, and Python, it provides enterprise-grade network security with the flexibility of open source.
 
 ## 🏗️ System Architecture
 
-SASEWaddle consists of three main components working together to provide comprehensive secure access:
+Tobogganing consists of three main components working together to provide comprehensive secure access:
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -202,4 +202,4 @@ SASEWaddle consists of three main components working together to provide compreh
 - **Webhook Support**: Event-driven integrations
 - **SSO Integration**: SAML2/OAuth2 support
 
-SASEWaddle provides a complete, modern SASE solution that scales from small office deployments to enterprise-grade multi-region installations, all while maintaining the flexibility and transparency of open source software.
+Tobogganing provides a complete, modern SASE solution that scales from small office deployments to enterprise-grade multi-region installations, all while maintaining the flexibility and transparency of open source software.

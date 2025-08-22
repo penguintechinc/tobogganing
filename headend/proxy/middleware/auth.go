@@ -17,7 +17,7 @@ import (
     "github.com/gin-gonic/gin"
     log "github.com/sirupsen/logrus"
 
-    "github.com/sasewaddle/headend/proxy/auth"
+    "github.com/tobogganing/headend/proxy/auth"
 )
 
 // AuthRequired middleware validates both certificate and JWT/SSO authentication

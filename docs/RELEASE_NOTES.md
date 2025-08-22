@@ -1,6 +1,6 @@
-# 📋 SASEWaddle Release Notes
+# 📋 Tobogganing Release Notes
 
-All notable changes to SASEWaddle will be documented in this file. New releases will be prepended to this file.
+All notable changes to Tobogganing will be documented in this file. New releases will be prepended to this file.
 
 ---
 
@@ -61,7 +61,7 @@ type App struct {
 # Reliable GUI build via Docker
 docker build -f Dockerfile.gui-ubuntu -t gui-builder .
 docker create --name temp gui-builder
-docker cp temp:/src/sasewaddle-client-gui ./client-gui
+docker cp temp:/src/tobogganing-client-gui ./client-gui
 docker rm temp
 
 # Cross-platform build support
@@ -255,7 +255,7 @@ golang.org/x/text: v0.21.0 → v0.24.0
 ### 🚨 Important Security Notes
 
 **Immediate Action Required**
-- 🔴 **High Priority**: Update all SASEWaddle deployments to v1.0.1
+- 🔴 **High Priority**: Update all Tobogganing deployments to v1.0.1
 - 🔴 **CVE Impact**: Both patched vulnerabilities were rated HIGH severity
 - 🔴 **Supply Chain**: Enhanced dependency validation prevents future protestware risks
 
@@ -279,7 +279,7 @@ golang.org/x/text: v0.21.0 → v0.24.0
 cd headend && go build -o headend-proxy ./proxy
 
 # Native client (headless)  
-cd clients/native && go build -o sasewaddle-client-headless ./build-headless.go
+cd clients/native && go build -o tobogganing-client-headless ./build-headless.go
 
 # Website
 cd website && npm install && npm run build
@@ -360,7 +360,7 @@ cd website && npm install && npm run build
 - 🔌 **Embedded SDK**: Software development kit for integrating SASE into third-party products
 - 🛠️ **Integration Support**: APIs and documentation for product embedding
 - 📚 **Developer Resources**: Comprehensive guides for embedded integration
-- 🏢 **Partner Program**: Support for companies embedding SASEWaddle
+- 🏢 **Partner Program**: Support for companies embedding Tobogganing
 - 💰 **Enterprise Pricing**: Starting at $5/month/user with volume discounts
 - 📞 **Sales Contact**: sales@penguintech.io for embedded and enterprise solutions
 
@@ -530,22 +530,22 @@ cd website && npm install && npm run build
 
 ### 📞 Support & Community
 
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/your-org/sasewaddle/issues)
-- **💬 Community**: [Discord Server](https://discord.gg/sasewaddle)
-- **📚 Documentation**: [docs.sasewaddle.com](https://docs.sasewaddle.com)
-- **🔒 Security**: security@sasewaddle.com
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/penguintechinc/tobogganing/issues)
+- **💬 Community**: [Discord Server](https://discord.gg/tobogganing)
+- **📚 Documentation**: [docs.tobogganing.com](https://docs.tobogganing.com)
+- **🔒 Security**: security@tobogganing.com
 
 ---
 
 ## 🎯 What's Next?
 
-SASEWaddle v1.0.0 represents a complete, production-ready Open Source SASE solution. We're excited to see how the community adopts and contributes to the project!
+Tobogganing v1.0.0 represents a complete, production-ready Open Source SASE solution. We're excited to see how the community adopts and contributes to the project!
 
 **Get Started Today:**
-1. 📥 Download from [GitHub Releases](https://github.com/your-org/sasewaddle/releases)
-2. 📖 Follow the [Quick Start Guide](https://docs.sasewaddle.com/quickstart)
-3. 🚀 Deploy with our [example configurations](https://github.com/your-org/sasewaddle/tree/main/deploy)
-4. 💬 Join our [community discussions](https://github.com/your-org/sasewaddle/discussions)
+1. 📥 Download from [GitHub Releases](https://github.com/penguintechinc/tobogganing/releases)
+2. 📖 Follow the [Quick Start Guide](https://docs.tobogganing.com/quickstart)
+3. 🚀 Deploy with our [example configurations](https://github.com/penguintechinc/tobogganing/tree/main/deploy)
+4. 💬 Join our [community discussions](https://github.com/penguintechinc/tobogganing/discussions)
 
 ---
 

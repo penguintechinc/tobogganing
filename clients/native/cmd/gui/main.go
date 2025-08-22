@@ -23,9 +23,9 @@ import (
     "syscall"
 
     "github.com/spf13/cobra"
-    "github.com/sasewaddle/clients/native/internal/client"
-    "github.com/sasewaddle/clients/native/internal/config"
-    "github.com/sasewaddle/clients/native/internal/tray"
+    "github.com/tobogganing/clients/native/internal/client"
+    "github.com/tobogganing/clients/native/internal/config"
+    "github.com/tobogganing/clients/native/internal/tray"
 )
 
 const (

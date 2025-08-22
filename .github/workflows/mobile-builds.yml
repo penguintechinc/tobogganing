@@ -154,7 +154,7 @@ jobs:
         echo "export const BUILD_CONFIG = {
           VERSION: '$VERSION_NAME',
           BUILD_TYPE: '$BUILD_TYPE',
-          API_ENDPOINT: 'https://api-dev.sasewaddle.com'
+          API_ENDPOINT: 'https://api-dev.tobogganing.com'
         };" > src/config/build.ts
         
         # Build APK
@@ -176,7 +176,7 @@ jobs:
         echo "export const BUILD_CONFIG = {
           VERSION: '$VERSION_NAME',
           BUILD_TYPE: 'production',
-          API_ENDPOINT: 'https://api.sasewaddle.com'
+          API_ENDPOINT: 'https://api.tobogganing.com'
         };" > src/config/build.ts
         
         # Decode and save keystore
@@ -191,7 +191,7 @@ jobs:
       run: |
         cd clients/mobile/android/app/build/outputs/apk/debug
         # APK is already signed with debug key
-        mv app-debug.apk "sasewaddle-mobile-android-${{ steps.version.outputs.version }}-debug.apk"
+        mv app-debug.apk "tobogganing-mobile-android-${{ steps.version.outputs.version }}-debug.apk"
     
     - name: Upload Android APK artifact (Debug)
       if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
@@ -214,7 +214,7 @@ jobs:
       uses: r0adkll/upload-google-play@v1
       with:
         serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-        packageName: com.sasewaddle.mobile
+        packageName: com.tobogganing.mobile
         releaseFiles: clients/mobile/android/app/build/outputs/bundle/release/*.aab
         track: internal
         status: draft
@@ -288,28 +288,28 @@ jobs:
         echo "export const BUILD_CONFIG = {
           VERSION: '$VERSION_NAME',
           BUILD_TYPE: '$BUILD_TYPE',
-          API_ENDPOINT: 'https://api-dev.sasewaddle.com'
+          API_ENDPOINT: 'https://api-dev.tobogganing.com'
         };" > src/config/build.ts
         
         # Update iOS project version
         cd ios
-        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION_NAME" SASEWaddleMobile/Info.plist
-        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" SASEWaddleMobile/Info.plist
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION_NAME" TobogganingMobile/Info.plist
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" TobogganingMobile/Info.plist
     
     - name: Build iOS App (Debug)
       if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
       run: |
         cd clients/mobile/ios
-        xcodebuild -workspace SASEWaddleMobile.xcworkspace \
-          -scheme SASEWaddleMobile \
+        xcodebuild -workspace TobogganingMobile.xcworkspace \
+          -scheme TobogganingMobile \
           -configuration Debug \
           -destination 'generic/platform=iOS' \
-          -archivePath SASEWaddleMobile.xcarchive \
+          -archivePath TobogganingMobile.xcarchive \
           archive
         
         # Export IPA
         xcodebuild -exportArchive \
-          -archivePath SASEWaddleMobile.xcarchive \
+          -archivePath TobogganingMobile.xcarchive \
           -exportPath ./build \
           -exportOptionsPlist ExportOptions-Debug.plist
     
@@ -346,20 +346,20 @@ jobs:
         echo "export const BUILD_CONFIG = {
           VERSION: '$VERSION_NAME',
           BUILD_TYPE: 'production',
-          API_ENDPOINT: 'https://api.sasewaddle.com'
+          API_ENDPOINT: 'https://api.tobogganing.com'
         };" > src/config/build.ts
         
         cd ios
-        xcodebuild -workspace SASEWaddleMobile.xcworkspace \
-          -scheme SASEWaddleMobile \
+        xcodebuild -workspace TobogganingMobile.xcworkspace \
+          -scheme TobogganingMobile \
           -configuration Release \
           -destination 'generic/platform=iOS' \
-          -archivePath SASEWaddleMobile.xcarchive \
+          -archivePath TobogganingMobile.xcarchive \
           archive CODE_SIGN_STYLE=Manual
         
         # Export IPA for App Store
         xcodebuild -exportArchive \
-          -archivePath SASEWaddleMobile.xcarchive \
+          -archivePath TobogganingMobile.xcarchive \
           -exportPath ./build \
           -exportOptionsPlist ExportOptions-AppStore.plist
     
@@ -423,10 +423,10 @@ jobs:
         VERSION="${{ steps.version.outputs.version }}"
         
         # Package Android AAB
-        cp mobile-artifacts/android/*.aab "mobile-release-packages/sasewaddle-mobile-android-${VERSION}.aab"
+        cp mobile-artifacts/android/*.aab "mobile-release-packages/tobogganing-mobile-android-${VERSION}.aab"
         
         # Package iOS IPA
-        cp mobile-artifacts/ios/*.ipa "mobile-release-packages/sasewaddle-mobile-ios-${VERSION}.ipa"
+        cp mobile-artifacts/ios/*.ipa "mobile-release-packages/tobogganing-mobile-ios-${VERSION}.ipa"
         
         # Create checksums
         cd mobile-release-packages
@@ -435,12 +435,12 @@ jobs:
         
         # Create installation guide
         cat > mobile-release-packages/MOBILE_INSTALL.md << 'EOF'
-        # SASEWaddle Mobile App Installation Guide
+        # Tobogganing Mobile App Installation Guide
         
         ## Android Installation
         
         ### From Google Play Store (Recommended)
-        1. Search for "SASEWaddle" in the Google Play Store
+        1. Search for "Tobogganing" in the Google Play Store
         2. Install the app
         
         ### Manual Installation (APK Sideloading)
@@ -454,7 +454,7 @@ jobs:
         ## iOS Installation
         
         ### From App Store (Recommended)
-        1. Search for "SASEWaddle" in the App Store
+        1. Search for "Tobogganing" in the App Store
         2. Install the app
         
         ### Enterprise Installation (IPA)
@@ -466,7 +466,7 @@ jobs:
         ## Configuration
         
         After installation:
-        1. Open the SASEWaddle app
+        1. Open the Tobogganing app
         2. Enter your Manager URL (e.g., https://manager.company.com)
         3. Enter your API key or scan the QR code provided by your administrator
         4. Follow the setup wizard to complete configuration
@@ -483,7 +483,7 @@ jobs:
         ## Support
         
         For technical support, please contact your system administrator or visit:
-        https://github.com/your-org/sasewaddle/issues
+        https://github.com/your-org/tobogganing/issues
         EOF
     
     - name: Upload mobile release assets
@@ -498,10 +498,10 @@ jobs:
           ## 📱 Mobile Applications
           
           ### Android
-          - **Google Play AAB**: `sasewaddle-mobile-android-${{ steps.version.outputs.version }}.aab`
+          - **Google Play AAB**: `tobogganing-mobile-android-${{ steps.version.outputs.version }}.aab`
           
           ### iOS  
-          - **App Store IPA**: `sasewaddle-mobile-ios-${{ steps.version.outputs.version }}.ipa`
+          - **App Store IPA**: `tobogganing-mobile-ios-${{ steps.version.outputs.version }}.ipa`
           
           See `MOBILE_INSTALL.md` for detailed installation instructions.
 

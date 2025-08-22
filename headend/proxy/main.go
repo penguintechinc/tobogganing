@@ -32,12 +32,12 @@ import (
     log "github.com/sirupsen/logrus"
     "github.com/spf13/viper"
 
-    "github.com/sasewaddle/headend/proxy/auth"
-    "github.com/sasewaddle/headend/proxy/firewall"
-    "github.com/sasewaddle/headend/proxy/mirror"
-    "github.com/sasewaddle/headend/proxy/middleware"
-    "github.com/sasewaddle/headend/proxy/ports"
-    "github.com/sasewaddle/headend/proxy/syslog"
+    "github.com/tobogganing/headend/proxy/auth"
+    "github.com/tobogganing/headend/proxy/firewall"
+    "github.com/tobogganing/headend/proxy/mirror"
+    "github.com/tobogganing/headend/proxy/middleware"
+    "github.com/tobogganing/headend/proxy/ports"
+    "github.com/tobogganing/headend/proxy/syslog"
 )
 
 type ProxyServer struct {

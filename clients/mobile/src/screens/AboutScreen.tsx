@@ -26,29 +26,29 @@ const AboutScreen: React.FC = () => {
   const { config } = useConfig();
 
   const handleOpenWebsite = () => {
-    Linking.openURL('https://sasewaddle.com');
+    Linking.openURL('https://tobogganing.com');
   };
 
   const handleOpenGitHub = () => {
-    Linking.openURL('https://github.com/SASEWaddle/SASEWaddle');
+    Linking.openURL('https://github.com/penguintechinc/tobogganing');
   };
 
   const handleOpenLicense = () => {
-    Linking.openURL('https://github.com/SASEWaddle/SASEWaddle/blob/main/LICENSE');
+    Linking.openURL('https://github.com/penguintechinc/tobogganing/blob/main/LICENSE');
   };
 
   const handleOpenPrivacyPolicy = () => {
-    Linking.openURL('https://sasewaddle.com/privacy');
+    Linking.openURL('https://tobogganing.com/privacy');
   };
 
   const handleOpenTerms = () => {
-    Linking.openURL('https://sasewaddle.com/terms');
+    Linking.openURL('https://tobogganing.com/terms');
   };
 
   const handleSendFeedback = () => {
-    const subject = `SASEWaddle Mobile App Feedback (v${APP_VERSION})`;
-    const body = `Please share your feedback about the SASEWaddle mobile app:\n\n`;
-    Linking.openURL(`mailto:feedback@sasewaddle.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+    const subject = `Tobogganing Mobile App Feedback (v${APP_VERSION})`;
+    const body = `Please share your feedback about the Tobogganing mobile app:\n\n`;
+    Linking.openURL(`mailto:feedback@tobogganing.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
   const styles = createStyles(colors);
@@ -64,7 +64,7 @@ const AboutScreen: React.FC = () => {
             </View>
           </View>
           
-          <Text style={styles.appName}>SASEWaddle</Text>
+          <Text style={styles.appName}>Tobogganing</Text>
           <Text style={styles.appTagline}>Open Source SASE Solution</Text>
           <Text style={styles.appVersion}>Version {APP_VERSION} (Build {BUILD_NUMBER})</Text>
         </View>
@@ -73,7 +73,7 @@ const AboutScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <Text style={styles.description}>
-            SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implementing 
+            Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing 
             Zero Trust Network Architecture (ZTNA) principles. This mobile client provides secure 
             VPN connectivity with the same functionality as our desktop clients.
           </Text>
@@ -217,7 +217,7 @@ const AboutScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Credits</Text>
           <Text style={styles.creditsText}>
-            SASEWaddle is built with open source technologies including WireGuard, 
+            Tobogganing is built with open source technologies including WireGuard, 
             React Native, and many other amazing projects. Special thanks to the 
             WireGuard team for creating such an excellent VPN protocol.
           </Text>
@@ -226,7 +226,7 @@ const AboutScreen: React.FC = () => {
         {/* Copyright */}
         <View style={styles.footer}>
           <Text style={styles.copyright}>
-            © 2024 SASEWaddle Contributors
+            © 2024 Tobogganing Contributors
           </Text>
           <Text style={styles.copyrightSub}>
             Licensed under Open Source License

@@ -130,11 +130,11 @@ const SettingsScreen: React.FC = () => {
   };
 
   const handleOpenSupport = () => {
-    Linking.openURL('https://github.com/SASEWaddle/SASEWaddle/issues');
+    Linking.openURL('https://github.com/penguintechinc/tobogganing/issues');
   };
 
   const handleOpenDocumentation = () => {
-    Linking.openURL('https://sasewaddle.com/docs');
+    Linking.openURL('https://tobogganing.com/docs');
   };
 
   const styles = createStyles(colors);

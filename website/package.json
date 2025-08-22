@@ -1,7 +1,7 @@
 {
-  "name": "sasewaddle-website",
+  "name": "tobogganing-website",
   "version": "1.1.2",
-  "description": "SASEWaddle Marketing Website and Documentation Portal",
+  "description": "Tobogganing Marketing Website and Documentation Portal",
   "private": true,
   "scripts": {
     "dev": "next dev",

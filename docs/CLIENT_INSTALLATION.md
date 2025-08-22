@@ -1,6 +1,6 @@
-# 🖥️ SASEWaddle Client Installation Guide
+# 🖥️ Tobogganing Client Installation Guide
 
-> **Complete guide for installing and configuring SASEWaddle clients across all platforms**
+> **Complete guide for installing and configuring Tobogganing clients across all platforms**
 
 ## 📋 Table of Contents
 
@@ -16,19 +16,19 @@
 
 ## 🎯 Client Types
 
-SASEWaddle offers two distinct client types optimized for different use cases:
+Tobogganing offers two distinct client types optimized for different use cases:
 
 ### 🖼️ **Desktop GUI Clients**
 **Perfect for end users who want the best experience**
 
 | Platform | Binary Name | Features |
 |----------|-------------|----------|
-| **macOS Universal** | `sasewaddle-client-darwin-universal` | Intel + Apple Silicon |
-| **macOS Intel** | `sasewaddle-client-darwin-amd64` | Intel Macs |
-| **macOS Apple Silicon** | `sasewaddle-client-darwin-arm64` | M1/M2/M3 Macs |
-| **Linux AMD64** | `sasewaddle-client-linux-amd64` | Desktop Linux |
-| **Linux ARM64** | `sasewaddle-client-linux-arm64` | ARM64 Linux |
-| **Windows** | `sasewaddle-client-windows-amd64.exe` | Windows 10/11 |
+| **macOS Universal** | `tobogganing-client-darwin-universal` | Intel + Apple Silicon |
+| **macOS Intel** | `tobogganing-client-darwin-amd64` | Intel Macs |
+| **macOS Apple Silicon** | `tobogganing-client-darwin-arm64` | M1/M2/M3 Macs |
+| **Linux AMD64** | `tobogganing-client-linux-amd64` | Desktop Linux |
+| **Linux ARM64** | `tobogganing-client-linux-arm64` | ARM64 Linux |
+| **Windows** | `tobogganing-client-windows-amd64.exe` | Windows 10/11 |
 
 **GUI Features:**
 - ✅ **System Tray Integration** - Native tray icon on all platforms
@@ -45,10 +45,10 @@ SASEWaddle offers two distinct client types optimized for different use cases:
 | Platform | Binary Name | Use Case |
 |----------|-------------|----------|
 | **All Desktop Platforms** | `*-headless` variants | Server deployments |
-| **Linux ARM v7** | `sasewaddle-client-linux-armv7-headless` | Raspberry Pi, embedded |
-| **Linux ARM v6** | `sasewaddle-client-linux-armv6-headless` | Older ARM devices |
-| **Linux MIPS** | `sasewaddle-client-linux-mips-headless` | Router firmware |
-| **Linux MIPSLE** | `sasewaddle-client-linux-mipsle-headless` | Little-endian MIPS |
+| **Linux ARM v7** | `tobogganing-client-linux-armv7-headless` | Raspberry Pi, embedded |
+| **Linux ARM v6** | `tobogganing-client-linux-armv6-headless` | Older ARM devices |
+| **Linux MIPS** | `tobogganing-client-linux-mips-headless` | Router firmware |
+| **Linux MIPSLE** | `tobogganing-client-linux-mipsle-headless` | Little-endian MIPS |
 
 **Headless Features:**
 - ✅ **CLI Interface** - Command-line only, no GUI dependencies
@@ -67,23 +67,23 @@ SASEWaddle offers two distinct client types optimized for different use cases:
 #### Quick Install
 ```bash
 # Install GUI version with system tray
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-gui.sh | bash
 ```
 
 #### Manual Install
 ```bash
 # Universal Binary (recommended - works on Intel + Apple Silicon)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o /usr/local/bin/sasewaddle-client
-chmod +x /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal -o /usr/local/bin/tobogganing-client
+chmod +x /usr/local/bin/tobogganing-client
 
 # Or download specific architecture
 # Intel Macs
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-amd64 -o /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-amd64 -o /usr/local/bin/tobogganing-client
 
 # Apple Silicon Macs (M1/M2/M3)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-arm64 -o /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-arm64 -o /usr/local/bin/tobogganing-client
 
-chmod +x /usr/local/bin/sasewaddle-client
+chmod +x /usr/local/bin/tobogganing-client
 ```
 
 #### macOS App Bundle (Future)
@@ -92,7 +92,7 @@ chmod +x /usr/local/bin/sasewaddle-client
 # Coming in v1.2.0
 ```
 
-### 🐧 Linux Installation
+### 🛷 Linux Installation
 
 #### Ubuntu/Debian
 ```bash
@@ -100,13 +100,13 @@ chmod +x /usr/local/bin/sasewaddle-client
 sudo apt-get update
 sudo apt-get install libayatana-appindicator3-1 libgtk-3-0
 
-# Install SASEWaddle GUI client
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o /usr/local/bin/sasewaddle-client
-sudo chmod +x /usr/local/bin/sasewaddle-client
+# Install Tobogganing GUI client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o /usr/local/bin/tobogganing-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 
 # For ARM64 systems
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-arm64 -o /usr/local/bin/sasewaddle-client
-sudo chmod +x /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-arm64 -o /usr/local/bin/tobogganing-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 ```
 
 #### RHEL/CentOS/Fedora
@@ -114,9 +114,9 @@ sudo chmod +x /usr/local/bin/sasewaddle-client
 # Install GUI dependencies
 sudo dnf install libayatana-appindicator-gtk3 gtk3
 
-# Install SASEWaddle GUI client
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o /usr/local/bin/sasewaddle-client
-sudo chmod +x /usr/local/bin/sasewaddle-client
+# Install Tobogganing GUI client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o /usr/local/bin/tobogganing-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 ```
 
 #### Arch Linux
@@ -124,9 +124,9 @@ sudo chmod +x /usr/local/bin/sasewaddle-client
 # Install GUI dependencies
 sudo pacman -S libayatana-appindicator gtk3
 
-# Install SASEWaddle GUI client
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o /usr/local/bin/sasewaddle-client
-sudo chmod +x /usr/local/bin/sasewaddle-client
+# Install Tobogganing GUI client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o /usr/local/bin/tobogganing-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 ```
 
 ### 🪟 Windows Installation
@@ -134,10 +134,10 @@ sudo chmod +x /usr/local/bin/sasewaddle-client
 #### Manual Install
 ```powershell
 # Download Windows GUI client
-Invoke-WebRequest -Uri "https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64.exe" -OutFile "C:\Program Files\SASEWaddle\sasewaddle-client.exe"
+Invoke-WebRequest -Uri "https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-windows-amd64.exe" -OutFile "C:\Program Files\Tobogganing\tobogganing-client.exe"
 
 # Add to PATH
-$env:PATH += ";C:\Program Files\SASEWaddle"
+$env:PATH += ";C:\Program Files\Tobogganing"
 ```
 
 #### Windows Installer (Future)
@@ -156,25 +156,25 @@ $env:PATH += ";C:\Program Files\SASEWaddle"
 ```bash
 # Download headless version for your architecture
 # AMD64 (most common)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o /usr/local/bin/sasewaddle-client
-sudo chmod +x /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64-headless -o /usr/local/bin/tobogganing-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 
 # ARM64 servers
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-arm64-headless -o /usr/local/bin/sasewaddle-client
-sudo chmod +x /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-arm64-headless -o /usr/local/bin/tobogganing-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 ```
 
 #### macOS Servers
 ```bash
 # Headless version for macOS servers
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal-headless -o /usr/local/bin/sasewaddle-client
-chmod +x /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal-headless -o /usr/local/bin/tobogganing-client
+chmod +x /usr/local/bin/tobogganing-client
 ```
 
 #### Windows Servers
 ```powershell
 # Headless version for Windows servers
-Invoke-WebRequest -Uri "https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64-headless.exe" -OutFile "C:\Program Files\SASEWaddle\sasewaddle-client.exe"
+Invoke-WebRequest -Uri "https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-windows-amd64-headless.exe" -OutFile "C:\Program Files\Tobogganing\tobogganing-client.exe"
 ```
 
 ### Embedded Systems & IoT
@@ -182,23 +182,23 @@ Invoke-WebRequest -Uri "https://github.com/penguintechinc/sasewaddle/releases/la
 #### Raspberry Pi
 ```bash
 # Raspberry Pi 4/5 (ARM v7)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-armv7-headless -o /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-armv7-headless -o /usr/local/bin/tobogganing-client
 
 # Raspberry Pi Zero/1 (ARM v6)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-armv6-headless -o /usr/local/bin/sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-armv6-headless -o /usr/local/bin/tobogganing-client
 
-sudo chmod +x /usr/local/bin/sasewaddle-client
+sudo chmod +x /usr/local/bin/tobogganing-client
 ```
 
 #### Router Firmware
 ```bash
 # MIPS routers (OpenWrt, DD-WRT)
-wget https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-mips-headless -O /usr/bin/sasewaddle-client
+wget https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-mips-headless -O /usr/bin/tobogganing-client
 
 # Little-endian MIPS
-wget https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-mipsle-headless -O /usr/bin/sasewaddle-client
+wget https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-mipsle-headless -O /usr/bin/tobogganing-client
 
-chmod +x /usr/bin/sasewaddle-client
+chmod +x /usr/bin/tobogganing-client
 ```
 
 ---
@@ -209,16 +209,16 @@ chmod +x /usr/bin/sasewaddle-client
 
 ```bash
 # Pull official image
-docker pull ghcr.io/penguintechinc/sasewaddle-client:latest
+docker pull ghcr.io/penguintechinc/tobogganing-client:latest
 
 # Run with configuration
 docker run -d \
-  --name sasewaddle-client \
+  --name tobogganing-client \
   --cap-add NET_ADMIN \
   --device /dev/net/tun \
   -e MANAGER_URL=https://manager.example.com \
   -e API_KEY=your-api-key \
-  ghcr.io/penguintechinc/sasewaddle-client:latest
+  ghcr.io/penguintechinc/tobogganing-client:latest
 ```
 
 ### Custom Dockerfile
@@ -230,8 +230,8 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates iptables
 
 # Copy headless binary
-COPY sasewaddle-client-linux-amd64-headless /usr/bin/sasewaddle-client
-RUN chmod +x /usr/bin/sasewaddle-client
+COPY tobogganing-client-linux-amd64-headless /usr/bin/tobogganing-client
+RUN chmod +x /usr/bin/tobogganing-client
 
 # Configuration
 ENV MANAGER_URL=""
@@ -240,9 +240,9 @@ ENV LOG_LEVEL="info"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD /usr/bin/sasewaddle-client status || exit 1
+  CMD /usr/bin/tobogganing-client status || exit 1
 
-ENTRYPOINT ["/usr/bin/sasewaddle-client"]
+ENTRYPOINT ["/usr/bin/tobogganing-client"]
 CMD ["connect", "--daemon"]
 ```
 
@@ -251,9 +251,9 @@ CMD ["connect", "--daemon"]
 ```yaml
 version: '3.8'
 services:
-  sasewaddle-client:
-    image: ghcr.io/penguintechinc/sasewaddle-client:latest
-    container_name: sasewaddle-client
+  tobogganing-client:
+    image: ghcr.io/penguintechinc/tobogganing-client:latest
+    container_name: tobogganing-client
     cap_add:
       - NET_ADMIN
     devices:
@@ -264,15 +264,15 @@ services:
       - LOG_LEVEL=info
     restart: unless-stopped
     networks:
-      - sasewaddle
+      - tobogganing
     volumes:
-      - sasewaddle-config:/etc/sasewaddle
+      - tobogganing-config:/etc/tobogganing
 
 volumes:
-  sasewaddle-config:
+  tobogganing-config:
 
 networks:
-  sasewaddle:
+  tobogganing:
     external: true
 ```
 
@@ -284,7 +284,7 @@ networks:
 
 ```bash
 # Initialize client configuration
-sasewaddle-client init \
+tobogganing-client init \
   --manager-url https://manager.example.com:8000 \
   --api-key YOUR_TEMPORARY_API_KEY \
   --auto-update \
@@ -294,11 +294,11 @@ sasewaddle-client init \
 ### Configuration File
 
 The client creates a configuration file at:
-- **Linux/macOS**: `~/.sasewaddle/config.yaml`
-- **Windows**: `%APPDATA%\SASEWaddle\config.yaml`
+- **Linux/macOS**: `~/.tobogganing/config.yaml`
+- **Windows**: `%APPDATA%\Tobogganing\config.yaml`
 
 ```yaml
-# ~/.sasewaddle/config.yaml
+# ~/.tobogganing/config.yaml
 manager:
   url: "https://manager.example.com:8000"
   api_key: "your-api-key"
@@ -312,7 +312,7 @@ client:
   system_tray: true  # GUI builds only
 
 wireguard:
-  interface: "wg-sasewaddle"
+  interface: "wg-tobogganing"
   dns: ["1.1.1.1", "8.8.8.8"]
   mtu: 1420
 
@@ -337,7 +337,7 @@ export SASEWADDLE_AUTO_UPDATE="true"
 
 # Headless-specific
 export SASEWADDLE_DAEMON_MODE="true"
-export SASEWADDLE_PID_FILE="/var/run/sasewaddle.pid"
+export SASEWADDLE_PID_FILE="/var/run/tobogganing.pid"
 ```
 
 ---
@@ -348,16 +348,16 @@ export SASEWADDLE_PID_FILE="/var/run/sasewaddle.pid"
 
 ```bash
 # Start GUI with system tray
-sasewaddle-client gui
+tobogganing-client gui
 
 # Start minimized to system tray
-sasewaddle-client gui --minimize
+tobogganing-client gui --minimize
 
 # Start GUI and auto-connect
-sasewaddle-client gui --auto-connect
+tobogganing-client gui --auto-connect
 
 # Force configuration update
-sasewaddle-client update-config
+tobogganing-client update-config
 ```
 
 **System Tray Operations:**
@@ -369,44 +369,44 @@ sasewaddle-client update-config
 
 ```bash
 # Connect and run as daemon
-sasewaddle-client connect --daemon
+tobogganing-client connect --daemon
 
 # Connect in foreground
-sasewaddle-client connect
+tobogganing-client connect
 
 # Check connection status
-sasewaddle-client status
+tobogganing-client status
 
 # View detailed statistics
-sasewaddle-client stats
+tobogganing-client stats
 
 # Disconnect
-sasewaddle-client disconnect
+tobogganing-client disconnect
 
 # Update configuration
-sasewaddle-client update-config
+tobogganing-client update-config
 
 # View logs
-sasewaddle-client logs --tail=100
+tobogganing-client logs --tail=100
 ```
 
 ### Systemd Service
 
 ```ini
-# /etc/systemd/system/sasewaddle.service
+# /etc/systemd/system/tobogganing.service
 [Unit]
-Description=SASEWaddle Client
+Description=Tobogganing Client
 After=network.target
 Wants=network.target
 
 [Service]
 Type=forking
-ExecStart=/usr/local/bin/sasewaddle-client connect --daemon
-ExecStop=/usr/local/bin/sasewaddle-client disconnect
+ExecStart=/usr/local/bin/tobogganing-client connect --daemon
+ExecStop=/usr/local/bin/tobogganing-client disconnect
 Restart=always
 RestartSec=5
-User=sasewaddle
-Group=sasewaddle
+User=tobogganing
+Group=tobogganing
 
 [Install]
 WantedBy=multi-user.target
@@ -414,9 +414,9 @@ WantedBy=multi-user.target
 
 ```bash
 # Enable and start service
-sudo systemctl enable sasewaddle
-sudo systemctl start sasewaddle
-sudo systemctl status sasewaddle
+sudo systemctl enable tobogganing
+sudo systemctl start tobogganing
+sudo systemctl status tobogganing
 ```
 
 ---
@@ -443,13 +443,13 @@ sudo apt-get install gnome-shell-extension-appindicator
 sw_vers
 
 # Ensure binary has proper permissions
-codesign -v /usr/local/bin/sasewaddle-client
+codesign -v /usr/local/bin/tobogganing-client
 ```
 
 #### Windows System Tray Issues
 ```powershell
 # Run as administrator if needed
-Start-Process sasewaddle-client -Verb RunAs
+Start-Process tobogganing-client -Verb RunAs
 
 # Check Windows version compatibility
 Get-ComputerInfo | Select WindowsProductName, WindowsVersion
@@ -466,7 +466,7 @@ curl -k https://manager.example.com:8000/health
 nslookup manager.example.com
 
 # Test with debug logging
-SASEWADDLE_LOG_LEVEL=debug sasewaddle-client connect
+SASEWADDLE_LOG_LEVEL=debug tobogganing-client connect
 ```
 
 #### WireGuard Interface Issues
@@ -475,7 +475,7 @@ SASEWADDLE_LOG_LEVEL=debug sasewaddle-client connect
 sudo wg show
 
 # Check interface configuration
-ip addr show wg-sasewaddle
+ip addr show wg-tobogganing
 
 # Check routing table
 ip route show
@@ -484,13 +484,13 @@ ip route show
 #### Certificate Issues
 ```bash
 # Check certificate validity
-sasewaddle-client cert-info
+tobogganing-client cert-info
 
 # Force certificate renewal
-sasewaddle-client renew-cert
+tobogganing-client renew-cert
 
 # Reset client configuration
-sasewaddle-client reset --confirm
+tobogganing-client reset --confirm
 ```
 
 ### Performance Issues
@@ -498,13 +498,13 @@ sasewaddle-client reset --confirm
 #### High CPU Usage
 ```bash
 # Check process stats
-top -p $(pgrep sasewaddle-client)
+top -p $(pgrep tobogganing-client)
 
 # Reduce log level
 export SASEWADDLE_LOG_LEVEL=warning
 
 # Check for update loops
-sasewaddle-client logs | grep "update"
+tobogganing-client logs | grep "update"
 ```
 
 #### Network Performance
@@ -516,7 +516,7 @@ speedtest-cli
 ping -M do -s 1472 8.8.8.8
 
 # Adjust MTU if needed
-sasewaddle-client config set wireguard.mtu 1380
+tobogganing-client config set wireguard.mtu 1380
 ```
 
 ---
@@ -527,8 +527,8 @@ sasewaddle-client config set wireguard.mtu 1380
 - [API Documentation](./API.md)
 - [Feature Documentation](./FEATURES.md)
 - [Troubleshooting Guide](./TROUBLESHOOTING.md)
-- [GitHub Releases](https://github.com/penguintechinc/sasewaddle/releases)
+- [GitHub Releases](https://github.com/penguintechinc/tobogganing/releases)
 
 ---
 
-**Need Help?** Open an issue on [GitHub](https://github.com/penguintechinc/sasewaddle/issues) or join our [Discord](https://discord.gg/sasewaddle)
+**Need Help?** Open an issue on [GitHub](https://github.com/penguintechinc/tobogganing/issues) or join our [Discord](https://discord.gg/tobogganing)

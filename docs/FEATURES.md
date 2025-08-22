@@ -1,4 +1,4 @@
-# 🚀 SASEWaddle Features Documentation
+# 🚀 Tobogganing Features Documentation
 
 > **Last Updated**: 2025-08-21  
 > **Version**: 1.1.0
@@ -133,7 +133,7 @@ Administrators can configure proxy listening ports through the web interface:
 
 ## 🖥️ Client Applications
 
-SASEWaddle provides two distinct client types optimized for different deployment scenarios and user experiences:
+Tobogganing provides two distinct client types optimized for different deployment scenarios and user experiences:
 
 ### 🖼️ **Desktop GUI Clients**
 **Perfect for end users who want the best experience**
@@ -141,12 +141,12 @@ SASEWaddle provides two distinct client types optimized for different deployment
 #### Supported Platforms
 | Platform | Binary Name | Features |
 |----------|-------------|----------|
-| **macOS Universal** | `sasewaddle-client-darwin-universal` | Intel + Apple Silicon support |
-| **macOS Intel** | `sasewaddle-client-darwin-amd64` | Optimized for Intel Macs |
-| **macOS Apple Silicon** | `sasewaddle-client-darwin-arm64` | M1/M2/M3 native performance |
-| **Linux AMD64** | `sasewaddle-client-linux-amd64` | Desktop Linux distributions |
-| **Linux ARM64** | `sasewaddle-client-linux-arm64` | ARM64 Linux systems |
-| **Windows** | `sasewaddle-client-windows-amd64.exe` | Windows 10/11 support |
+| **macOS Universal** | `tobogganing-client-darwin-universal` | Intel + Apple Silicon support |
+| **macOS Intel** | `tobogganing-client-darwin-amd64` | Optimized for Intel Macs |
+| **macOS Apple Silicon** | `tobogganing-client-darwin-arm64` | M1/M2/M3 native performance |
+| **Linux AMD64** | `tobogganing-client-linux-amd64` | Desktop Linux distributions |
+| **Linux ARM64** | `tobogganing-client-linux-arm64` | ARM64 Linux systems |
+| **Windows** | `tobogganing-client-windows-amd64.exe` | Windows 10/11 support |
 
 #### System Tray Integration Features
 - ✅ **Native System Tray Icon** - Platform-specific tray integration
@@ -160,14 +160,14 @@ SASEWaddle provides two distinct client types optimized for different deployment
 #### Installation & Usage
 ```bash
 # Quick GUI installation
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-gui.sh | bash
 
 # Manual installation
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
-chmod +x sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal -o tobogganing-client
+chmod +x tobogganing-client
 
 # Start with system tray
-./sasewaddle-client gui --auto-connect
+./tobogganing-client gui --auto-connect
 ```
 
 ### 🖥️ **Headless Clients**
@@ -177,10 +177,10 @@ chmod +x sasewaddle-client
 | Platform | Binary Name | Use Case |
 |----------|-------------|----------|
 | **Desktop Platforms** | `*-headless` variants | Server deployments |
-| **Linux ARM v7** | `sasewaddle-client-linux-armv7-headless` | Raspberry Pi 4/5 |
-| **Linux ARM v6** | `sasewaddle-client-linux-armv6-headless` | Raspberry Pi Zero/1 |
-| **Linux MIPS** | `sasewaddle-client-linux-mips-headless` | Router firmware |
-| **Linux MIPSLE** | `sasewaddle-client-linux-mipsle-headless` | Little-endian MIPS |
+| **Linux ARM v7** | `tobogganing-client-linux-armv7-headless` | Raspberry Pi 4/5 |
+| **Linux ARM v6** | `tobogganing-client-linux-armv6-headless` | Raspberry Pi Zero/1 |
+| **Linux MIPS** | `tobogganing-client-linux-mips-headless` | Router firmware |
+| **Linux MIPSLE** | `tobogganing-client-linux-mipsle-headless` | Little-endian MIPS |
 
 #### Command-Line Features
 - ✅ **CLI Interface Only** - No GUI dependencies required
@@ -193,13 +193,13 @@ chmod +x sasewaddle-client
 #### Installation & Usage
 ```bash
 # Quick headless installation
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-headless.sh | bash
 
 # Connect as daemon
-./sasewaddle-client connect --daemon
+./tobogganing-client connect --daemon
 
 # Check status
-./sasewaddle-client status
+./tobogganing-client status
 ```
 
 ### 🐳 **Docker Container Client**
@@ -209,12 +209,12 @@ curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/
 ```bash
 # Official Docker image
 docker run -d \
-  --name sasewaddle-client \
+  --name tobogganing-client \
   --cap-add NET_ADMIN \
   --device /dev/net/tun \
   -e MANAGER_URL=https://manager.example.com \
   -e API_KEY=your-api-key \
-  ghcr.io/penguintechinc/sasewaddle-client:latest
+  ghcr.io/penguintechinc/tobogganing-client:latest
 ```
 
 **Container Features:**
@@ -249,7 +249,7 @@ adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
 #### Universal Configuration
 ```yaml
-# ~/.sasewaddle/config.yaml
+# ~/.tobogganing/config.yaml
 manager:
   url: "https://manager.example.com:8000"
   api_key: "your-api-key"
@@ -263,7 +263,7 @@ client:
   system_tray: true  # GUI builds only
 
 wireguard:
-  interface: "wg-sasewaddle"
+  interface: "wg-tobogganing"
   dns: ["1.1.1.1", "8.8.8.8"]
   mtu: 1420
 ```
@@ -281,7 +281,7 @@ export SASEWADDLE_AUTO_UPDATE="true"
 
 # Headless-specific
 export SASEWADDLE_DAEMON_MODE="true"
-export SASEWADDLE_PID_FILE="/var/run/sasewaddle.pid"
+export SASEWADDLE_PID_FILE="/var/run/tobogganing.pid"
 ```
 
 ---
@@ -323,9 +323,9 @@ export SASEWADDLE_PID_FILE="/var/run/sasewaddle.pid"
 DB_TYPE=mysql
 DB_HOST=mysql.example.com
 DB_PORT=3306
-DB_USER=sasewaddle
+DB_USER=tobogganing
 DB_PASSWORD=secure_password
-DB_NAME=sasewaddle_production
+DB_NAME=tobogganing_production
 
 # Read Replica Support
 DB_READ_REPLICA_ENABLED=true
@@ -364,19 +364,19 @@ DB_TLS_VERIFY_MODE=VERIFY_CA
 
 ```prometheus
 # Connection metrics
-sasewaddle_connections_total{type="wireguard", status="active"}
-sasewaddle_bandwidth_bytes{direction="ingress", protocol="tcp"}
-sasewaddle_auth_attempts_total{result="success", method="jwt"}
+tobogganing_connections_total{type="wireguard", status="active"}
+tobogganing_bandwidth_bytes{direction="ingress", protocol="tcp"}
+tobogganing_auth_attempts_total{result="success", method="jwt"}
 
 # System metrics
-sasewaddle_cpu_usage_percent{component="headend"}
-sasewaddle_memory_usage_bytes{component="manager"}
-sasewaddle_disk_usage_percent{path="/data"}
+tobogganing_cpu_usage_percent{component="headend"}
+tobogganing_memory_usage_bytes{component="manager"}
+tobogganing_disk_usage_percent{path="/data"}
 
 # Business metrics
-sasewaddle_users_total{role="admin"}
-sasewaddle_certificates_issued_total{type="client"}
-sasewaddle_firewall_rules_evaluated_total{action="allow"}
+tobogganing_users_total{role="admin"}
+tobogganing_certificates_issued_total{type="client"}
+tobogganing_firewall_rules_evaluated_total{action="allow"}
 ```
 
 ### 🏥 Health Monitoring
@@ -474,4 +474,4 @@ SYSTEM_TRAY_ENABLED=true
 
 ---
 
-*For the latest updates and feature announcements, visit our [GitHub repository](https://github.com/your-org/sasewaddle)*
+*For the latest updates and feature announcements, visit our [GitHub repository](https://github.com/penguintechinc/tobogganing)*

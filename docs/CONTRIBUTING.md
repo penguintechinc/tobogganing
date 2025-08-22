@@ -1,6 +1,6 @@
-# 🤝 Contributing to SASEWaddle
+# 🤝 Contributing to Tobogganing
 
-Thank you for your interest in contributing to SASEWaddle! We welcome contributions from the community and appreciate your help in making this project better.
+Thank you for your interest in contributing to Tobogganing! We welcome contributions from the community and appreciate your help in making this project better.
 
 ## 📋 Table of Contents
 
@@ -30,8 +30,8 @@ Thank you for your interest in contributing to SASEWaddle! We welcome contributi
 1. **Fork** the repository on GitHub
 2. **Clone** your fork locally:
    ```bash
-   git clone https://github.com/your-username/sasewaddle.git
-   cd sasewaddle
+   git clone https://github.com/your-username/tobogganing.git
+   cd tobogganing
    ```
 
 ## 💻 Development Setup
@@ -239,7 +239,7 @@ For new features, include:
 ⚠️ **DO NOT** create public issues for security vulnerabilities!
 
 Instead:
-1. 📧 Email **security@sasewaddle.com**
+1. 📧 Email **security@tobogganing.com**
 2. 📄 Include detailed vulnerability info
 3. ⏰ Allow reasonable response time
 4. 🤝 Follow responsible disclosure
@@ -268,8 +268,8 @@ Contributors are recognized through:
 
 ## 📄 License
 
-By contributing to SASEWaddle, you agree that your contributions will be licensed under the **MIT License**.
+By contributing to Tobogganing, you agree that your contributions will be licensed under the **MIT License**.
 
 ---
 
-🙏 **Thank you for contributing to SASEWaddle!** Together, we're making secure networking accessible to everyone! 🚀
+🙏 **Thank you for contributing to Tobogganing!** Together, we're making secure networking accessible to everyone! 🚀

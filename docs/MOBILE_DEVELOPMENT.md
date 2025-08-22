@@ -1,8 +1,8 @@
-# 📱 SASEWaddle Mobile Development Guide
+# 📱 Tobogganing Mobile Development Guide
 
 ## 🎯 Overview
 
-SASEWaddle includes a React Native mobile application for Android and iOS (planned) that provides secure VPN access with an intuitive mobile interface. This guide covers setup, development, building, and deployment of the mobile client.
+Tobogganing includes a React Native mobile application for Android and iOS (planned) that provides secure VPN access with an intuitive mobile interface. This guide covers setup, development, building, and deployment of the mobile client.
 
 ## 📋 Table of Contents
 
@@ -130,7 +130,7 @@ clients/mobile/
 │   │   ├── build.gradle         # Android build configuration
 │   │   └── src/main/
 │   │       ├── AndroidManifest.xml
-│   │       ├── java/com/sasewaddle/mobile/
+│   │       ├── java/com/tobogganing/mobile/
 │   │       └── res/             # Android resources
 │   ├── build.gradle             # Root build configuration
 │   ├── gradlew                  # Gradle wrapper
@@ -264,7 +264,7 @@ adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
 adb devices
 
 # View app logs
-adb logcat | grep SASEWaddle
+adb logcat | grep Tobogganing
 ```
 
 #### Install to Emulator
@@ -469,13 +469,13 @@ watchman watch-del-all
 **VPN Connection Failures**
 ```bash
 # Check device logs
-adb logcat | grep SASEWaddle
+adb logcat | grep Tobogganing
 
 # Verify network connectivity
 adb shell ping manager.example.com
 
 # Check certificate validity
-adb shell cat /data/data/com.sasewaddle.mobile/files/cert.pem
+adb shell cat /data/data/com.tobogganing.mobile/files/cert.pem
 ```
 
 **Performance Issues**
@@ -484,10 +484,10 @@ adb shell cat /data/data/com.sasewaddle.mobile/files/cert.pem
 adb shell setprop debug.choreographer.skipwarning 1
 
 # Monitor memory usage
-adb shell dumpsys meminfo com.sasewaddle.mobile
+adb shell dumpsys meminfo com.tobogganing.mobile
 
 # Check CPU usage
-adb shell top | grep sasewaddle
+adb shell top | grep tobogganing
 ```
 
 ### Debug Tools
@@ -504,7 +504,7 @@ npx react-native run-android --variant=debug
 #### Android Studio Debugging
 ```bash
 # Open project in Android Studio
-~/open-sasewaddle-mobile.sh
+~/open-tobogganing-mobile.sh
 
 # Use Android Studio debugger
 # Set breakpoints in Java/Kotlin code
@@ -517,10 +517,10 @@ npx react-native run-android --variant=debug
 npx react-native log-android
 
 # View native Android logs
-adb logcat *:E | grep SASEWaddle
+adb logcat *:E | grep Tobogganing
 
 # Export logs for analysis
-adb logcat -d > sasewaddle-logs.txt
+adb logcat -d > tobogganing-logs.txt
 ```
 
 ### Performance Optimization
@@ -553,8 +553,8 @@ cd android && ./gradlew assembleRelease
 
 - **Documentation**: [/docs/MOBILE_DEVELOPMENT.md](MOBILE_DEVELOPMENT.md)
 - **Build Scripts**: [/scripts/setup-android-studio.sh](../scripts/setup-android-studio.sh)
-- **Issue Tracker**: [GitHub Issues](https://github.com/your-org/sasewaddle/issues)
+- **Issue Tracker**: [GitHub Issues](https://github.com/penguintechinc/tobogganing/issues)
 - **React Native Docs**: [https://reactnative.dev/docs/getting-started](https://reactnative.dev/docs/getting-started)
 - **Android Developer Docs**: [https://developer.android.com/](https://developer.android.com/)
 
-This comprehensive mobile development guide provides everything needed to develop, build, test, and deploy the SASEWaddle mobile application across different environments and use cases.
+This comprehensive mobile development guide provides everything needed to develop, build, test, and deploy the Tobogganing mobile application across different environments and use cases.

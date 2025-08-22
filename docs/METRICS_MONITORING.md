@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-SASEWaddle provides comprehensive metrics collection and monitoring capabilities through Prometheus-compatible endpoints. Both clients and headends report metrics to the manager service, enabling real-time monitoring and alerting.
+Tobogganing provides comprehensive metrics collection and monitoring capabilities through Prometheus-compatible endpoints. Both clients and headends report metrics to the manager service, enabling real-time monitoring and alerting.
 
 ## 📈 Metrics Collection Architecture
 
@@ -70,33 +70,33 @@ Content-Type: application/json
 
 | Metric | Type | Description | Labels |
 |--------|------|-------------|--------|
-| `sasewaddle_client_bytes_sent` | Gauge | Bytes sent by client | client_id, name, type, headless |
-| `sasewaddle_client_bytes_received` | Gauge | Bytes received by client | client_id, name, type, headless |
-| `sasewaddle_client_packets_sent` | Gauge | Packets sent by client | client_id, name, type, headless |
-| `sasewaddle_client_packets_received` | Gauge | Packets received by client | client_id, name, type, headless |
-| `sasewaddle_client_connection_uptime_seconds` | Gauge | Connection uptime | client_id, name, type, headless |
-| `sasewaddle_client_last_check_in_timestamp` | Gauge | Last check-in time | client_id, name, type, headless |
+| `tobogganing_client_bytes_sent` | Gauge | Bytes sent by client | client_id, name, type, headless |
+| `tobogganing_client_bytes_received` | Gauge | Bytes received by client | client_id, name, type, headless |
+| `tobogganing_client_packets_sent` | Gauge | Packets sent by client | client_id, name, type, headless |
+| `tobogganing_client_packets_received` | Gauge | Packets received by client | client_id, name, type, headless |
+| `tobogganing_client_connection_uptime_seconds` | Gauge | Connection uptime | client_id, name, type, headless |
+| `tobogganing_client_last_check_in_timestamp` | Gauge | Last check-in time | client_id, name, type, headless |
 
 ### Headend Metrics
 
 | Metric | Type | Description | Labels |
 |--------|------|-------------|--------|
-| `sasewaddle_headend_active_connections` | Gauge | Active connections | headend_id, name, region, datacenter |
-| `sasewaddle_headend_bandwidth_in_bytes` | Gauge | Incoming bandwidth | headend_id, name, region, datacenter |
-| `sasewaddle_headend_bandwidth_out_bytes` | Gauge | Outgoing bandwidth | headend_id, name, region, datacenter |
-| `sasewaddle_headend_cpu_usage_percent` | Gauge | CPU usage percentage | headend_id, name, region, datacenter |
-| `sasewaddle_headend_memory_usage_bytes` | Gauge | Memory usage | headend_id, name, region, datacenter |
-| `sasewaddle_headend_last_check_in_timestamp` | Gauge | Last check-in time | headend_id, name, region, datacenter |
+| `tobogganing_headend_active_connections` | Gauge | Active connections | headend_id, name, region, datacenter |
+| `tobogganing_headend_bandwidth_in_bytes` | Gauge | Incoming bandwidth | headend_id, name, region, datacenter |
+| `tobogganing_headend_bandwidth_out_bytes` | Gauge | Outgoing bandwidth | headend_id, name, region, datacenter |
+| `tobogganing_headend_cpu_usage_percent` | Gauge | CPU usage percentage | headend_id, name, region, datacenter |
+| `tobogganing_headend_memory_usage_bytes` | Gauge | Memory usage | headend_id, name, region, datacenter |
+| `tobogganing_headend_last_check_in_timestamp` | Gauge | Last check-in time | headend_id, name, region, datacenter |
 
 ### Manager Service Metrics
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `sasewaddle_manager_clusters_total` | Gauge | Total registered clusters |
-| `sasewaddle_manager_clients_total` | Gauge | Total registered clients |
-| `sasewaddle_manager_http_requests_total` | Counter | HTTP requests processed |
-| `sasewaddle_manager_auth_attempts_total` | Counter | Authentication attempts |
-| `sasewaddle_manager_certificates_issued_total` | Counter | Certificates issued |
+| `tobogganing_manager_clusters_total` | Gauge | Total registered clusters |
+| `tobogganing_manager_clients_total` | Gauge | Total registered clients |
+| `tobogganing_manager_http_requests_total` | Counter | HTTP requests processed |
+| `tobogganing_manager_auth_attempts_total` | Counter | Authentication attempts |
+| `tobogganing_manager_certificates_issued_total` | Counter | Certificates issued |
 
 ## 🔐 Authentication
 
@@ -107,7 +107,7 @@ The `/metrics` endpoint requires authentication via Bearer token:
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'sasewaddle-manager'
+  - job_name: 'tobogganing-manager'
     bearer_token: 'YOUR_METRICS_TOKEN'
     static_configs:
       - targets: ['manager.example.com:8000']
@@ -219,13 +219,13 @@ curl -X POST "${MANAGER_URL}/api/v1/clients/${CLIENT_ID}/metrics" \
 ```json
 {
   "dashboard": {
-    "title": "SASEWaddle Monitoring",
+    "title": "Tobogganing Monitoring",
     "panels": [
       {
         "title": "Active Clients by Type",
         "targets": [
           {
-            "expr": "count by (type) (sasewaddle_client_last_check_in_timestamp > (time() - 300))"
+            "expr": "count by (type) (tobogganing_client_last_check_in_timestamp > (time() - 300))"
           }
         ]
       },
@@ -233,7 +233,7 @@ curl -X POST "${MANAGER_URL}/api/v1/clients/${CLIENT_ID}/metrics" \
         "title": "Total Bandwidth Usage",
         "targets": [
           {
-            "expr": "sum(rate(sasewaddle_client_bytes_sent[5m])) + sum(rate(sasewaddle_client_bytes_received[5m]))"
+            "expr": "sum(rate(tobogganing_client_bytes_sent[5m])) + sum(rate(tobogganing_client_bytes_received[5m]))"
           }
         ]
       },
@@ -241,7 +241,7 @@ curl -X POST "${MANAGER_URL}/api/v1/clients/${CLIENT_ID}/metrics" \
         "title": "Headend CPU Usage",
         "targets": [
           {
-            "expr": "sasewaddle_headend_cpu_usage_percent"
+            "expr": "tobogganing_headend_cpu_usage_percent"
           }
         ]
       }
@@ -256,10 +256,10 @@ curl -X POST "${MANAGER_URL}/api/v1/clients/${CLIENT_ID}/metrics" \
 
 ```yaml
 groups:
-  - name: sasewaddle_alerts
+  - name: tobogganing_alerts
     rules:
       - alert: ClientOffline
-        expr: time() - sasewaddle_client_last_check_in_timestamp > 900
+        expr: time() - tobogganing_client_last_check_in_timestamp > 900
         for: 5m
         labels:
           severity: warning
@@ -268,7 +268,7 @@ groups:
           description: "Client has not checked in for more than 15 minutes"
       
       - alert: HeadendHighCPU
-        expr: sasewaddle_headend_cpu_usage_percent > 80
+        expr: tobogganing_headend_cpu_usage_percent > 80
         for: 10m
         labels:
           severity: critical
@@ -277,7 +277,7 @@ groups:
           description: "CPU usage is {{ $value }}%"
       
       - alert: HeadendDown
-        expr: time() - sasewaddle_headend_last_check_in_timestamp > 300
+        expr: time() - tobogganing_headend_last_check_in_timestamp > 300
         for: 2m
         labels:
           severity: critical
@@ -297,7 +297,7 @@ curl -H "Authorization: Bearer YOUR_METRICS_TOKEN" \
 
 # Check specific metric
 curl -H "Authorization: Bearer YOUR_METRICS_TOKEN" \
-     https://manager.example.com/metrics | grep sasewaddle_client_bytes_sent
+     https://manager.example.com/metrics | grep tobogganing_client_bytes_sent
 ```
 
 ### Verify Client Submission

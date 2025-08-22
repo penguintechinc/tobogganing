@@ -1,7 +1,7 @@
-# SASEWaddle Project Documentation
+# Tobogganing Project Documentation
 
 ## Project Overview
-SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of three main components:
+Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of three main components:
 
 1. **Manager Service** - Centralized orchestration and certificate management
 2. **Headend Server** - WireGuard termination and proxy authentication  
@@ -310,7 +310,7 @@ docker buildx inspect --bootstrap
 
 ## Project Structure
 ```
-/workspaces/SASEWaddle/
+/workspaces/Tobogganing/
 ├── manager/                 # Manager service code
 │   ├── api/                # REST API endpoints
 │   ├── web/                # py4web frontend with role-based access
@@ -434,7 +434,7 @@ docker buildx inspect --bootstrap
 
 ## ✅ Development Completion Status
 
-All initial development tasks have been completed! The SASEWaddle project now includes:
+All initial development tasks have been completed! The Tobogganing project now includes:
 
 **🎉 Version v1.1.4 Features Complete:**
 
@@ -645,7 +645,7 @@ DB_PATH=/data/sasewaddle.db
 
 ## 🌐 Advanced Network Management - VRF & OSPF
 
-SASEWaddle includes enterprise-grade network segmentation and routing capabilities using FRR (Free Range Routing):
+Tobogganing includes enterprise-grade network segmentation and routing capabilities using FRR (Free Range Routing):
 
 ### Virtual Routing and Forwarding (VRF) Features
 
@@ -749,7 +749,7 @@ router ospf vrf corporate-wan
 
 ## 🔥 Advanced Firewall System
 
-SASEWaddle includes a comprehensive firewall system for granular access control:
+Tobogganing includes a comprehensive firewall system for granular access control:
 
 ### Rule Types Supported
 
@@ -852,19 +852,19 @@ SASEWaddle includes a comprehensive firewall system for granular access control:
 **CVE**: GHSA-v778-237x-gjrc (CRITICAL) - Misuse of ServerConfig.PublicKeyCallback may cause authorization bypass
 **Affected**: golang.org/x/crypto < 0.31.0
 **Resolution**:
-- ✅ Updated /workspaces/SASEWaddle/headend/go.mod: v0.17.0 → v0.31.0 
-- ✅ Updated /workspaces/SASEWaddle/clients/native/go.mod: v0.16.0 → v0.31.0
-- ✅ FIXED: WireGuard API compatibility issues in /workspaces/SASEWaddle/headend/wireguard/manager.go
+- ✅ Updated /workspaces/Tobogganing/headend/go.mod: v0.17.0 → v0.31.0 
+- ✅ Updated /workspaces/Tobogganing/clients/native/go.mod: v0.16.0 → v0.31.0
+- ✅ FIXED: WireGuard API compatibility issues in /workspaces/Tobogganing/headend/wireguard/manager.go
   - Fixed ParseEndpoint (removed from wgtypes) → manual parsing with net.UDPAddr
   - Fixed wgtypes.IPNet and wgtypes.ParseIPNet → using standard net.ParseCIDR
 - ✅ Headend builds successfully with patched crypto library
 - ⚠️ Native client has GUI dependency issues (not CVE-related)
 
 **Files Modified**:
-- /workspaces/SASEWaddle/headend/go.mod (crypto: v0.17.0→v0.31.0)
-- /workspaces/SASEWaddle/clients/native/go.mod (crypto: v0.16.0→v0.31.0) 
-- /workspaces/SASEWaddle/headend/wireguard/manager.go (API compatibility fixes)
-- /workspaces/SASEWaddle/clients/native/cmd/tray-example/main.go (import path fixes)
+- /workspaces/Tobogganing/headend/go.mod (crypto: v0.17.0→v0.31.0)
+- /workspaces/Tobogganing/clients/native/go.mod (crypto: v0.16.0→v0.31.0) 
+- /workspaces/Tobogganing/headend/wireguard/manager.go (API compatibility fixes)
+- /workspaces/Tobogganing/clients/native/cmd/tray-example/main.go (import path fixes)
 
 ## 🔧 Pending: Native Client Build Issues 
 **Status**: PENDING

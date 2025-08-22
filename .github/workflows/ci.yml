@@ -198,9 +198,9 @@ jobs:
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "tag=sasewaddle-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}" >> $GITHUB_OUTPUT
+          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}" >> $GITHUB_OUTPUT
         else
-          echo "tag=sasewaddle-${{ matrix.component }}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}" >> $GITHUB_OUTPUT
         fi
     
     - name: Set up QEMU
@@ -222,11 +222,11 @@ jobs:
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}"
+          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}"
         else
-          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}"
+          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
           if [ "${{ github.ref_name }}" = "main" ]; then
-            TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:latest"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
           fi
         fi
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
@@ -349,9 +349,9 @@ jobs:
         mkdir -p build
         
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          BINARY_NAME="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}-pr${{ github.event.number }}${{ matrix.binary_suffix }}"
+          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}-pr${{ github.event.number }}${{ matrix.binary_suffix }}"
         else
-          BINARY_NAME="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}${{ matrix.binary_suffix }}"
+          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}${{ matrix.binary_suffix }}"
         fi
         
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
@@ -390,9 +390,9 @@ jobs:
             platform=$(basename "$dir" | sed 's/native-client-//')
             
             if [[ "$platform" == *"windows"* ]]; then
-              cd "$dir" && zip -r "../../release-packages/sasewaddle-client-${platform}.zip" . && cd -
+              cd "$dir" && zip -r "../../release-packages/tobogganing-client-${platform}.zip" . && cd -
             else
-              cd "$dir" && tar -czf "../../release-packages/sasewaddle-client-${platform}.tar.gz" . && cd -
+              cd "$dir" && tar -czf "../../release-packages/tobogganing-client-${platform}.tar.gz" . && cd -
             fi
           fi
         done

@@ -2,11 +2,11 @@
 
 ## 📋 Overview
 
-The PenguinTech licensing system supports **multiple products under a single license key**. This allows customers to purchase one license that covers SASEWaddle, SquawkDNS, WaddleBot, and future products at different tiers.
+The PenguinTech licensing system supports **multiple products under a single license key**. This allows customers to purchase one license that covers Tobogganing, SquawkDNS, WaddleBot, and future products at different tiers.
 
 ## 🎯 Product Portfolio
 
-### 🦭 SASEWaddle (VPN/SASE)
+### 🦭 Tobogganing (VPN/SASE)
 - **Community**: Core VPN features, unlimited clients/headends
 - **Professional**: Adds metrics, advanced firewall, VRF/OSPF
 - **Enterprise**: Adds SSO, LDAP, MFA, traffic mirroring, custom branding
@@ -47,7 +47,7 @@ Where:
   "license_key": "PENG-A1B2-C3D4-E5F6-G7H8-9IJK",
   "customer": "Acme Corp",
   "products": {
-    "sasewaddle": "community",
+    "tobogganing": "community",
     "squawkdns": "professional"
   }
 }
@@ -59,7 +59,7 @@ Where:
   "license_key": "PENG-ENT1-ERPX-2024-PROD-ABC1",
   "customer": "Enterprise Inc",
   "products": {
-    "sasewaddle": "enterprise",
+    "tobogganing": "enterprise",
     "squawkdns": "enterprise", 
     "waddlebot": "professional"
   }
@@ -78,7 +78,7 @@ Content-Type: application/json
 
 {
   "license_key": "PENG-A1B2-C3D4-E5F6-G7H8-9IJK",
-  "product": "sasewaddle"
+  "product": "tobogganing"
 }
 ```
 
@@ -86,7 +86,7 @@ Content-Type: application/json
 ```json
 {
   "valid": true,
-  "product": "sasewaddle",
+  "product": "tobogganing",
   "tier": "professional",
   "features": [
     "wireguard_vpn",
@@ -95,7 +95,7 @@ Content-Type: application/json
     "advanced_firewall"
   ],
   "all_products": {
-    "sasewaddle": "professional",
+    "tobogganing": "professional",
     "squawkdns": "enterprise"
   },
   "expires_at": "2025-12-31T23:59:59Z"
@@ -110,7 +110,7 @@ Content-Type: application/json
 
 {
   "license_key": "PENG-A1B2-C3D4-E5F6-G7H8-9IJK",
-  "product": "sasewaddle",
+  "product": "tobogganing",
   "feature": "client_metrics"
 }
 ```
@@ -119,7 +119,7 @@ Content-Type: application/json
 ```json
 {
   "enabled": true,
-  "product": "sasewaddle",
+  "product": "tobogganing",
   "tier": "professional",
   "message": "Feature enabled"
 }
@@ -127,16 +127,16 @@ Content-Type: application/json
 
 ## 💻 Product Integration Examples
 
-### SASEWaddle Integration
+### Tobogganing Integration
 ```python
 import requests
 
-def check_sasewaddle_license():
+def check_tobogganing_license():
     response = requests.post(
         'https://license.penguintech.io/api/validate',
         json={
             'license_key': os.getenv('LICENSE_KEY'),
-            'product': 'sasewaddle'
+            'product': 'tobogganing'
         }
     )
     
@@ -206,12 +206,12 @@ license_data = {
     'customer_email': 'admin@enterprise.com',
     'organization': 'Enterprise Corp',
     'products': {
-        'sasewaddle': 'enterprise',
+        'tobogganing': 'enterprise',
         'squawkdns': 'professional',
         'waddlebot': 'community'
     },
     'expires_at': datetime(2025, 12, 31),
-    'notes': 'Enterprise bundle with custom SASEWaddle tier'
+    'notes': 'Enterprise bundle with custom Tobogganing tier'
 }
 ```
 
@@ -219,7 +219,7 @@ license_data = {
 
 Add new products to existing licenses:
 ```python
-# Add WaddleBot to existing SASEWaddle license
+# Add WaddleBot to existing Tobogganing license
 existing_license.products['waddlebot'] = 'professional'
 ```
 
@@ -258,13 +258,13 @@ Enterprise Bundle:          Contact sales
 # Check what products are available in your license
 curl -X POST https://license.penguintech.io/api/validate \
   -H "Content-Type: application/json" \
-  -d '{"license_key": "YOUR-LICENSE", "product": "sasewaddle"}'
+  -d '{"license_key": "YOUR-LICENSE", "product": "tobogganing"}'
 
 # Response will show available_products if product not found
 {
   "valid": false,
   "message": "Product 'waddlebot' not included in this license",
-  "available_products": ["sasewaddle", "squawkdns"]
+  "available_products": ["tobogganing", "squawkdns"]
 }
 ```
 
@@ -275,7 +275,7 @@ curl -X POST https://license.penguintech.io/api/check_feature \
   -H "Content-Type: application/json" \
   -d '{
     "license_key": "YOUR-LICENSE",
-    "product": "sasewaddle", 
+    "product": "tobogganing", 
     "feature": "sso_authentication"
   }'
 ```
@@ -283,8 +283,8 @@ curl -X POST https://license.penguintech.io/api/check_feature \
 ### Legacy Endpoint Support
 
 Old endpoints still work for backward compatibility:
-- `POST /api/sasewaddle/validate` → redirects to `/api/validate`
-- `POST /api/sasewaddle/check_feature` → redirects to `/api/check_feature`
+- `POST /api/tobogganing/validate` → redirects to `/api/validate`
+- `POST /api/tobogganing/check_feature` → redirects to `/api/check_feature`
 
 ## 🔐 Security Features
 
@@ -303,11 +303,11 @@ Old endpoints still work for backward compatibility:
 
 ### From Single-Product to Multi-Product
 
-**Old SASEWaddle validation:**
+**Old Tobogganing validation:**
 ```python
 # Old way (still works)
 response = requests.post(
-    'https://license.penguintech.io/api/sasewaddle/validate',
+    'https://license.penguintech.io/api/tobogganing/validate',
     json={'license_key': LICENSE_KEY}
 )
 ```
@@ -319,7 +319,7 @@ response = requests.post(
     'https://license.penguintech.io/api/validate',
     json={
         'license_key': LICENSE_KEY,
-        'product': 'sasewaddle'
+        'product': 'tobogganing'
     }
 )
 ```
@@ -341,7 +341,7 @@ WHERE products IS NULL;
 
 ## 🔗 Related Documentation
 
-- [SASEWaddle Licensing](./LICENSING.md) - SASEWaddle-specific licensing details
+- [Tobogganing Licensing](./LICENSING.md) - Tobogganing-specific licensing details
 - [API Documentation](./API.md) - Technical API reference  
 - [Authentication Guide](./AUTHENTICATION.md) - Authentication across products
 - [License Server Documentation](https://github.com/penguintech/license-server) - Server setup and management

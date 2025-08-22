@@ -8,9 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sasewaddle/clients/native/internal/config"
-	"github.com/sasewaddle/clients/native/internal/tray"
-	"github.com/sasewaddle/clients/native/internal/vpn"
+	"github.com/tobogganing/clients/native/internal/config"
+	"github.com/tobogganing/clients/native/internal/tray"
+	"github.com/tobogganing/clients/native/internal/vpn"
 )
 
 func main() {
@@ -70,6 +70,7 @@ func main() {
 	log.Println("System tray started. Right-click the tray icon to access options.")
 	if err := trayManager.Run(); err != nil {
 		log.Printf("Tray manager failed: %v", err)
-		os.Exit(1)
+		// Return and let defer handle cleanup
+		return
 	}
 }

@@ -22,38 +22,38 @@ jobs:
           # Desktop platforms - Headless versions (for servers)
           - goos: darwin
             goarch: amd64
-            binary_name: sasewaddle-client-darwin-amd64-headless
+            binary_name: tobogganing-client-darwin-amd64-headless
           - goos: darwin
             goarch: arm64
-            binary_name: sasewaddle-client-darwin-arm64-headless
+            binary_name: tobogganing-client-darwin-arm64-headless
           - goos: linux
             goarch: amd64
-            binary_name: sasewaddle-client-linux-amd64-headless
+            binary_name: tobogganing-client-linux-amd64-headless
           - goos: linux
             goarch: arm64
-            binary_name: sasewaddle-client-linux-arm64-headless
+            binary_name: tobogganing-client-linux-arm64-headless
           - goos: windows
             goarch: amd64
-            binary_name: sasewaddle-client-windows-amd64-headless.exe
+            binary_name: tobogganing-client-windows-amd64-headless.exe
           - goos: windows
             goarch: arm64
-            binary_name: sasewaddle-client-windows-arm64-headless.exe
+            binary_name: tobogganing-client-windows-arm64-headless.exe
           
           # Embedded platforms - Headless only
           - goos: linux
             goarch: arm
             goarm: 7
-            binary_name: sasewaddle-client-linux-armv7-headless
+            binary_name: tobogganing-client-linux-armv7-headless
           - goos: linux
             goarch: arm
             goarm: 6
-            binary_name: sasewaddle-client-linux-armv6-headless
+            binary_name: tobogganing-client-linux-armv6-headless
           - goos: linux
             goarch: mips
-            binary_name: sasewaddle-client-linux-mips-headless
+            binary_name: tobogganing-client-linux-mips-headless
           - goos: linux
             goarch: mipsle
-            binary_name: sasewaddle-client-linux-mipsle-headless
+            binary_name: tobogganing-client-linux-mipsle-headless
     
     steps:
       - name: Checkout code
@@ -143,27 +143,27 @@ jobs:
       - name: Download Intel binary
         uses: actions/download-artifact@v4
         with:
-          name: sasewaddle-client-darwin-amd64
+          name: tobogganing-client-darwin-amd64
           path: ./
       
       - name: Download ARM64 binary
         uses: actions/download-artifact@v4
         with:
-          name: sasewaddle-client-darwin-arm64
+          name: tobogganing-client-darwin-arm64
           path: ./
       
       - name: Create Universal Headless Binary
         run: |
-          lipo -create -output sasewaddle-client-darwin-universal-headless \
-            sasewaddle-client-darwin-amd64-headless \
-            sasewaddle-client-darwin-arm64-headless
-          chmod +x sasewaddle-client-darwin-universal-headless
+          lipo -create -output tobogganing-client-darwin-universal-headless \
+            tobogganing-client-darwin-amd64-headless \
+            tobogganing-client-darwin-arm64-headless
+          chmod +x tobogganing-client-darwin-universal-headless
       
       - name: Upload Universal Headless Binary
         uses: actions/upload-artifact@v4
         with:
-          name: sasewaddle-client-darwin-universal-headless
-          path: sasewaddle-client-darwin-universal-headless
+          name: tobogganing-client-darwin-universal-headless
+          path: tobogganing-client-darwin-universal-headless
 
   release-headless:
     name: Create Headless Release
@@ -203,7 +203,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            artifacts/sasewaddle-client-*
+            artifacts/tobogganing-client-*
             artifacts/headend-proxy-*
             artifacts/*.sha256
         env:

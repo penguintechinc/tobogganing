@@ -1,6 +1,6 @@
-# 🏗️ SASEWaddle Architecture Guide
+# 🏗️ Tobogganing Architecture Guide
 
-> **💡 Overview**: SASEWaddle implements a modern three-tier Zero Trust Network Architecture designed for enterprise-scale secure access.
+> **💡 Overview**: Tobogganing implements a modern three-tier Zero Trust Network Architecture designed for enterprise-scale secure access.
 
 ## 📋 Table of Contents
 
@@ -523,4 +523,4 @@ Ready to deploy? Choose your path:
 
 ---
 
-*📝 This document is updated with each release. For the latest version, visit our [documentation portal](https://docs.sasewaddle.com).*
+*📝 This document is updated with each release. For the latest version, visit our [documentation portal](https://docs.tobogganing.com).*

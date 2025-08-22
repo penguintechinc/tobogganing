@@ -1,10 +1,10 @@
-# 🔐 SASEWaddle Licensing Guide
+# 🔐 Tobogganing Licensing Guide
 
 ## 📋 Overview
 
-SASEWaddle uses a tiered licensing model to provide different feature sets based on organizational needs. The licensing system is managed through a centralized license server at **license.penguintech.io** that validates licenses and controls feature access.
+Tobogganing uses a tiered licensing model to provide different feature sets based on organizational needs. The licensing system is managed through a centralized license server at **license.penguintech.io** that validates licenses and controls feature access.
 
-> 🎁 **Multi-Product Support**: SASEWaddle licenses can be bundled with other PenguinTech products (SquawkDNS, WaddleBot) under a single license key. See [Multi-Product Licensing Guide](./MULTI_PRODUCT_LICENSING.md) for details.
+> 🎁 **Multi-Product Support**: Tobogganing licenses can be bundled with other PenguinTech products (SquawkDNS, WaddleBot) under a single license key. See [Multi-Product Licensing Guide](./MULTI_PRODUCT_LICENSING.md) for details.
 
 ## 🎯 License Tiers
 
@@ -67,7 +67,7 @@ Where:
 
 Example: `PENG-A1B2-C3D4-E5F6-G7H8-9IJK`
 
-> **Legacy Format**: Older `SASE-` prefixed keys still work for SASEWaddle but new licenses use the universal `PENG-` prefix.
+> **Legacy Format**: Older `SASE-` prefixed keys still work for Tobogganing but new licenses use the universal `PENG-` prefix.
 
 ## ⚙️ Configuration
 
@@ -82,18 +82,18 @@ environment:
   - LICENSE_SERVER_URL=https://license.penguintech.io  # Optional, this is default
 ```
 
-**Note:** If no license key is provided, SASEWaddle runs in **Community Open Source** mode with full core features and no artificial limits.
+**Note:** If no license key is provided, Tobogganing runs in **Community Open Source** mode with full core features and no artificial limits.
 
 ### Docker Compose Example
 
 ```yaml
 services:
   manager:
-    image: sasewaddle/manager:latest
+    image: tobogganing/manager:latest
     environment:
       - SASEWADDLE_LICENSE_KEY=${SASEWADDLE_LICENSE_KEY}
       - DB_HOST=mysql
-      - DB_USER=sasewaddle
+      - DB_USER=tobogganing
       - DB_PASSWORD=${DB_PASSWORD}
     ports:
       - "8000:8000"
@@ -105,14 +105,14 @@ services:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sasewaddle-config
+  name: tobogganing-config
 data:
   SASEWADDLE_LICENSE_KEY: "SASE-A1B2-C3D4-E5F6-G7H8-9IJK"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sasewaddle-manager
+  name: tobogganing-manager
 spec:
   template:
     spec:
@@ -120,7 +120,7 @@ spec:
       - name: manager
         envFrom:
         - configMapRef:
-            name: sasewaddle-config
+            name: tobogganing-config
 ```
 
 ## 🔍 License Validation
@@ -143,7 +143,7 @@ sequenceDiagram
     alt Cache valid (<1 hour)
         C-->>M: Return cached license
     else Cache expired or missing
-        M->>L: POST /api/sasewaddle/validate
+        M->>L: POST /api/tobogganing/validate
         L-->>M: License info + features
         M->>C: Update cache
     end
@@ -170,7 +170,7 @@ Users will see a notice indicating the feature requires a license upgrade:
 
 ```
 ⚠️ This feature requires a Professional license
-Contact sales@sasewaddle.com for upgrade options
+Contact sales@tobogganing.com for upgrade options
 ```
 
 ## 📊 Licensed Features Reference
@@ -209,7 +209,7 @@ Contact sales@sasewaddle.com for upgrade options
 echo $SASEWADDLE_LICENSE_KEY
 
 # Test license validation manually
-curl -X POST https://license.penguintech.io/api/sasewaddle/validate \
+curl -X POST https://license.penguintech.io/api/tobogganing/validate \
   -H "Content-Type: application/json" \
   -d '{"license_key": "YOUR-LICENSE-KEY"}'
 ```
@@ -217,7 +217,7 @@ curl -X POST https://license.penguintech.io/api/sasewaddle/validate \
 #### Feature Not Working
 ```bash
 # Check specific feature availability
-curl -X POST https://license.penguintech.io/api/sasewaddle/check_feature \
+curl -X POST https://license.penguintech.io/api/tobogganing/check_feature \
   -H "Content-Type: application/json" \
   -d '{"license_key": "YOUR-LICENSE-KEY", "feature": "client_metrics"}'
 ```
@@ -255,7 +255,7 @@ Response:
 
 ### Trial License
 Request a 30-day trial license:
-- Email: sales@sasewaddle.com
+- Email: sales@tobogganing.com
 - Include: Organization name, use case, expected scale
 
 ### Purchase Options

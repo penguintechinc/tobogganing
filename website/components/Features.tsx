@@ -80,11 +80,11 @@ const Features: React.FC = () => {
           <h2 className="text-4xl sm:text-5xl font-bold mb-6">
             <span className="text-gray-900">Everything You Need for</span>
             <span className="block bg-gradient-to-r from-primary-600 via-secondary-600 to-accent-600 bg-clip-text text-transparent">
-              Zero Trust Security 🐧
+              Zero Trust Security 🛷
             </span>
           </h2>
           <p className="text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
-            SASEWaddle provides all the features you need to secure your distributed workforce 
+            Tobogganing provides all the features you need to secure your distributed workforce 
             with <strong>Zero Trust principles</strong> and modern cloud-native architecture that <em>just works</em>.
           </p>
         </div>

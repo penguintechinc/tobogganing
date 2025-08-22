@@ -97,10 +97,10 @@ jobs:
         MAJOR=$(echo $VERSION | cut -d. -f1)
         MINOR=$(echo $VERSION | cut -d. -f1-2)
         
-        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${MINOR}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${MAJOR}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:latest"
+        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
+        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${MINOR}"
+        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${MAJOR}"
+        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
         
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
     
@@ -160,25 +160,25 @@ jobs:
           - runner: ubuntu-24.04
             goos: linux
             goarch: amd64
-            binary: sasewaddle-client-linux-amd64
+            binary: tobogganing-client-linux-amd64
           - runner: ubuntu-24.04
             goos: linux
             goarch: arm64
-            binary: sasewaddle-client-linux-arm64
+            binary: tobogganing-client-linux-arm64
           # Windows builds
           - runner: windows-latest
             goos: windows
             goarch: amd64
-            binary: sasewaddle-client-windows-amd64.exe
+            binary: tobogganing-client-windows-amd64.exe
           # macOS builds (will create universal binary)
           - runner: macos-latest
             goos: darwin
             goarch: amd64
-            binary: sasewaddle-client-darwin-amd64
+            binary: tobogganing-client-darwin-amd64
           - runner: macos-latest
             goos: darwin
             goarch: arm64
-            binary: sasewaddle-client-darwin-arm64
+            binary: tobogganing-client-darwin-arm64
     
     steps:
     - uses: actions/checkout@v4
@@ -214,8 +214,8 @@ jobs:
         
         mkdir -p build
         
-        # Use consistent naming pattern: sasewaddle-client-{os}-{arch}-{version}
-        VERSIONED_BINARY="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
+        # Use consistent naming pattern: tobogganing-client-{os}-{arch}-{version}
+        VERSIONED_BINARY="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
           VERSIONED_BINARY="${VERSIONED_BINARY}.exe"
         fi
@@ -227,7 +227,7 @@ jobs:
     - name: Upload binary artifact
       uses: actions/upload-artifact@v3
       with:
-        name: sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}
+        name: tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
         retention-days: 30
 
@@ -239,13 +239,13 @@ jobs:
     - name: Download macOS binaries
       uses: actions/download-artifact@v3
       with:
-        name: sasewaddle-client-darwin-amd64
+        name: tobogganing-client-darwin-amd64
         path: ./amd64
     
     - name: Download macOS ARM64 binary
       uses: actions/download-artifact@v3
       with:
-        name: sasewaddle-client-darwin-arm64
+        name: tobogganing-client-darwin-arm64
         path: ./arm64
     
     - name: Read version from .version file
@@ -260,11 +260,11 @@ jobs:
         VERSION="${{ steps.version.outputs.version }}"
         
         # Find the actual binary files (they have version in the name now)
-        AMD64_BINARY=$(find ./amd64 -name "sasewaddle-client-darwin-amd64-*" | head -1)
-        ARM64_BINARY=$(find ./arm64 -name "sasewaddle-client-darwin-arm64-*" | head -1)
+        AMD64_BINARY=$(find ./amd64 -name "tobogganing-client-darwin-amd64-*" | head -1)
+        ARM64_BINARY=$(find ./arm64 -name "tobogganing-client-darwin-arm64-*" | head -1)
         
         if [ -n "$AMD64_BINARY" ] && [ -n "$ARM64_BINARY" ]; then
-          lipo -create -output "build/sasewaddle-client-darwin-universal-${VERSION}" \
+          lipo -create -output "build/tobogganing-client-darwin-universal-${VERSION}" \
             "$AMD64_BINARY" \
             "$ARM64_BINARY"
         else
@@ -277,7 +277,7 @@ jobs:
     - name: Upload universal binary
       uses: actions/upload-artifact@v3
       with:
-        name: sasewaddle-client-darwin-universal
+        name: tobogganing-client-darwin-universal
         path: build/*
         retention-days: 30
 
@@ -309,26 +309,26 @@ jobs:
         
         # Linux AMD64 package
         mkdir -p linux-amd64
-        cp artifacts/sasewaddle-client-linux-amd64/sasewaddle-client-linux-amd64-${VERSION} linux-amd64/sasewaddle-client
-        chmod +x linux-amd64/sasewaddle-client
-        tar -czf release-packages/sasewaddle-client-linux-amd64-${VERSION}.tar.gz -C linux-amd64 .
+        cp artifacts/tobogganing-client-linux-amd64/tobogganing-client-linux-amd64-${VERSION} linux-amd64/tobogganing-client
+        chmod +x linux-amd64/tobogganing-client
+        tar -czf release-packages/tobogganing-client-linux-amd64-${VERSION}.tar.gz -C linux-amd64 .
         
         # Linux ARM64 package  
         mkdir -p linux-arm64
-        cp artifacts/sasewaddle-client-linux-arm64/sasewaddle-client-linux-arm64-${VERSION} linux-arm64/sasewaddle-client
-        chmod +x linux-arm64/sasewaddle-client
-        tar -czf release-packages/sasewaddle-client-linux-arm64-${VERSION}.tar.gz -C linux-arm64 .
+        cp artifacts/tobogganing-client-linux-arm64/tobogganing-client-linux-arm64-${VERSION} linux-arm64/tobogganing-client
+        chmod +x linux-arm64/tobogganing-client
+        tar -czf release-packages/tobogganing-client-linux-arm64-${VERSION}.tar.gz -C linux-arm64 .
         
         # Windows package
         mkdir -p windows
-        cp artifacts/sasewaddle-client-windows-amd64/sasewaddle-client-windows-amd64-${VERSION}.exe windows/sasewaddle-client.exe
-        cd windows && zip -r ../release-packages/sasewaddle-client-windows-amd64-${VERSION}.zip . && cd ..
+        cp artifacts/tobogganing-client-windows-amd64/tobogganing-client-windows-amd64-${VERSION}.exe windows/tobogganing-client.exe
+        cd windows && zip -r ../release-packages/tobogganing-client-windows-amd64-${VERSION}.zip . && cd ..
         
         # macOS Universal package
         mkdir -p macos
-        cp artifacts/sasewaddle-client-darwin-universal/sasewaddle-client-darwin-universal-${VERSION} macos/sasewaddle-client
-        chmod +x macos/sasewaddle-client
-        tar -czf release-packages/sasewaddle-client-darwin-universal-${VERSION}.tar.gz -C macos .
+        cp artifacts/tobogganing-client-darwin-universal/tobogganing-client-darwin-universal-${VERSION} macos/tobogganing-client
+        chmod +x macos/tobogganing-client
+        tar -czf release-packages/tobogganing-client-darwin-universal-${VERSION}.tar.gz -C macos .
         
         # Create checksums
         cd release-packages
@@ -341,8 +341,8 @@ jobs:
         
         # Create example client configuration
         cat > release-packages/examples/client-config.yaml << 'EOF'
-# SASEWaddle Native Client Configuration
-# Copy this file to ~/.sasewaddle/config.yaml and modify as needed
+# Tobogganing Native Client Configuration
+# Copy this file to ~/.tobogganing/config.yaml and modify as needed
 
 # Manager Service URL (required)
 manager_url: "https://your-manager.example.com:8000"
@@ -377,9 +377,9 @@ EOF
         
         # Create example docker-compose.yml for self-hosted deployment
         cat > release-packages/examples/docker-compose.yml << 'EOF'
-# SASEWaddle Self-Hosted Deployment Example
+# Tobogganing Self-Hosted Deployment Example
 # 
-# This example shows how to deploy SASEWaddle components using Docker Compose
+# This example shows how to deploy Tobogganing components using Docker Compose
 # Modify the environment variables and volumes as needed for your deployment
 
 version: '3.8'
@@ -399,7 +399,7 @@ services:
 
   # Manager Service - Central orchestration
   manager:
-    image: ghcr.io/your-org/sasewaddle/manager:latest
+    image: ghcr.io/your-org/tobogganing/manager:latest
     restart: unless-stopped
     depends_on:
       redis:
@@ -423,7 +423,7 @@ services:
 
   # Headend Server - WireGuard termination and proxy
   headend:
-    image: ghcr.io/your-org/sasewaddle/headend:latest
+    image: ghcr.io/your-org/tobogganing/headend:latest
     restart: unless-stopped
     depends_on:
       manager:
@@ -472,7 +472,7 @@ EOF
         # Create installation script
         cat > release-packages/examples/install.sh << 'EOF'
 #!/bin/bash
-# SASEWaddle Native Client Installation Script
+# Tobogganing Native Client Installation Script
 
 set -e
 
@@ -500,9 +500,9 @@ esac
 
 # Download and install
 VERSION=${1:-"latest"}
-DOWNLOAD_URL="https://github.com/your-org/sasewaddle/releases/download/v${VERSION}/sasewaddle-client-${VERSION}-${PLATFORM}${EXT}"
+DOWNLOAD_URL="https://github.com/your-org/tobogganing/releases/download/v${VERSION}/tobogganing-client-${VERSION}-${PLATFORM}${EXT}"
 
-echo "Installing SASEWaddle Native Client..."
+echo "Installing Tobogganing Native Client..."
 echo "Platform: $PLATFORM"
 echo "Version: $VERSION"
 
@@ -512,29 +512,29 @@ cd "$TMP_DIR"
 
 # Download
 echo "Downloading from: $DOWNLOAD_URL"
-curl -L -o "sasewaddle-client${EXT}" "$DOWNLOAD_URL"
+curl -L -o "tobogganing-client${EXT}" "$DOWNLOAD_URL"
 
 # Extract and install
 case $EXT in
-    .tar.gz) tar -xzf "sasewaddle-client${EXT}" ;;
-    .zip) unzip "sasewaddle-client${EXT}" ;;
+    .tar.gz) tar -xzf "tobogganing-client${EXT}" ;;
+    .zip) unzip "tobogganing-client${EXT}" ;;
 esac
 
 # Install binary
-sudo mv sasewaddle-client /usr/local/bin/
-sudo chmod +x /usr/local/bin/sasewaddle-client
+sudo mv tobogganing-client /usr/local/bin/
+sudo chmod +x /usr/local/bin/tobogganing-client
 
 # Create config directory
-mkdir -p "$HOME/.sasewaddle"
+mkdir -p "$HOME/.tobogganing"
 
 echo "Installation complete!"
 echo ""
 echo "Next steps:"
-echo "1. Get an API key from your SASEWaddle manager"
-echo "2. Run: sasewaddle-client init --manager-url https://your-manager.example.com:8000 --api-key YOUR_API_KEY"
-echo "3. Run: sasewaddle-client connect"
+echo "1. Get an API key from your Tobogganing manager"
+echo "2. Run: tobogganing-client init --manager-url https://your-manager.example.com:8000 --api-key YOUR_API_KEY"
+echo "3. Run: tobogganing-client connect"
 echo ""
-echo "For more information, visit: https://github.com/your-org/sasewaddle"
+echo "For more information, visit: https://github.com/your-org/tobogganing"
 
 # Cleanup
 cd /
@@ -549,7 +549,7 @@ EOF
         VERSION="${{ steps.version.outputs.version }}"
         
         cat > release-notes.md << EOF
-        # SASEWaddle Release v${VERSION}
+        # Tobogganing Release v${VERSION}
         
         ## 🚀 Features
         
@@ -577,15 +577,15 @@ EOF
         ## 📦 Downloads
         
         ### Native Client Binaries
-        - **macOS Universal**: \`sasewaddle-client-darwin-universal-${VERSION}.tar.gz\`
-        - **Windows x64**: \`sasewaddle-client-windows-amd64-${VERSION}.zip\`
-        - **Linux x64**: \`sasewaddle-client-linux-amd64-${VERSION}.tar.gz\`
-        - **Linux ARM64**: \`sasewaddle-client-linux-arm64-${VERSION}.tar.gz\`
+        - **macOS Universal**: \`tobogganing-client-darwin-universal-${VERSION}.tar.gz\`
+        - **Windows x64**: \`tobogganing-client-windows-amd64-${VERSION}.zip\`
+        - **Linux x64**: \`tobogganing-client-linux-amd64-${VERSION}.tar.gz\`
+        - **Linux ARM64**: \`tobogganing-client-linux-arm64-${VERSION}.tar.gz\`
         
         ### Docker Images
-        - **Manager**: \`ghcr.io/${{ github.repository }}/sasewaddle-manager:${VERSION}\`
-        - **Headend**: \`ghcr.io/${{ github.repository }}/sasewaddle-headend:${VERSION}\`
-        - **Client**: \`ghcr.io/${{ github.repository }}/sasewaddle-client:${VERSION}\`
+        - **Manager**: \`ghcr.io/${{ github.repository }}/tobogganing-manager:${VERSION}\`
+        - **Headend**: \`ghcr.io/${{ github.repository }}/tobogganing-headend:${VERSION}\`
+        - **Client**: \`ghcr.io/${{ github.repository }}/tobogganing-client:${VERSION}\`
         
         ## 🛠️ Installation
         
@@ -597,7 +597,7 @@ EOF
         ### Manual Installation
         1. Download the appropriate binary for your platform
         2. Extract and move to your PATH
-        3. Run \`sasewaddle-client init\` to configure
+        3. Run \`tobogganing-client init\` to configure
         
         ### Docker Deployment
         See \`examples/docker-compose.yml\` for a complete deployment example.
@@ -629,7 +629,7 @@ EOF
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
-        name: "SASEWaddle v${{ steps.version.outputs.version }}"
+        name: "Tobogganing v${{ steps.version.outputs.version }}"
         body_path: release-notes.md
         files: |
           release-packages/*

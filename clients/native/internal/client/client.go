@@ -31,8 +31,8 @@ import (
     "golang.zx2c4.com/wireguard/wgctrl"
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
-    "github.com/sasewaddle/clients/native/internal/config"
-    "github.com/sasewaddle/clients/native/internal/auth"
+    "github.com/tobogganing/clients/native/internal/config"
+    "github.com/tobogganing/clients/native/internal/auth"
 )
 
 const (

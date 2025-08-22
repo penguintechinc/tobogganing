@@ -1,29 +1,38 @@
 ```
-                    🐧 SASEWaddle - The Sassy SASE Penguin 🐧
-                              
-                                   .-""""""-.
-                                 .'          '.
-                                /   O      O   \
-                               :           `    :
-                               |                |
-                               :    \______/    :    "Zero Trust? More like Zero Chill!"
-                                \              /
-                                 '.  '------'  .'      
-                            jgs    `""------""`
+              🛷 TOBOGGANING - Slide Into Zero Trust Security! 🛷
+                         
+                              ⛄ "Downhill to Security!" ⛄
                                       
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │  🛡️  SECURE  •  🚀 FAST  •  🔓 OPEN SOURCE  •  🐧 WADDLE-POWERED  │
-    └─────────────────────────────────────────────────────────────────────────┘
+                        ╭─────────────────────────────────╮
+                       ╱                                   ╲
+                      ╱    ◉     T O B O G G A N I N G     ◉    ╲
+                     ╱                                           ╲
+                    ╱         🛡️ Zero Trust Architecture         ╲
+                   ╱                                               ╲
+                  ╱─────────────────────────────────────────────────╲
+                 ╱███████████████████████████████████████████████████╲
+                ╱░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╲
+               ╱▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓╲
+              ╱════════════════════════════════════════════════════════╲
+             ╱      ❄️ WireGuard VPN  •  🔒 Enterprise Security        ╲  
+            ╱           💻 Multi-Platform  •  📱 Mobile Apps            ╲
+           ╱                                                             ╲
+          ╱_______________________________________________________________╲
+              ╲╲╲╲╲╲╲╲╲╲╲  Sliding down the security slope!  ╱╱╱╱╱╱╱╱╱╱╱
+                  
+    ╭───────────────────────────────────────────────────────────────────────╮
+    │  🛡️ SECURE  •  🚀 LIGHTNING FAST  •  🔓 OPEN SOURCE  •  🛷 POWERED  │
+    ╰───────────────────────────────────────────────────────────────────────╯
 ```
 
-# SASEWaddle
+# Tobogganing
 
-[![GitHub release](https://img.shields.io/github/release/your-org/sasewaddle.svg)](https://github.com/your-org/sasewaddle/releases)
-[![Build Status](https://github.com/your-org/sasewaddle/workflows/CI/badge.svg)](https://github.com/your-org/sasewaddle/actions)
+[![GitHub release](https://img.shields.io/github/release/penguintechinc/Tobogganing.svg)](https://github.com/penguintechinc/Tobogganing/releases)
+[![Build Status](https://github.com/penguintechinc/Tobogganing/workflows/CI/badge.svg)](https://github.com/penguintechinc/Tobogganing/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Report Card](https://goreportcard.com/badge/github.com/your-org/sasewaddle)](https://goreportcard.com/report/github.com/your-org/sasewaddle)
+[![Go Report Card](https://goreportcard.com/badge/github.com/penguintechinc/Tobogganing)](https://goreportcard.com/report/github.com/penguintechinc/Tobogganing)
 
-**SASEWaddle** is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. Built with modern technologies like WireGuard, Go, and Python, it provides enterprise-grade network security with the flexibility of open source.
+**Tobogganing** is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. Built with modern technologies like WireGuard, Go, and Python, it provides enterprise-grade network security with the flexibility of open source.
 
 ## 🚀 Features
 

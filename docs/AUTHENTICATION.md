@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-SASEWaddle provides flexible authentication options that scale from simple deployments to enterprise environments. **Basic username/password authentication is always available** regardless of license tier, with enterprise features providing additional authentication methods.
+Tobogganing provides flexible authentication options that scale from simple deployments to enterprise environments. **Basic username/password authentication is always available** regardless of license tier, with enterprise features providing additional authentication methods.
 
 ## 🎯 Authentication Methods
 
@@ -10,7 +10,7 @@ SASEWaddle provides flexible authentication options that scale from simple deplo
 **Always Available** - No license restrictions
 
 - **Username/Password**: Standard web portal authentication
-- **Local User Management**: Create and manage users directly in SASEWaddle
+- **Local User Management**: Create and manage users directly in Tobogganing
 - **Role-Based Access**: Admin and Reporter roles
 - **Session Management**: Secure session handling with configurable timeouts
 - **Password Security**: bcrypt hashing with secure defaults
@@ -28,14 +28,14 @@ export JWT_SECRET=your-secure-secret
 #### SSO/SAML2 Integration
 - **SAML2 Identity Providers**: Okta, Azure AD, Google Workspace, etc.
 - **Single Sign-On**: Seamless integration with corporate IdP
-- **Attribute Mapping**: Map IdP attributes to SASEWaddle roles
+- **Attribute Mapping**: Map IdP attributes to Tobogganing roles
 - **Session Federation**: Consistent login experience
 
 **Configuration:**
 ```bash
 export SSO_ENABLED=true
 export SAML2_IDP_URL=https://your-idp.com/saml2
-export SAML2_ENTITY_ID=sasewaddle
+export SAML2_ENTITY_ID=tobogganing
 export SAML2_CERTIFICATE_PATH=/certs/saml.crt
 export SAML2_PRIVATE_KEY_PATH=/certs/saml.key
 ```
@@ -43,7 +43,7 @@ export SAML2_PRIVATE_KEY_PATH=/certs/saml.key
 #### OAuth2 Integration
 - **OAuth2 Providers**: GitHub, GitLab, custom OAuth2 servers
 - **Authorization Code Flow**: Standard OAuth2 implementation
-- **Scope-Based Access**: Map OAuth2 scopes to SASEWaddle permissions
+- **Scope-Based Access**: Map OAuth2 scopes to Tobogganing permissions
 
 **Configuration:**
 ```bash
@@ -56,7 +56,7 @@ export OAUTH2_REDIRECT_URI=https://manager.example.com/auth/oauth2/callback
 
 #### LDAP/Active Directory
 - **Directory Integration**: Connect to existing LDAP/AD infrastructure
-- **Group Mapping**: Map LDAP groups to SASEWaddle roles
+- **Group Mapping**: Map LDAP groups to Tobogganing roles
 - **Nested Groups**: Support for complex organizational structures
 - **TLS Encryption**: Secure LDAP communication
 
@@ -64,7 +64,7 @@ export OAUTH2_REDIRECT_URI=https://manager.example.com/auth/oauth2/callback
 ```bash
 export LDAP_ENABLED=true
 export LDAP_SERVER=ldap://ldap.company.com:389
-export LDAP_BIND_DN=cn=sasewaddle,ou=service,dc=company,dc=com
+export LDAP_BIND_DN=cn=tobogganing,ou=service,dc=company,dc=com
 export LDAP_BIND_PASSWORD=service-password
 export LDAP_USER_BASE=ou=users,dc=company,dc=com
 export LDAP_GROUP_BASE=ou=groups,dc=company,dc=com
@@ -158,7 +158,7 @@ services:
       - JWT_SECRET=your-256-bit-secret
       - SESSION_TIMEOUT_HOURS=8
       - DB_HOST=mysql
-      - DB_USER=sasewaddle
+      - DB_USER=tobogganing
       - DB_PASSWORD=${DB_PASSWORD}
 ```
 
@@ -177,8 +177,8 @@ services:
       
       # SSO Configuration
       - SSO_ENABLED=true
-      - SAML2_IDP_URL=https://company.okta.com/app/sasewaddle/exk123/sso/saml
-      - SAML2_ENTITY_ID=sasewaddle-production
+      - SAML2_IDP_URL=https://company.okta.com/app/tobogganing/exk123/sso/saml
+      - SAML2_ENTITY_ID=tobogganing-production
       
       # LDAP Configuration  
       - LDAP_ENABLED=true
@@ -213,7 +213,7 @@ curl -X POST https://manager.example.com/api/web/user \
 ```yaml
 # LDAP Group Mapping
 ldap_role_mapping:
-  "CN=SASEWaddle-Admins,OU=Groups,DC=company,DC=com": "admin"
+  "CN=Tobogganing-Admins,OU=Groups,DC=company,DC=com": "admin"
   "CN=Network-Team,OU=Groups,DC=company,DC=com": "reporter"
   "CN=IT-Staff,OU=Groups,DC=company,DC=com": "user"
 
@@ -221,7 +221,7 @@ ldap_role_mapping:
 saml_attribute_mapping:
   role_attribute: "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
   role_mapping:
-    "sasewaddle-admins": "admin"
+    "tobogganing-admins": "admin"
     "network-engineers": "reporter"
 ```
 
@@ -243,7 +243,7 @@ curl -X POST https://manager.example.com/login \
 #### SSO Configuration Issues
 ```bash
 # Verify license supports SSO
-curl -X POST https://license.squawkdns.com/api/sasewaddle/check_feature \
+curl -X POST https://license.squawkdns.com/api/tobogganing/check_feature \
   -H "Content-Type: application/json" \
   -d '{"license_key": "YOUR-LICENSE", "feature": "sso_authentication"}'
 
@@ -255,7 +255,7 @@ curl https://manager.example.com/auth/saml2/metadata
 ```bash
 # Test LDAP connectivity
 ldapsearch -x -H ldap://ldap.company.com \
-  -D "cn=sasewaddle,ou=service,dc=company,dc=com" \
+  -D "cn=tobogganing,ou=service,dc=company,dc=com" \
   -W -b "ou=users,dc=company,dc=com" "(uid=testuser)"
 ```
 

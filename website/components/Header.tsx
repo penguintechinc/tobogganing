@@ -33,9 +33,9 @@ const Header: React.FC = () => {
           <div className="flex items-center">
             <Link href="/" className="group flex items-center space-x-3 transition-all duration-300 hover:scale-105">
               <div className="h-10 w-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:rotate-3">
-                <span className="text-white font-bold text-lg">🐧</span>
+                <span className="text-white font-bold text-lg">🛷</span>
               </div>
-              <span className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">SASEWaddle</span>
+              <span className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">Tobogganing</span>
             </Link>
           </div>
 
@@ -62,7 +62,7 @@ const Header: React.FC = () => {
           {/* CTA Button */}
           <div className="hidden lg:flex lg:items-center lg:space-x-3">
             <Link
-              href="https://github.com/penguintechinc/SASEWaddle"
+              href="https://github.com/penguintechinc/tobogganing"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-primary-600 transition-all duration-300 rounded-xl hover:bg-gray-50"
@@ -118,7 +118,7 @@ const Header: React.FC = () => {
               ))}
               <div className="border-t border-primary-200/30 pt-4 mt-4 space-y-3">
                 <Link
-                  href="https://github.com/penguintechinc/SASEWaddle"
+                  href="https://github.com/penguintechinc/tobogganing"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center px-4 py-3 text-base font-medium text-gray-600 hover:text-primary-600 rounded-xl hover:bg-primary-50/50 transition-all duration-300"

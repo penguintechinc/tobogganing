@@ -33,10 +33,10 @@ jobs:
       matrix:
         include:
           - goarch: amd64
-            binary_name: sasewaddle-client-darwin-amd64
+            binary_name: tobogganing-client-darwin-amd64
             runner: macos-13  # Intel runner for AMD64
           - goarch: arm64
-            binary_name: sasewaddle-client-darwin-arm64
+            binary_name: tobogganing-client-darwin-arm64
             runner: macos-latest  # Apple Silicon runner for ARM64
     runs-on: ${{ matrix.runner }}
 
@@ -94,11 +94,11 @@ jobs:
       matrix:
         include:
           - goarch: amd64
-            binary_name: sasewaddle-client-linux-amd64
+            binary_name: tobogganing-client-linux-amd64
             dockerfile: Dockerfile.gui-amd64
             platform: linux/amd64
           - goarch: arm64
-            binary_name: sasewaddle-client-linux-arm64
+            binary_name: tobogganing-client-linux-arm64
             dockerfile: Dockerfile.gui-arm64
             platform: linux/arm64
 
@@ -133,7 +133,7 @@ jobs:
           
           # Extract the binary from the container
           docker create --name temp-container gui-builder-${{ matrix.goarch }}
-          docker cp temp-container:/src/sasewaddle-client-gui ../../dist/${{ matrix.binary_name }}
+          docker cp temp-container:/src/tobogganing-client-gui ../../dist/${{ matrix.binary_name }}
           docker rm temp-container
           
           # Verify the binary was created
@@ -153,9 +153,9 @@ jobs:
       matrix:
         include:
           - goarch: amd64
-            binary_name: sasewaddle-client-windows-amd64.exe
+            binary_name: tobogganing-client-windows-amd64.exe
           - goarch: arm64
-            binary_name: sasewaddle-client-windows-arm64.exe
+            binary_name: tobogganing-client-windows-arm64.exe
 
     steps:
       - name: Checkout code
@@ -213,27 +213,27 @@ jobs:
       - name: Download Intel binary
         uses: actions/download-artifact@v4
         with:
-          name: sasewaddle-client-darwin-amd64
+          name: tobogganing-client-darwin-amd64
           path: ./
       
       - name: Download ARM64 binary
         uses: actions/download-artifact@v4
         with:
-          name: sasewaddle-client-darwin-arm64
+          name: tobogganing-client-darwin-arm64
           path: ./
       
       - name: Create Universal Binary
         run: |
-          lipo -create -output sasewaddle-client-darwin-universal \
-            sasewaddle-client-darwin-amd64 \
-            sasewaddle-client-darwin-arm64
-          chmod +x sasewaddle-client-darwin-universal
+          lipo -create -output tobogganing-client-darwin-universal \
+            tobogganing-client-darwin-amd64 \
+            tobogganing-client-darwin-arm64
+          chmod +x tobogganing-client-darwin-universal
       
       - name: Upload Universal Binary
         uses: actions/upload-artifact@v4
         with:
-          name: sasewaddle-client-darwin-universal
-          path: sasewaddle-client-darwin-universal
+          name: tobogganing-client-darwin-universal
+          path: tobogganing-client-darwin-universal
 
   release:
     name: Create Release
@@ -273,7 +273,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            artifacts/sasewaddle-client-*
+            artifacts/tobogganing-client-*
             artifacts/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

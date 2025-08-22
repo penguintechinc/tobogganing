@@ -1,4 +1,4 @@
-module github.com/sasewaddle/clients/native
+module github.com/tobogganing/clients/native
 
 go 1.23.1
 

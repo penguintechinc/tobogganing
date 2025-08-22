@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/sasewaddle/clients/native/internal/config"
+	"github.com/tobogganing/clients/native/internal/config"
 	"github.com/spf13/cobra"
 )
 
