@@ -1,3 +1,5 @@
+//go:build !nogui
+
 // Package gui implements the graphical user interface for the SASEWaddle native client.
 package gui
 

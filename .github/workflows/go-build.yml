@@ -76,9 +76,9 @@ jobs:
           CGO_ENABLED: 0
         run: |
           # Build WITHOUT GUI for servers and embedded systems
-          go build -tags="nogui" -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
+          go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../../dist/${{ matrix.binary_name }} \
-            ./cmd/main.go
+            ./cmd/headless
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4

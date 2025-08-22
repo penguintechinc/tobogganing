@@ -186,7 +186,7 @@ jobs:
         
         # Build with optimizations
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-          -o build/${BINARY_NAME} ./cmd/main.go
+          -o build/${BINARY_NAME} ./cmd/headless
         
         echo "Built: ${BINARY_NAME}"
         ls -la build/

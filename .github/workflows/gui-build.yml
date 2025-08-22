@@ -47,7 +47,7 @@ jobs:
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../../dist/${{ matrix.binary_name }} \
-            ./cmd/main.go
+            ./cmd/gui
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -117,7 +117,7 @@ jobs:
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../../dist/${{ matrix.binary_name }} \
-            ./cmd/main.go
+            ./cmd/gui
 
       - name: Build GUI binary (ARM64)
         if: matrix.goarch == 'arm64'
@@ -130,7 +130,7 @@ jobs:
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../../dist/${{ matrix.binary_name }} \
-            ./cmd/main.go
+            ./cmd/gui
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -165,7 +165,7 @@ jobs:
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../../dist/sasewaddle-client-windows-amd64.exe \
-            ./cmd/main.go
+            ./cmd/gui
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
