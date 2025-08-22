@@ -262,7 +262,7 @@ func (t *TrayManager) handleConnect() {
 	log.Println("Tray: Connect requested")
 	if err := t.vpn.Connect(); err != nil {
 		log.Printf("Failed to connect: %v", err)
-		// TODO: Show error notification
+		t.showNotification("Connection Failed", fmt.Sprintf("Failed to connect: %v", err))
 	}
 }
 
@@ -270,7 +270,7 @@ func (t *TrayManager) handleDisconnect() {
 	log.Println("Tray: Disconnect requested")
 	if err := t.vpn.Disconnect(); err != nil {
 		log.Printf("Failed to disconnect: %v", err)
-		// TODO: Show error notification
+		t.showNotification("Disconnect Failed", fmt.Sprintf("Failed to disconnect: %v", err))
 	}
 }
 
@@ -286,10 +286,10 @@ func (t *TrayManager) handleUpdateConfig() {
 	log.Println("Tray: Update configuration requested")
 	if err := t.config.UpdateConfiguration(); err != nil {
 		log.Printf("Failed to update configuration: %v", err)
-		// TODO: Show error notification
+		t.showNotification("Configuration Update Failed", fmt.Sprintf("Failed to update: %v", err))
 	} else {
 		log.Println("Configuration updated successfully")
-		// TODO: Show success notification
+		t.showNotification("Configuration Updated", "Configuration updated successfully")
 	}
 	t.lastUpdate = time.Now()
 }
@@ -343,4 +343,16 @@ func getConnectedIconPNG() []byte {
 func getDisconnectedIconPNG() []byte {
 	// Red dot icon (simplified)
 	return []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
+}
+
+// showNotification displays a system notification to the user
+func (t *TrayManager) showNotification(title, message string) {
+	// Set the tray icon tooltip with the notification message
+	systray.SetTooltip(fmt.Sprintf("%s: %s", title, message))
+	
+	// Log the notification for debugging
+	log.Printf("Notification: %s - %s", title, message)
+	
+	// On platforms that support it, this could be extended to show
+	// native system notifications using platform-specific APIs
 }

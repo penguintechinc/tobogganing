@@ -24,6 +24,14 @@ import (
 	"github.com/sasewaddle/clients/native/internal/config"
 )
 
+const (
+	// Operating system constants
+	platformWindows = "windows"
+	
+	// Status constants
+	statusUnknown = "unknown"
+)
+
 // Manager handles WireGuard VPN connections and implements the tray.VPNManager interface
 type Manager struct {
 	config         *config.Config
@@ -52,7 +60,7 @@ func NewManager(cfg *config.Config) *Manager {
 	
 	// Determine interface name based on platform
 	interfaceName := "wg0"
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		interfaceName = "SASEWaddle"
 	}
 	
@@ -191,7 +199,7 @@ func (m *Manager) connectWireGuard() error {
 		return m.connectLinux()
 	case "darwin":
 		return m.connectMacOS()
-	case "windows":
+	case platformWindows:
 		return m.connectWindows()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
@@ -210,7 +218,7 @@ func (m *Manager) disconnectWireGuard() error {
 		return m.disconnectLinux()
 	case "darwin":
 		return m.disconnectMacOS()
-	case "windows":
+	case platformWindows:
 		return m.disconnectWindows()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
@@ -378,12 +386,12 @@ func (m *Manager) getLocalIP() string {
 	// Try to get the IP address of the WireGuard interface
 	iface, err := net.InterfaceByName(m.interfaceName)
 	if err != nil {
-		return "unknown"
+		return statusUnknown
 	}
 	
 	addrs, err := iface.Addrs()
 	if err != nil {
-		return "unknown"
+		return statusUnknown
 	}
 	
 	for _, addr := range addrs {
@@ -394,7 +402,7 @@ func (m *Manager) getLocalIP() string {
 		}
 	}
 	
-	return "unknown"
+	return statusUnknown
 }
 
 // Statistics and monitoring
@@ -467,7 +475,7 @@ func (m *Manager) parseTransferAmount(amountStr string) uint64 {
 	
 	// Simple parsing - would use proper float parsing in production
 	var amount float64
-	fmt.Sscanf(parts[0], "%f", &amount)
+	_, _ = fmt.Sscanf(parts[0], "%f", &amount)
 	
 	return uint64(amount * float64(multiplier))
 }
@@ -528,10 +536,6 @@ func (m *Manager) checkConnection() {
 
 // Utility functions for VPN management
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
 
 func readWireGuardConfig(path string) ([]byte, error) {
 	return os.ReadFile(path)

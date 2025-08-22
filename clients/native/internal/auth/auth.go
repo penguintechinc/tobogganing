@@ -68,7 +68,9 @@ func (a *Manager) GetToken(nodeID, nodeType, apiKey string) (*TokenInfo, error) 
     if err != nil {
         return nil, fmt.Errorf("token request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("token request failed with status %d", resp.StatusCode)
@@ -108,7 +110,9 @@ func (a *Manager) RefreshToken(refreshToken string) (*TokenInfo, error) {
     if err != nil {
         return nil, fmt.Errorf("refresh request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("refresh request failed with status %d", resp.StatusCode)
@@ -142,7 +146,9 @@ func (a *Manager) ValidateToken(token string) (bool, error) {
     if err != nil {
         return false, fmt.Errorf("validation request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     return resp.StatusCode == http.StatusOK, nil
 }
@@ -208,7 +214,9 @@ func (a *Manager) RevokeToken(token string) error {
     if err != nil {
         return fmt.Errorf("revoke request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     if resp.StatusCode != http.StatusOK {
         return fmt.Errorf("revoke request failed with status %d", resp.StatusCode)

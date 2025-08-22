@@ -260,7 +260,7 @@ func (ew *EmbeddedWireGuard) cleanup() {
 		ew.device = nil
 	}
 	if ew.tun != nil {
-		ew.tun.Close()
+		_ = ew.tun.Close()
 		ew.tun = nil
 	}
 }

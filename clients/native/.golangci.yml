@@ -4,18 +4,32 @@ run:
   timeout: 10m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - vendor
-  skip-files:
-    - ".*\\.pb\\.go$"
-
-output:
-  format: colored-line-number
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-use-default: false
+  exclude-rules:
+    # Skip systray related linting errors when CGO is disabled
+    - text: "could not import github.com/getlantern/systray"
+      linters:
+        - typecheck
+    - text: "Package ayatana-appindicator3-0.1 was not found"
+      linters:
+        - typecheck
+    # Skip unused imports in build-tag specific files
+    - path: "_test\\.go"
+      linters:
+        - gochecknoglobals
+        - gochecknoinits
+    # Allow long functions in main and setup code
+    - path: "cmd/.*\\.go"
+      linters:
+        - funlen
+    # Allow globals in main package
+    - path: "cmd/.*\\.go"
+      linters:
+        - gochecknoglobals
 
 linters-settings:
   govet:
@@ -36,9 +50,6 @@ linters-settings:
 
   lll:
     line-length: 120
-
-  golint:
-    min-confidence: 0.8
 
   gocyclo:
     min-complexity: 15
@@ -63,7 +74,6 @@ linters:
     - errcheck
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
     - misspell
     - goconst
@@ -84,26 +94,3 @@ linters:
 
 severity:
   default-severity: error
-
-# Skip certain linters for files with build tags that handle system-specific code
-  exclude-rules:
-    # Skip systray related linting errors when CGO is disabled
-    - text: "could not import github.com/getlantern/systray"
-      linters:
-        - typecheck
-    - text: "Package ayatana-appindicator3-0.1 was not found"
-      linters:
-        - typecheck
-    # Skip unused imports in build-tag specific files
-    - path: "_test\\.go"
-      linters:
-        - gochecknoglobals
-        - gochecknoinits
-    # Allow long functions in main and setup code
-    - path: "cmd/.*\\.go"
-      linters:
-        - funlen
-    # Allow globals in main package
-    - path: "cmd/.*\\.go"
-      linters:
-        - gochecknoglobals

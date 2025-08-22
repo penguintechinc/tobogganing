@@ -35,6 +35,13 @@ import (
     "github.com/sasewaddle/clients/native/internal/auth"
 )
 
+const (
+    // Operating system constants
+    platformWindows = "windows"
+    platformDarwin  = "darwin"
+    platformLinux   = "linux"
+)
+
 // Client represents the SASEWaddle native client
 type Client struct {
     config       *config.Config
@@ -172,7 +179,21 @@ func (c *Client) Status() (*ConnectionStatus, error) {
 func (c *Client) register() error {
     fmt.Println("Registering client with Manager Service...")
 
-    // Generate WireGuard keys
+    if err := c.generateWireGuardKeys(); err != nil {
+        return err
+    }
+
+    regReq := c.buildRegistrationRequest()
+    
+    regResp, err := c.sendRegistrationRequest(regReq)
+    if err != nil {
+        return err
+    }
+
+    return c.processRegistrationResponse(regResp)
+}
+
+func (c *Client) generateWireGuardKeys() error {
     privateKey, err := wgtypes.GeneratePrivateKey()
     if err != nil {
         return fmt.Errorf("failed to generate WireGuard keys: %w", err)
@@ -180,15 +201,17 @@ func (c *Client) register() error {
 
     c.wgPrivateKey = privateKey
     c.wgPublicKey = privateKey.PublicKey()
+    return nil
+}
 
-    // Prepare registration request
+func (c *Client) buildRegistrationRequest() map[string]interface{} {
     clientName := c.config.ClientName
     if clientName == "" {
         hostname, _ := os.Hostname()
         clientName = fmt.Sprintf("native-client-%s-%s", runtime.GOOS, hostname)
     }
 
-    regReq := map[string]interface{}{
+    return map[string]interface{}{
         "name":       clientName,
         "type":       "client_native",
         "public_key": c.wgPublicKey.String(),
@@ -197,12 +220,15 @@ func (c *Client) register() error {
             "architecture": runtime.GOARCH,
         },
     }
+}
 
+func (c *Client) sendRegistrationRequest(regReq map[string]interface{}) (*registrationResponse, error) {
     reqBody, _ := json.Marshal(regReq)
     
-    req, err := http.NewRequest("POST", c.config.ManagerURL+"/api/v1/clients/register", strings.NewReader(string(reqBody)))
+    registerURL := c.config.ManagerURL + "/api/v1/clients/register"
+    req, err := http.NewRequest("POST", registerURL, strings.NewReader(string(reqBody)))
     if err != nil {
-        return err
+        return nil, err
     }
 
     req.Header.Set("Content-Type", "application/json")
@@ -210,43 +236,52 @@ func (c *Client) register() error {
 
     resp, err := c.httpClient.Do(req)
     if err != nil {
-        return fmt.Errorf("registration request failed: %w", err)
+        return nil, fmt.Errorf("registration request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     if resp.StatusCode != http.StatusOK {
         body, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("registration failed with status %d: %s", resp.StatusCode, body)
+        return nil, fmt.Errorf("registration failed with status %d: %s", resp.StatusCode, body)
     }
 
-    var regResp struct {
-        ClientID     string `json:"client_id"`
-        APIKey       string `json:"api_key"`
-        Cluster      struct {
-            HeadendURL string `json:"headend_url"`
-        } `json:"cluster"`
-        Certificates struct {
-            Cert string `json:"cert"`
-            Key  string `json:"key"`
-            CA   string `json:"ca"`
-        } `json:"certificates"`
-    }
-
+    var regResp registrationResponse
     if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
-        return fmt.Errorf("failed to parse registration response: %w", err)
+        return nil, fmt.Errorf("failed to parse registration response: %w", err)
     }
 
+    return &regResp, nil
+}
+
+func (c *Client) processRegistrationResponse(regResp *registrationResponse) error {
     c.clientID = regResp.ClientID
     c.headendURL = regResp.Cluster.HeadendURL
     c.config.APIKey = regResp.APIKey
 
     // Save certificates
-    if err := c.saveCertificates(regResp.Certificates.Cert, regResp.Certificates.Key, regResp.Certificates.CA); err != nil {
+    err := c.saveCertificates(regResp.Certificates.Cert, regResp.Certificates.Key, regResp.Certificates.CA)
+    if err != nil {
         return fmt.Errorf("failed to save certificates: %w", err)
     }
 
     fmt.Printf("Registration successful - Client ID: %s\n", c.clientID)
     return nil
+}
+
+// registrationResponse represents the response from the manager service
+type registrationResponse struct {
+    ClientID     string `json:"client_id"`
+    APIKey       string `json:"api_key"`
+    Cluster      struct {
+        HeadendURL string `json:"headend_url"`
+    } `json:"cluster"`
+    Certificates struct {
+        Cert string `json:"cert"`
+        Key  string `json:"key"`
+        CA   string `json:"ca"`
+    } `json:"certificates"`
 }
 
 func (c *Client) authenticate() error {
@@ -271,7 +306,9 @@ func (c *Client) authenticate() error {
     if err != nil {
         return fmt.Errorf("authentication request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     if resp.StatusCode != http.StatusOK {
         body, _ := io.ReadAll(resp.Body)
@@ -306,7 +343,8 @@ func (c *Client) setupWireGuard() error {
 
     reqBody, _ := json.Marshal(wgReq)
     
-    req, err := http.NewRequest("POST", c.config.ManagerURL+"/api/v1/wireguard/keys", strings.NewReader(string(reqBody)))
+    keysURL := c.config.ManagerURL + "/api/v1/wireguard/keys"
+    req, err := http.NewRequest("POST", keysURL, strings.NewReader(string(reqBody)))
     if err != nil {
         return err
     }
@@ -318,7 +356,9 @@ func (c *Client) setupWireGuard() error {
     if err != nil {
         return fmt.Errorf("WireGuard config request failed: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        _ = resp.Body.Close()
+    }()
 
     if resp.StatusCode != http.StatusOK {
         body, _ := io.ReadAll(resp.Body)
@@ -382,9 +422,9 @@ func (c *Client) startWireGuard() error {
 
     var cmd *exec.Cmd
     switch runtime.GOOS {
-    case "darwin", "linux":
+    case platformDarwin, platformLinux:
         cmd = exec.Command("wg-quick", "up", configPath)
-    case "windows":
+    case platformWindows:
         // On Windows, we'd need to use WireGuard service
         // Use WireGuard for Windows service
         cmd = exec.Command("wg-quick.exe", "up", configPath)
@@ -406,9 +446,9 @@ func (c *Client) stopWireGuard() error {
 
     var cmd *exec.Cmd
     switch runtime.GOOS {
-    case "darwin", "linux":
+    case platformDarwin, platformLinux:
         cmd = exec.Command("wg-quick", "down", configPath)
-    case "windows":
+    case platformWindows:
         // Use WireGuard for Windows service
         cmd = exec.Command("wg-quick.exe", "up", configPath)
     default:
@@ -465,11 +505,11 @@ func (c *Client) checkAuthentication() error {
 
 func (c *Client) getWireGuardInterface() string {
     switch runtime.GOOS {
-    case "darwin":
+    case platformDarwin:
         return "utun1"
-    case "linux":
+    case platformLinux:
         return "wg0"  
-    case "windows":
+    case platformWindows:
         return "sasewaddle"
     default:
         return "wg0"
@@ -480,11 +520,11 @@ func (c *Client) getWireGuardConfigPath() string {
     interfaceName := c.getWireGuardInterface()
     
     switch runtime.GOOS {
-    case "darwin":
+    case platformDarwin:
         return fmt.Sprintf("/usr/local/etc/wireguard/%s.conf", interfaceName)
-    case "linux":
+    case platformLinux:
         return fmt.Sprintf("/etc/wireguard/%s.conf", interfaceName)
-    case "windows":
+    case platformWindows:
         return fmt.Sprintf("C:\\Program Files\\WireGuard\\Data\\Configurations\\%s.conf", interfaceName)
     default:
         return fmt.Sprintf("/etc/wireguard/%s.conf", interfaceName)
@@ -495,9 +535,9 @@ func (c *Client) getInterfaceIP(interfaceName string) (string, error) {
     var cmd *exec.Cmd
     
     switch runtime.GOOS {
-    case "darwin", "linux":
+    case platformDarwin, platformLinux:
         cmd = exec.Command("ip", "addr", "show", interfaceName)
-    case "windows":
+    case platformWindows:
         cmd = exec.Command("netsh", "interface", "ip", "show", "addresses", interfaceName)
     default:
         return "", fmt.Errorf("unsupported platform")
@@ -547,11 +587,11 @@ func (c *Client) saveCertificates(cert, key, ca string) error {
 
 func (c *Client) getCertificateDir() string {
     switch runtime.GOOS {
-    case "darwin":
+    case platformDarwin:
         return os.Getenv("HOME") + "/.sasewaddle/certs"
-    case "linux": 
+    case platformLinux: 
         return os.Getenv("HOME") + "/.sasewaddle/certs"
-    case "windows":
+    case platformWindows:
         return os.Getenv("APPDATA") + "\\SASEWaddle\\certs"
     default:
         return "/tmp/sasewaddle/certs"
