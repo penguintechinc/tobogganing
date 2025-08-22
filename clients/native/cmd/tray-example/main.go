@@ -37,7 +37,11 @@ func main() {
 	if err := configManager.Start(); err != nil {
 		log.Fatalf("Failed to start configuration manager: %v", err)
 	}
-	defer configManager.Stop()
+	defer func() {
+		if err := configManager.Stop(); err != nil {
+			log.Printf("Error stopping configuration manager: %v", err)
+		}
+	}()
 
 	// Create tray manager
 	trayManager := tray.NewTrayManager(vpnManager, configManager)
@@ -51,8 +55,12 @@ func main() {
 		log.Println("Received shutdown signal, cleaning up...")
 		
 		// Stop managers
-		configManager.Stop()
-		vpnManager.Stop()
+		if err := configManager.Stop(); err != nil {
+			log.Printf("Error stopping configuration manager: %v", err)
+		}
+		if err := vpnManager.Stop(); err != nil {
+			log.Printf("Error stopping VPN manager: %v", err)
+		}
 		trayManager.Stop()
 		
 		os.Exit(0)
@@ -61,6 +69,7 @@ func main() {
 	// Run tray (this blocks until the application exits)
 	log.Println("System tray started. Right-click the tray icon to access options.")
 	if err := trayManager.Run(); err != nil {
-		log.Fatalf("Tray manager failed: %v", err)
+		log.Printf("Tray manager failed: %v", err)
+		os.Exit(1)
 	}
 }

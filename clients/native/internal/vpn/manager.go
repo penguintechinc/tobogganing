@@ -444,44 +444,62 @@ type InterfaceStatistics struct {
 func (m *Manager) getInterfaceStatistics() InterfaceStatistics {
 	stats := InterfaceStatistics{}
 	
-	// Get statistics using wg command
-	cmd := exec.Command("wg", "show", m.interfaceName)
-	output, err := cmd.Output()
+	output, err := m.getWireGuardOutput()
 	if err != nil {
 		log.Printf("Failed to get WireGuard statistics: %v", err)
 		return stats
 	}
 	
-	// Parse wg output for statistics
-	lines := strings.Split(string(output), "\n")
+	m.parseWireGuardOutput(string(output), &stats)
+	return stats
+}
+
+func (m *Manager) getWireGuardOutput() ([]byte, error) {
+	cmd := exec.Command("wg", "show", m.interfaceName)
+	return cmd.Output()
+}
+
+func (m *Manager) parseWireGuardOutput(output string, stats *InterfaceStatistics) {
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.Contains(line, "transfer:") {
-			// Parse transfer line: "transfer: 1.23 MiB received, 456.78 KiB sent"
-			parts := strings.Fields(line)
-			if len(parts) >= 6 {
-				// This is a simplified parser - production would be more robust
-				if strings.Contains(line, "received") {
-					stats.BytesReceived = m.parseTransferAmount(parts[1] + " " + parts[2])
-				}
-				if strings.Contains(line, "sent") {
-					stats.BytesSent = m.parseTransferAmount(parts[4] + " " + parts[5])
-				}
-			}
-		}
-		if strings.Contains(line, "latest handshake:") {
-			// Parse handshake time
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				timeStr := strings.TrimSpace(parts[1])
-				if t, err := time.Parse("2006-01-02 15:04:05", timeStr); err == nil {
-					stats.LastHandshake = t
-				}
-			}
-		}
+		m.parseTransferLine(line, stats)
+		m.parseHandshakeLine(line, stats)
+	}
+}
+
+func (m *Manager) parseTransferLine(line string, stats *InterfaceStatistics) {
+	if !strings.Contains(line, "transfer:") {
+		return
 	}
 	
-	return stats
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return
+	}
+	
+	if strings.Contains(line, "received") {
+		stats.BytesReceived = m.parseTransferAmount(parts[1] + " " + parts[2])
+	}
+	if strings.Contains(line, "sent") {
+		stats.BytesSent = m.parseTransferAmount(parts[4] + " " + parts[5])
+	}
+}
+
+func (m *Manager) parseHandshakeLine(line string, stats *InterfaceStatistics) {
+	if !strings.Contains(line, "latest handshake:") {
+		return
+	}
+	
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return
+	}
+	
+	timeStr := strings.TrimSpace(parts[1])
+	if t, err := time.Parse("2006-01-02 15:04:05", timeStr); err == nil {
+		stats.LastHandshake = t
+	}
 }
 
 func (m *Manager) parseTransferAmount(amountStr string) uint64 {

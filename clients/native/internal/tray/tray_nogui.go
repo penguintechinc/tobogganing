@@ -45,7 +45,7 @@ func NewTrayManager(vpn VPNManager, config ConfigManager) *TrayManager {
 	}
 }
 
-// Run starts the system tray and blocks until the context is cancelled (stub implementation)
+// Run starts the system tray and blocks until the context is canceled (stub implementation)
 func (t *TrayManager) Run() error {
 	log.Println("System tray not available in this build (no GUI support)")
 	<-t.ctx.Done()

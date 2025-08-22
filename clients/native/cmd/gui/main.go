@@ -28,6 +28,12 @@ import (
     "github.com/sasewaddle/clients/native/internal/tray"
 )
 
+const (
+    osWindows = "windows"
+    osDarwin  = "darwin"
+    osLinux   = "linux"
+)
+
 var (
     version   = "1.1.0"
     buildTime = "unknown"
@@ -219,11 +225,11 @@ func runGUI(cmd *cobra.Command, args []string) error {
 func runServiceInstall(cmd *cobra.Command, args []string) error {
     // Implementation depends on platform
     switch runtime.GOOS {
-    case "windows":
+    case osWindows:
         return installWindowsService()
-    case "darwin":
+    case osDarwin:
         return installMacOSService()
-    case "linux":
+    case osLinux:
         return installLinuxService()
     default:
         return fmt.Errorf("service installation not supported on %s", runtime.GOOS)
@@ -232,11 +238,11 @@ func runServiceInstall(cmd *cobra.Command, args []string) error {
 
 func runServiceUninstall(cmd *cobra.Command, args []string) error {
     switch runtime.GOOS {
-    case "windows":
+    case osWindows:
         return uninstallWindowsService()
-    case "darwin":
+    case osDarwin:
         return uninstallMacOSService()
-    case "linux":
+    case osLinux:
         return uninstallLinuxService()
     default:
         return fmt.Errorf("service uninstallation not supported on %s", runtime.GOOS)
@@ -245,11 +251,11 @@ func runServiceUninstall(cmd *cobra.Command, args []string) error {
 
 func runServiceStart(cmd *cobra.Command, args []string) error {
     switch runtime.GOOS {
-    case "windows":
+    case osWindows:
         return startWindowsService()
-    case "darwin":
+    case osDarwin:
         return startMacOSService()
-    case "linux":
+    case osLinux:
         return startLinuxService()
     default:
         return fmt.Errorf("service control not supported on %s", runtime.GOOS)
@@ -258,11 +264,11 @@ func runServiceStart(cmd *cobra.Command, args []string) error {
 
 func runServiceStop(cmd *cobra.Command, args []string) error {
     switch runtime.GOOS {
-    case "windows":
+    case osWindows:
         return stopWindowsService()
-    case "darwin":
+    case osDarwin:
         return stopMacOSService()
-    case "linux":
+    case osLinux:
         return stopLinuxService()
     default:
         return fmt.Errorf("service control not supported on %s", runtime.GOOS)
