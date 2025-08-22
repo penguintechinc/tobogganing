@@ -147,13 +147,17 @@ func (m *Manager) Stop() {
     // Close connections
     m.mu.Lock()
     for dest, conn := range m.connections {
-        conn.Close()
+        if err := conn.Close(); err != nil {
+            log.Debugf("Error closing connection: %v", err)
+        }
         delete(m.connections, dest)
     }
     
     // Close Suricata connection
     if m.suricataConn != nil {
-        m.suricataConn.Close()
+        if err := m.suricataConn.Close(); err != nil {
+            log.Debugf("Error closing Suricata connection: %v", err)
+        }
         m.suricataConn = nil
     }
     
@@ -398,7 +402,9 @@ func (m *Manager) reconnect(dest string) {
     
     // Close existing connection
     if conn, exists := m.connections[dest]; exists {
-        conn.Close()
+        if err := conn.Close(); err != nil {
+            log.Debugf("Error closing connection: %v", err)
+        }
         delete(m.connections, dest)
     }
     
@@ -499,7 +505,9 @@ func (m *Manager) reconnectSuricata() {
     defer m.mu.Unlock()
     
     if m.suricataConn != nil {
-        m.suricataConn.Close()
+        if err := m.suricataConn.Close(); err != nil {
+            log.Debugf("Error closing Suricata connection: %v", err)
+        }
         m.suricataConn = nil
     }
     

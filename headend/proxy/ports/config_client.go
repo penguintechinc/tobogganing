@@ -71,7 +71,11 @@ func (c *ConfigClient) FetchConfig() (*PortConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Debugf("Error closing response body: %v", err)
+		}
+	}()
 	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

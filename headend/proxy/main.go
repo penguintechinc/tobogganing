@@ -32,12 +32,12 @@ import (
     log "github.com/sirupsen/logrus"
     "github.com/spf13/viper"
 
-    "github.com/sasewaddle/headend/proxy/auth"
-    "github.com/sasewaddle/headend/proxy/firewall"
-    "github.com/sasewaddle/headend/proxy/mirror"
-    "github.com/sasewaddle/headend/proxy/middleware"
-    "github.com/sasewaddle/headend/proxy/ports"
-    "github.com/sasewaddle/headend/proxy/syslog"
+    "github.com/tobogganing/headend/proxy/auth"
+    "github.com/tobogganing/headend/proxy/firewall"
+    "github.com/tobogganing/headend/proxy/mirror"
+    "github.com/tobogganing/headend/proxy/middleware"
+    "github.com/tobogganing/headend/proxy/ports"
+    "github.com/tobogganing/headend/proxy/syslog"
 )
 
 type ProxyServer struct {
@@ -385,12 +385,7 @@ func (s *ProxyServer) healthHandler(c *gin.Context) {
 
 func (s *ProxyServer) healthzHandler(c *gin.Context) {
     // Kubernetes-style health check
-    healthy := true
-    
-    // Check auth provider
-    if s.authProvider == nil {
-        healthy = false
-    }
+    healthy := s.authProvider != nil
     
     // Check proxies
     if s.tcpProxy == nil || s.udpProxy == nil {
@@ -464,11 +459,14 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
     requestID := c.GetHeader("X-Request-ID")
     
     // Check firewall rules if firewall manager is enabled
-    allowed := true
+    var allowed bool
     if s.firewallManager != nil {
         allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+    } else {
+        allowed = true
+    }
         
-        if !allowed {
+    if !allowed {
             log.Warnf("Firewall blocked access for user %s to %s", user.ID, targetHost)
             
             // Log denied access to syslog
@@ -478,10 +476,9 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
             
             c.JSON(http.StatusForbidden, gin.H{"error": "Access denied by firewall policy"})
             return
-        }
-        
-        log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
     }
+        
+    log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
 
     // Get or create proxy for target
     proxy := s.getOrCreateProxy(targetHost)
@@ -649,10 +646,14 @@ func (s *ProxyServer) Run() error {
         
         // Close TCP and UDP proxies
         if s.tcpProxy != nil && s.tcpProxy.listener != nil {
-            s.tcpProxy.listener.Close()
+            if err := s.tcpProxy.listener.Close(); err != nil {
+                log.Errorf("Failed to close TCP listener: %v", err)
+            }
         }
         if s.udpProxy != nil && s.udpProxy.conn != nil {
-            s.udpProxy.conn.Close()
+            if err := s.udpProxy.conn.Close(); err != nil {
+                log.Errorf("Failed to close UDP connection: %v", err)
+            }
         }
 
         if err := s.httpServer.Shutdown(ctx); err != nil {
@@ -751,7 +752,11 @@ func (t *TCPProxy) Start() {
 }
 
 func (t *TCPProxy) handleConnection(clientConn net.Conn) {
-    defer clientConn.Close()
+    defer func() {
+        if err := clientConn.Close(); err != nil {
+            log.Debugf("Error closing client connection: %v", err)
+        }
+    }()
     
     // Read first packet to extract JWT token from headers
     buffer := make([]byte, 4096)
@@ -782,11 +787,14 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
     }
     
     // Check firewall rules if firewall manager is enabled
-    allowed := true
+    var allowed bool
     if t.firewallManager != nil {
         allowed = t.firewallManager.CheckAccess(user.ID, targetHost)
+    } else {
+        allowed = true
+    }
         
-        if !allowed {
+    if !allowed {
             log.Warnf("Firewall blocked TCP connection for user %s to %s", user.ID, targetHost)
             
             // Log denied access to syslog
@@ -795,9 +803,9 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
             }
             
             return
-        }
-        log.Debugf("Firewall allowed TCP connection for user %s to %s", user.ID, targetHost)
     }
+        
+    log.Debugf("Firewall allowed TCP connection for user %s to %s", user.ID, targetHost)
     
     // Log allowed access to syslog
     if t.syslogLogger != nil {
@@ -819,7 +827,11 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
         log.Errorf("Failed to connect to target %s: %v", targetHost, err)
         return
     }
-    defer targetConn.Close()
+    defer func() {
+        if err := targetConn.Close(); err != nil {
+            log.Debugf("Error closing target connection: %v", err)
+        }
+    }()
     
     // Send original packet to target
     if _, err := targetConn.Write(buffer[:n]); err != nil {
@@ -923,11 +935,14 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
     }
     
     // Check firewall rules if firewall manager is enabled
-    allowed := true
+    var allowed bool
     if u.firewallManager != nil {
         allowed = u.firewallManager.CheckAccess(user.ID, targetHost)
+    } else {
+        allowed = true
+    }
         
-        if !allowed {
+    if !allowed {
             log.Warnf("Firewall blocked UDP packet for user %s to %s", user.ID, targetHost)
             
             // Log denied access to syslog
@@ -936,9 +951,9 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
             }
             
             return
-        }
-        log.Debugf("Firewall allowed UDP packet for user %s to %s", user.ID, targetHost)
     }
+        
+    log.Debugf("Firewall allowed UDP packet for user %s to %s", user.ID, targetHost)
     
     // Log allowed access to syslog
     if u.syslogLogger != nil {
@@ -957,7 +972,11 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
         log.Errorf("Failed to connect to target %s: %v", targetHost, err)
         return
     }
-    defer targetConn.Close()
+    defer func() {
+        if err := targetConn.Close(); err != nil {
+            log.Debugf("Error closing target connection: %v", err)
+        }
+    }()
     
     // Forward packet to target
     if _, err := targetConn.Write(data); err != nil {
@@ -972,7 +991,10 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
     
     // Read response and send back
     response := make([]byte, 65536)
-    targetConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+    if err := targetConn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+        log.Errorf("Failed to set read deadline: %v", err)
+        return
+    }
     n, err := targetConn.Read(response)
     if err != nil {
         log.Errorf("Failed to read response from target: %v", err)
@@ -1027,27 +1049,24 @@ func (s *ProxyServer) refreshPortConfig(configClient *ports.ConfigClient) {
 	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
 	
-	for {
-		select {
-		case <-ticker.C:
-			config, err := configClient.FetchConfig()
-			if err != nil {
-				log.Errorf("Failed to refresh port config: %v", err)
-				continue
-			}
-			
-			// Validate the configuration
-			if err := configClient.ValidateConfig(config); err != nil {
-				log.Errorf("Invalid port config received: %v", err)
-				continue
-			}
-			
-			// Update port manager configuration
-			if err := s.updatePortConfiguration(config); err != nil {
-				log.Errorf("Failed to update port configuration: %v", err)
-			} else {
-				log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
-			}
+	for range ticker.C {
+		config, err := configClient.FetchConfig()
+		if err != nil {
+			log.Errorf("Failed to refresh port config: %v", err)
+			continue
+		}
+		
+		// Validate the configuration
+		if err := configClient.ValidateConfig(config); err != nil {
+			log.Errorf("Invalid port config received: %v", err)
+			continue
+		}
+		
+		// Update port manager configuration
+		if err := s.updatePortConfiguration(config); err != nil {
+			log.Errorf("Failed to update port configuration: %v", err)
+		} else {
+			log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
 		}
 	}
 }
@@ -1078,7 +1097,11 @@ func (s *ProxyServer) updatePortConfiguration(config *ports.PortConfig) error {
 
 // handleDynamicTCPConnection handles new TCP connections on dynamically configured ports
 func (s *ProxyServer) handleDynamicTCPConnection(conn net.Conn, port int, protocol string) {
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Debugf("Error closing connection: %v", err)
+		}
+	}()
 	
 	log.Debugf("New TCP connection on dynamic port %d from %s", port, conn.RemoteAddr())
 	
@@ -1109,9 +1132,8 @@ func (s *ProxyServer) handleDynamicTCPConnection(conn net.Conn, port int, protoc
 	log.Infof("Authenticated TCP connection on port %d for user: %s to %s", port, user.ID, targetHost)
 	
 	// Check firewall rules
-	allowed := true
 	if s.firewallManager != nil {
-		allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+		allowed := s.firewallManager.CheckAccess(user.ID, targetHost)
 		if !allowed {
 			log.Warnf("Firewall blocked TCP connection on port %d for user %s to %s", port, user.ID, targetHost)
 			
@@ -1143,7 +1165,11 @@ func (s *ProxyServer) handleDynamicTCPConnection(conn net.Conn, port int, protoc
 		log.Errorf("Failed to connect to target %s from port %d: %v", targetHost, port, err)
 		return
 	}
-	defer targetConn.Close()
+	defer func() {
+		if err := targetConn.Close(); err != nil {
+			log.Debugf("Error closing target connection: %v", err)
+		}
+	}()
 	
 	// Send original packet to target
 	if _, err := targetConn.Write(buffer[:n]); err != nil {
@@ -1184,9 +1210,8 @@ func (s *ProxyServer) handleDynamicUDPPacket(data []byte, addr *net.UDPAddr, por
 	log.Infof("Authenticated UDP packet on port %d for user: %s to %s", port, user.ID, targetHost)
 	
 	// Check firewall rules
-	allowed := true
 	if s.firewallManager != nil {
-		allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+		allowed := s.firewallManager.CheckAccess(user.ID, targetHost)
 		if !allowed {
 			log.Warnf("Firewall blocked UDP packet on port %d for user %s to %s", port, user.ID, targetHost)
 			
@@ -1215,7 +1240,11 @@ func (s *ProxyServer) handleDynamicUDPPacket(data []byte, addr *net.UDPAddr, por
 		log.Errorf("Failed to connect to target %s from port %d: %v", targetHost, port, err)
 		return
 	}
-	defer targetConn.Close()
+	defer func() {
+		if err := targetConn.Close(); err != nil {
+			log.Debugf("Error closing target connection: %v", err)
+		}
+	}()
 	
 	// Forward packet to target
 	if _, err := targetConn.Write(data); err != nil {
@@ -1230,7 +1259,10 @@ func (s *ProxyServer) handleDynamicUDPPacket(data []byte, addr *net.UDPAddr, por
 	
 	// Read response and send back (UDP response handling would need port manager support)
 	response := make([]byte, 65536)
-	targetConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	if err := targetConn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		log.Errorf("Failed to set read deadline: %v", err)
+		return
+	}
 	n, err := targetConn.Read(response)
 	if err != nil {
 		log.Debugf("No response from target %s (normal for UDP)", targetHost)

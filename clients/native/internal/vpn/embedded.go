@@ -7,10 +7,10 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"sync"
 
+	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
 )
@@ -55,7 +55,8 @@ func (ew *EmbeddedWireGuard) Start(config string) error {
 
 	// Create WireGuard device
 	logger := device.NewLogger(device.LogLevelVerbose, fmt.Sprintf("(%s) ", ew.interfaceName))
-	wgDevice := device.NewDevice(ew.tun, logger)
+	bind := conn.NewDefaultBind()
+	wgDevice := device.NewDevice(ew.tun, bind, logger)
 	ew.device = wgDevice
 
 	// Configure WireGuard device
@@ -259,7 +260,7 @@ func (ew *EmbeddedWireGuard) cleanup() {
 		ew.device = nil
 	}
 	if ew.tun != nil {
-		ew.tun.Close()
+		_ = ew.tun.Close()
 		ew.tun = nil
 	}
 }

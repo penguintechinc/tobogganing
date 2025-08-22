@@ -227,6 +227,9 @@ def define_schema() -> None:
               requires=IS_IN_SET(['active', 'inactive', 'suspended'])),
         Field('public_key', 'text'),
         Field('config', 'json'),
+        Field('tunnel_mode', 'string', length=20, default='full',
+              requires=IS_IN_SET(['full', 'split'])),
+        Field('split_tunnel_routes', 'json'),  # List of routes for split tunnel mode (domains, IPv4/IPv6 addresses and CIDRs)
         Field('last_seen', 'datetime'),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),

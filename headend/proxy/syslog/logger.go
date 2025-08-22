@@ -135,7 +135,9 @@ func (s *SyslogLogger) Stop() {
 	// Close connection
 	s.mu.Lock()
 	if s.conn != nil {
-		s.conn.Close()
+		if err := s.conn.Close(); err != nil {
+			log.Debugf("Error closing syslog connection: %v", err)
+		}
 		s.conn = nil
 	}
 	s.mu.Unlock()

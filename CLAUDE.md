@@ -1,7 +1,7 @@
-# SASEWaddle Project Documentation
+# Tobogganing Project Documentation
 
 ## Project Overview
-SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of three main components:
+Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of three main components:
 
 1. **Manager Service** - Centralized orchestration and certificate management
 2. **Headend Server** - WireGuard termination and proxy authentication  
@@ -87,12 +87,34 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - Containerized deployment for easy scaling
 
 #### Native Golang Client
-- **Platforms**: Mac Universal, Linux, Windows
-- Lightweight and efficient
-- Direct integration with system network stack
-- GUI and CLI interfaces
-- Auto-update capabilities
-- **System Tray Integration**:
+- **Platforms**: Complete multi-architecture support across all major platforms
+- **Dual Build Architecture** with Go build tags for conditional compilation:
+  - **GUI Builds** (`//go:build !nogui`): Full desktop experience with system tray
+  - **Headless Builds** (`//go:build nogui`): CLI-only for servers and automation
+
+## 🏗️ Complete Build Matrix
+
+### 🖥️ GUI Client Builds (Desktop Experience)
+| **Platform** | **AMD64/x86_64** | **ARM64** | **Build Method** |
+|-------------|------------------|-----------|------------------|
+| **macOS**    | ✅ | ✅ | Native (creates Universal binary) |
+| **Linux**    | ✅ | ✅ | Docker (architecture-specific) |
+| **Windows**  | ✅ | ✅ | Native with CGO |
+
+### ⚡ Headless Client Builds (Server/Embedded)
+| **Platform** | **AMD64/x86_64** | **ARM64** | **ARMv7** | **ARMv6** | **MIPS** | **MIPS LE** |
+|-------------|------------------|-----------|-----------|-----------|----------|-------------|
+| **macOS**    | ✅ | ✅ | - | - | - | - |
+| **Linux**    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Windows**  | ✅ | ✅ | - | - | - | - |
+
+### 🏭 Total Build Outputs
+- **GUI Builds**: 6 binaries (macOS AMD64, macOS ARM64 + Universal, Linux AMD64, Linux ARM64, Windows AMD64, Windows ARM64)
+- **Headless Builds**: 8 primary + embedded variants (macOS AMD64, macOS ARM64 + Universal, Linux AMD64, Linux ARM64, Windows AMD64, Windows ARM64, Linux ARMv6/v7, Linux MIPS/MIPS LE)
+- **Cross-Platform**: All major desktop and server architectures covered
+- Lightweight and efficient with direct system network stack integration
+- Auto-update capabilities and certificate management
+- **System Tray Integration** (GUI Builds Only):
   - Real-time connection status monitoring
   - Connect/disconnect VPN with single click
   - Configuration update management with random scheduling (45-60 min intervals)
@@ -100,13 +122,34 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
   - Connection statistics viewer in browser
   - Settings and about dialogs
   - Graceful shutdown with automatic disconnection
+- **Headless Features** (Server/Embedded):
+  - Command-line interface only
+  - Daemon mode for background operation
+  - Docker and systemd integration
+  - Wide platform support (ARM, MIPS, embedded systems)
+  - Minimal resource footprint
 
 ## Development Guidelines
+
+### Development Requirements
+- **Operating System**: Ubuntu 24.04 LTS (standardized for all Debian/Ubuntu development and CI/CD)
+- **Go 1.23+** - All Go components (headend server and native clients)
+- **Python 3.12+** - Manager service and web portal
+- **Node.js 18+** - Website and React Native mobile applications
+- **Docker** - Containerized development and deployment
 
 ### Coding Standards
 - **Python**: Follow PEP 8, use type hints, async/await patterns
 - **Golang**: Follow Go formatting standards, use modules
 - **Docker**: Multi-stage builds for security and size optimization
+- **Go Development**: ALWAYS run lint check and build test after creating or modifying Go packages:
+  - `golangci-lint run` for linting
+  - `go build ./...` for build verification
+  - Fix all linting errors before committing code
+- **Build Tags**: Use conditional compilation for GUI vs headless builds:
+  - GUI builds: Default behavior, requires CGO and system dependencies
+  - Headless builds: Use `-tags="nogui"` flag for static compilation
+  - Test both variants when modifying client code
 
 ### Testing Requirements
 - Unit tests for all components
@@ -120,6 +163,137 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - Semantic versioning (starting at 1.0.0)
 - Automated Docker image publishing
 - Cross-platform binary compilation for Go clients
+- **Dual Client Architecture**: GUI vs Headless builds using Go build tags
+  - **GUI Builds** (Default for Desktop): System tray integration using github.com/getlantern/systray
+    - macOS: Universal binaries (Intel + Apple Silicon)
+    - Linux: Native system tray with libayatana-appindicator
+    - Windows: Native system tray integration
+    - Build with CGO enabled for GUI dependencies
+    - Primary user experience for end users
+  - **Headless Builds** (Servers/Embedded): CLI-only, no GUI dependencies
+    - Static compilation with CGO_ENABLED=0
+    - Minimal resource footprint
+    - Perfect for Docker containers and automation
+    - Wide platform support (ARM, MIPS, embedded systems)
+
+#### Local Testing & Build Process Guidelines
+
+**IMPORTANT**: When performing local builds and testing, replicate the build process from GitHub Actions workflows as closely as possible to ensure consistency and catch issues early.
+
+##### Build Testing Requirements
+1. **Manager Docker Container**:
+   ```bash
+   cd manager && docker build -t sasewaddle-manager:test . --no-cache
+   ```
+
+2. **Headend Server**:
+   ```bash
+   cd headend && docker build -t sasewaddle-headend:test . --no-cache
+   ```
+
+3. **Go Native Clients**:
+   ```bash
+   cd clients/native
+   # Headless builds (for ARM/embedded testing, use Docker)
+   go build -tags="nogui" -o sasewaddle-headless ./cmd/headless
+   # GUI builds (may require system dependencies)
+   go build -o sasewaddle-gui ./cmd/gui
+   ```
+
+4. **Docker Client**:
+   ```bash
+   cd clients/docker && docker build -t sasewaddle-docker-client:test . --no-cache
+   ```
+
+##### Cross-Platform Testing (ARM/Embedded)
+- **Use Docker containers** for ARM builds to ensure consistent environment
+- **Multi-arch Docker builds** should be tested locally before CI/CD
+- **Build tags** (`nogui`) should be tested for embedded/headless deployments
+
+##### GUI Client Build Process
+The GUI client uses the Fyne framework and requires special build considerations:
+
+**Docker-Based GUI Builds (Recommended for Linux/ARM)**
+- Use architecture-specific Dockerfiles for optimal builds:
+  - `Dockerfile.gui-amd64` for Intel/AMD builds
+  - `Dockerfile.gui-arm64` for ARM64 builds with cross-compilation
+- Includes all required system packages: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev, etc.
+- Each Dockerfile optimized for its target architecture
+
+**Important Fyne Framework Notes**
+- Fixed critical type declaration: use `fyne.App` interface, not `app.App`
+- Correct import pattern:
+  ```go
+  import (
+      "fyne.io/fyne/v2"
+      "fyne.io/fyne/v2/app"
+      "fyne.io/fyne/v2/widget"
+  )
+  
+  type App struct {
+      fyneApp fyne.App  // Correct: fyne.App interface
+  }
+  
+  func NewApp() *App {
+      return &App{
+          fyneApp: app.New(),  // app.New() returns fyne.App
+      }
+  }
+  ```
+
+**Build Command Examples**
+```bash
+# Docker-based GUI build (AMD64)
+docker build -f Dockerfile.gui-amd64 -t gui-builder-amd64 .
+docker create --name temp gui-builder-amd64
+docker cp temp:/src/sasewaddle-client-gui ./client-gui-amd64
+docker rm temp
+
+# Docker-based GUI build (ARM64)
+docker buildx build --platform linux/arm64 -f Dockerfile.gui-arm64 -t gui-builder-arm64 .
+docker create --name temp gui-builder-arm64
+docker cp temp:/src/sasewaddle-client-gui ./client-gui-arm64
+docker rm temp
+
+# Test GUI package compilation
+go build -v ./internal/gui
+
+# Native cross-platform build (requires system dependencies)
+CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build ./cmd/gui
+```
+
+**Troubleshooting GUI Builds**
+- **"undefined: app.App" error**: Check type declaration uses `fyne.App` not `app.App`
+- **ARM64 CGO assembly errors**: Use native runners for each architecture instead of cross-compilation
+  - macOS: Use `macos-13` for Intel AMD64, `macos-latest` for Apple Silicon ARM64
+  - Linux: Use architecture-specific Docker containers with proper toolchains
+- **Missing GUI dependencies**: Use Docker container builds for consistent environment
+- **CGO compilation errors**: Ensure CGO_ENABLED=1 for GUI builds
+- **Cross-compilation issues**: Use Docker Buildx with QEMU for ARM builds
+- **Slow builds**: GUI Docker builds take 5-10 minutes due to large dependency chains
+- **QEMU requirement**: Always set up QEMU for both AMD64/ARM64 in CI/CD environments
+
+**Build Verification Commands**
+```bash
+# Verify headless builds work (fast test)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o test-amd64 ./cmd/headless
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o test-arm64 ./cmd/headless
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o test-win-arm64.exe ./cmd/headless
+
+# Check architecture of binaries
+file test-*
+
+# Set up QEMU for local cross-platform Docker testing
+docker run --privileged --rm tonistiigi/binfmt --install all
+docker buildx create --name multiarch --driver docker-container --use
+docker buildx inspect --bootstrap
+```
+
+##### Linting Requirements
+- **Headend**: `golangci-lint run` (should show 0 issues)
+- **Native Clients**: Use appropriate build tags when linting GUI vs headless code
+- **Fix all linting errors** before committing code
+- **Python code**: Use `pylint` and `mypy` for manager service
 
 ### Security Considerations
 - Zero Trust principles throughout
@@ -136,7 +310,7 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 
 ## Project Structure
 ```
-/workspaces/SASEWaddle/
+/workspaces/Tobogganing/
 ├── manager/                 # Manager service code
 │   ├── api/                # REST API endpoints
 │   ├── web/                # py4web frontend with role-based access
@@ -208,18 +382,80 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - [x] Test Go builds for proxy and clients
 
 ### 📝 Current TODO Status
-*Last Updated: 2025-08-20*
+*Last Updated: 2025-08-21*
 
-All initial development tasks have been completed! The SASEWaddle project now includes:
+## ✅ Recently Completed Features (2025-08-22)
+
+1. ✅ **Split/Full Tunnel Configuration** 
+   - Added tunnel_mode field to clients table (full/split)
+   - Added split_tunnel_routes for domains, IPv4/IPv6 addresses and CIDRs
+   - New API endpoint: `PUT /api/v1/clients/<client_id>/tunnel-config`
+   - Supports bypassing specific domains or IP ranges
+
+2. ✅ **Enhanced Metrics Collection**
+   - Clients and headends can now submit metrics to manager
+   - New API endpoints: 
+     - `POST /api/v1/clients/<client_id>/metrics`
+     - `POST /api/v1/headends/<headend_id>/metrics`
+   - Prometheus metrics for client/headend monitoring:
+     - Connection statistics (bytes, packets, uptime)
+     - System resources (CPU, memory for headends)
+     - Last check-in timestamps
+   - Authentication required via Bearer token
+
+3. ✅ **System Check-in Dashboard**
+   - New web dashboard at `/checkin-dashboard`
+   - Shows last check-in times for all systems
+   - Differentiates between headends and clients
+   - Identifies headless vs GUI clients
+   - Color-coded status indicators:
+     - Green: Online (< 5 min for clients, < 2 min for headends)
+     - Yellow: Warning (< 15 min for clients, < 5 min for headends)  
+     - Red: Offline (older check-ins)
+   - Summary statistics for quick overview
+
+## 🎁 Bonus Features Added
+
+### Enterprise Licensing System
+- **Community Open Source**: Full VPN features with unlimited clients/headends, no license required
+- **Professional Tier**: Adds metrics collection and monitoring capabilities  
+- **Enterprise Tier**: Adds SSO/SAML2, LDAP, MFA, and advanced security features
+- **License Server**: Available at license.penguintech.io for feature validation
+- **Feature Gating**: Automatic validation ensures licensed features are properly controlled
+- **No Artificial Limits**: Community edition has no client or headend restrictions
+- **Authentication Strategy**: Basic username/password authentication always available in all tiers
+  - SSO/LDAP/MFA are **additional** authentication options for Enterprise customers
+  - No disruption to existing authentication workflows
+
+## 🔄 Ongoing Security & Quality Tasks
+
+1. 🚧 **Add input validation to all network-facing functions in Go code** - Ensure functions receiving data from outside via network connections perform basic input validation
+2. 🚧 **Clean up lint warnings in headend** - Fix remaining golangci-lint issues for clean CI/CD pipeline
+
+## ✅ Development Completion Status
+
+All initial development tasks have been completed! The Tobogganing project now includes:
+
+**🎉 Version v1.1.4 Features Complete:**
 
 1. ✅ **Manager Service** - Complete with PyDAL database, web portal, and API
 2. ✅ **Headend Proxy** - Go-based with firewall, syslog, and traffic mirroring
-3. ✅ **Client Applications** - Native Go client with GUI support
+3. ✅ **Client Applications** - Native Go client with GUI support and Docker builds
 4. ✅ **Network Features** - VRF/OSPF routing via FRR integration
 5. ✅ **Security Features** - Comprehensive firewall, IDS/IPS integration
 6. ✅ **Monitoring** - Prometheus metrics, syslog logging, health checks
 7. ✅ **Database** - PyDAL with MySQL/PostgreSQL/SQLite support
 8. ✅ **Documentation** - Well-documented Go code with package descriptions
+9. ✅ **Build System** - Docker-based GUI builds with Fyne framework fixes
+10. ✅ **CI/CD Pipeline** - GitHub Actions with cross-platform support
+
+**🔧 Version v1.1.4 Improvements:**
+- **Fixed Fyne GUI Framework Issues**: Corrected type declarations (`fyne.App` vs `app.App`)
+- **Docker-Based GUI Builds**: Reliable GUI client builds using Ubuntu containers
+- **Enhanced GitHub Actions**: Updated workflows with Docker Buildx and QEMU for ARM64
+- **Comprehensive Build Testing**: Added linting and GUI package compilation tests
+- **Cross-Platform Support**: Improved ARM64 build process via Docker containers
+- **Build Documentation**: Complete Docker-based build process documentation
 
 ## Legacy Development TODO List (Historical)
 - [x] Implement Manager Service (py4web Docker container with async/multithreading)
@@ -368,7 +604,10 @@ DB_PATH=/data/sasewaddle.db
 
 #### Core Management
 - `POST /api/v1/clients/register` - Register new client
-- `GET /api/v1/clients/{id}/config` - Get client configuration
+- `GET /api/v1/clients/{id}/config` - Get client configuration (includes tunnel config)
+- `PUT /api/v1/clients/{id}/tunnel-config` - Update client tunnel configuration
+- `POST /api/v1/clients/{id}/metrics` - Submit client metrics
+- `POST /api/v1/headends/{id}/metrics` - Submit headend metrics
 - `POST /api/v1/certs/generate` - Generate certificates
 - `GET /api/v1/status` - System status
 - `GET /health` - Detailed health check
@@ -380,6 +619,7 @@ DB_PATH=/data/sasewaddle.db
 - `POST /api/web/user/{id}/toggle` - Enable/disable user (Admin only)
 - `GET /api/web/stats` - Real-time dashboard statistics
 - `POST /api/web/client/{id}/revoke` - Revoke client access
+- `GET /checkin-dashboard` - System check-in dashboard page
 
 #### Firewall Management API
 - `POST /api/web/firewall/rule` - Create firewall rule
@@ -405,7 +645,7 @@ DB_PATH=/data/sasewaddle.db
 
 ## 🌐 Advanced Network Management - VRF & OSPF
 
-SASEWaddle includes enterprise-grade network segmentation and routing capabilities using FRR (Free Range Routing):
+Tobogganing includes enterprise-grade network segmentation and routing capabilities using FRR (Free Range Routing):
 
 ### Virtual Routing and Forwarding (VRF) Features
 
@@ -509,7 +749,7 @@ router ospf vrf corporate-wan
 
 ## 🔥 Advanced Firewall System
 
-SASEWaddle includes a comprehensive firewall system for granular access control:
+Tobogganing includes a comprehensive firewall system for granular access control:
 
 ### Rule Types Supported
 
@@ -612,19 +852,19 @@ SASEWaddle includes a comprehensive firewall system for granular access control:
 **CVE**: GHSA-v778-237x-gjrc (CRITICAL) - Misuse of ServerConfig.PublicKeyCallback may cause authorization bypass
 **Affected**: golang.org/x/crypto < 0.31.0
 **Resolution**:
-- ✅ Updated /workspaces/SASEWaddle/headend/go.mod: v0.17.0 → v0.31.0 
-- ✅ Updated /workspaces/SASEWaddle/clients/native/go.mod: v0.16.0 → v0.31.0
-- ✅ FIXED: WireGuard API compatibility issues in /workspaces/SASEWaddle/headend/wireguard/manager.go
+- ✅ Updated /workspaces/Tobogganing/headend/go.mod: v0.17.0 → v0.31.0 
+- ✅ Updated /workspaces/Tobogganing/clients/native/go.mod: v0.16.0 → v0.31.0
+- ✅ FIXED: WireGuard API compatibility issues in /workspaces/Tobogganing/headend/wireguard/manager.go
   - Fixed ParseEndpoint (removed from wgtypes) → manual parsing with net.UDPAddr
   - Fixed wgtypes.IPNet and wgtypes.ParseIPNet → using standard net.ParseCIDR
 - ✅ Headend builds successfully with patched crypto library
 - ⚠️ Native client has GUI dependency issues (not CVE-related)
 
 **Files Modified**:
-- /workspaces/SASEWaddle/headend/go.mod (crypto: v0.17.0→v0.31.0)
-- /workspaces/SASEWaddle/clients/native/go.mod (crypto: v0.16.0→v0.31.0) 
-- /workspaces/SASEWaddle/headend/wireguard/manager.go (API compatibility fixes)
-- /workspaces/SASEWaddle/clients/native/cmd/tray-example/main.go (import path fixes)
+- /workspaces/Tobogganing/headend/go.mod (crypto: v0.17.0→v0.31.0)
+- /workspaces/Tobogganing/clients/native/go.mod (crypto: v0.16.0→v0.31.0) 
+- /workspaces/Tobogganing/headend/wireguard/manager.go (API compatibility fixes)
+- /workspaces/Tobogganing/clients/native/cmd/tray-example/main.go (import path fixes)
 
 ## 🔧 Pending: Native Client Build Issues 
 **Status**: PENDING
@@ -645,7 +885,7 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 - Follow consistent styling across all documentation files
 - Keep README.md in the root directory, but all other docs go in `docs/`
 
-## Current Active Tasks (Updated 2025-01-20)
+## Current Active Tasks (Updated 2025-08-21)
 1. ✅ **Implement Manager py4web web portal with role-based access**
 2. ✅ **Add Prometheus metrics endpoint to Manager service**  
 3. ✅ **Implement user authentication and role system (admin/reporter)**
@@ -656,10 +896,13 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 8. ✅ **Add comprehensive firewall system with domain, IP, protocol, and port control**
 9. ✅ **Configure headend to get firewall rules from manager with Redis caching and randomized refresh**
 10. ✅ **Add syslog logging for user resource access from headend (UDP only)**
-11. 📋 **Add screenshots and connectivity diagrams to Next.js website**
+11. ✅ **Add screenshots and connectivity diagrams to Next.js website**
 12. ✅ **Add FRR-based VRFs for IP space segmentation**
 13. ✅ **Implement OSPF routing across WireGuard tunnels**  
 14. ✅ **Create admin portal for VRF and OSPF configuration**
-15. 🚧 **Allow admin to specify what ports the go proxy listens on**
-16. 📋 **Migrate Manager to use PyDAL with MySQL as default and read replica support**
+15. ✅ **Allow admin to specify what ports the go proxy listens on**
+16. ✅ **Migrate Manager to use PyDAL with MySQL as default and read replica support**
+17. ✅ **Create multi-architecture Docker builds (ARM64/AMD64)**
+18. ✅ **Set up cross-platform Go binary compilation**
+19. ✅ **Create GitHub Actions CI/CD workflows**
 

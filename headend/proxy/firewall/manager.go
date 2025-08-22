@@ -168,7 +168,11 @@ func (m *Manager) fetchRules() error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch rules: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Warnf("Failed to close response body: %v", err)
+		}
+	}()
 	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -384,7 +388,7 @@ func (m *Manager) matchProtocolRule(rule FirewallRule, target string) bool {
 	}
 	
 	// Check protocol
-	if rule.Protocol != "" && strings.ToLower(rule.Protocol) != strings.ToLower(connInfo["protocol"]) {
+	if rule.Protocol != "" && !strings.EqualFold(rule.Protocol, connInfo["protocol"]) {
 		return false
 	}
 	

@@ -1,4 +1,4 @@
-# SASEWaddle Usage Guide
+# Tobogganing Usage Guide
 
 ## 📋 Table of Contents
 
@@ -19,8 +19,8 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/sasewaddle.git
-cd sasewaddle
+git clone https://github.com/penguintechinc/tobogganing.git
+cd tobogganing
 
 # Start all services
 docker-compose -f deploy/docker-compose/docker-compose.dev.yml up -d
@@ -46,7 +46,7 @@ cd headend
 ./build/headend
 
 # Install native client
-./clients/native/sasewaddle-client init --manager-url http://localhost:8000
+./clients/native/tobogganing-client init --manager-url http://localhost:8000
 ```
 
 ---
@@ -82,21 +82,21 @@ docker-compose -f deploy/docker-compose/docker-compose.prod.yml ps
 ### Docker Client
 
 ```bash
-# Run SASEWaddle client in Docker
+# Run Tobogganing client in Docker
 docker run -d \
-  --name sasewaddle-client \
+  --name tobogganing-client \
   --cap-add NET_ADMIN \
   --device /dev/net/tun \
   -e MANAGER_URL=https://manager.example.com:8000 \
   -e API_KEY=your-api-key \
-  -v sasewaddle-client-data:/app/data \
-  sasewaddle/client:latest
+  -v tobogganing-client-data:/app/data \
+  tobogganing/client:latest
 
 # Check client status
-docker logs sasewaddle-client
+docker logs tobogganing-client
 
 # Stop client
-docker stop sasewaddle-client
+docker stop tobogganing-client
 ```
 
 ---
@@ -110,32 +110,32 @@ docker stop sasewaddle-client
 kubectl apply -f deploy/kubernetes/
 
 # Check deployment status
-kubectl get pods -n sasewaddle
+kubectl get pods -n tobogganing
 
 # View logs
-kubectl logs -f deployment/manager -n sasewaddle
+kubectl logs -f deployment/manager -n tobogganing
 ```
 
 ### Helm Chart Deployment
 
 ```bash
-# Add SASEWaddle Helm repository
-helm repo add sasewaddle https://charts.sasewaddle.com
+# Add Tobogganing Helm repository
+helm repo add tobogganing https://charts.tobogganing.com
 helm repo update
 
 # Install with Helm
-helm install sasewaddle sasewaddle/sasewaddle \
-  --namespace sasewaddle \
+helm install tobogganing tobogganing/tobogganing \
+  --namespace tobogganing \
   --create-namespace \
   --values values.yaml
 
 # Upgrade deployment
-helm upgrade sasewaddle sasewaddle/sasewaddle \
-  --namespace sasewaddle \
+helm upgrade tobogganing tobogganing/tobogganing \
+  --namespace tobogganing \
   --values values.yaml
 
 # Check status
-helm status sasewaddle -n sasewaddle
+helm status tobogganing -n tobogganing
 ```
 
 ### Custom Values
@@ -160,7 +160,7 @@ headend:
 database:
   type: postgresql
   host: postgres.example.com
-  name: sasewaddle
+  name: tobogganing
 
 redis:
   enabled: true
@@ -218,7 +218,7 @@ terraform apply -var-file="multi-cloud.tfvars"
 ./scripts/setup-android-studio.sh --start-emulator
 
 # Open project in Android Studio
-~/open-sasewaddle-mobile.sh
+~/open-tobogganing-mobile.sh
 ```
 
 ### Mobile App Installation
@@ -231,7 +231,7 @@ adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
 adb devices
 
 # View app logs
-adb logcat | grep SASEWaddle
+adb logcat | grep Tobogganing
 ```
 
 ### Mobile App Configuration
@@ -256,24 +256,24 @@ The mobile app requires the following configuration:
 #### Manager Service
 ```yaml
 volumes:
-  - sasewaddle-manager-data:/app/data          # Application data
-  - sasewaddle-certificates:/app/certs         # Certificate storage
-  - sasewaddle-config:/app/config             # Configuration files
-  - sasewaddle-logs:/app/logs                 # Log files
+  - tobogganing-manager-data:/app/data          # Application data
+  - tobogganing-certificates:/app/certs         # Certificate storage
+  - tobogganing-config:/app/config             # Configuration files
+  - tobogganing-logs:/app/logs                 # Log files
 ```
 
 #### Headend Service
 ```yaml
 volumes:
-  - sasewaddle-headend-config:/app/config     # WireGuard configuration
-  - sasewaddle-headend-logs:/app/logs         # Traffic logs
+  - tobogganing-headend-config:/app/config     # WireGuard configuration
+  - tobogganing-headend-logs:/app/logs         # Traffic logs
 ```
 
 #### Database
 ```yaml
 volumes:
-  - sasewaddle-mysql-data:/var/lib/mysql      # MySQL data
-  - sasewaddle-redis-data:/data               # Redis data
+  - tobogganing-mysql-data:/var/lib/mysql      # MySQL data
+  - tobogganing-redis-data:/data               # Redis data
 ```
 
 ### Optional Volumes for Advanced Usage
@@ -281,7 +281,7 @@ volumes:
 ```yaml
 volumes:
   # Backup storage
-  - sasewaddle-backups:/app/backups
+  - tobogganing-backups:/app/backups
   
   # Custom certificates
   - custom-ca-certs:/etc/ssl/certs
@@ -298,7 +298,7 @@ volumes:
 
 ```bash
 # Automated backups with S3
-export BACKUP_S3_BUCKET=sasewaddle-backups
+export BACKUP_S3_BUCKET=tobogganing-backups
 export BACKUP_S3_REGION=us-east-1
 export BACKUP_SCHEDULE="0 2 * * *"  # Daily at 2 AM
 
@@ -318,8 +318,8 @@ docker exec manager python -m manager.backup restore backup-20231201.tar.gz
 #### Manager Service
 ```bash
 # Database configuration
-DATABASE_URL=mysql://user:pass@host:3306/sasewaddle
-DB_READ_REPLICA_URL=mysql://user:pass@replica:3306/sasewaddle
+DATABASE_URL=mysql://user:pass@host:3306/tobogganing
+DB_READ_REPLICA_URL=mysql://user:pass@replica:3306/tobogganing
 
 # Redis configuration
 REDIS_URL=redis://localhost:6379
@@ -331,7 +331,7 @@ SESSION_TIMEOUT_HOURS=8
 METRICS_TOKEN=prometheus-scraper-token
 
 # Backup settings
-BACKUP_S3_BUCKET=sasewaddle-backups
+BACKUP_S3_BUCKET=tobogganing-backups
 BACKUP_S3_REGION=us-east-1
 BACKUP_ENCRYPTION_KEY=your-backup-encryption-key
 
@@ -416,8 +416,8 @@ python -m manager.main \
 
 #### Native Client
 ```bash
-./sasewaddle-client \
-  --config /etc/sasewaddle/client.yaml \
+./tobogganing-client \
+  --config /etc/tobogganing/client.yaml \
   --manager-url https://manager.example.com:8000 \
   --api-key your-api-key \
   --daemon
@@ -534,4 +534,4 @@ make test-integration
 docker-compose -f docker-compose.dev.yml logs -f
 ```
 
-This comprehensive usage guide covers all aspects of deploying, configuring, and managing SASEWaddle in various environments, from development to enterprise production deployments.
+This comprehensive usage guide covers all aspects of deploying, configuring, and managing Tobogganing in various environments, from development to enterprise production deployments.

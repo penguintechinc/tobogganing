@@ -1,0 +1,42 @@
+# Multi-stage Docker build for SASEWaddle Headless client
+# This provides a consistent build environment for headless/nogui builds
+
+FROM golang:1.23-alpine AS headless-builder
+
+# Install basic build dependencies
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    git
+
+# Set working directory
+WORKDIR /src
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build headless client (no GUI dependencies)
+ARG VERSION=dev
+ARG BUILD_TIME
+ARG GIT_COMMIT
+RUN CGO_ENABLED=0 go build \
+    -tags="nogui" \
+    -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
+    -o sasewaddle-client-headless \
+    ./cmd/headless
+
+# Test stage - verify the binary was built
+FROM alpine:3.19 AS test
+RUN apk add --no-cache file
+COPY --from=headless-builder /src/sasewaddle-client-headless /tmp/
+RUN file /tmp/sasewaddle-client-headless && \
+    ls -la /tmp/sasewaddle-client-headless && \
+    /tmp/sasewaddle-client-headless --version || true
+
+# Final stage - extract the binary
+FROM scratch
+COPY --from=headless-builder /src/sasewaddle-client-headless /sasewaddle-client-headless

@@ -49,7 +49,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.23'
   NODE_VERSION: '18'
 
 jobs:
@@ -61,11 +61,11 @@ jobs:
       matrix:
         include:
           # Linux builds
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: amd64
             enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux' }}
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: arm64
             enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux' }}
@@ -136,13 +136,13 @@ jobs:
         # Set API endpoint based on build type
         case "${{ github.event.inputs.build_type }}" in
           "production")
-            API_ENDPOINT="https://api.sasewaddle.com"
+            API_ENDPOINT="https://api.tobogganing.com"
             ;;
           "staging")
-            API_ENDPOINT="https://api-staging.sasewaddle.com"
+            API_ENDPOINT="https://api-staging.tobogganing.com"
             ;;
           *)
-            API_ENDPOINT="https://api-dev.sasewaddle.com"
+            API_ENDPOINT="https://api-dev.tobogganing.com"
             ;;
         esac
         
@@ -179,14 +179,14 @@ jobs:
         mkdir -p build
         
         # Set binary name and extension
-        BINARY_NAME="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
+        BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
         
         # Build with optimizations
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-          -o build/${BINARY_NAME} ./cmd
+          -o build/${BINARY_NAME} ./cmd/headless
         
         echo "Built: ${BINARY_NAME}"
         ls -la build/
@@ -196,7 +196,7 @@ jobs:
       shell: bash
       run: |
         cd clients/native/build
-        BINARY=$(ls sasewaddle-client-* | head -1)
+        BINARY=$(ls tobogganing-client-* | head -1)
         if [[ "${{ matrix.goos }}" == "windows" ]]; then
           ./${BINARY} --version
         else
@@ -214,7 +214,7 @@ jobs:
   # Build Go headend proxy
   build-headend-proxy:
     if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     
@@ -276,7 +276,7 @@ jobs:
   # Trigger mobile builds
   trigger-mobile-builds:
     if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'mobile-apps' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Trigger mobile build workflow
       uses: actions/github-script@v7
@@ -301,7 +301,7 @@ jobs:
   # Build Docker images
   build-docker-images:
     if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'docker-images' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -340,10 +340,10 @@ jobs:
       id: meta
       run: |
         VERSION="${{ steps.version.outputs.full_version }}"
-        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}"
+        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
         
         if [[ "${{ github.event.inputs.build_type }}" == "production" ]]; then
-          TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:latest"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
         fi
         
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
@@ -399,7 +399,7 @@ jobs:
   # Build website
   build-website:
     if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'website' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     
@@ -427,16 +427,16 @@ jobs:
         
         case "${{ github.event.inputs.build_type }}" in
           "production")
-            echo "NEXT_PUBLIC_API_URL=https://api.sasewaddle.com" > .env.production
-            echo "NEXT_PUBLIC_MANAGER_URL=https://manager.sasewaddle.com" >> .env.production
+            echo "NEXT_PUBLIC_API_URL=https://api.tobogganing.com" > .env.production
+            echo "NEXT_PUBLIC_MANAGER_URL=https://manager.tobogganing.com" >> .env.production
             ;;
           "staging")
-            echo "NEXT_PUBLIC_API_URL=https://api-staging.sasewaddle.com" > .env.staging
-            echo "NEXT_PUBLIC_MANAGER_URL=https://manager-staging.sasewaddle.com" >> .env.staging
+            echo "NEXT_PUBLIC_API_URL=https://api-staging.tobogganing.com" > .env.staging
+            echo "NEXT_PUBLIC_MANAGER_URL=https://manager-staging.tobogganing.com" >> .env.staging
             ;;
           *)
-            echo "NEXT_PUBLIC_API_URL=https://api-dev.sasewaddle.com" > .env.development
-            echo "NEXT_PUBLIC_MANAGER_URL=https://manager-dev.sasewaddle.com" >> .env.development
+            echo "NEXT_PUBLIC_API_URL=https://api-dev.tobogganing.com" > .env.development
+            echo "NEXT_PUBLIC_MANAGER_URL=https://manager-dev.tobogganing.com" >> .env.development
             ;;
         esac
         
@@ -459,7 +459,7 @@ jobs:
   create-draft-release:
     if: ${{ github.event.inputs.create_draft_release == 'true' && github.event.inputs.build_type == 'production' }}
     needs: [build-go-clients, build-headend-proxy, build-docker-images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -493,7 +493,7 @@ jobs:
         
         # Package Go clients
         if [ -d "artifacts" ]; then
-          for file in artifacts/sasewaddle-client-*; do
+          for file in artifacts/tobogganing-client-*; do
             if [ -f "$file" ]; then
               basename=$(basename "$file")
               if [[ "$basename" == *"windows"* ]]; then
@@ -524,7 +524,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ steps.version.outputs.version }}-draft
-        name: "SASEWaddle v${{ steps.version.outputs.version }} (Draft)"
+        name: "Tobogganing v${{ steps.version.outputs.version }} (Draft)"
         body: |
           ## Manual Build Release - v${{ steps.version.outputs.version }}
           
@@ -547,9 +547,9 @@ jobs:
           ## Docker Images
           
           Docker images are available at:
-          - `ghcr.io/${{ github.repository }}/sasewaddle-manager:${{ steps.version.outputs.version }}`
-          - `ghcr.io/${{ github.repository }}/sasewaddle-headend:${{ steps.version.outputs.version }}`
-          - `ghcr.io/${{ github.repository }}/sasewaddle-client:${{ steps.version.outputs.version }}`
+          - `ghcr.io/${{ github.repository }}/tobogganing-manager:${{ steps.version.outputs.version }}`
+          - `ghcr.io/${{ github.repository }}/tobogganing-headend:${{ steps.version.outputs.version }}`
+          - `ghcr.io/${{ github.repository }}/tobogganing-client:${{ steps.version.outputs.version }}`
         files: |
           release-packages/*
         draft: true
@@ -559,7 +559,7 @@ jobs:
   build-summary:
     if: always()
     needs: [build-go-clients, build-headend-proxy, trigger-mobile-builds, build-docker-images, build-website, create-draft-release]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Build Summary
       run: |

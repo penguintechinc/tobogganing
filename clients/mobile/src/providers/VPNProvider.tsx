@@ -79,7 +79,7 @@ export const VPNProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     error: null,
   });
 
-  const [statusCheckInterval, setStatusCheckInterval] = useState<number | null>(null);
+  const [statusCheckInterval, setStatusCheckInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Initialize VPN status monitoring
   useEffect(() => {

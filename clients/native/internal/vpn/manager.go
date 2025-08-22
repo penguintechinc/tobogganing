@@ -20,16 +20,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sasewaddle/clients/native/internal/config"
-	"golang.zx2c4.com/wireguard/wgctrl"
-	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	"github.com/tobogganing/clients/native/internal/client"
+	"github.com/tobogganing/clients/native/internal/config"
+)
+
+const (
+	// Operating system constants
+	platformWindows = "windows"
+	
+	// Status constants
+	statusUnknown = "unknown"
 )
 
 // Manager handles WireGuard VPN connections and implements the tray.VPNManager interface
 type Manager struct {
 	config         *config.Config
 	isConnected    bool
-	currentStatus  tray.ConnectionStatus
+	currentStatus  client.ConnectionStatus
 	ctx            context.Context
 	cancel         context.CancelFunc
 	mutex          sync.RWMutex
@@ -53,7 +60,7 @@ func NewManager(cfg *config.Config) *Manager {
 	
 	// Determine interface name based on platform
 	interfaceName := "wg0"
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		interfaceName = "SASEWaddle"
 	}
 	
@@ -96,19 +103,21 @@ func (m *Manager) Connect() error {
 	
 	// Update status
 	m.isConnected = true
-	m.currentStatus = tray.ConnectionStatus{
-		Connected:      true,
-		ServerName:     m.config.GetServerName(),
+	m.currentStatus = client.ConnectionStatus{
+		State:          "connected",
+		ClientID:       m.config.ClientName,
+		WireGuardIP:    m.getLocalIP(),
+		HeadendURL:     m.config.ManagerURL,
 		ConnectedSince: time.Now(),
-		LocalIP:        m.getLocalIP(),
-		ServerIP:       m.config.GetServerIP(),
-		PublicKey:      m.config.GetPublicKey(),
+		BytesReceived:  0,
+		BytesSent:      0,
+		LastHandshake:  time.Now(),
 	}
 	
 	// Start monitoring
 	m.startMonitoring()
 	
-	log.Printf("VPN connected successfully to %s", m.currentStatus.ServerName)
+	log.Printf("VPN connected successfully to %s", m.config.ManagerURL)
 	return nil
 }
 
@@ -133,8 +142,8 @@ func (m *Manager) Disconnect() error {
 	
 	// Update status
 	m.isConnected = false
-	m.currentStatus = tray.ConnectionStatus{
-		Connected: false,
+	m.currentStatus = client.ConnectionStatus{
+		State: "disconnected",
 	}
 	
 	log.Println("VPN disconnected successfully")
@@ -149,19 +158,47 @@ func (m *Manager) IsConnected() bool {
 }
 
 // GetStatus returns detailed connection status
-func (m *Manager) GetStatus() tray.ConnectionStatus {
+func (m *Manager) GetStatus() client.ConnectionStatus {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	
 	if m.isConnected {
 		// Update statistics if connected
 		stats := m.getInterfaceStatistics()
-		m.currentStatus.BytesSent = stats.BytesSent
-		m.currentStatus.BytesReceived = stats.BytesReceived
+		m.currentStatus.BytesSent = int64(stats.BytesSent)
+		m.currentStatus.BytesReceived = int64(stats.BytesReceived)
 		m.currentStatus.LastHandshake = stats.LastHandshake
 	}
 	
 	return m.currentStatus
+}
+
+// GetStatusString returns a simple string status for tray interface
+func (m *Manager) GetStatusString() string {
+	if m.isConnected {
+		return "Connected"
+	}
+	return "Disconnected"
+}
+
+// GetStatistics returns connection statistics for tray interface
+func (m *Manager) GetStatistics() map[string]interface{} {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	
+	stats := make(map[string]interface{})
+	stats["connected"] = m.isConnected
+	stats["status"] = m.GetStatusString()
+	
+	if m.isConnected {
+		ifaceStats := m.getInterfaceStatistics()
+		stats["bytes_sent"] = ifaceStats.BytesSent
+		stats["bytes_received"] = ifaceStats.BytesReceived
+		stats["last_handshake"] = ifaceStats.LastHandshake
+		stats["interface_name"] = m.interfaceName
+	}
+	
+	return stats
 }
 
 // Stop gracefully stops the VPN manager
@@ -190,7 +227,7 @@ func (m *Manager) connectWireGuard() error {
 		return m.connectLinux()
 	case "darwin":
 		return m.connectMacOS()
-	case "windows":
+	case platformWindows:
 		return m.connectWindows()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
@@ -209,7 +246,7 @@ func (m *Manager) disconnectWireGuard() error {
 		return m.disconnectLinux()
 	case "darwin":
 		return m.disconnectMacOS()
-	case "windows":
+	case platformWindows:
 		return m.disconnectWindows()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
@@ -326,7 +363,7 @@ func (m *Manager) connectWindowsFallback() error {
 	// This would implement wireguard-go integration
 	// For now, return an error indicating the limitation
 	// Use WireGuard for Windows service
-	cmd := exec.Command("wg-quick", "up", configPath)
+	cmd := exec.Command("wg-quick", "up", m.configPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start WireGuard on Windows: %w", err)
 	}
@@ -353,12 +390,12 @@ func (m *Manager) validateConfig() error {
 	}
 	
 	// Check if config file exists and is readable
-	if !m.config.FileExists(m.configPath) {
+	if _, err := os.Stat(m.configPath); os.IsNotExist(err) {
 		return fmt.Errorf("WireGuard configuration file not found: %s", m.configPath)
 	}
 	
 	// Validate config content (basic check)
-	content, err := m.config.ReadFile(m.configPath)
+	content, err := os.ReadFile(m.configPath)
 	if err != nil {
 		return fmt.Errorf("cannot read configuration file: %w", err)
 	}
@@ -377,12 +414,12 @@ func (m *Manager) getLocalIP() string {
 	// Try to get the IP address of the WireGuard interface
 	iface, err := net.InterfaceByName(m.interfaceName)
 	if err != nil {
-		return "unknown"
+		return statusUnknown
 	}
 	
 	addrs, err := iface.Addrs()
 	if err != nil {
-		return "unknown"
+		return statusUnknown
 	}
 	
 	for _, addr := range addrs {
@@ -393,7 +430,7 @@ func (m *Manager) getLocalIP() string {
 		}
 	}
 	
-	return "unknown"
+	return statusUnknown
 }
 
 // Statistics and monitoring
@@ -407,44 +444,62 @@ type InterfaceStatistics struct {
 func (m *Manager) getInterfaceStatistics() InterfaceStatistics {
 	stats := InterfaceStatistics{}
 	
-	// Get statistics using wg command
-	cmd := exec.Command("wg", "show", m.interfaceName)
-	output, err := cmd.Output()
+	output, err := m.getWireGuardOutput()
 	if err != nil {
 		log.Printf("Failed to get WireGuard statistics: %v", err)
 		return stats
 	}
 	
-	// Parse wg output for statistics
-	lines := strings.Split(string(output), "\n")
+	m.parseWireGuardOutput(string(output), &stats)
+	return stats
+}
+
+func (m *Manager) getWireGuardOutput() ([]byte, error) {
+	cmd := exec.Command("wg", "show", m.interfaceName)
+	return cmd.Output()
+}
+
+func (m *Manager) parseWireGuardOutput(output string, stats *InterfaceStatistics) {
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.Contains(line, "transfer:") {
-			// Parse transfer line: "transfer: 1.23 MiB received, 456.78 KiB sent"
-			parts := strings.Fields(line)
-			if len(parts) >= 6 {
-				// This is a simplified parser - production would be more robust
-				if strings.Contains(line, "received") {
-					stats.BytesReceived = m.parseTransferAmount(parts[1] + " " + parts[2])
-				}
-				if strings.Contains(line, "sent") {
-					stats.BytesSent = m.parseTransferAmount(parts[4] + " " + parts[5])
-				}
-			}
-		}
-		if strings.Contains(line, "latest handshake:") {
-			// Parse handshake time
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				timeStr := strings.TrimSpace(parts[1])
-				if t, err := time.Parse("2006-01-02 15:04:05", timeStr); err == nil {
-					stats.LastHandshake = t
-				}
-			}
-		}
+		m.parseTransferLine(line, stats)
+		m.parseHandshakeLine(line, stats)
+	}
+}
+
+func (m *Manager) parseTransferLine(line string, stats *InterfaceStatistics) {
+	if !strings.Contains(line, "transfer:") {
+		return
 	}
 	
-	return stats
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return
+	}
+	
+	if strings.Contains(line, "received") {
+		stats.BytesReceived = m.parseTransferAmount(parts[1] + " " + parts[2])
+	}
+	if strings.Contains(line, "sent") {
+		stats.BytesSent = m.parseTransferAmount(parts[4] + " " + parts[5])
+	}
+}
+
+func (m *Manager) parseHandshakeLine(line string, stats *InterfaceStatistics) {
+	if !strings.Contains(line, "latest handshake:") {
+		return
+	}
+	
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return
+	}
+	
+	timeStr := strings.TrimSpace(parts[1])
+	if t, err := time.Parse("2006-01-02 15:04:05", timeStr); err == nil {
+		stats.LastHandshake = t
+	}
 }
 
 func (m *Manager) parseTransferAmount(amountStr string) uint64 {
@@ -466,7 +521,7 @@ func (m *Manager) parseTransferAmount(amountStr string) uint64 {
 	
 	// Simple parsing - would use proper float parsing in production
 	var amount float64
-	fmt.Sscanf(parts[0], "%f", &amount)
+	_, _ = fmt.Sscanf(parts[0], "%f", &amount)
 	
 	return uint64(amount * float64(multiplier))
 }
@@ -508,7 +563,7 @@ func (m *Manager) checkConnection() {
 		log.Printf("WireGuard interface %s not found, marking as disconnected", m.interfaceName)
 		m.mutex.Lock()
 		m.isConnected = false
-		m.currentStatus.Connected = false
+		m.currentStatus.State = "disconnected"
 		m.mutex.Unlock()
 		return
 	}
@@ -527,10 +582,6 @@ func (m *Manager) checkConnection() {
 
 // Utility functions for VPN management
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
 
 func readWireGuardConfig(path string) ([]byte, error) {
 	return os.ReadFile(path)

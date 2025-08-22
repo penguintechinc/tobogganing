@@ -17,7 +17,7 @@ env:
 jobs:
   # Test Manager Service (Python)
   test-manager:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: [3.12]
@@ -69,10 +69,10 @@ jobs:
 
   # Test Headend Server (Go)
   test-headend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        go-version: [1.21]
+        go-version: [1.23]
     
     steps:
     - uses: actions/checkout@v4
@@ -96,10 +96,11 @@ jobs:
         go mod download
     
     - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
         working-directory: headend
+        args: --timeout=5m --out-format=colored-line-number
     
     - name: Test with go test
       run: |
@@ -115,10 +116,10 @@ jobs:
 
   # Test Native Client (Go)
   test-client:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        go-version: [1.21]
+        go-version: [1.23]
     
     steps:
     - uses: actions/checkout@v4
@@ -136,21 +137,37 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-client-
     
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        # Install GUI dependencies with fallbacks for different Ubuntu versions
+        sudo apt-get install -y \
+          libayatana-appindicator3-dev \
+          libgtk-3-dev \
+          pkg-config \
+          build-essential || true
+        
+        # Try newer webkit first, fallback to older version
+        sudo apt-get install -y libwebkit2gtk-4.1-dev || \
+        sudo apt-get install -y libwebkit2gtk-4.0-dev || \
+        echo "Warning: webkit2gtk not available, GUI features may be limited"
+    
     - name: Install dependencies
       run: |
         cd clients/native
         go mod download
     
     - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
         working-directory: clients/native
+        args: --build-tags=nogui --timeout=5m --out-format=colored-line-number
     
     - name: Test with go test
       run: |
         cd clients/native
-        go test -v -race -coverprofile=coverage.out ./... || exit 0
+        go test -tags=nogui -v -race -coverprofile=coverage.out ./... || exit 0
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
@@ -162,7 +179,7 @@ jobs:
   # Build and push Docker images
   build-images:
     needs: [test-manager, test-headend, test-client]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -181,9 +198,9 @@ jobs:
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "tag=sasewaddle-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}" >> $GITHUB_OUTPUT
+          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}" >> $GITHUB_OUTPUT
         else
-          echo "tag=sasewaddle-${{ matrix.component }}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}" >> $GITHUB_OUTPUT
         fi
     
     - name: Set up QEMU
@@ -205,11 +222,11 @@ jobs:
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}"
+          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}"
         else
-          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:${VERSION}"
+          TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
           if [ "${{ github.ref_name }}" = "main" ]; then
-            TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/sasewaddle-${{ matrix.component }}:latest"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
           fi
         fi
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
@@ -266,11 +283,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: amd64
             binary_suffix: ""
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             goos: linux
             goarch: arm64
             binary_suffix: ""
@@ -300,7 +317,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: 1.21
+        go-version: 1.23
     
     - name: Cache Go modules
       uses: actions/cache@v3
@@ -332,13 +349,13 @@ jobs:
         mkdir -p build
         
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          BINARY_NAME="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}-pr${{ github.event.number }}${{ matrix.binary_suffix }}"
+          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}-pr${{ github.event.number }}${{ matrix.binary_suffix }}"
         else
-          BINARY_NAME="sasewaddle-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}${{ matrix.binary_suffix }}"
+          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}${{ matrix.binary_suffix }}"
         fi
         
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-          -o build/${BINARY_NAME} ./cmd
+          -o build/${BINARY_NAME} ./cmd/headless
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
@@ -351,7 +368,7 @@ jobs:
   create-release:
     if: github.event_name == 'release'
     needs: [build-images, build-native-client]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     
@@ -373,9 +390,9 @@ jobs:
             platform=$(basename "$dir" | sed 's/native-client-//')
             
             if [[ "$platform" == *"windows"* ]]; then
-              cd "$dir" && zip -r "../../release-packages/sasewaddle-client-${platform}.zip" . && cd -
+              cd "$dir" && zip -r "../../release-packages/tobogganing-client-${platform}.zip" . && cd -
             else
-              cd "$dir" && tar -czf "../../release-packages/sasewaddle-client-${platform}.tar.gz" . && cd -
+              cd "$dir" && tar -czf "../../release-packages/tobogganing-client-${platform}.tar.gz" . && cd -
             fi
           fi
         done
@@ -389,7 +406,7 @@ jobs:
 
   # Security scanning
   security-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -414,7 +431,7 @@ jobs:
   # Integration tests
   integration-test:
     needs: [build-images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       redis:
         image: redis:7

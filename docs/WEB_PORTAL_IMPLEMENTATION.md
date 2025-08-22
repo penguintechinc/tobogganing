@@ -1,4 +1,4 @@
-# 🌐 SASEWaddle Web Portal & Metrics Implementation
+# 🌐 Tobogganing Web Portal & Metrics Implementation
 
 ## ✅ **Implementation Summary**
 
@@ -107,18 +107,18 @@ All requested features have been successfully implemented for both Manager and H
 
 ### Manager Service Metrics
 ```
-sasewaddle_manager_info
-sasewaddle_manager_status
-sasewaddle_manager_uptime_seconds
-sasewaddle_manager_http_requests_total
-sasewaddle_manager_http_request_duration_seconds
-sasewaddle_manager_auth_attempts_total
-sasewaddle_manager_clusters_total
-sasewaddle_manager_clients_total
-sasewaddle_manager_certificates_issued_total
-sasewaddle_manager_jwt_tokens_issued_total
-sasewaddle_manager_memory_usage_bytes
-sasewaddle_manager_cpu_usage_percent
+tobogganing_manager_info
+tobogganing_manager_status
+tobogganing_manager_uptime_seconds
+tobogganing_manager_http_requests_total
+tobogganing_manager_http_request_duration_seconds
+tobogganing_manager_auth_attempts_total
+tobogganing_manager_clusters_total
+tobogganing_manager_clients_total
+tobogganing_manager_certificates_issued_total
+tobogganing_manager_jwt_tokens_issued_total
+tobogganing_manager_memory_usage_bytes
+tobogganing_manager_cpu_usage_percent
 ```
 
 ### Headend Service Metrics
@@ -135,7 +135,7 @@ http_requests_total
 #### Manager Service
 ```bash
 # Database
-DATABASE_URL=sqlite:///sasewaddle.db
+DATABASE_URL=sqlite:///tobogganing.db
 
 # Redis  
 REDIS_URL=redis://localhost:6379

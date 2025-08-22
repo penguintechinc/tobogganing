@@ -203,6 +203,61 @@
                 </div>
             </div>
 
+            <!-- Port Configuration Section -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Proxy Port Configuration</h3>
+                    <button onclick="editPortConfig()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
+                        Edit Ports
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-medium text-gray-700 mb-2">TCP Ports</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <code id="tcpPortRanges" class="text-sm">Loading...</code>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-medium text-gray-700 mb-2">UDP Ports</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <code id="udpPortRanges" class="text-sm">Loading...</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <p>Configure which ports the proxy listens on for incoming connections.</p>
+                    <p>Format: port ranges (e.g., 8080-8090) or individual ports (e.g., 9000)</p>
+                </div>
+            </div>
+
+            <!-- Port Configuration Modal -->
+            <div id="portConfigModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Edit Port Configuration</h3>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">TCP Port Ranges</label>
+                            <input type="text" id="tcpPortInput" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="e.g., 8080-8090,9000,9500-9600">
+                            <p class="text-xs text-gray-600 mt-1">Comma-separated port ranges or individual ports</p>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">UDP Port Ranges</label>
+                            <input type="text" id="udpPortInput" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="e.g., 5000-5100,6000">
+                            <p class="text-xs text-gray-600 mt-1">Comma-separated port ranges or individual ports</p>
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button onclick="closePortConfigModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                                Cancel
+                            </button>
+                            <button onclick="savePortConfig()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Connected Clients -->
             <div class="bg-white rounded-lg shadow-md p-6">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Connected Clients (<span id="connectedClientsCount">0</span>)</h3>
@@ -260,6 +315,79 @@
             return `${Math.floor(diffMins / 1440)} days ago`;
         }
 
+        // Port configuration management
+        let currentPortConfig = null;
+        
+        async function loadPortConfig() {
+            const headendId = '[[=headend_id]]';
+            try {
+                const response = await fetch(`/api/web/ports/headend/${headendId}`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    currentPortConfig = result;
+                    document.getElementById('tcpPortRanges').textContent = result.tcp_ranges || 'Not configured';
+                    document.getElementById('udpPortRanges').textContent = result.udp_ranges || 'Not configured';
+                } else {
+                    document.getElementById('tcpPortRanges').textContent = 'Failed to load';
+                    document.getElementById('udpPortRanges').textContent = 'Failed to load';
+                }
+            } catch (error) {
+                console.error('Error loading port config:', error);
+                document.getElementById('tcpPortRanges').textContent = 'Error loading';
+                document.getElementById('udpPortRanges').textContent = 'Error loading';
+            }
+        }
+        
+        function editPortConfig() {
+            if (currentPortConfig) {
+                document.getElementById('tcpPortInput').value = currentPortConfig.tcp_ranges || '';
+                document.getElementById('udpPortInput').value = currentPortConfig.udp_ranges || '';
+            }
+            document.getElementById('portConfigModal').classList.remove('hidden');
+        }
+        
+        function closePortConfigModal() {
+            document.getElementById('portConfigModal').classList.add('hidden');
+        }
+        
+        async function savePortConfig() {
+            const headendId = '[[=headend_id]]';
+            const tcpRanges = document.getElementById('tcpPortInput').value.trim();
+            const udpRanges = document.getElementById('udpPortInput').value.trim();
+            
+            if (!tcpRanges && !udpRanges) {
+                alert('Please specify at least one port range');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/web/ports/headend/${headendId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tcp_ranges: tcpRanges,
+                        udp_ranges: udpRanges
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Port configuration updated successfully');
+                    closePortConfigModal();
+                    loadPortConfig();
+                } else {
+                    alert('Failed to update port configuration: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saving port config:', error);
+                alert('Error saving port configuration');
+            }
+        }
+        
         // Load headend data
         async function loadHeadendData() {
             const headendId = '[[=headend_id]]';
@@ -276,6 +404,8 @@
                     populateHeadendData(result.data);
                     document.getElementById('loadingState').classList.add('hidden');
                     document.getElementById('headendData').classList.remove('hidden');
+                    // Load port configuration after headend data
+                    loadPortConfig();
                 } else {
                     throw new Error(result.error || 'Headend not found');
                 }

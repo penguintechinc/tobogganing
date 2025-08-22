@@ -16,7 +16,7 @@ package config
 import (
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "net/http"
     "os"
     "time"
@@ -152,14 +152,18 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
     if err != nil {
         return nil, fmt.Errorf("failed to fetch config: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        if err := resp.Body.Close(); err != nil {
+            log.Warnf("Failed to close response body: %v", err)
+        }
+    }()
     
     if resp.StatusCode != http.StatusOK {
-        body, _ := ioutil.ReadAll(resp.Body)
+        body, _ := io.ReadAll(resp.Body)
         return nil, fmt.Errorf("manager returned status %d: %s", resp.StatusCode, string(body))
     }
     
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
@@ -223,14 +227,11 @@ func (cm *Manager) WatchConfig(refreshInterval time.Duration) {
         ticker := time.NewTicker(refreshInterval)
         defer ticker.Stop()
         
-        for {
-            select {
-            case <-ticker.C:
-                if _, err := cm.RefreshConfig(); err != nil {
-                    log.Errorf("Failed to refresh config: %v", err)
-                } else {
-                    log.Debug("Configuration refreshed successfully")
-                }
+        for range ticker.C {
+            if _, err := cm.RefreshConfig(); err != nil {
+                log.Errorf("Failed to refresh config: %v", err)
+            } else {
+                log.Debug("Configuration refreshed successfully")
             }
         }
     }()

@@ -1,0 +1,279 @@
+# GUI Client Build Workflow
+# 
+# This workflow builds GUI clients for multiple platforms using Fyne framework.
+# 
+# Key implementation notes:
+# - Linux builds use architecture-specific Docker containers for optimal builds
+# - AMD64: Dockerfile.gui-amd64 with native compilation
+# - ARM64: Dockerfile.gui-arm64 with cross-compilation toolchain  
+# - macOS builds use native runners (macos-13 for Intel, macos-latest for Apple Silicon)
+# - Windows builds run natively with linting verification
+# - All builds include golangci-lint checks and GUI package compilation tests
+# - Fixed Fyne type declaration: uses fyne.App instead of app.App
+# - Eliminates ARM64 CGO assembly errors by using appropriate native runners
+
+name: GUI Client Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-macos-gui:
+    name: Build macOS GUI Client
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            binary_name: tobogganing-client-darwin-amd64
+            runner: macos-13  # Intel runner for AMD64
+          - goarch: arm64
+            binary_name: tobogganing-client-darwin-arm64
+            runner: macos-latest  # Apple Silicon runner for ARM64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      
+      - name: Install dependencies
+        working-directory: ./clients/native
+        run: |
+          go mod download
+          go mod verify
+      
+      - name: Run golangci-lint
+        working-directory: ./clients/native
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint --version
+          golangci-lint run --timeout=10m
+      
+      - name: Test GUI package compilation
+        working-directory: ./clients/native
+        env:
+          CGO_ENABLED: 1
+        run: |
+          # Verify the Fyne GUI package compiles correctly
+          go build -v ./internal/gui
+          echo "GUI package compiled successfully"
+      
+      - name: Build GUI binary
+        working-directory: ./clients/native
+        env:
+          CGO_ENABLED: 1
+        run: |
+          # Build natively on the appropriate architecture runner
+          go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
+            -o ../../dist/${{ matrix.binary_name }} \
+            ./cmd/gui
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
+
+  build-linux-gui:
+    name: Build Linux GUI Client (Docker)
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            binary_name: tobogganing-client-linux-amd64
+            dockerfile: Dockerfile.gui-amd64
+            platform: linux/amd64
+          - goarch: arm64
+            binary_name: tobogganing-client-linux-arm64
+            dockerfile: Dockerfile.gui-arm64
+            platform: linux/arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Set up QEMU for cross-platform builds
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+      
+      - name: Create dist directory
+        run: mkdir -p dist
+      
+      - name: Build GUI client in Docker container
+        working-directory: ./clients/native
+        run: |
+          # Build the Docker image and extract the binary
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            --build-arg VERSION=${{ github.ref_name }} \
+            --build-arg BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            -f ${{ matrix.dockerfile }} \
+            -t gui-builder-${{ matrix.goarch }} \
+            --load \
+            .
+          
+          # Extract the binary from the container
+          docker create --name temp-container gui-builder-${{ matrix.goarch }}
+          docker cp temp-container:/src/tobogganing-client-gui ../../dist/${{ matrix.binary_name }}
+          docker rm temp-container
+          
+          # Verify the binary was created
+          ls -la ../../dist/${{ matrix.binary_name }}
+          file ../../dist/${{ matrix.binary_name }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
+
+  build-windows-gui:
+    name: Build Windows GUI Client
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            binary_name: tobogganing-client-windows-amd64.exe
+          - goarch: arm64
+            binary_name: tobogganing-client-windows-arm64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      
+      - name: Install dependencies
+        working-directory: ./clients/native
+        run: |
+          go mod download
+          go mod verify
+      
+      - name: Run golangci-lint
+        working-directory: ./clients/native
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint --version
+          golangci-lint run --timeout=10m
+      
+      - name: Test GUI package compilation
+        working-directory: ./clients/native
+        env:
+          CGO_ENABLED: 1
+        run: |
+          # Verify the Fyne GUI package compiles correctly
+          go build -v ./internal/gui
+          echo "GUI package compiled successfully"
+      
+      - name: Build GUI binary
+        working-directory: ./clients/native
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: |
+          go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
+            -o ../../dist/${{ matrix.binary_name }} \
+            ./cmd/gui
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
+
+  create-universal-binary:
+    name: Create macOS Universal Binary
+    needs: build-macos-gui
+    runs-on: macos-latest
+    
+    steps:
+      - name: Download Intel binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tobogganing-client-darwin-amd64
+          path: ./
+      
+      - name: Download ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tobogganing-client-darwin-arm64
+          path: ./
+      
+      - name: Create Universal Binary
+        run: |
+          lipo -create -output tobogganing-client-darwin-universal \
+            tobogganing-client-darwin-amd64 \
+            tobogganing-client-darwin-arm64
+          chmod +x tobogganing-client-darwin-universal
+      
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tobogganing-client-darwin-universal
+          path: tobogganing-client-darwin-universal
+
+  release:
+    name: Create Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-macos-gui, build-linux-gui, build-windows-gui, create-universal-binary]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      
+      - name: Create checksums
+        run: |
+          cd artifacts
+          for dir in */; do
+            cd "$dir"
+            for file in *; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" > "$file.sha256"
+                mv "$file" "$file.sha256" ../
+              fi
+            done
+            cd ..
+          done
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/tobogganing-client-*
+            artifacts/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

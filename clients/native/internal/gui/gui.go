@@ -1,15 +1,19 @@
+//go:build !nogui
+
 // Package gui implements the graphical user interface for the SASEWaddle native client.
 package gui
 
 import (
     "context"
+    
+    "fyne.io/fyne/v2"
     "fyne.io/fyne/v2/app"
     "fyne.io/fyne/v2/widget"
 )
 
 // App represents the GUI application
 type App struct {
-    fyneApp app.App
+    fyneApp fyne.App
 }
 
 // NewApp creates a new GUI application
@@ -33,4 +37,11 @@ func (a *App) Stop() error {
         a.fyneApp.Quit()
     }
     return nil
+}
+
+// Run starts the GUI application with the given configuration
+func Run(cfg interface{}) error {
+    app := NewApp()
+    ctx := context.Background()
+    return app.Run(ctx)
 }

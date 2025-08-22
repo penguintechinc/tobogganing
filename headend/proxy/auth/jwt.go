@@ -61,7 +61,11 @@ func (j *JWTProvider) fetchPublicKey() error {
     if err != nil {
         return fmt.Errorf("failed to fetch public key: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        if err := resp.Body.Close(); err != nil {
+            log.Warnf("Failed to close response body: %v", err)
+        }
+    }()
     
     if resp.StatusCode != http.StatusOK {
         return fmt.Errorf("manager returned status %d", resp.StatusCode)

@@ -18,7 +18,7 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "net"
     "net/http"
     "os"
@@ -31,6 +31,21 @@ import (
     "golang.zx2c4.com/wireguard/wgctrl"
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
+
+// Config represents the WireGuard manager configuration
+type Config struct {
+    InterfaceName string
+    ListenPort    int
+    PrivateKey    string
+    Network       string
+    ManagerURL    string
+}
+
+// WireGuardManager alias for Manager for backward compatibility
+type WireGuardManager = Manager
+
+// PeerConfig alias for wgtypes.PeerConfig for backward compatibility  
+type PeerConfig = wgtypes.PeerConfig
 
 // Manager handles WireGuard interface configuration and peer management
 type Manager struct {
@@ -53,8 +68,13 @@ type Peer struct {
     Endpoint    string `json:"endpoint,omitempty"`
 }
 
-// NewManager creates a new WireGuard manager
-func NewManager(interfaceName, managerURL string, listenPort int, network string) (*Manager, error) {
+// NewManager creates a new WireGuard manager from a Config
+func NewManager(config *Config) (*Manager, error) {
+    return NewManagerWithParams(config.InterfaceName, config.ManagerURL, config.ListenPort, config.Network)
+}
+
+// NewManagerWithParams creates a new WireGuard manager with explicit parameters
+func NewManagerWithParams(interfaceName, managerURL string, listenPort int, network string) (*Manager, error) {
     client, err := wgctrl.New()
     if err != nil {
         return nil, fmt.Errorf("failed to create WireGuard client: %w", err)
@@ -83,7 +103,7 @@ func (m *Manager) initializeKeys() error {
     keyPath := fmt.Sprintf("/etc/wireguard/%s.key", m.interfaceName)
     
     // Try to load existing private key
-    if data, err := ioutil.ReadFile(keyPath); err == nil {
+    if data, err := os.ReadFile(keyPath); err == nil {
         key, err := wgtypes.ParseKey(strings.TrimSpace(string(data)))
         if err == nil {
             m.privateKey = key
@@ -107,7 +127,7 @@ func (m *Manager) initializeKeys() error {
         return fmt.Errorf("failed to create /etc/wireguard directory: %w", err)
     }
     
-    if err := ioutil.WriteFile(keyPath, []byte(privateKey.String()), 0600); err != nil {
+    if err := os.WriteFile(keyPath, []byte(privateKey.String()), 0600); err != nil {
         return fmt.Errorf("failed to save private key: %w", err)
     }
     
@@ -275,13 +295,17 @@ func (m *Manager) fetchPeersFromManager() ([]Peer, error) {
     if err != nil {
         return nil, fmt.Errorf("failed to fetch peers: %w", err)
     }
-    defer resp.Body.Close()
+    defer func() {
+        if err := resp.Body.Close(); err != nil {
+            log.Debugf("Error closing response body: %v", err)
+        }
+    }()
     
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("manager returned status %d", resp.StatusCode)
     }
     
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }

@@ -225,6 +225,91 @@ class ManagerMetrics:
             registry=self.registry
         )
         
+        # Client and Headend Reported Metrics
+        self.client_metrics_bytes_sent = Gauge(
+            'sasewaddle_client_bytes_sent',
+            'Bytes sent by client',
+            ['client_id', 'client_name', 'client_type', 'headless'],
+            registry=self.registry
+        )
+        
+        self.client_metrics_bytes_received = Gauge(
+            'sasewaddle_client_bytes_received',
+            'Bytes received by client',
+            ['client_id', 'client_name', 'client_type', 'headless'],
+            registry=self.registry
+        )
+        
+        self.client_metrics_packets_sent = Gauge(
+            'sasewaddle_client_packets_sent',
+            'Packets sent by client',
+            ['client_id', 'client_name', 'client_type', 'headless'],
+            registry=self.registry
+        )
+        
+        self.client_metrics_packets_received = Gauge(
+            'sasewaddle_client_packets_received',
+            'Packets received by client',
+            ['client_id', 'client_name', 'client_type', 'headless'],
+            registry=self.registry
+        )
+        
+        self.client_metrics_connection_uptime = Gauge(
+            'sasewaddle_client_connection_uptime_seconds',
+            'Client connection uptime in seconds',
+            ['client_id', 'client_name', 'client_type', 'headless'],
+            registry=self.registry
+        )
+        
+        self.client_metrics_last_check_in = Gauge(
+            'sasewaddle_client_last_check_in_timestamp',
+            'Timestamp of last check-in from client',
+            ['client_id', 'client_name', 'client_type', 'headless'],
+            registry=self.registry
+        )
+        
+        self.headend_metrics_connections = Gauge(
+            'sasewaddle_headend_active_connections',
+            'Active connections on headend',
+            ['headend_id', 'headend_name', 'region', 'datacenter'],
+            registry=self.registry
+        )
+        
+        self.headend_metrics_bandwidth_in = Gauge(
+            'sasewaddle_headend_bandwidth_in_bytes',
+            'Incoming bandwidth on headend',
+            ['headend_id', 'headend_name', 'region', 'datacenter'],
+            registry=self.registry
+        )
+        
+        self.headend_metrics_bandwidth_out = Gauge(
+            'sasewaddle_headend_bandwidth_out_bytes',
+            'Outgoing bandwidth on headend',
+            ['headend_id', 'headend_name', 'region', 'datacenter'],
+            registry=self.registry
+        )
+        
+        self.headend_metrics_cpu_usage = Gauge(
+            'sasewaddle_headend_cpu_usage_percent',
+            'CPU usage on headend',
+            ['headend_id', 'headend_name', 'region', 'datacenter'],
+            registry=self.registry
+        )
+        
+        self.headend_metrics_memory_usage = Gauge(
+            'sasewaddle_headend_memory_usage_bytes',
+            'Memory usage on headend',
+            ['headend_id', 'headend_name', 'region', 'datacenter'],
+            registry=self.registry
+        )
+        
+        self.headend_metrics_last_check_in = Gauge(
+            'sasewaddle_headend_last_check_in_timestamp',
+            'Timestamp of last check-in from headend',
+            ['headend_id', 'headend_name', 'region', 'datacenter'],
+            registry=self.registry
+        )
+        
         # Business Logic Metrics
         self.user_logins_total = Counter(
             'sasewaddle_manager_user_logins_total',
@@ -375,6 +460,110 @@ class ManagerMetrics:
         """Update service uptime"""
         uptime = time.time() - self._start_time
         self.uptime_seconds.set(uptime)
+    
+    def update_client_metrics(self, client_id: str, client_name: str, client_type: str, 
+                            headless: bool, metrics: Dict[str, Any]):
+        """Update metrics reported by a client"""
+        headless_str = 'true' if headless else 'false'
+        
+        if 'bytes_sent' in metrics:
+            self.client_metrics_bytes_sent.labels(
+                client_id=client_id,
+                client_name=client_name,
+                client_type=client_type,
+                headless=headless_str
+            ).set(metrics['bytes_sent'])
+        
+        if 'bytes_received' in metrics:
+            self.client_metrics_bytes_received.labels(
+                client_id=client_id,
+                client_name=client_name,
+                client_type=client_type,
+                headless=headless_str
+            ).set(metrics['bytes_received'])
+        
+        if 'packets_sent' in metrics:
+            self.client_metrics_packets_sent.labels(
+                client_id=client_id,
+                client_name=client_name,
+                client_type=client_type,
+                headless=headless_str
+            ).set(metrics['packets_sent'])
+        
+        if 'packets_received' in metrics:
+            self.client_metrics_packets_received.labels(
+                client_id=client_id,
+                client_name=client_name,
+                client_type=client_type,
+                headless=headless_str
+            ).set(metrics['packets_received'])
+        
+        if 'connection_uptime' in metrics:
+            self.client_metrics_connection_uptime.labels(
+                client_id=client_id,
+                client_name=client_name,
+                client_type=client_type,
+                headless=headless_str
+            ).set(metrics['connection_uptime'])
+        
+        # Always update last check-in time
+        self.client_metrics_last_check_in.labels(
+            client_id=client_id,
+            client_name=client_name,
+            client_type=client_type,
+            headless=headless_str
+        ).set(time.time())
+    
+    def update_headend_metrics(self, headend_id: str, headend_name: str, 
+                              region: str, datacenter: str, metrics: Dict[str, Any]):
+        """Update metrics reported by a headend"""
+        if 'active_connections' in metrics:
+            self.headend_metrics_connections.labels(
+                headend_id=headend_id,
+                headend_name=headend_name,
+                region=region,
+                datacenter=datacenter
+            ).set(metrics['active_connections'])
+        
+        if 'bandwidth_in' in metrics:
+            self.headend_metrics_bandwidth_in.labels(
+                headend_id=headend_id,
+                headend_name=headend_name,
+                region=region,
+                datacenter=datacenter
+            ).set(metrics['bandwidth_in'])
+        
+        if 'bandwidth_out' in metrics:
+            self.headend_metrics_bandwidth_out.labels(
+                headend_id=headend_id,
+                headend_name=headend_name,
+                region=region,
+                datacenter=datacenter
+            ).set(metrics['bandwidth_out'])
+        
+        if 'cpu_usage' in metrics:
+            self.headend_metrics_cpu_usage.labels(
+                headend_id=headend_id,
+                headend_name=headend_name,
+                region=region,
+                datacenter=datacenter
+            ).set(metrics['cpu_usage'])
+        
+        if 'memory_usage' in metrics:
+            self.headend_metrics_memory_usage.labels(
+                headend_id=headend_id,
+                headend_name=headend_name,
+                region=region,
+                datacenter=datacenter
+            ).set(metrics['memory_usage'])
+        
+        # Always update last check-in time
+        self.headend_metrics_last_check_in.labels(
+            headend_id=headend_id,
+            headend_name=headend_name,
+            region=region,
+            datacenter=datacenter
+        ).set(time.time())
     
     def set_service_status(self, status: str):
         """Set service status"""

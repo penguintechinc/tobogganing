@@ -1,7 +1,7 @@
 {
-  "name": "sasewaddle-mobile",
-  "version": "1.0.0",
-  "description": "SASEWaddle Mobile Client - React Native app for WireGuard VPN management",
+  "name": "tobogganing-mobile",
+  "version": "1.1.2",
+  "description": "Tobogganing Mobile Client - React Native app for WireGuard VPN management",
   "main": "index.js",
   "scripts": {
     "android": "react-native run-android",
@@ -9,8 +9,9 @@
     "start": "react-native start",
     "test": "jest",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "type-check": "tsc --noEmit",
     "build:android": "cd android && ./gradlew assembleRelease",
-    "build:ios": "cd ios && xcodebuild -workspace SASEWaddleMobile.xcworkspace -scheme SASEWaddleMobile -configuration Release archive",
+    "build:ios": "cd ios && xcodebuild -workspace ToboggandingMobile.xcworkspace -scheme ToboggandingMobile -configuration Release archive",
     "clean": "react-native clean",
     "pod-install": "cd ios && pod install"
   },
@@ -70,6 +71,6 @@
     "zero-trust",
     "mobile"
   ],
-  "author": "SASEWaddle Team",
+  "author": "Tobogganing Team",
   "license": "MIT"
 }

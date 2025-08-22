@@ -251,7 +251,9 @@ func (pm *PortManager) acceptTCPConnections(listener net.Listener, port int) {
 		if pm.onNewConn != nil {
 			go pm.onNewConn(conn, port, "tcp")
 		} else {
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				log.Debugf("Error closing unhandled connection: %v", err)
+			}
 		}
 	}
 }

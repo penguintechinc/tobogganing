@@ -22,6 +22,25 @@ import structlog
 
 logger = structlog.get_logger()
 
+def _format_time_ago(time_diff):
+    """Format a timedelta into a human-readable 'time ago' string"""
+    if not time_diff:
+        return 'Never'
+    
+    seconds = int(time_diff.total_seconds())
+    
+    if seconds < 60:
+        return f'{seconds} seconds ago'
+    elif seconds < 3600:
+        minutes = seconds // 60
+        return f'{minutes} minute{"s" if minutes != 1 else ""} ago'
+    elif seconds < 86400:
+        hours = seconds // 3600
+        return f'{hours} hour{"s" if hours != 1 else ""} ago'
+    else:
+        days = seconds // 86400
+        return f'{days} day{"s" if days != 1 else ""} ago'
+
 def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_manager):
     """Setup web portal routes"""
     
@@ -333,6 +352,138 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
                 "vrf_statuses": [],
                 "ospf_area_types": [],
                 "error": "Failed to load network configuration"
+            }
+    
+    @action("checkin-dashboard")
+    @action.uses("checkin_dashboard.html")
+    @require_auth
+    async def checkin_dashboard():
+        """System check-in dashboard showing last check-in times"""
+        user = request.user
+        
+        try:
+            from ..database import get_read_db
+            from datetime import datetime, timedelta
+            import time
+            
+            db = get_read_db()
+            
+            # Get all clients with last check-in info
+            clients = db(db.clients).select(orderby=~db.clients.last_seen)
+            
+            # Get all clusters (headends) with last heartbeat
+            clusters = db(db.clusters).select(orderby=~db.clusters.updated_at)
+            
+            current_time = datetime.now()
+            
+            # Process clients
+            client_data = []
+            for client in clients:
+                last_seen = client.last_seen or client.created_at
+                time_diff = current_time - last_seen if last_seen else None
+                
+                # Determine if headless based on client type or name patterns
+                is_headless = (
+                    client.type == 'docker' or 
+                    'server' in client.name.lower() or
+                    'compute' in client.name.lower() or
+                    'headless' in client.name.lower()
+                )
+                
+                # Determine status based on last check-in time
+                if time_diff:
+                    if time_diff < timedelta(minutes=5):
+                        status = 'online'
+                        status_color = 'success'
+                    elif time_diff < timedelta(minutes=15):
+                        status = 'warning'
+                        status_color = 'warning'
+                    else:
+                        status = 'offline'
+                        status_color = 'danger'
+                else:
+                    status = 'unknown'
+                    status_color = 'secondary'
+                
+                client_data.append({
+                    'id': client.client_id,
+                    'name': client.name,
+                    'type': client.type,
+                    'headless': is_headless,
+                    'last_seen': last_seen.isoformat() if last_seen else None,
+                    'time_ago': _format_time_ago(time_diff) if time_diff else 'Never',
+                    'status': status,
+                    'status_color': status_color,
+                    'tunnel_mode': getattr(client, 'tunnel_mode', 'full'),
+                    'user': db(db.users.id == client.user_id).select().first().username if client.user_id else 'System'
+                })
+            
+            # Process headends
+            headend_data = []
+            for cluster in clusters:
+                last_heartbeat = cluster.updated_at or cluster.created_at
+                time_diff = current_time - last_heartbeat if last_heartbeat else None
+                
+                # Determine status based on last heartbeat
+                if time_diff:
+                    if time_diff < timedelta(minutes=2):
+                        status = 'online'
+                        status_color = 'success'
+                    elif time_diff < timedelta(minutes=5):
+                        status = 'warning'
+                        status_color = 'warning'
+                    else:
+                        status = 'offline'
+                        status_color = 'danger'
+                else:
+                    status = 'unknown'
+                    status_color = 'secondary'
+                
+                headend_data.append({
+                    'id': cluster.id,
+                    'name': cluster.name,
+                    'region': cluster.region,
+                    'datacenter': cluster.datacenter,
+                    'last_heartbeat': last_heartbeat.isoformat() if last_heartbeat else None,
+                    'time_ago': _format_time_ago(time_diff) if time_diff else 'Never',
+                    'status': status,
+                    'status_color': status_color,
+                    'cluster_status': cluster.status
+                })
+            
+            # Calculate summary statistics
+            total_clients = len(client_data)
+            online_clients = len([c for c in client_data if c['status'] == 'online'])
+            headless_clients = len([c for c in client_data if c['headless']])
+            gui_clients = total_clients - headless_clients
+            
+            total_headends = len(headend_data)
+            online_headends = len([h for h in headend_data if h['status'] == 'online'])
+            
+            return {
+                "title": "System Check-in Dashboard",
+                "user": user,
+                "clients": client_data,
+                "headends": headend_data,
+                "stats": {
+                    "total_clients": total_clients,
+                    "online_clients": online_clients,
+                    "headless_clients": headless_clients,
+                    "gui_clients": gui_clients,
+                    "total_headends": total_headends,
+                    "online_headends": online_headends
+                }
+            }
+            
+        except Exception as e:
+            logger.error("Check-in dashboard error", error=str(e))
+            return {
+                "title": "System Check-in Dashboard",
+                "user": user,
+                "clients": [],
+                "headends": [],
+                "stats": {},
+                "error": "Failed to load check-in data"
             }
     
     # API endpoints for AJAX requests
@@ -959,3 +1110,90 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
             logger.error("Get all port configs error", error=str(e))
             response.status = 500
             return {"error": "Failed to get port configurations"}
+    
+    # Web admin endpoints for port configuration
+    @action("api/web/ports/headend/<headend_id>", method=["GET"])
+    @action.uses(require_auth, "json")
+    async def web_get_headend_ports(headend_id):
+        """Get port configuration for a headend (web admin API)"""
+        try:
+            user = get_current_user()
+            if not user or user['role'] != 'admin':
+                response.status = 403
+                return {"error": "Admin access required"}
+            
+            config = await port_config_manager.get_headend_config(headend_id)
+            
+            if not config:
+                return {
+                    "headend_id": headend_id,
+                    "tcp_ranges": "8080-8090,9000",
+                    "udp_ranges": "5000-5100",
+                    "tcp_ranges_detail": [],
+                    "udp_ranges_detail": [],
+                }
+            
+            return {
+                "headend_id": config.headend_id,
+                "cluster_id": config.cluster_id,
+                "tcp_ranges": config.get_tcp_range_string(),
+                "udp_ranges": config.get_udp_range_string(),
+                "tcp_ranges_detail": [pr.to_dict() for pr in config.tcp_ranges],
+                "udp_ranges_detail": [pr.to_dict() for pr in config.udp_ranges],
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+            }
+        except Exception as e:
+            logger.error("Web get headend ports error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to get port configuration"}
+    
+    @action("api/web/ports/headend/<headend_id>", method=["POST"])
+    @action.uses(require_auth, "json")
+    async def web_update_headend_ports(headend_id):
+        """Update port configuration for a headend (web admin API)"""
+        try:
+            user = get_current_user()
+            if not user or user['role'] != 'admin':
+                response.status = 403
+                return {"error": "Admin access required"}
+            
+            data = await request.json()
+            tcp_ranges = data.get('tcp_ranges', '')
+            udp_ranges = data.get('udp_ranges', '')
+            cluster_id = data.get('cluster_id', f'cluster-{headend_id}')
+            
+            # Validate port ranges
+            tcp_parsed = port_config_manager.parse_port_ranges(tcp_ranges, PortProtocol.TCP)
+            udp_parsed = port_config_manager.parse_port_ranges(udp_ranges, PortProtocol.UDP)
+            
+            if not tcp_parsed and not udp_parsed:
+                response.status = 400
+                return {"error": "At least one port range must be specified"}
+            
+            # Update configuration
+            success = await port_config_manager.update_headend_config(
+                headend_id=headend_id,
+                cluster_id=cluster_id,
+                tcp_ranges=tcp_parsed,
+                udp_ranges=udp_parsed
+            )
+            
+            if not success:
+                response.status = 500
+                return {"error": "Failed to update port configuration"}
+            
+            logger.info("Port configuration updated", 
+                       headend_id=headend_id,
+                       tcp_ranges=tcp_ranges,
+                       udp_ranges=udp_ranges,
+                       admin_user=user['username'])
+            
+            return {"success": True, "message": "Port configuration updated"}
+            
+        except ValueError as e:
+            response.status = 400
+            return {"error": f"Invalid port range format: {str(e)}"}
+        except Exception as e:
+            logger.error("Web update headend ports error", error=str(e))
+            response.status = 500
+            return {"error": "Failed to update port configuration"}

@@ -2,7 +2,7 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-/* Custom styles for SASEWaddle website */
+/* Custom styles for Tobogganing website */
 html {
   scroll-behavior: smooth;
 }
@@ -53,6 +53,19 @@ code {
     transform: translateY(0);
     opacity: 1;
   }
+}
+
+/* Animation delay utilities */
+.animation-delay-1000 {
+  animation-delay: 1s;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
 }
 
 .animate-fade-in {
@@ -153,11 +166,11 @@ a:hover {
 
 /* Button styles */
 .btn-primary {
-  @apply bg-primary-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary-700 focus:ring-4 focus:ring-primary-200 transition-all duration-200;
+  @apply bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all duration-200;
 }
 
 .btn-secondary {
-  @apply bg-white text-primary-600 border-2 border-primary-600 px-6 py-3 rounded-lg font-semibold hover:bg-primary-50 focus:ring-4 focus:ring-primary-200 transition-all duration-200;
+  @apply bg-white text-blue-600 border-2 border-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 focus:ring-4 focus:ring-blue-200 transition-all duration-200;
 }
 
 /* Card hover effects */

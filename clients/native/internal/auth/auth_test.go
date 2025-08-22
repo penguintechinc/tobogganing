@@ -41,7 +41,7 @@ func TestManager_GetToken_Success(t *testing.T) {
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"access_token": "test-access-token",
 			"refresh_token": "test-refresh-token",
 			"expires_at": "2024-12-31T23:59:59Z",
@@ -77,7 +77,7 @@ func TestManager_GetToken_HTTPError(t *testing.T) {
 	// Create mock server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error": "unauthorized"}`))
+		_, _ = w.Write([]byte(`{"error": "unauthorized"}`))
 	}))
 	defer server.Close()
 	
@@ -101,7 +101,7 @@ func TestManager_RefreshToken_Success(t *testing.T) {
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"access_token": "new-access-token",
 			"refresh_token": "new-refresh-token",
 			"expires_at": "2024-12-31T23:59:59Z",

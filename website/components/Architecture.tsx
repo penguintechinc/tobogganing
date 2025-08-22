@@ -29,7 +29,7 @@ const Architecture: React.FC = () => {
             <img 
               src="/images/diagrams/connectivity-flow.svg" 
               alt="SASEWaddle Connectivity Flow Diagram"
-              className="max-w-full h-auto"
+              className="w-full max-w-4xl h-auto object-contain"
               style={{ maxHeight: '600px' }}
             />
           </div>

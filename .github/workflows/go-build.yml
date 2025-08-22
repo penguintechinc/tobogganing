@@ -1,0 +1,210 @@
+name: Headless Client Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-headless-client:
+    name: Build Headless Client Binaries
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          # Desktop platforms - Headless versions (for servers)
+          - goos: darwin
+            goarch: amd64
+            binary_name: tobogganing-client-darwin-amd64-headless
+          - goos: darwin
+            goarch: arm64
+            binary_name: tobogganing-client-darwin-arm64-headless
+          - goos: linux
+            goarch: amd64
+            binary_name: tobogganing-client-linux-amd64-headless
+          - goos: linux
+            goarch: arm64
+            binary_name: tobogganing-client-linux-arm64-headless
+          - goos: windows
+            goarch: amd64
+            binary_name: tobogganing-client-windows-amd64-headless.exe
+          - goos: windows
+            goarch: arm64
+            binary_name: tobogganing-client-windows-arm64-headless.exe
+          
+          # Embedded platforms - Headless only
+          - goos: linux
+            goarch: arm
+            goarm: 7
+            binary_name: tobogganing-client-linux-armv7-headless
+          - goos: linux
+            goarch: arm
+            goarm: 6
+            binary_name: tobogganing-client-linux-armv6-headless
+          - goos: linux
+            goarch: mips
+            binary_name: tobogganing-client-linux-mips-headless
+          - goos: linux
+            goarch: mipsle
+            binary_name: tobogganing-client-linux-mipsle-headless
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      
+      - name: Install dependencies
+        working-directory: ./clients/native
+        run: |
+          go mod download
+          go mod verify
+      
+      - name: Build headless binary
+        working-directory: ./clients/native
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: 0
+        run: |
+          # Build WITHOUT GUI for servers and embedded systems
+          go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
+            -o ../../dist/${{ matrix.binary_name }} \
+            ./cmd/headless
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
+
+  build-headend-proxy:
+    name: Build Headend Proxy Binaries
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            binary_name: headend-proxy-linux-amd64
+          - goos: linux
+            goarch: arm64
+            binary_name: headend-proxy-linux-arm64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      
+      - name: Install dependencies
+        working-directory: ./headend
+        run: |
+          go mod download
+          go mod verify
+      
+      - name: Build binary
+        working-directory: ./headend
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
+            -o ../dist/${{ matrix.binary_name }} \
+            ./proxy
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
+
+  create-universal-headless:
+    name: Create macOS Universal Headless Binary
+    needs: build-headless-client
+    runs-on: macos-latest
+    
+    steps:
+      - name: Download Intel binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tobogganing-client-darwin-amd64
+          path: ./
+      
+      - name: Download ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tobogganing-client-darwin-arm64
+          path: ./
+      
+      - name: Create Universal Headless Binary
+        run: |
+          lipo -create -output tobogganing-client-darwin-universal-headless \
+            tobogganing-client-darwin-amd64-headless \
+            tobogganing-client-darwin-arm64-headless
+          chmod +x tobogganing-client-darwin-universal-headless
+      
+      - name: Upload Universal Headless Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tobogganing-client-darwin-universal-headless
+          path: tobogganing-client-darwin-universal-headless
+
+  release-headless:
+    name: Create Headless Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-headless-client, create-universal-headless]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      
+      - name: Create checksums
+        run: |
+          cd artifacts
+          for dir in */; do
+            cd "$dir"
+            for file in *; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" > "$file.sha256"
+                mv "$file" "$file.sha256" ../
+              fi
+            done
+            cd ..
+          done
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/tobogganing-client-*
+            artifacts/headend-proxy-*
+            artifacts/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

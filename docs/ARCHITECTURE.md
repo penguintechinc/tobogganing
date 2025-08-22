@@ -1,6 +1,6 @@
-# 🏗️ SASEWaddle Architecture Guide
+# 🏗️ Tobogganing Architecture Guide
 
-> **💡 Overview**: SASEWaddle implements a modern three-tier Zero Trust Network Architecture designed for enterprise-scale secure access.
+> **💡 Overview**: Tobogganing implements a modern three-tier Zero Trust Network Architecture designed for enterprise-scale secure access.
 
 ## 📋 Table of Contents
 
@@ -60,28 +60,28 @@
 │               │           │    Server       │           │   Service       │
 │ 🖥️ Native App │           │                 │           │                 │
 │ 🐳 Docker     │           │ • WireGuard     │           │ • Orchestration │
-│ 📱 Mobile*    │           │ • Proxy         │           │ • Certificates  │
-│               │           │ • Auth          │           │ • JWT Tokens    │
-│               │           │ • Traffic Mirr. │           │ • Web UI        │
+│ 📱 Mobile     │           │ • Go Proxy      │           │ • Certificates  │
+│ 🔧 Embedded   │           │ • Firewall      │           │ • JWT Tokens    │
+│               │           │ • IDS/IPS       │           │ • Web Portal    │
+│               │           │ • Syslog        │           │ • Analytics     │
 └───────────────┘           └─────────────────┘           └─────────────────┘
         │                             │                             │
         ▼                             ▼                             ▼
 ┌───────────────┐           ┌─────────────────┐           ┌─────────────────┐
 │ 🔐 Cert Store │           │ 🔍 Monitoring   │           │ 🗄️ Database     │
-│               │           │ • Prometheus    │           │ • PostgreSQL    │
-│ 🔑 Config     │           │ • Grafana       │           │ • SQLite (dev)  │
+│               │           │ • Prometheus    │           │ • MySQL         │
+│ 🔑 Config     │           │ • Grafana       │           │ • PostgreSQL    │
+│               │           │ • Suricata IDS  │           │ • Read Replicas │
 └───────────────┘           └─────────────────┘           └─────────────────┘
-                                      │
-                                      ▼
-                            ┌─────────────────┐
-                            │ 🗄️ Redis Cache  │
-                            │ • Sessions      │
-                            │ • JWT Tokens    │
-                            │ • Rate Limiting │
-                            └─────────────────┘
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────┐           ┌─────────────────┐           ┌─────────────────┐
+│ 🌐 Network    │           │ 🗄️ Redis Cache  │           │ 📊 Analytics    │
+│ • FRR Router  │           │ • Sessions      │           │ • Real-time     │
+│ • VRF/OSPF    │           │ • Firewall Rules│           │ • Aggregations  │
+│ • BGP         │           │ • Rate Limiting │           │ • Reports       │
+└───────────────┘           └─────────────────┘           └─────────────────┘
 ```
-
-*📱 Mobile clients planned for v1.1+
 
 ### 🔄 Communication Flow
 
@@ -161,7 +161,7 @@ sequenceDiagram
 
 ### 🌐 Headend Server
 
-> **🔧 Technology**: Go 1.21 + WireGuard + goroutines
+> **🔧 Technology**: Go 1.23 + WireGuard + goroutines
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -204,7 +204,7 @@ sequenceDiagram
 
 ### 👤 Client Applications
 
-> **🔧 Technology**: Go 1.21 + Cross-platform UI
+> **🔧 Technology**: Go 1.23 + Cross-platform UI
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -523,4 +523,4 @@ Ready to deploy? Choose your path:
 
 ---
 
-*📝 This document is updated with each release. For the latest version, visit our [documentation portal](https://docs.sasewaddle.com).*
+*📝 This document is updated with each release. For the latest version, visit our [documentation portal](https://docs.tobogganing.com).*

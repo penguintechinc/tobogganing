@@ -65,7 +65,7 @@ export const AppShowcase: React.FC<AppShowcaseProps> = ({
                   alt={screenshot.alt}
                   width={800}
                   height={500}
-                  className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-300"
+                  className="object-contain w-full h-full max-h-80 group-hover:scale-105 transition-transform duration-300"
                   onError={(e) => {
                     // Handle missing images gracefully
                     e.currentTarget.style.display = 'none';
