@@ -244,6 +244,49 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 ### 📝 Current TODO Status
 *Last Updated: 2025-08-21*
 
+## ✅ Recently Completed Features (2025-08-22)
+
+1. ✅ **Split/Full Tunnel Configuration** 
+   - Added tunnel_mode field to clients table (full/split)
+   - Added split_tunnel_routes for domains, IPv4/IPv6 addresses and CIDRs
+   - New API endpoint: `PUT /api/v1/clients/<client_id>/tunnel-config`
+   - Supports bypassing specific domains or IP ranges
+
+2. ✅ **Enhanced Metrics Collection**
+   - Clients and headends can now submit metrics to manager
+   - New API endpoints: 
+     - `POST /api/v1/clients/<client_id>/metrics`
+     - `POST /api/v1/headends/<headend_id>/metrics`
+   - Prometheus metrics for client/headend monitoring:
+     - Connection statistics (bytes, packets, uptime)
+     - System resources (CPU, memory for headends)
+     - Last check-in timestamps
+   - Authentication required via Bearer token
+
+3. ✅ **System Check-in Dashboard**
+   - New web dashboard at `/checkin-dashboard`
+   - Shows last check-in times for all systems
+   - Differentiates between headends and clients
+   - Identifies headless vs GUI clients
+   - Color-coded status indicators:
+     - Green: Online (< 5 min for clients, < 2 min for headends)
+     - Yellow: Warning (< 15 min for clients, < 5 min for headends)  
+     - Red: Offline (older check-ins)
+   - Summary statistics for quick overview
+
+## 🎁 Bonus Features Added
+
+### Enterprise Licensing System
+- **Community Open Source**: Full VPN features with unlimited clients/headends, no license required
+- **Professional Tier**: Adds metrics collection and monitoring capabilities  
+- **Enterprise Tier**: Adds SSO/SAML2, LDAP, MFA, and advanced security features
+- **License Server**: Available at license.penguintech.io for feature validation
+- **Feature Gating**: Automatic validation ensures licensed features are properly controlled
+- **No Artificial Limits**: Community edition has no client or headend restrictions
+- **Authentication Strategy**: Basic username/password authentication always available in all tiers
+  - SSO/LDAP/MFA are **additional** authentication options for Enterprise customers
+  - No disruption to existing authentication workflows
+
 ## 🔄 Ongoing Security & Quality Tasks
 
 1. 🚧 **Add input validation to all network-facing functions in Go code** - Ensure functions receiving data from outside via network connections perform basic input validation
@@ -411,7 +454,10 @@ DB_PATH=/data/sasewaddle.db
 
 #### Core Management
 - `POST /api/v1/clients/register` - Register new client
-- `GET /api/v1/clients/{id}/config` - Get client configuration
+- `GET /api/v1/clients/{id}/config` - Get client configuration (includes tunnel config)
+- `PUT /api/v1/clients/{id}/tunnel-config` - Update client tunnel configuration
+- `POST /api/v1/clients/{id}/metrics` - Submit client metrics
+- `POST /api/v1/headends/{id}/metrics` - Submit headend metrics
 - `POST /api/v1/certs/generate` - Generate certificates
 - `GET /api/v1/status` - System status
 - `GET /health` - Detailed health check
@@ -423,6 +469,7 @@ DB_PATH=/data/sasewaddle.db
 - `POST /api/web/user/{id}/toggle` - Enable/disable user (Admin only)
 - `GET /api/web/stats` - Real-time dashboard statistics
 - `POST /api/web/client/{id}/revoke` - Revoke client access
+- `GET /checkin-dashboard` - System check-in dashboard page
 
 #### Firewall Management API
 - `POST /api/web/firewall/rule` - Create firewall rule

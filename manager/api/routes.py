@@ -181,10 +181,103 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "region": cluster.region,
                     "datacenter": cluster.datacenter
                 },
-                "status": client.status
+                "status": client.status,
+                "tunnel_mode": getattr(client, 'tunnel_mode', 'full'),
+                "split_tunnel_routes": getattr(client, 'split_tunnel_routes', [])
             }
         except Exception as e:
             logger.error(f"Get config error: {e}")
+            response.status = 500
+            return {"error": "Internal server error"}
+    
+    @action("api/v1/clients/<client_id>/tunnel-config", method=["PUT"])
+    @action.uses("json")
+    async def update_tunnel_config(client_id):
+        try:
+            # Authenticate using API key or admin token
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Invalid authorization header"}
+            
+            # Check if this is an admin JWT or client API key
+            token = auth_header[7:]
+            
+            # Try JWT first (for admin access)
+            user_info = jwt_manager.validate_token(token)
+            if user_info and user_info.get('role') == 'admin':
+                # Admin can update any client
+                pass
+            else:
+                # Try client API key
+                client = await client_registry.authenticate_client(token)
+                if not client or client.id != client_id:
+                    response.status = 401
+                    return {"error": "Unauthorized"}
+            
+            data = await request.json()
+            
+            # Validate tunnel mode
+            tunnel_mode = data.get('tunnel_mode', 'full')
+            if tunnel_mode not in ['full', 'split']:
+                response.status = 400
+                return {"error": "Invalid tunnel_mode. Must be 'full' or 'split'"}
+            
+            # Validate split tunnel routes if in split mode
+            split_tunnel_routes = []
+            if tunnel_mode == 'split':
+                routes = data.get('split_tunnel_routes', [])
+                if not isinstance(routes, list):
+                    response.status = 400
+                    return {"error": "split_tunnel_routes must be a list"}
+                
+                # Validate each route (domain, IPv4, IPv6, or CIDR)
+                import ipaddress
+                import re
+                
+                domain_pattern = re.compile(r'^(\*\.)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+                
+                for route in routes:
+                    if not isinstance(route, str):
+                        response.status = 400
+                        return {"error": f"Invalid route format: {route}"}
+                    
+                    # Try to parse as IP address or network
+                    try:
+                        ipaddress.ip_network(route, strict=False)
+                        split_tunnel_routes.append(route)
+                    except ValueError:
+                        # Not an IP, try as domain
+                        if domain_pattern.match(route):
+                            split_tunnel_routes.append(route)
+                        else:
+                            response.status = 400
+                            return {"error": f"Invalid route: {route}. Must be a domain, IP address, or CIDR"}
+            
+            # Update client configuration in database
+            from ..database import get_db
+            db = get_db()
+            
+            client_record = db(db.clients.client_id == client_id).select().first()
+            if not client_record:
+                response.status = 404
+                return {"error": "Client not found"}
+            
+            client_record.update_record(
+                tunnel_mode=tunnel_mode,
+                split_tunnel_routes=split_tunnel_routes if tunnel_mode == 'split' else []
+            )
+            db.commit()
+            
+            return {
+                "client_id": client_id,
+                "tunnel_mode": tunnel_mode,
+                "split_tunnel_routes": split_tunnel_routes if tunnel_mode == 'split' else [],
+                "status": "updated"
+            }
+            
+        except Exception as e:
+            logger.error(f"Update tunnel config error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
     
@@ -218,6 +311,110 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             }
         except Exception as e:
             logger.error(f"Key rotation error: {e}")
+            response.status = 500
+            return {"error": "Internal server error"}
+    
+    @action("api/v1/clients/<client_id>/metrics", method=["POST"])
+    @action.uses("json")
+    async def submit_client_metrics(client_id):
+        try:
+            # Check if metrics feature is licensed
+            from ..licensing import check_feature
+            if not check_feature('client_metrics'):
+                response.status = 402  # Payment Required
+                return {
+                    "error": "Feature not licensed",
+                    "message": "Client metrics collection requires a Professional or Enterprise license"
+                }
+            
+            # Authenticate using API key
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Invalid authorization header"}
+            
+            api_key = auth_header[7:]
+            client = await client_registry.authenticate_client(api_key)
+            
+            if not client or client.id != client_id:
+                response.status = 401
+                return {"error": "Unauthorized"}
+            
+            data = await request.json()
+            
+            # Import metrics module
+            from ..metrics.prometheus import get_metrics_instance
+            metrics = get_metrics_instance()
+            
+            # Update client metrics
+            metrics.update_client_metrics(
+                client_id=client.id,
+                client_name=client.name,
+                client_type=client.type,
+                headless=data.get('headless', False),
+                metrics=data.get('metrics', {})
+            )
+            
+            # Update last seen in database
+            from ..database import get_db
+            db = get_db()
+            client_record = db(db.clients.client_id == client_id).select().first()
+            if client_record:
+                from datetime import datetime
+                client_record.update_record(last_seen=datetime.now())
+                db.commit()
+            
+            return {"status": "metrics_received"}
+            
+        except Exception as e:
+            logger.error(f"Submit client metrics error: {e}")
+            response.status = 500
+            return {"error": "Internal server error"}
+    
+    @action("api/v1/headends/<headend_id>/metrics", method=["POST"])
+    @action.uses("json")
+    async def submit_headend_metrics(headend_id):
+        try:
+            # Authenticate using JWT or headend token
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Invalid authorization header"}
+            
+            token = auth_header[7:]
+            
+            # Validate headend authentication
+            # For now, we'll use JWT validation
+            user_info = jwt_manager.validate_token(token)
+            if not user_info:
+                response.status = 401
+                return {"error": "Unauthorized"}
+            
+            data = await request.json()
+            
+            # Import metrics module
+            from ..metrics.prometheus import get_metrics_instance
+            metrics = get_metrics_instance()
+            
+            # Get headend info from cluster
+            cluster = await cluster_manager.get_cluster_by_headend(headend_id)
+            if not cluster:
+                response.status = 404
+                return {"error": "Headend not found"}
+            
+            # Update headend metrics
+            metrics.update_headend_metrics(
+                headend_id=headend_id,
+                headend_name=data.get('headend_name', headend_id),
+                region=cluster.region,
+                datacenter=cluster.datacenter,
+                metrics=data.get('metrics', {})
+            )
+            
+            return {"status": "metrics_received"}
+            
+        except Exception as e:
+            logger.error(f"Submit headend metrics error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
     

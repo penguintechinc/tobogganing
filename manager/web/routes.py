@@ -22,6 +22,25 @@ import structlog
 
 logger = structlog.get_logger()
 
+def _format_time_ago(time_diff):
+    """Format a timedelta into a human-readable 'time ago' string"""
+    if not time_diff:
+        return 'Never'
+    
+    seconds = int(time_diff.total_seconds())
+    
+    if seconds < 60:
+        return f'{seconds} seconds ago'
+    elif seconds < 3600:
+        minutes = seconds // 60
+        return f'{minutes} minute{"s" if minutes != 1 else ""} ago'
+    elif seconds < 86400:
+        hours = seconds // 3600
+        return f'{hours} hour{"s" if hours != 1 else ""} ago'
+    else:
+        days = seconds // 86400
+        return f'{days} day{"s" if days != 1 else ""} ago'
+
 def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_manager):
     """Setup web portal routes"""
     
@@ -333,6 +352,138 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
                 "vrf_statuses": [],
                 "ospf_area_types": [],
                 "error": "Failed to load network configuration"
+            }
+    
+    @action("checkin-dashboard")
+    @action.uses("checkin_dashboard.html")
+    @require_auth
+    async def checkin_dashboard():
+        """System check-in dashboard showing last check-in times"""
+        user = request.user
+        
+        try:
+            from ..database import get_read_db
+            from datetime import datetime, timedelta
+            import time
+            
+            db = get_read_db()
+            
+            # Get all clients with last check-in info
+            clients = db(db.clients).select(orderby=~db.clients.last_seen)
+            
+            # Get all clusters (headends) with last heartbeat
+            clusters = db(db.clusters).select(orderby=~db.clusters.updated_at)
+            
+            current_time = datetime.now()
+            
+            # Process clients
+            client_data = []
+            for client in clients:
+                last_seen = client.last_seen or client.created_at
+                time_diff = current_time - last_seen if last_seen else None
+                
+                # Determine if headless based on client type or name patterns
+                is_headless = (
+                    client.type == 'docker' or 
+                    'server' in client.name.lower() or
+                    'compute' in client.name.lower() or
+                    'headless' in client.name.lower()
+                )
+                
+                # Determine status based on last check-in time
+                if time_diff:
+                    if time_diff < timedelta(minutes=5):
+                        status = 'online'
+                        status_color = 'success'
+                    elif time_diff < timedelta(minutes=15):
+                        status = 'warning'
+                        status_color = 'warning'
+                    else:
+                        status = 'offline'
+                        status_color = 'danger'
+                else:
+                    status = 'unknown'
+                    status_color = 'secondary'
+                
+                client_data.append({
+                    'id': client.client_id,
+                    'name': client.name,
+                    'type': client.type,
+                    'headless': is_headless,
+                    'last_seen': last_seen.isoformat() if last_seen else None,
+                    'time_ago': _format_time_ago(time_diff) if time_diff else 'Never',
+                    'status': status,
+                    'status_color': status_color,
+                    'tunnel_mode': getattr(client, 'tunnel_mode', 'full'),
+                    'user': db(db.users.id == client.user_id).select().first().username if client.user_id else 'System'
+                })
+            
+            # Process headends
+            headend_data = []
+            for cluster in clusters:
+                last_heartbeat = cluster.updated_at or cluster.created_at
+                time_diff = current_time - last_heartbeat if last_heartbeat else None
+                
+                # Determine status based on last heartbeat
+                if time_diff:
+                    if time_diff < timedelta(minutes=2):
+                        status = 'online'
+                        status_color = 'success'
+                    elif time_diff < timedelta(minutes=5):
+                        status = 'warning'
+                        status_color = 'warning'
+                    else:
+                        status = 'offline'
+                        status_color = 'danger'
+                else:
+                    status = 'unknown'
+                    status_color = 'secondary'
+                
+                headend_data.append({
+                    'id': cluster.id,
+                    'name': cluster.name,
+                    'region': cluster.region,
+                    'datacenter': cluster.datacenter,
+                    'last_heartbeat': last_heartbeat.isoformat() if last_heartbeat else None,
+                    'time_ago': _format_time_ago(time_diff) if time_diff else 'Never',
+                    'status': status,
+                    'status_color': status_color,
+                    'cluster_status': cluster.status
+                })
+            
+            # Calculate summary statistics
+            total_clients = len(client_data)
+            online_clients = len([c for c in client_data if c['status'] == 'online'])
+            headless_clients = len([c for c in client_data if c['headless']])
+            gui_clients = total_clients - headless_clients
+            
+            total_headends = len(headend_data)
+            online_headends = len([h for h in headend_data if h['status'] == 'online'])
+            
+            return {
+                "title": "System Check-in Dashboard",
+                "user": user,
+                "clients": client_data,
+                "headends": headend_data,
+                "stats": {
+                    "total_clients": total_clients,
+                    "online_clients": online_clients,
+                    "headless_clients": headless_clients,
+                    "gui_clients": gui_clients,
+                    "total_headends": total_headends,
+                    "online_headends": online_headends
+                }
+            }
+            
+        except Exception as e:
+            logger.error("Check-in dashboard error", error=str(e))
+            return {
+                "title": "System Check-in Dashboard",
+                "user": user,
+                "clients": [],
+                "headends": [],
+                "stats": {},
+                "error": "Failed to load check-in data"
             }
     
     # API endpoints for AJAX requests

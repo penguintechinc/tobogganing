@@ -26,51 +26,58 @@ const Header: React.FC = () => {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-white/95 backdrop-blur-md shadow-lg border-b border-primary-200/30 sticky top-0 z-50">
       <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" aria-label="Global">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-18 items-center justify-between">
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">SW</span>
+            <Link href="/" className="group flex items-center space-x-3 transition-all duration-300 hover:scale-105">
+              <div className="h-10 w-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:rotate-3">
+                <span className="text-white font-bold text-lg">🐧</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">SASEWaddle</span>
+              <span className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">SASEWaddle</span>
             </Link>
           </div>
 
           {/* Desktop navigation */}
-          <div className="hidden lg:flex lg:items-center lg:space-x-8">
+          <div className="hidden lg:flex lg:items-center lg:space-x-2">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`text-sm font-medium transition-colors duration-200 ${
+                className={`relative px-4 py-2 text-sm font-medium rounded-xl transition-all duration-300 ${
                   isActive(item.href)
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-600 hover:text-primary-600'
+                    ? 'text-primary-600 bg-gradient-to-r from-primary-50 to-secondary-50 shadow-sm'
+                    : 'text-gray-600 hover:text-primary-600 hover:bg-primary-50/50'
                 }`}
               >
                 {item.name}
+                {isActive(item.href) && (
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-primary-500 rounded-full"></div>
+                )}
               </Link>
             ))}
           </div>
 
           {/* CTA Button */}
-          <div className="hidden lg:flex lg:items-center lg:space-x-4">
+          <div className="hidden lg:flex lg:items-center lg:space-x-3">
             <Link
-              href="https://github.com/your-org/sasewaddle"
+              href="https://github.com/penguintechinc/SASEWaddle"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors"
+              className="group flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-primary-600 transition-all duration-300 rounded-xl hover:bg-gray-50"
             >
+              <span className="mr-1">⭐</span>
               GitHub
             </Link>
             <Link
               href="/downloads"
-              className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors duration-200"
+              className="group relative bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:from-primary-700 hover:to-secondary-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
-              Get Started
+              <span className="relative z-10 flex items-center">
+                🚀 Get Started
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-accent-600 to-primary-700 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </Link>
           </div>
 
@@ -93,36 +100,37 @@ const Header: React.FC = () => {
 
         {/* Mobile navigation */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-200 bg-white">
-            <div className="space-y-1 px-2 pb-3 pt-2">
+          <div className="lg:hidden border-t border-primary-200/30 bg-white/95 backdrop-blur-md">
+            <div className="space-y-2 px-4 pb-4 pt-4">
               {navigation.map((item) => (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`block px-3 py-2 text-base font-medium rounded-md transition-colors ${
+                  className={`block px-4 py-3 text-base font-medium rounded-xl transition-all duration-300 ${
                     isActive(item.href)
-                      ? 'text-primary-600 bg-primary-50'
-                      : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50'
+                      ? 'text-primary-600 bg-gradient-to-r from-primary-50 to-secondary-50 shadow-sm'
+                      : 'text-gray-600 hover:text-primary-600 hover:bg-primary-50/50'
                   }`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {item.name}
                 </Link>
               ))}
-              <div className="border-t border-gray-200 pt-4 mt-4">
+              <div className="border-t border-primary-200/30 pt-4 mt-4 space-y-3">
                 <Link
-                  href="https://github.com/your-org/sasewaddle"
+                  href="https://github.com/penguintechinc/SASEWaddle"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block px-3 py-2 text-base font-medium text-gray-600 hover:text-primary-600 rounded-md"
+                  className="flex items-center px-4 py-3 text-base font-medium text-gray-600 hover:text-primary-600 rounded-xl hover:bg-primary-50/50 transition-all duration-300"
                 >
+                  <span className="mr-2">⭐</span>
                   GitHub
                 </Link>
                 <Link
                   href="/downloads"
-                  className="block mx-3 mt-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-base font-medium hover:bg-primary-700 transition-colors text-center"
+                  className="block mx-2 bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-6 py-3 rounded-xl text-base font-bold hover:from-primary-700 hover:to-secondary-700 transition-all duration-300 text-center shadow-lg"
                 >
-                  Get Started
+                  🚀 Get Started
                 </Link>
               </div>
             </div>

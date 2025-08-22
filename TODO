@@ -1,0 +1,12 @@
+✅ COMPLETED (2025-08-22):
+- ✅ Split/Full tunnel configuration - Added tunnel_mode and split_tunnel_routes to clients, supports domains/IPs/CIDRs
+- ✅ Metrics collection - Added Prometheus-compatible metrics API for clients and headends with authentication
+- ✅ System check-in dashboard - Created /checkin-dashboard showing last check-in times with headless detection
+- ✅ Build testing and linting - All Go builds successful, Python syntax validated
+- ✅ CLAUDE.md updated - Added new features, API endpoints, and recent completions section
+- ✅ Documentation updated - Created TUNNEL_CONFIGURATION.md, METRICS_MONITORING.md, and LICENSING.md
+
+BONUS FEATURES ADDED:
+- 🎁 Enterprise licensing system - Metrics and SSO are now licensed features (Professional/Enterprise tiers)
+- 🎁 License server integration - Added SASEWaddle product support to license server
+- 🎁 Feature gating - Automatic feature checks based on license tier

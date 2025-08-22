@@ -63,132 +63,168 @@ const features = [
 
 const Features: React.FC = () => {
   return (
-    <div id="features" className="bg-white py-20 sm:py-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div id="features" className="bg-gradient-to-br from-gray-50 via-white to-primary-50/30 py-20 sm:py-24 relative overflow-hidden">
+      {/* Background decorations */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary-200/20 rounded-full mix-blend-multiply filter blur-3xl opacity-40"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary-200/20 rounded-full mix-blend-multiply filter blur-3xl opacity-40"></div>
+      </div>
+      
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center px-6 py-3 rounded-full bg-gradient-to-r from-primary-500/10 to-secondary-500/10 text-primary-700 text-sm font-semibold mb-6 border border-primary-200">
+            <span className="animate-pulse mr-2">✨</span>
             Enterprise-Grade Features
+          </div>
+          <h2 className="text-4xl sm:text-5xl font-bold mb-6">
+            <span className="text-gray-900">Everything You Need for</span>
+            <span className="block bg-gradient-to-r from-primary-600 via-secondary-600 to-accent-600 bg-clip-text text-transparent">
+              Zero Trust Security 🐧
+            </span>
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
             SASEWaddle provides all the features you need to secure your distributed workforce 
-            with Zero Trust principles and modern cloud-native architecture.
+            with <strong>Zero Trust principles</strong> and modern cloud-native architecture that <em>just works</em>.
           </p>
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {features.map((feature, index) => (
             <div
               key={feature.name}
-              className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-200 hover:shadow-lg hover:border-primary-300 transition-all duration-300"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-gray-200/50 hover:shadow-2xl hover:border-primary-300 transition-all duration-500 transform hover:-translate-y-2 hover:scale-105"
             >
               {/* Icon */}
-              <div className={`inline-flex items-center justify-center w-12 h-12 ${feature.color} rounded-xl mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                <feature.icon className="h-6 w-6 text-white" aria-hidden="true" />
+              <div className={`inline-flex items-center justify-center w-14 h-14 ${feature.color} rounded-2xl mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg`}>
+                <feature.icon className="h-7 w-7 text-white" aria-hidden="true" />
               </div>
 
               {/* Content */}
-              <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors">
                 {feature.name}
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
                 {feature.description}
               </p>
 
-              {/* Hover effect */}
-              <div className="absolute inset-0 rounded-2xl bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+              {/* Hover gradient overlay */}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary-50 via-white to-secondary-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+              
+              {/* Subtle border glow on hover */}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary-500 to-secondary-500 opacity-0 group-hover:opacity-20 transition-opacity duration-300 -z-20 blur-md"></div>
             </div>
           ))}
         </div>
 
         {/* Technical Specifications */}
-        <div className="mt-20 bg-gray-50 rounded-2xl p-8 lg:p-12">
-          <div className="text-center mb-12">
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">Technical Specifications</h3>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Built with modern technologies for maximum performance, security, and scalability
+        <div className="mt-24 bg-gradient-to-br from-white to-gray-50/80 rounded-3xl p-8 lg:p-12 shadow-xl border border-gray-200/50 backdrop-blur-sm">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-accent-500/10 to-primary-500/10 text-accent-700 text-sm font-semibold mb-4 border border-accent-200">
+              <span className="mr-2">🔧</span>
+              Technical Stack
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 mb-4">Built with Modern Tech 🚀</h3>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              Powered by cutting-edge technologies for <strong>maximum performance</strong>, 
+              <strong>bulletproof security</strong>, and <strong>infinite scalability</strong>
             </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Manager Service */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Manager Service</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
+            <div className="group bg-white rounded-2xl p-8 border border-gray-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+              <div className="flex items-center mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-white font-bold text-xl">🐍</span>
+                </div>
+                <h4 className="text-xl font-bold text-gray-900 group-hover:text-primary-600 transition-colors">Manager Service</h4>
+              </div>
+              <ul className="space-y-3 text-sm text-gray-600">
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-primary-500 rounded-full mr-3"></span>
-                  Python 3.12 with asyncio
+                  <div className="w-2 h-2 bg-gradient-to-r from-primary-400 to-primary-600 rounded-full mr-3 animate-pulse"></div>
+                  <strong>Python 3.12</strong> with asyncio & threading
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-primary-500 rounded-full mr-3"></span>
-                  py4web REST API framework
+                  <div className="w-2 h-2 bg-gradient-to-r from-primary-400 to-primary-600 rounded-full mr-3"></div>
+                  <strong>py4web</strong> REST API framework
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-primary-500 rounded-full mr-3"></span>
-                  SQLite/PostgreSQL database
+                  <div className="w-2 h-2 bg-gradient-to-r from-primary-400 to-primary-600 rounded-full mr-3"></div>
+                  <strong>MySQL/PostgreSQL</strong> with PyDAL ORM
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-primary-500 rounded-full mr-3"></span>
-                  Redis caching & sessions
+                  <div className="w-2 h-2 bg-gradient-to-r from-primary-400 to-primary-600 rounded-full mr-3"></div>
+                  <strong>Redis</strong> caching & sessions
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-primary-500 rounded-full mr-3"></span>
-                  X.509 certificate management
+                  <div className="w-2 h-2 bg-gradient-to-r from-primary-400 to-primary-600 rounded-full mr-3"></div>
+                  <strong>X.509</strong> certificate management
                 </li>
               </ul>
             </div>
 
             {/* Headend Server */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Headend Server</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
+            <div className="group bg-white rounded-2xl p-8 border border-gray-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+              <div className="flex items-center mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-secondary-500 to-secondary-600 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-white font-bold text-xl">⚡</span>
+                </div>
+                <h4 className="text-xl font-bold text-gray-900 group-hover:text-secondary-600 transition-colors">Headend Server</h4>
+              </div>
+              <ul className="space-y-3 text-sm text-gray-600">
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
-                  Go 1.21 with goroutines
+                  <div className="w-2 h-2 bg-gradient-to-r from-secondary-400 to-secondary-600 rounded-full mr-3 animate-pulse"></div>
+                  <strong>Go 1.23</strong> with goroutines
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
-                  WireGuard kernel module
+                  <div className="w-2 h-2 bg-gradient-to-r from-secondary-400 to-secondary-600 rounded-full mr-3"></div>
+                  <strong>WireGuard</strong> kernel module
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
-                  Multi-protocol proxy
+                  <div className="w-2 h-2 bg-gradient-to-r from-secondary-400 to-secondary-600 rounded-full mr-3"></div>
+                  <strong>Multi-protocol</strong> proxy (TCP/UDP/HTTPS)
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
-                  Traffic mirroring (VXLAN/GRE)
+                  <div className="w-2 h-2 bg-gradient-to-r from-secondary-400 to-secondary-600 rounded-full mr-3"></div>
+                  <strong>Traffic mirroring</strong> (VXLAN/GRE/ERSPAN)
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
-                  External IdP integration
+                  <div className="w-2 h-2 bg-gradient-to-r from-secondary-400 to-secondary-600 rounded-full mr-3"></div>
+                  <strong>External IdP</strong> integration
                 </li>
               </ul>
             </div>
 
             {/* Client Applications */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Client Applications</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
+            <div className="group bg-white rounded-2xl p-8 border border-gray-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+              <div className="flex items-center mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-accent-500 to-accent-600 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-white font-bold text-xl">📱</span>
+                </div>
+                <h4 className="text-xl font-bold text-gray-900 group-hover:text-accent-600 transition-colors">Client Applications</h4>
+              </div>
+              <ul className="space-y-3 text-sm text-gray-600">
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                  Go native binaries
+                  <div className="w-2 h-2 bg-gradient-to-r from-accent-400 to-accent-600 rounded-full mr-3 animate-pulse"></div>
+                  <strong>Go native</strong> binaries (GUI + Headless)
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                  React Native mobile apps
+                  <div className="w-2 h-2 bg-gradient-to-r from-accent-400 to-accent-600 rounded-full mr-3"></div>
+                  <strong>React Native</strong> mobile apps
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                  Docker containers
+                  <div className="w-2 h-2 bg-gradient-to-r from-accent-400 to-accent-600 rounded-full mr-3"></div>
+                  <strong>Docker</strong> containers (ARM64/AMD64)
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                  Cross-platform support
+                  <div className="w-2 h-2 bg-gradient-to-r from-accent-400 to-accent-600 rounded-full mr-3"></div>
+                  <strong>Cross-platform</strong> support
                 </li>
                 <li className="flex items-center">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                  Auto-configuration
+                  <div className="w-2 h-2 bg-gradient-to-r from-accent-400 to-accent-600 rounded-full mr-3"></div>
+                  <strong>Auto-configuration</strong> & updates
                 </li>
               </ul>
             </div>
