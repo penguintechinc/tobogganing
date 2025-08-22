@@ -1,0 +1,21 @@
+# Debug Dockerfile to check file contents
+
+FROM golang:1.23-bullseye AS debug
+
+# Install basic tools
+RUN apt-get update && apt-get install -y file tree && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy files
+COPY . .
+
+# Show the file structure and content
+RUN echo "=== File structure ===" && \
+    tree -a . || ls -la && \
+    echo "=== internal/gui/gui.go content ===" && \
+    cat internal/gui/gui.go && \
+    echo "=== go.mod content ===" && \
+    head -20 go.mod && \
+    echo "=== Go version ===" && \
+    go version

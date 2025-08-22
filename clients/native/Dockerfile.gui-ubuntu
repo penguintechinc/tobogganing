@@ -1,24 +1,25 @@
-# Multi-stage Docker build for SASEWaddle GUI client
+# Multi-stage Docker build for SASEWaddle GUI client (Ubuntu-based)
 # This provides a consistent build environment with all GUI dependencies
 
-FROM golang:1.23-alpine AS gui-builder
+FROM golang:1.23-bullseye AS gui-builder
 
 # Install GUI development dependencies for Linux
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     gcc \
-    musl-dev \
+    libc6-dev \
     libx11-dev \
     libxcursor-dev \
     libxrandr-dev \
     libxinerama-dev \
     libxi-dev \
-    mesa-dev \
-    pkgconfig \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libglfw3-dev \
+    pkg-config \
     git \
-    libayatana-appindicator-dev \
-    gtk+3.0-dev \
-    libgl1-mesa-glx \
-    libc6-compat
+    libayatana-appindicator3-dev \
+    libgtk-3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /src
@@ -40,12 +41,18 @@ RUN CGO_ENABLED=1 go build \
     ./cmd/gui
 
 # Test stage - verify the binary was built
-FROM alpine:3.19 AS test
-RUN apk add --no-cache file
+FROM ubuntu:20.04 AS test
+RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
 COPY --from=gui-builder /src/sasewaddle-client-gui /tmp/
 RUN file /tmp/sasewaddle-client-gui && \
     ls -la /tmp/sasewaddle-client-gui
 
-# Final stage - extract the binary
-FROM scratch
-COPY --from=gui-builder /src/sasewaddle-client-gui /sasewaddle-client-gui
+# Final stage - minimal runtime image
+FROM ubuntu:20.04
+RUN apt-get update && apt-get install -y \
+    libayatana-appindicator3-1 \
+    libgtk-3-0 \
+    libgl1-mesa-glx \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=gui-builder /src/sasewaddle-client-gui /usr/local/bin/sasewaddle-client-gui
+ENTRYPOINT ["/usr/local/bin/sasewaddle-client-gui"]

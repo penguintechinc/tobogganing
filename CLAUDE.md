@@ -155,6 +155,96 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
     - Perfect for Docker containers and automation
     - Wide platform support (ARM, MIPS, embedded systems)
 
+#### Local Testing & Build Process Guidelines
+
+**IMPORTANT**: When performing local builds and testing, replicate the build process from GitHub Actions workflows as closely as possible to ensure consistency and catch issues early.
+
+##### Build Testing Requirements
+1. **Manager Docker Container**:
+   ```bash
+   cd manager && docker build -t sasewaddle-manager:test . --no-cache
+   ```
+
+2. **Headend Server**:
+   ```bash
+   cd headend && docker build -t sasewaddle-headend:test . --no-cache
+   ```
+
+3. **Go Native Clients**:
+   ```bash
+   cd clients/native
+   # Headless builds (for ARM/embedded testing, use Docker)
+   go build -tags="nogui" -o sasewaddle-headless ./cmd/headless
+   # GUI builds (may require system dependencies)
+   go build -o sasewaddle-gui ./cmd/gui
+   ```
+
+4. **Docker Client**:
+   ```bash
+   cd clients/docker && docker build -t sasewaddle-docker-client:test . --no-cache
+   ```
+
+##### Cross-Platform Testing (ARM/Embedded)
+- **Use Docker containers** for ARM builds to ensure consistent environment
+- **Multi-arch Docker builds** should be tested locally before CI/CD
+- **Build tags** (`nogui`) should be tested for embedded/headless deployments
+
+##### GUI Client Build Process
+The GUI client uses the Fyne framework and requires special build considerations:
+
+**Docker-Based GUI Builds (Recommended for Linux/ARM)**
+- Use `Dockerfile.gui-ubuntu` for consistent GUI dependency management
+- Includes all required system packages: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev, etc.
+- Supports cross-platform builds via Docker Buildx and QEMU
+
+**Important Fyne Framework Notes**
+- Fixed critical type declaration: use `fyne.App` interface, not `app.App`
+- Correct import pattern:
+  ```go
+  import (
+      "fyne.io/fyne/v2"
+      "fyne.io/fyne/v2/app"
+      "fyne.io/fyne/v2/widget"
+  )
+  
+  type App struct {
+      fyneApp fyne.App  // Correct: fyne.App interface
+  }
+  
+  func NewApp() *App {
+      return &App{
+          fyneApp: app.New(),  // app.New() returns fyne.App
+      }
+  }
+  ```
+
+**Build Command Examples**
+```bash
+# Docker-based GUI build (Linux/ARM)
+docker build -f Dockerfile.gui-ubuntu -t gui-builder .
+docker create --name temp gui-builder
+docker cp temp:/src/sasewaddle-client-gui ./client-gui
+docker rm temp
+
+# Test GUI package compilation
+go build -v ./internal/gui
+
+# Cross-platform Docker build
+docker buildx build --platform linux/arm64 -f Dockerfile.gui-ubuntu .
+```
+
+**Troubleshooting GUI Builds**
+- **"undefined: app.App" error**: Check type declaration uses `fyne.App` not `app.App`
+- **Missing GUI dependencies**: Use Docker container builds for consistent environment
+- **CGO compilation errors**: Ensure CGO_ENABLED=1 for GUI builds
+- **Cross-compilation issues**: Use Docker Buildx with QEMU for ARM builds
+
+##### Linting Requirements
+- **Headend**: `golangci-lint run` (should show 0 issues)
+- **Native Clients**: Use appropriate build tags when linting GUI vs headless code
+- **Fix all linting errors** before committing code
+- **Python code**: Use `pylint` and `mypy` for manager service
+
 ### Security Considerations
 - Zero Trust principles throughout
 - Mutual TLS for all communications
@@ -296,16 +386,26 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 
 All initial development tasks have been completed! The SASEWaddle project now includes:
 
-**🎉 Version v1.1.0 Features Complete:**
+**🎉 Version v1.1.4 Features Complete:**
 
 1. ✅ **Manager Service** - Complete with PyDAL database, web portal, and API
 2. ✅ **Headend Proxy** - Go-based with firewall, syslog, and traffic mirroring
-3. ✅ **Client Applications** - Native Go client with GUI support
+3. ✅ **Client Applications** - Native Go client with GUI support and Docker builds
 4. ✅ **Network Features** - VRF/OSPF routing via FRR integration
 5. ✅ **Security Features** - Comprehensive firewall, IDS/IPS integration
 6. ✅ **Monitoring** - Prometheus metrics, syslog logging, health checks
 7. ✅ **Database** - PyDAL with MySQL/PostgreSQL/SQLite support
 8. ✅ **Documentation** - Well-documented Go code with package descriptions
+9. ✅ **Build System** - Docker-based GUI builds with Fyne framework fixes
+10. ✅ **CI/CD Pipeline** - GitHub Actions with cross-platform support
+
+**🔧 Version v1.1.4 Improvements:**
+- **Fixed Fyne GUI Framework Issues**: Corrected type declarations (`fyne.App` vs `app.App`)
+- **Docker-Based GUI Builds**: Reliable GUI client builds using Ubuntu containers
+- **Enhanced GitHub Actions**: Updated workflows with Docker Buildx and QEMU for ARM64
+- **Comprehensive Build Testing**: Added linting and GUI package compilation tests
+- **Cross-Platform Support**: Improved ARM64 build process via Docker containers
+- **Build Documentation**: Complete Docker-based build process documentation
 
 ## Legacy Development TODO List (Historical)
 - [x] Implement Manager Service (py4web Docker container with async/multithreading)

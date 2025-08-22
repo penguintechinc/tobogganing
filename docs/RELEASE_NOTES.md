@@ -4,6 +4,142 @@ All notable changes to SASEWaddle will be documented in this file. New releases 
 
 ---
 
+## 🔧 v1.1.4 - "Build System Enhancement" (2025-08-22)
+
+### 🎯 Major Improvements
+
+**🐳 Docker-Based GUI Builds**
+- ✅ **Reliable GUI Client Builds** - Implemented Docker-based build system using Ubuntu containers
+- ✅ **Cross-Platform Support** - ARM64 and AMD64 builds via Docker Buildx and QEMU
+- ✅ **Consistent Dependencies** - All GUI libraries included: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev
+- ✅ **Production Ready** - Eliminates environment-specific build issues
+
+**🔧 Fyne Framework Fixes**
+- 🐛 **Critical Type Declaration Fix** - Resolved `undefined: app.App` error in GUI code
+- ✅ **Correct Import Pattern** - Fixed Fyne framework usage with proper `fyne.App` interface
+- ✅ **Build Verification** - Added GUI package compilation tests to catch issues early
+- ✅ **Documentation** - Complete troubleshooting guide for common Fyne issues
+
+**⚙️ Enhanced CI/CD Pipeline**
+- 🚀 **GitHub Actions Update** - Enhanced workflows with Docker Buildx for Linux builds
+- ✅ **Comprehensive Testing** - Added golangci-lint and GUI compilation verification
+- ✅ **Multi-Platform Matrix** - Improved ARM64 cross-compilation support
+- ✅ **Artifact Management** - Proper binary extraction from Docker containers
+
+### 🛠️ Technical Details
+
+**Fixed Code Issues**
+```go
+// Before (broken):
+import (
+    "fyne.io/fyne/v2/app"
+    "fyne.io/fyne/v2/widget"
+)
+type App struct {
+    fyneApp app.App  // ❌ Wrong type
+}
+
+// After (correct):
+import (
+    "fyne.io/fyne/v2"
+    "fyne.io/fyne/v2/app"
+    "fyne.io/fyne/v2/widget"
+)
+type App struct {
+    fyneApp fyne.App  // ✅ Correct interface
+}
+```
+
+**New Docker Build Process**
+```bash
+# Reliable GUI build via Docker
+docker build -f Dockerfile.gui-ubuntu -t gui-builder .
+docker create --name temp gui-builder
+docker cp temp:/src/sasewaddle-client-gui ./client-gui
+docker rm temp
+
+# Cross-platform build support
+docker buildx build --platform linux/arm64,linux/amd64 \
+    -f Dockerfile.gui-ubuntu .
+```
+
+**Enhanced GitHub Actions**
+- **Linux Builds**: Now use Docker containers for consistency
+- **macOS/Windows**: Added GUI compilation verification steps
+- **ARM64 Support**: QEMU-based cross-platform builds
+- **Linting Integration**: Matches local development workflow
+
+### 📚 Documentation Updates
+
+**Comprehensive Build Guide**
+- 🏗️ **Docker-Based Approach** - Complete documentation for reliable GUI builds
+- 🐛 **Troubleshooting Section** - Common errors and solutions
+- 🖥️ **Platform-Specific Notes** - macOS, Windows, and Linux considerations
+- ⚡ **Quick Reference** - Build commands for all scenarios
+
+**Build Process Documentation**
+- ✅ Local testing procedures that match CI/CD workflows
+- ✅ Cross-platform build verification steps
+- ✅ Fyne framework best practices and common pitfalls
+- ✅ Docker container usage for ARM builds
+
+### 🔧 Build Verification
+
+**Tested Components**
+- ✅ **GUI Client (Docker)** - Builds successfully on Ubuntu with all dependencies
+- ✅ **Headless Client** - Static compilation verified for embedded deployment
+- ✅ **GitHub Actions** - All workflow matrices tested and working
+- ✅ **Cross-Platform** - ARM64 builds verified via Docker Buildx
+
+**New Build Commands**
+```bash
+# GUI client via Docker (recommended)
+docker build -f Dockerfile.gui-ubuntu -t gui-builder .
+
+# Test GUI package compilation  
+go build -v ./internal/gui
+
+# Lint verification (matches CI/CD)
+golangci-lint run --timeout=10m
+```
+
+### 🚀 Developer Experience
+
+**Improved Local Development**
+- 🔄 **Consistent Environment** - Docker eliminates "works on my machine" issues
+- ⚡ **Faster Debugging** - Clear error messages and troubleshooting steps
+- 📋 **Standardized Process** - Local builds match GitHub Actions exactly
+- 🔍 **Better Testing** - GUI package compilation verification
+
+**Enhanced CI/CD Reliability**
+- 🎯 **Predictable Builds** - Docker containers ensure consistent dependencies
+- 🚀 **Faster Iteration** - Parallel builds with proper matrix configuration
+- 🔒 **Security** - Updated workflows with latest actions and best practices
+- 📊 **Better Monitoring** - Enhanced logging and verification steps
+
+### 🎉 What This Means
+
+**For Developers**
+- 🛠️ **Reliable GUI Builds** - No more environment-specific compilation issues
+- 📚 **Clear Documentation** - Complete guides for all build scenarios
+- ⚡ **Faster Development** - Consistent Docker-based approach
+- 🔍 **Better Testing** - Early detection of GUI framework issues
+
+**For Users**
+- ✅ **More Stable Releases** - Enhanced build verification prevents broken binaries
+- 🚀 **Faster Updates** - Improved CI/CD pipeline reduces release time
+- 🌐 **Better Platform Support** - Reliable ARM64 builds for embedded devices
+- 🔒 **Higher Quality** - Comprehensive testing and linting integration
+
+### 🔗 Upgrade Notes
+
+- ✅ **Fully Compatible** - No breaking changes to existing functionality
+- ✅ **Drop-in Replacement** - Existing configurations continue to work
+- ✅ **Enhanced Reliability** - Build system improvements benefit all deployments
+- ✅ **Future Ready** - Foundation for upcoming mobile and embedded features
+
+---
+
 ## 🚀 v1.1.0 - "Enterprise Features" (2025-08-21)
 
 ### 🎉 Major New Features

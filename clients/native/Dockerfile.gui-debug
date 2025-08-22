@@ -1,0 +1,43 @@
+# Debug GUI build step by step
+
+FROM golang:1.23-bullseye AS gui-debug
+
+# Install GUI development dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libc6-dev \
+    libx11-dev \
+    libxcursor-dev \
+    libxrandr-dev \
+    libxinerama-dev \
+    libxi-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libglfw3-dev \
+    pkg-config \
+    git \
+    libayatana-appindicator3-dev \
+    libgtk-3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy and download modules first
+COPY go.mod go.sum ./
+RUN echo "=== Downloading modules ===" && \
+    go mod download && \
+    echo "=== Modules downloaded ===" && \
+    go list -m all | grep fyne
+
+# Copy source
+COPY . .
+
+# Try to debug the build step by step
+RUN echo "=== Checking go env ===" && \
+    go env && \
+    echo "=== Checking module graph ===" && \
+    go mod graph | grep fyne && \
+    echo "=== Trying to build just the gui package ===" && \
+    CGO_ENABLED=1 go build -v ./internal/gui || true && \
+    echo "=== Trying to build with verbose output ===" && \
+    CGO_ENABLED=1 go build -x -v ./cmd/gui 2>&1 || true
