@@ -3,11 +3,12 @@
 # This workflow builds GUI clients for multiple platforms using Fyne framework.
 # 
 # Key implementation notes:
-# - Linux builds use Docker containers for consistent GUI dependencies
+# - Linux builds use architecture-specific Docker containers for optimal builds
+# - AMD64: Dockerfile.gui-amd64 with native compilation
+# - ARM64: Dockerfile.gui-arm64 with cross-compilation toolchain
 # - macOS and Windows builds run natively with linting verification
 # - All builds include golangci-lint checks and GUI package compilation tests
 # - Fixed Fyne type declaration: uses fyne.App instead of app.App
-# - Supports cross-platform builds (ARM64/AMD64) via Docker Buildx and QEMU
 
 name: GUI Client Build
 
@@ -90,11 +91,11 @@ jobs:
         include:
           - goarch: amd64
             binary_name: sasewaddle-client-linux-amd64
-            dockerfile: Dockerfile.gui-ubuntu
+            dockerfile: Dockerfile.gui-amd64
             platform: linux/amd64
           - goarch: arm64
             binary_name: sasewaddle-client-linux-arm64
-            dockerfile: Dockerfile.gui-ubuntu
+            dockerfile: Dockerfile.gui-arm64
             platform: linux/arm64
 
     steps:
@@ -105,10 +106,9 @@ jobs:
         uses: docker/setup-buildx-action@v3
       
       - name: Set up QEMU for cross-platform builds
-        if: matrix.goarch == 'arm64'
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64
+          platforms: linux/amd64,linux/arm64
       
       - name: Create dist directory
         run: mkdir -p dist
@@ -145,6 +145,13 @@ jobs:
   build-windows-gui:
     name: Build Windows GUI Client
     runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            binary_name: sasewaddle-client-windows-amd64.exe
+          - goarch: arm64
+            binary_name: sasewaddle-client-windows-arm64.exe
 
     steps:
       - name: Checkout code
@@ -180,18 +187,18 @@ jobs:
       - name: Build GUI binary
         working-directory: ./clients/native
         env:
-          GOARCH: amd64
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
-            -o ../../dist/sasewaddle-client-windows-amd64.exe \
+            -o ../../dist/${{ matrix.binary_name }} \
             ./cmd/gui
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sasewaddle-client-windows-amd64.exe
-          path: dist/sasewaddle-client-windows-amd64.exe
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
 
   create-universal-binary:
     name: Create macOS Universal Binary

@@ -1,9 +1,9 @@
-# Multi-stage Docker build for SASEWaddle GUI client (Ubuntu-based)
-# This provides a consistent build environment with all GUI dependencies
+# Docker build for SASEWaddle GUI client (AMD64)
+# Optimized for native AMD64 builds with all GUI dependencies
 
-FROM golang:1.23-bullseye AS gui-builder
+FROM golang:1.23-bullseye AS gui-builder-amd64
 
-# Install GUI development dependencies for Linux
+# Install GUI development dependencies for AMD64
 RUN apt-get update && apt-get install -y \
     gcc \
     libc6-dev \
@@ -31,11 +31,11 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build GUI client
+# Build GUI client for AMD64
 ARG VERSION=dev
 ARG BUILD_TIME
 ARG GIT_COMMIT
-RUN CGO_ENABLED=1 go build \
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
     -o sasewaddle-client-gui \
     ./cmd/gui
@@ -43,7 +43,7 @@ RUN CGO_ENABLED=1 go build \
 # Test stage - verify the binary was built
 FROM ubuntu:20.04 AS test
 RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
-COPY --from=gui-builder /src/sasewaddle-client-gui /tmp/
+COPY --from=gui-builder-amd64 /src/sasewaddle-client-gui /tmp/
 RUN file /tmp/sasewaddle-client-gui && \
     ls -la /tmp/sasewaddle-client-gui
 
@@ -54,5 +54,5 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 \
     libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=gui-builder /src/sasewaddle-client-gui /usr/local/bin/sasewaddle-client-gui
+COPY --from=gui-builder-amd64 /src/sasewaddle-client-gui /usr/local/bin/sasewaddle-client-gui
 ENTRYPOINT ["/usr/local/bin/sasewaddle-client-gui"]

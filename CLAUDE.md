@@ -87,10 +87,31 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 - Containerized deployment for easy scaling
 
 #### Native Golang Client
-- **Platforms**: Mac Universal, Linux, Windows (GUI), plus ARM/MIPS/embedded (headless)
+- **Platforms**: Complete multi-architecture support across all major platforms
 - **Dual Build Architecture** with Go build tags for conditional compilation:
   - **GUI Builds** (`//go:build !nogui`): Full desktop experience with system tray
   - **Headless Builds** (`//go:build nogui`): CLI-only for servers and automation
+
+## 🏗️ Complete Build Matrix
+
+### 🖥️ GUI Client Builds (Desktop Experience)
+| **Platform** | **AMD64/x86_64** | **ARM64** | **Build Method** |
+|-------------|------------------|-----------|------------------|
+| **macOS**    | ✅ | ✅ | Native (creates Universal binary) |
+| **Linux**    | ✅ | ✅ | Docker (architecture-specific) |
+| **Windows**  | ✅ | ✅ | Native with CGO |
+
+### ⚡ Headless Client Builds (Server/Embedded)
+| **Platform** | **AMD64/x86_64** | **ARM64** | **ARMv7** | **ARMv6** | **MIPS** | **MIPS LE** |
+|-------------|------------------|-----------|-----------|-----------|----------|-------------|
+| **macOS**    | ✅ | ✅ | - | - | - | - |
+| **Linux**    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Windows**  | ✅ | ✅ | - | - | - | - |
+
+### 🏭 Total Build Outputs
+- **GUI Builds**: 6 binaries (macOS AMD64, macOS ARM64 + Universal, Linux AMD64, Linux ARM64, Windows AMD64, Windows ARM64)
+- **Headless Builds**: 8 primary + embedded variants (macOS AMD64, macOS ARM64 + Universal, Linux AMD64, Linux ARM64, Windows AMD64, Windows ARM64, Linux ARMv6/v7, Linux MIPS/MIPS LE)
+- **Cross-Platform**: All major desktop and server architectures covered
 - Lightweight and efficient with direct system network stack integration
 - Auto-update capabilities and certificate management
 - **System Tray Integration** (GUI Builds Only):
@@ -193,9 +214,11 @@ SASEWaddle is an Open Source Secure Access Service Edge (SASE) solution implemen
 The GUI client uses the Fyne framework and requires special build considerations:
 
 **Docker-Based GUI Builds (Recommended for Linux/ARM)**
-- Use `Dockerfile.gui-ubuntu` for consistent GUI dependency management
+- Use architecture-specific Dockerfiles for optimal builds:
+  - `Dockerfile.gui-amd64` for Intel/AMD builds
+  - `Dockerfile.gui-arm64` for ARM64 builds with cross-compilation
 - Includes all required system packages: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev, etc.
-- Supports cross-platform builds via Docker Buildx and QEMU
+- Each Dockerfile optimized for its target architecture
 
 **Important Fyne Framework Notes**
 - Fixed critical type declaration: use `fyne.App` interface, not `app.App`
@@ -220,17 +243,23 @@ The GUI client uses the Fyne framework and requires special build considerations
 
 **Build Command Examples**
 ```bash
-# Docker-based GUI build (Linux/ARM)
-docker build -f Dockerfile.gui-ubuntu -t gui-builder .
-docker create --name temp gui-builder
-docker cp temp:/src/sasewaddle-client-gui ./client-gui
+# Docker-based GUI build (AMD64)
+docker build -f Dockerfile.gui-amd64 -t gui-builder-amd64 .
+docker create --name temp gui-builder-amd64
+docker cp temp:/src/sasewaddle-client-gui ./client-gui-amd64
+docker rm temp
+
+# Docker-based GUI build (ARM64)
+docker buildx build --platform linux/arm64 -f Dockerfile.gui-arm64 -t gui-builder-arm64 .
+docker create --name temp gui-builder-arm64
+docker cp temp:/src/sasewaddle-client-gui ./client-gui-arm64
 docker rm temp
 
 # Test GUI package compilation
 go build -v ./internal/gui
 
-# Cross-platform Docker build
-docker buildx build --platform linux/arm64 -f Dockerfile.gui-ubuntu .
+# Native cross-platform build (requires system dependencies)
+CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build ./cmd/gui
 ```
 
 **Troubleshooting GUI Builds**
@@ -238,6 +267,24 @@ docker buildx build --platform linux/arm64 -f Dockerfile.gui-ubuntu .
 - **Missing GUI dependencies**: Use Docker container builds for consistent environment
 - **CGO compilation errors**: Ensure CGO_ENABLED=1 for GUI builds
 - **Cross-compilation issues**: Use Docker Buildx with QEMU for ARM builds
+- **Slow builds**: GUI Docker builds take 5-10 minutes due to large dependency chains
+- **QEMU requirement**: Always set up QEMU for both AMD64/ARM64 in CI/CD environments
+
+**Build Verification Commands**
+```bash
+# Verify headless builds work (fast test)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o test-amd64 ./cmd/headless
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o test-arm64 ./cmd/headless
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o test-win-arm64.exe ./cmd/headless
+
+# Check architecture of binaries
+file test-*
+
+# Set up QEMU for local cross-platform Docker testing
+docker run --privileged --rm tonistiigi/binfmt --install all
+docker buildx create --name multiarch --driver docker-container --use
+docker buildx inspect --bootstrap
+```
 
 ##### Linting Requirements
 - **Headend**: `golangci-lint run` (should show 0 issues)

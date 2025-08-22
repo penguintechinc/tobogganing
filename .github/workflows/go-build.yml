@@ -35,6 +35,9 @@ jobs:
           - goos: windows
             goarch: amd64
             binary_name: sasewaddle-client-windows-amd64-headless.exe
+          - goos: windows
+            goarch: arm64
+            binary_name: sasewaddle-client-windows-arm64-headless.exe
           
           # Embedded platforms - Headless only
           - goos: linux
