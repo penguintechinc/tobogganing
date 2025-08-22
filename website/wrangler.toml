@@ -3,9 +3,6 @@ compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".vercel/output/static"
 
-[build]
-command = "npm run pages:build"
-
 # Environment variables
 [vars]
 ENVIRONMENT = "production"
@@ -29,28 +26,15 @@ SALES_EMAIL = "sales@penguintech.io"
 VERSION = "1.1.0"
 BUILD_TYPE = "production"
 
-# Staging environment
-[env.staging]
-name = "sasewaddle-website-staging"
+# Preview environment (for pull requests and staging)
+[env.preview]
+name = "sasewaddle-website-preview"
 
-[env.staging.vars]
-ENVIRONMENT = "staging"
-SITE_URL = "https://sasewaddle-website-staging.pages.dev"
+[env.preview.vars]
+ENVIRONMENT = "preview"
+SITE_URL = "https://sasewaddle-website-preview.pages.dev"
 GITHUB_URL = "https://github.com/penguintechinc/SASEWaddle"
-DOCS_URL = "https://docs-staging.sasewaddle.com"
+DOCS_URL = "https://docs-preview.sasewaddle.com"
 SALES_EMAIL = "sales@penguintech.io"
-VERSION = "1.1.0-staging"
-BUILD_TYPE = "staging"
-
-# Development environment
-[env.development]
-name = "sasewaddle-website-dev"
-
-[env.development.vars]
-ENVIRONMENT = "development"
-SITE_URL = "https://sasewaddle-website-dev.pages.dev"
-GITHUB_URL = "https://github.com/penguintechinc/SASEWaddle"
-DOCS_URL = "https://docs-dev.sasewaddle.com"
-SALES_EMAIL = "sales@penguintech.io"
-VERSION = "1.1.0-dev"
-BUILD_TYPE = "development"
+VERSION = "1.1.0-preview"
+BUILD_TYPE = "preview"
