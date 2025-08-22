@@ -29,7 +29,7 @@ const ManagerPortal: React.FC = () => {
             <img 
               src="/images/screenshots/manager-portal.svg" 
               alt="SASEWaddle Manager Portal Dashboard"
-              className="max-w-full h-auto border border-gray-200 rounded-lg shadow-lg"
+              className="w-full max-w-5xl h-auto object-contain border border-gray-200 rounded-lg shadow-lg"
               style={{ maxHeight: '700px' }}
             />
           </div>
