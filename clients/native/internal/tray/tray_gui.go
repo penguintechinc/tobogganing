@@ -356,3 +356,9 @@ func (t *TrayManager) showNotification(title, message string) {
 	// On platforms that support it, this could be extended to show
 	// native system notifications using platform-specific APIs
 }
+
+// Run starts the system tray manager with the given configuration
+func Run(cfg interface{}) error {
+	// For now, return an error indicating this needs proper configuration
+	return fmt.Errorf("tray.Run() needs proper VPN and config manager instances")
+}

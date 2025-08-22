@@ -2,8 +2,6 @@ module github.com/sasewaddle/clients/native
 
 go 1.23.1
 
-toolchain go1.24.5
-
 require (
 	fyne.io/fyne/v2 v2.4.3
 	github.com/getlantern/systray v1.2.2

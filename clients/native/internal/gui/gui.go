@@ -5,6 +5,7 @@ package gui
 
 import (
     "context"
+    
     "fyne.io/fyne/v2"
     "fyne.io/fyne/v2/app"
     "fyne.io/fyne/v2/widget"
@@ -36,4 +37,11 @@ func (a *App) Stop() error {
         a.fyneApp.Quit()
     }
     return nil
+}
+
+// Run starts the GUI application with the given configuration
+func Run(cfg interface{}) error {
+    app := NewApp()
+    ctx := context.Background()
+    return app.Run(ctx)
 }

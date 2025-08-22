@@ -56,3 +56,9 @@ func (t *TrayManager) Run() error {
 func (t *TrayManager) Stop() {
 	t.cancel()
 }
+
+// Run starts the system tray manager with the given configuration (stub implementation)
+func Run(cfg interface{}) error {
+	log.Println("System tray not available in this build (no GUI support)")
+	return nil
+}

@@ -2,8 +2,6 @@ module github.com/sasewaddle/headend
 
 go 1.23.1
 
-toolchain go1.24.5
-
 require (
 	github.com/coreos/go-oidc/v3 v3.9.0
 	github.com/gin-gonic/gin v1.9.1

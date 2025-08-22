@@ -122,7 +122,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
+          CGO_ENABLED: 0
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
             -o ../dist/${{ matrix.binary_name }} \

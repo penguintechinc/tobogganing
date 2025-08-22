@@ -15,17 +15,12 @@
 package main
 
 import (
-    "context"
     "fmt"
     "os"
-    "os/signal"
     "runtime"
-    "syscall"
 
     "github.com/spf13/cobra"
-    "github.com/sasewaddle/clients/native/internal/client"
     "github.com/sasewaddle/clients/native/internal/config"
-    "github.com/sasewaddle/clients/native/internal/gui"
     "github.com/sasewaddle/clients/native/internal/tray"
 )
 
@@ -212,15 +207,9 @@ func runGUI(cmd *cobra.Command, args []string) error {
         return fmt.Errorf("failed to load config: %w", err)
     }
 
-    headless, _ := cmd.Flags().GetBool("headless")
-    
-    if headless || runtime.GOOS == "linux" {
-        // Use system tray for headless or Linux
-        return tray.Run(cfg)
-    } else {
-        // Use full GUI for Windows/macOS
-        return gui.Run(cfg)
-    }
+    // This is the GUI client - always use system tray
+    // The headless client is in cmd/headless
+    return tray.Run(cfg)
 }
 
 func runServiceInstall(cmd *cobra.Command, args []string) error {
