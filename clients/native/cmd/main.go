@@ -1,3 +1,5 @@
+//go:build !nogui
+
 // Package main implements the SASEWaddle native client application.
 //
 // The native client provides cross-platform SASE connectivity with:

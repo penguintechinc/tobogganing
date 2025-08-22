@@ -221,7 +221,7 @@ jobs:
         fi
         
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-          -o build/${VERSIONED_BINARY} ./cmd
+          -o build/${VERSIONED_BINARY} ./cmd/main.go
       shell: bash
     
     - name: Upload binary artifact
