@@ -173,6 +173,34 @@ func (m *Manager) GetStatus() client.ConnectionStatus {
 	return m.currentStatus
 }
 
+// GetStatusString returns a simple string status for tray interface
+func (m *Manager) GetStatusString() string {
+	if m.isConnected {
+		return "Connected"
+	}
+	return "Disconnected"
+}
+
+// GetStatistics returns connection statistics for tray interface
+func (m *Manager) GetStatistics() map[string]interface{} {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	
+	stats := make(map[string]interface{})
+	stats["connected"] = m.isConnected
+	stats["status"] = m.GetStatusString()
+	
+	if m.isConnected {
+		ifaceStats := m.getInterfaceStatistics()
+		stats["bytes_sent"] = ifaceStats.BytesSent
+		stats["bytes_received"] = ifaceStats.BytesReceived
+		stats["last_handshake"] = ifaceStats.LastHandshake
+		stats["interface_name"] = m.interfaceName
+	}
+	
+	return stats
+}
+
 // Stop gracefully stops the VPN manager
 func (m *Manager) Stop() error {
 	if m.isConnected {

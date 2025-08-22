@@ -391,3 +391,22 @@ func (cm *Manager) ForceUpdate() error {
 	log.Println("Forcing immediate configuration update")
 	return cm.PullConfig()
 }
+
+// GetServerURL returns the Manager service URL for tray interface
+func (cm *Manager) GetServerURL() string {
+	if cm.config != nil && cm.config.ManagerURL != "" {
+		return cm.config.ManagerURL
+	}
+	return "https://localhost:8080" // Default fallback
+}
+
+// UpdateConfiguration updates the configuration for tray interface
+func (cm *Manager) UpdateConfiguration() error {
+	return cm.PullConfig()
+}
+
+// GetUpdateSchedule returns the current update schedule interval for tray interface
+func (cm *Manager) GetUpdateSchedule() time.Duration {
+	// Return the average of the random interval (45-60 minutes)
+	return 52*time.Minute + 30*time.Second
+}

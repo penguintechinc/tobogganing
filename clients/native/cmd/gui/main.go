@@ -15,11 +15,15 @@
 package main
 
 import (
+    "context"
     "fmt"
     "os"
+    "os/signal"
     "runtime"
+    "syscall"
 
     "github.com/spf13/cobra"
+    "github.com/sasewaddle/clients/native/internal/client"
     "github.com/sasewaddle/clients/native/internal/config"
     "github.com/sasewaddle/clients/native/internal/tray"
 )

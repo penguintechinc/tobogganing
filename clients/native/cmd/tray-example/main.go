@@ -40,7 +40,7 @@ func main() {
 	defer configManager.Stop()
 
 	// Create tray manager
-	trayManager := tray.NewManager(vpnManager, configManager)
+	trayManager := tray.NewTrayManager(vpnManager, configManager)
 
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)

@@ -15,7 +15,7 @@ type VPNManager interface {
 	Connect() error
 	Disconnect() error
 	IsConnected() bool
-	GetStatus() string
+	GetStatusString() string
 	GetStatistics() map[string]interface{}
 }
 

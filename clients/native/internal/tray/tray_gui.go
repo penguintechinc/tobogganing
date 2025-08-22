@@ -31,7 +31,7 @@ type VPNManager interface {
 	Connect() error
 	Disconnect() error
 	IsConnected() bool
-	GetStatus() string
+	GetStatusString() string
 	GetStatistics() map[string]interface{}
 }
 
@@ -184,7 +184,7 @@ func (t *TrayManager) startStatusUpdater() {
 // updateStatus updates the tray icon and status based on VPN state
 func (t *TrayManager) updateStatus() {
 	connected := t.vpn.IsConnected()
-	status := t.vpn.GetStatus()
+	status := t.vpn.GetStatusString()
 
 	if connected != t.connected {
 		t.connected = connected
