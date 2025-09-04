@@ -1,6 +1,6 @@
-# SASEWaddle Website
+# Tobogganing Website
 
-This is the official website and documentation portal for SASEWaddle, built with Next.js and deployed on Cloudflare Pages.
+This is the official website for Tobogganing, available at [tobogganing.io](https://tobogganing.io). Documentation is hosted at [docs.tobogganing.io](https://docs.tobogganing.io). Built with Next.js and deployed on Cloudflare Pages.
 
 ## Features
 
@@ -51,8 +51,8 @@ Create a `.env.local` file in the root directory:
 
 ```env
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-NEXT_PUBLIC_GITHUB_URL=https://github.com/your-org/sasewaddle
-NEXT_PUBLIC_DOCS_URL=http://localhost:3000/docs
+NEXT_PUBLIC_GITHUB_URL=https://github.com/penguintechinc/Tobogganing
+NEXT_PUBLIC_DOCS_URL=https://docs.tobogganing.io
 ```
 
 ### Project Structure
@@ -239,7 +239,7 @@ The website source code is available under the MIT License. Content and document
 
 ## Security
 
-- Report security issues to security@sasewaddle.com
+- Report security issues to security@penguintech.io
 - All dependencies are regularly updated
 - Security headers are configured
 - CSP policy implemented

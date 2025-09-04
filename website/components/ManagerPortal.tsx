@@ -162,7 +162,9 @@ const ManagerPortal: React.FC = () => {
               Download Now
             </a>
             <a
-              href="#documentation"
+              href={process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io'}
+              target="_blank"
+              rel="noopener noreferrer"
               className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary-600 transition-colors"
             >
               View Documentation

@@ -1,0 +1,151 @@
+site_name: Tobogganing Documentation
+site_url: https://docs.tobogganing.io
+site_description: Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA)
+site_author: Penguin Technologies Inc
+
+repo_name: penguintechinc/tobogganing
+repo_url: https://github.com/penguintechinc/tobogganing
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2024 Penguin Technologies Inc
+
+theme:
+  name: material
+  language: en
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  
+  font:
+    text: Roboto
+    code: Roboto Mono
+    
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+    - toc.integrate
+    - header.autohide
+    
+  icon:
+    logo: material/shield-check
+    repo: fontawesome/brands/github
+    edit: material/pencil 
+    view: material/eye
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/penguintechinc/tobogganing
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/penguintech
+    - icon: fontawesome/solid/globe
+      link: https://penguintech.io
+  
+  version:
+    provider: mike
+    default: latest
+
+nav:
+  - Home:
+    - Overview: index.md
+    - Quick Start: quickstart.md
+    - Features: features.md
+    
+  - Getting Started:
+    - Installation Guide: client-installation.md
+    - Usage Guide: usage.md
+    - Configuration: tunnel-configuration.md
+    
+  - Architecture:
+    - System Overview: architecture.md
+    - Authentication: authentication.md
+    - Licensing: licensing.md
+    
+  - Administration:
+    - Web Portal: web-portal-implementation.md
+    - Metrics & Monitoring: metrics-monitoring.md
+    - Multi-Product Licensing: multi-product-licensing.md
+    
+  - Development:
+    - Contributing: contributing.md
+    - Mobile Development: mobile-development.md
+    - Release Notes: release-notes.md
+    
+  - API Reference:
+    - API Documentation: api.md
+    
+  - Legal:
+    - License: license.md
+
+plugins:
+  - search:
+      lang: en
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: penguintechinc
+      repo: tobogganing
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://unpkg.com/mermaid@8.6.4/dist/mermaid.min.js
+  - javascripts/extra.js

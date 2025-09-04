@@ -13,7 +13,7 @@ const pricingTiers = [
   {
     name: 'Community',
     id: 'community',
-    href: 'https://github.com/your-org/sasewaddle',
+    href: 'https://github.com/penguintechinc/Tobogganing',
     price: '$0',
     period: 'forever',
     description: 'Perfect for personal projects, small teams, and getting started with SASE.',

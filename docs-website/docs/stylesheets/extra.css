@@ -1,0 +1,214 @@
+/* Custom CSS for Tobogganing Documentation */
+
+/* Brand Colors */
+:root {
+  --tobogganing-primary: #1976d2;
+  --tobogganing-secondary: #03a9f4;
+  --tobogganing-accent: #00bcd4;
+  --tobogganing-success: #4caf50;
+  --tobogganing-warning: #ff9800;
+  --tobogganing-error: #f44336;
+  --tobogganing-dark: #263238;
+  --tobogganing-light: #eceff1;
+}
+
+/* Enhanced card styling */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.grid.cards > div {
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 8px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.grid.cards > div:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: var(--tobogganing-primary);
+}
+
+/* Logo styling */
+.md-header__title {
+  font-weight: 700;
+}
+
+/* Custom badge styling */
+.badge-tobogganing {
+  background: linear-gradient(45deg, var(--tobogganing-primary), var(--tobogganing-secondary));
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  margin: 0.5rem 0;
+}
+
+/* Feature cards */
+.feature-card {
+  background: var(--md-code-bg-color);
+  border-left: 4px solid var(--tobogganing-primary);
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.feature-card h3 {
+  margin-top: 0;
+  color: var(--tobogganing-primary);
+}
+
+/* Code blocks enhancement */
+.highlight {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Table styling */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+table th {
+  background: var(--tobogganing-primary);
+  color: white;
+  font-weight: 600;
+}
+
+table th, table td {
+  padding: 0.75rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+table tr:nth-child(even) {
+  background: var(--md-code-bg-color);
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+/* Navigation enhancements */
+.md-nav__item--active > .md-nav__link {
+  color: var(--tobogganing-primary);
+  font-weight: 600;
+}
+
+/* Admonition styling */
+.md-typeset .admonition.tip {
+  border-color: var(--tobogganing-success);
+}
+
+.md-typeset .admonition.info {
+  border-color: var(--tobogganing-primary);
+}
+
+.md-typeset .admonition.warning {
+  border-color: var(--tobogganing-warning);
+}
+
+.md-typeset .admonition.danger {
+  border-color: var(--tobogganing-error);
+}
+
+/* Footer styling */
+.md-footer {
+  background: var(--tobogganing-dark);
+}
+
+/* Search highlighting */
+.md-search-result__title {
+  font-weight: 600;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .grid.cards {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  
+  .grid.cards > div {
+    padding: 1rem;
+  }
+}
+
+/* Tab styling */
+.tabbed-set {
+  margin: 1.5rem 0;
+}
+
+.tabbed-labels > label {
+  font-weight: 600;
+}
+
+.tabbed-content {
+  background: var(--md-code-bg-color);
+  border-radius: 0 8px 8px 8px;
+  padding: 1rem;
+}
+
+/* Icon enhancements */
+.md-icon {
+  vertical-align: middle;
+}
+
+/* Status indicators */
+.status-online {
+  color: var(--tobogganing-success);
+  font-weight: 600;
+}
+
+.status-warning {
+  color: var(--tobogganing-warning);
+  font-weight: 600;
+}
+
+.status-offline {
+  color: var(--tobogganing-error);
+  font-weight: 600;
+}
+
+/* Version badge */
+.version-badge {
+  background: var(--tobogganing-secondary);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Hero section for homepage */
+.hero-section {
+  text-align: center;
+  padding: 2rem 0;
+  margin: 2rem 0;
+  background: linear-gradient(135deg, var(--tobogganing-primary), var(--tobogganing-secondary));
+  color: white;
+  border-radius: 12px;
+}
+
+.hero-section h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.hero-section p {
+  font-size: 1.2rem;
+  margin: 1rem 0;
+  opacity: 0.9;
+}

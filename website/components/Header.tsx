@@ -5,13 +5,10 @@ import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const navigation = [
   { name: 'Features', href: '/#features' },
-  { name: 'Architecture', href: '/#architecture' },
-  { name: 'Embedded', href: '/#embedded' },
+  { name: 'Solutions', href: '/solutions' },
+  { name: 'Portal Demo', href: '/portal' },
   { name: 'Pricing', href: '/#pricing' },
-  { name: 'Documentation', href: '/docs' },
-  { name: 'Downloads', href: '/downloads' },
-  { name: 'Use Cases', href: '/use-cases' },
-  { name: 'Community', href: '/community' },
+  { name: 'Documentation', href: process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io' },
 ];
 
 const Header: React.FC = () => {
@@ -45,6 +42,8 @@ const Header: React.FC = () => {
               <Link
                 key={item.name}
                 href={item.href}
+                target={item.href.startsWith('http') ? '_blank' : undefined}
+                rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
                 className={`relative px-4 py-2 text-sm font-medium rounded-xl transition-all duration-300 ${
                   isActive(item.href)
                     ? 'text-primary-600 bg-gradient-to-r from-primary-50 to-secondary-50 shadow-sm'
@@ -62,7 +61,7 @@ const Header: React.FC = () => {
           {/* CTA Button */}
           <div className="hidden lg:flex lg:items-center lg:space-x-3">
             <Link
-              href="https://github.com/penguintechinc/tobogganing"
+              href="https://github.com/penguintechinc/Tobogganing"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-primary-600 transition-all duration-300 rounded-xl hover:bg-gray-50"
@@ -106,6 +105,8 @@ const Header: React.FC = () => {
                 <Link
                   key={item.name}
                   href={item.href}
+                  target={item.href.startsWith('http') ? '_blank' : undefined}
+                  rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
                   className={`block px-4 py-3 text-base font-medium rounded-xl transition-all duration-300 ${
                     isActive(item.href)
                       ? 'text-primary-600 bg-gradient-to-r from-primary-50 to-secondary-50 shadow-sm'
@@ -118,7 +119,7 @@ const Header: React.FC = () => {
               ))}
               <div className="border-t border-primary-200/30 pt-4 mt-4 space-y-3">
                 <Link
-                  href="https://github.com/penguintechinc/tobogganing"
+                  href="https://github.com/penguintechinc/Tobogganing"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center px-4 py-3 text-base font-medium text-gray-600 hover:text-primary-600 rounded-xl hover:bg-primary-50/50 transition-all duration-300"

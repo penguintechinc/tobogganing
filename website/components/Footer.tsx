@@ -9,16 +9,16 @@ const navigation = {
     { name: 'Pricing', href: '/pricing' },
   ],
   resources: [
-    { name: 'Documentation', href: '/docs' },
-    { name: 'API Reference', href: '/docs/api' },
+    { name: 'Documentation', href: process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io' },
+    { name: 'API Reference', href: (process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io') + '/api' },
     { name: 'Downloads', href: '/downloads' },
-    { name: 'Examples', href: '/docs/examples' },
+    { name: 'Examples', href: (process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io') + '/examples' },
   ],
   community: [
-    { name: 'GitHub', href: 'https://github.com/your-org/sasewaddle' },
-    { name: 'Discord', href: 'https://discord.gg/sasewaddle' },
-    { name: 'Forum', href: 'https://community.sasewaddle.com' },
-    { name: 'Roadmap', href: 'https://github.com/your-org/sasewaddle/projects' },
+    { name: 'GitHub', href: 'https://github.com/penguintechinc/Tobogganing' },
+    { name: 'Discord', href: 'https://discord.gg/tobogganing' },
+    { name: 'Forum', href: 'https://community.tobogganing.io' },
+    { name: 'Roadmap', href: 'https://github.com/penguintechinc/Tobogganing/projects' },
   ],
   company: [
     { name: 'About', href: '/about' },
@@ -40,14 +40,18 @@ const Footer: React.FC = () => {
           <div className="xl:col-span-1">
             <Link href="/" className="flex items-center space-x-2 mb-6">
               <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">SW</span>
+                <span className="text-white font-bold text-sm">🛷</span>
               </div>
-              <span className="text-xl font-bold text-white">SASEWaddle</span>
+              <span className="text-xl font-bold text-white">Tobogganing</span>
             </Link>
             <p className="text-gray-400 text-base max-w-md">
               Open Source SASE solution implementing Zero Trust Network Architecture. 
               Secure, scalable, and enterprise-ready.
             </p>
+            <div className="mt-4 text-sm text-gray-500">
+              <p>🌐 <a href="https://tobogganing.io" className="text-primary-400 hover:text-primary-300">tobogganing.io</a></p>
+              <p>📚 <a href="https://docs.tobogganing.io" className="text-primary-400 hover:text-primary-300">docs.tobogganing.io</a></p>
+            </div>
             <div className="mt-6">
               <p className="text-sm text-gray-500">
                 Made with ❤️ by the open source community
@@ -169,7 +173,7 @@ const Footer: React.FC = () => {
           <div className="md:flex md:items-center md:justify-between">
             <div className="flex space-x-6 md:order-2">
               <Link
-                href="https://github.com/your-org/sasewaddle"
+                href="https://github.com/penguintechinc/Tobogganing"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-white transition-colors duration-200"
@@ -185,7 +189,7 @@ const Footer: React.FC = () => {
               </Link>
               
               <Link
-                href="https://twitter.com/sasewaddle"
+                href="https://twitter.com/tobogganing"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-white transition-colors duration-200"
@@ -200,7 +204,7 @@ const Footer: React.FC = () => {
             <div className="mt-8 md:mt-0 md:order-1">
               <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-6">
                 <p className="text-base text-gray-400">
-                  &copy; 2024 SASEWaddle. Open Source under MIT License.
+                  &copy; 2024 Tobogganing. Open Source under MIT License. Visit us at <a href="https://tobogganing.io" className="text-primary-400 hover:text-primary-300">tobogganing.io</a>
                 </p>
                 <div className="flex space-x-6">
                   <Link

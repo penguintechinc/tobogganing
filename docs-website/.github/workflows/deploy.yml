@@ -1,0 +1,215 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'docs/**'
+      - 'docs-website/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'docs/**'
+      - 'docs-website/**'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # Validate and test the documentation
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd docs-website
+          pip install -r requirements.txt
+
+      - name: Validate configuration
+        run: |
+          cd docs-website
+          python -c "
+          import yaml
+          with open('mkdocs.yml', 'r') as f:
+              config = yaml.safe_load(f)
+              print('✅ mkdocs.yml is valid')
+              print(f'Site: {config[\"site_name\"]}')
+          "
+
+      - name: Check documentation files
+        run: |
+          cd docs-website
+          echo "📁 Documentation files:"
+          find docs/ -name "*.md" | sort
+          echo ""
+          echo "🔗 Symbolic links:"
+          find docs/ -type l | sort
+
+      - name: Build documentation
+        run: |
+          cd docs-website
+          mkdocs build --strict --verbose
+
+      - name: Test built site
+        run: |
+          cd docs-website
+          ls -la site/
+          echo "📊 Site statistics:"
+          echo "HTML files: $(find site/ -name "*.html" | wc -l)"
+          echo "CSS files: $(find site/ -name "*.css" | wc -l)"
+          echo "JS files: $(find site/ -name "*.js" | wc -l)"
+          echo "Total size: $(du -sh site/ | cut -f1)"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: documentation-site
+          path: docs-website/site/
+          retention-days: 30
+
+  # Build Docker image
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: docs-website
+          file: docs-website/Dockerfile
+          push: false
+          tags: |
+            tobogganing/docs:latest
+            tobogganing/docs:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          docker run -d --name docs-test -p 8080:80 tobogganing/docs:latest
+          sleep 10
+          
+          echo "🏥 Health check:"
+          curl -f http://localhost:8080/health || exit 1
+          
+          echo "🏠 Homepage test:"
+          curl -f http://localhost:8080/ | grep -q "Tobogganing Documentation" || exit 1
+          
+          echo "📄 Page test:"
+          curl -f http://localhost:8080/quickstart/ | grep -q "Quick Start" || exit 1
+          
+          docker stop docs-test
+          docker rm docs-test
+
+  # Deploy to GitHub Pages
+  deploy-pages:
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git info
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd docs-website
+          pip install -r requirements.txt
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Deploy to GitHub Pages
+        run: |
+          cd docs-website
+          mkdocs gh-deploy --force --clean --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Deploy to Cloudflare Pages (if secrets are configured)
+  deploy-cloudflare:
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.CLOUDFLARE_ENABLED == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd docs-website
+          pip install -r requirements.txt
+
+      - name: Build documentation
+        run: |
+          cd docs-website
+          mkdocs build --clean --verbose
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: tobogganing-docs
+          directory: docs-website/site
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          wranglerVersion: '3'
+
+  # Notify on completion
+  notify:
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-pages]
+    if: always() && github.event_name == 'push'
+    steps:
+      - name: Notification
+        run: |
+          if [[ "${{ needs.validate.result }}" == "success" ]]; then
+            echo "✅ Documentation validation passed"
+          else
+            echo "❌ Documentation validation failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.deploy-pages.result }}" == "success" ]]; then
+            echo "🚀 Documentation deployed successfully"
+            echo "📖 Available at: https://penguintechinc.github.io/tobogganing/"
+          else
+            echo "⚠️ Documentation deployment may have issues"
+          fi

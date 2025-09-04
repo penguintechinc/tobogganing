@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tobogganing-docs
+    ports:
+      - "8000:80"
+    environment:
+      - NGINX_HOST=localhost
+      - NGINX_PORT=80
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "com.docker.compose.service=docs"
+      - "com.docker.compose.project=tobogganing"
+
+  # Development service with live reload
+  docs-dev:
+    image: python:3.12-slim
+    container_name: tobogganing-docs-dev
+    working_dir: /docs
+    volumes:
+      - .:/docs
+      - docs_cache:/docs/.cache
+    ports:
+      - "8001:8000"
+    command: >
+      sh -c "
+        apt-get update && apt-get install -y git && 
+        pip install -r requirements.txt && 
+        mkdocs serve --dev-addr=0.0.0.0:8000 --livereload
+      "
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    profiles:
+      - dev
+
+volumes:
+  docs_cache:
+    driver: local
+
+networks:
+  default:
+    name: tobogganing-docs-network
