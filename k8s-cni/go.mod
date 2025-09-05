@@ -8,6 +8,11 @@ require (
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	github.com/vishvananda/netns v0.0.4
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230429144221-925a1e7659e6
+	github.com/cilium/ebpf v0.15.0
+	k8s.io/api v0.30.0
+	k8s.io/apimachinery v0.30.0
+	k8s.io/client-go v0.30.0
+	github.com/gorilla/websocket v1.5.0
 )
 
 require github.com/stretchr/testify v1.9.0

@@ -1,9 +1,0 @@
-✅ The website is super basic and really doesn't give the full sales picture of what this product can do for businesses. Add in a solutions page with different deployment scenarios and a dataflow diagram showing how things connect
-✅ Add mockups of the configuration portal to one of the pages within the website
-✅ This website is now at tobogganing.io and the docs site for it at docs.tobogganing.io, add these updates to the website
-✅ Create a root level docs-website/ folder and create a mkdocs website within it with softlinks to the markdown docs in docs/
-✅ Create a kubernetes Container Networking Interface compatible version of the agent with performance being critical in the folder k8s-cni/ with basic (not too complicated - just core test) unit tests
-✅ Run test builds of the two websites and the new CNI and cleanup any issues
-✅ Update the .version and reference to a new minor version where vMajor.Minor.Patch is the scheme
-✅ Update the README, CLAUDE.md and docs/ with the new website and CNI information
-- git commit updates
