@@ -30,14 +30,20 @@ const HomePage: React.FC = () => {
           </p>
           <div className="space-x-4">
             <a 
-              href="https://github.com/penguintechinc/Tobogganing" 
+              href="/portal" 
               className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700"
+            >
+              View Portal Demo
+            </a>
+            <a 
+              href="https://github.com/penguintechinc/Tobogganing" 
+              className="bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300"
             >
               View on GitHub
             </a>
             <a 
               href="#features" 
-              className="bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300"
+              className="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700"
             >
               Learn More
             </a>
@@ -137,6 +143,133 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
+      {/* Management Portal Section */}
+      <section className="py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <h3 className="text-3xl font-bold text-center mb-12">Enterprise Management Portal</h3>
+          
+          <div className="bg-white rounded-2xl shadow-xl p-8 lg:p-12 mb-12">
+            <div className="grid lg:grid-cols-2 gap-8 items-center">
+              <div>
+                <h4 className="text-2xl font-bold text-gray-900 mb-4">
+                  Comprehensive Web-Based Management
+                </h4>
+                <p className="text-gray-600 mb-6">
+                  Control your entire SASE infrastructure from a single, intuitive web interface. 
+                  Manage users, configure firewall rules, monitor network health, and analyze 
+                  real-time metrics with our powerful management portal.
+                </p>
+                <div className="space-y-3">
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                    <span className="text-gray-700">Role-based access control (Admin/Reporter)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    <span className="text-gray-700">Advanced firewall and network configuration</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
+                    <span className="text-gray-700">Real-time monitoring and analytics</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full mr-3"></div>
+                    <span className="text-gray-700">VRF and OSPF routing management</span>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <a 
+                    href="/portal" 
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 inline-flex items-center"
+                  >
+                    <span>Explore Interactive Demo</span>
+                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 rounded-xl p-6">
+                <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h5 className="font-semibold text-gray-900">🛷 Tobogganing Dashboard</h5>
+                    <div className="flex space-x-1">
+                      <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="bg-blue-50 p-2 rounded text-center">
+                      <div className="text-lg font-bold text-blue-600">847</div>
+                      <div className="text-xs text-gray-600">Clients</div>
+                    </div>
+                    <div className="bg-green-50 p-2 rounded text-center">
+                      <div className="text-lg font-bold text-green-600">731</div>
+                      <div className="text-xs text-gray-600">Active</div>
+                    </div>
+                    <div className="bg-purple-50 p-2 rounded text-center">
+                      <div className="text-lg font-bold text-purple-600">12</div>
+                      <div className="text-xs text-gray-600">Headends</div>
+                    </div>
+                  </div>
+                  <div className="bg-gray-100 h-12 rounded mb-3 flex items-center justify-center">
+                    <svg viewBox="0 0 100 30" className="w-full h-6">
+                      <path d="M 5 25 Q 20 15, 35 18 T 65 12 T 95 16" stroke="#3b82f6" strokeWidth="2" fill="none"/>
+                      <circle cx="95" cy="16" r="2" fill="#3b82f6"/>
+                    </svg>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>• User Management</span>
+                    <span>• Firewall Rules</span>
+                    <span>• Real-time Metrics</span>
+                  </div>
+                </div>
+                <div className="text-center text-sm text-gray-600">
+                  Live portal interface with interactive controls
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Portal Features */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="text-center p-6 bg-white rounded-lg shadow-sm">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <span className="text-blue-600 text-2xl">👥</span>
+              </div>
+              <h5 className="text-lg font-semibold mb-2">User Management</h5>
+              <p className="text-gray-600 text-sm">Role-based access, JWT authentication, and audit logging</p>
+            </div>
+
+            <div className="text-center p-6 bg-white rounded-lg shadow-sm">
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <span className="text-red-600 text-2xl">🛡️</span>
+              </div>
+              <h5 className="text-lg font-semibold mb-2">Firewall Control</h5>
+              <p className="text-gray-600 text-sm">Domain, IP, and protocol-level traffic filtering</p>
+            </div>
+
+            <div className="text-center p-6 bg-white rounded-lg shadow-sm">
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <span className="text-green-600 text-2xl">🌐</span>
+              </div>
+              <h5 className="text-lg font-semibold mb-2">Network Config</h5>
+              <p className="text-gray-600 text-sm">VRF setup, OSPF routing, and multi-area design</p>
+            </div>
+
+            <div className="text-center p-6 bg-white rounded-lg shadow-sm">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <span className="text-purple-600 text-2xl">📊</span>
+              </div>
+              <h5 className="text-lg font-semibold mb-2">Real-time Analytics</h5>
+              <p className="text-gray-600 text-sm">Traffic monitoring, system health, and performance metrics</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="bg-gray-800 text-white py-8">
         <div className="max-w-6xl mx-auto px-4 text-center">
@@ -147,7 +280,7 @@ const HomePage: React.FC = () => {
             <a href="https://github.com/penguintechinc/Tobogganing" className="text-gray-400 hover:text-white">
               GitHub
             </a>
-            <a href="https://github.com/penguintechinc/Tobogganing/blob/main/README.md" className="text-gray-400 hover:text-white">
+            <a href={process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io'} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white">
               Documentation
             </a>
           </div>

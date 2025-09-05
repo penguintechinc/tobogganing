@@ -12,11 +12,11 @@ export default function App({ Component, pageProps }: AppProps) {
         
         {/* SEO meta tags */}
         <meta name="robots" content="index, follow" />
-        <meta name="author" content="SASEWaddle Team" />
+        <meta name="author" content="Tobogganing Team" />
         <meta name="theme-color" content="#3b82f6" />
         
         {/* Open Graph meta tags */}
-        <meta property="og:site_name" content="SASEWaddle" />
+        <meta property="og:site_name" content="Tobogganing" />
         <meta property="og:locale" content="en_US" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/images/og-image.png" />
@@ -25,8 +25,8 @@ export default function App({ Component, pageProps }: AppProps) {
         
         {/* Twitter Card meta tags */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:site" content="@sasewaddle" />
-        <meta name="twitter:creator" content="@sasewaddle" />
+        <meta name="twitter:site" content="@tobogganing" />
+        <meta name="twitter:creator" content="@tobogganing" />
         <meta name="twitter:image" content="/images/twitter-card.png" />
         
         {/* Favicon and app icons */}
@@ -45,10 +45,10 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         
         {/* Canonical URL - will be overridden by individual pages */}
-        <link rel="canonical" href="https://sasewaddle.com" />
+        <link rel="canonical" href="https://tobogganing.io" />
         
         {/* RSS feed */}
-        <link rel="alternate" type="application/rss+xml" title="SASEWaddle Blog" href="/rss.xml" />
+        <link rel="alternate" type="application/rss+xml" title="Tobogganing Blog" href="/rss.xml" />
         
         {/* Security headers */}
         <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
@@ -56,10 +56,10 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta httpEquiv="X-XSS-Protection" content="1; mode=block" />
         
         {/* PWA meta tags */}
-        <meta name="application-name" content="SASEWaddle" />
+        <meta name="application-name" content="Tobogganing" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="SASEWaddle" />
+        <meta name="apple-mobile-web-app-title" content="Tobogganing" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-TileColor" content="#3b82f6" />
@@ -72,9 +72,9 @@ export default function App({ Component, pageProps }: AppProps) {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              "name": "SASEWaddle",
+              "name": "Tobogganing",
               "description": "Open Source SASE solution implementing Zero Trust Network Architecture",
-              "url": "https://sasewaddle.com",
+              "url": "https://tobogganing.io",
               "applicationCategory": "SecurityApplication",
               "operatingSystem": ["Linux", "macOS", "Windows"],
               "offers": {
@@ -84,10 +84,10 @@ export default function App({ Component, pageProps }: AppProps) {
               },
               "author": {
                 "@type": "Organization",
-                "name": "SASEWaddle Team",
-                "url": "https://sasewaddle.com"
+                "name": "Tobogganing Team",
+                "url": "https://tobogganing.io"
               },
-              "downloadUrl": "https://sasewaddle.com/downloads",
+              "downloadUrl": "https://tobogganing.io/downloads",
               "featureList": [
                 "Zero Trust Network Architecture",
                 "WireGuard VPN",

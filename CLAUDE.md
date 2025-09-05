@@ -1,11 +1,28 @@
 # Tobogganing Project Documentation
 
 ## Project Overview
-Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of three main components:
+Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of multiple integrated components:
 
+## Core System Components
 1. **Manager Service** - Centralized orchestration and certificate management
 2. **Headend Server** - WireGuard termination and proxy authentication  
 3. **Client Applications** - Docker and native clients for various platforms
+
+## Additional Platform Components (v1.2.0+)
+4. **Marketing Website** - Next.js website available at [tobogganing.io](https://tobogganing.io)
+   - Interactive solutions showcase with deployment scenarios
+   - Configuration portal mockups demonstrating enterprise capabilities
+   - Responsive design optimized for Cloudflare Pages deployment
+
+5. **Documentation Portal** - MkDocs website available at [docs.tobogganing.io](https://docs.tobogganing.io)
+   - Comprehensive documentation with Material theme
+   - Symlinked to existing markdown documentation in `docs/` folder
+   - Docker-ready with automated builds and deployment workflows
+
+6. **Kubernetes CNI Plugin** - High-performance container networking interface
+   - CNI Spec 1.0.0 compliant with ADD/DEL/CHECK/VERSION command support
+   - WireGuard tunnel management per pod with automatic IP allocation
+   - Enterprise-ready with comprehensive test coverage and CI/CD integration
 
 ## Architecture
 
@@ -328,10 +345,21 @@ docker buildx inspect --bootstrap
 │   ├── docker/             # Docker client
 │   └── native/             # Golang native client
 ├── website/                # Next.js marketing website
-│   ├── pages/              # Next.js pages
+│   ├── pages/              # Next.js pages (including /solutions and /portal)
 │   ├── components/         # React components
 │   ├── public/             # Static assets
 │   └── functions/          # Cloudflare Workers functions
+├── docs-website/           # MkDocs documentation portal
+│   ├── docs/               # Symlinked documentation files
+│   ├── mkdocs.yml          # MkDocs configuration
+│   ├── requirements.txt    # Python dependencies
+│   └── Dockerfile          # Container build configuration
+├── k8s-cni/                # Kubernetes CNI plugin
+│   ├── cmd/tobogganing-cni/ # Main CNI binary
+│   ├── pkg/                # CNI implementation packages
+│   ├── tests/              # Unit test coverage
+│   ├── deploy/             # Kubernetes deployment manifests
+│   └── examples/           # Configuration examples
 ├── deploy/                 # Deployment configurations
 │   ├── suricata/           # Suricata IDS configuration
 │   ├── prometheus/         # Prometheus configuration

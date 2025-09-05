@@ -1,6 +1,6 @@
 {
   "name": "tobogganing-mobile",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Tobogganing Mobile Client - React Native app for WireGuard VPN management",
   "main": "index.js",
   "scripts": {

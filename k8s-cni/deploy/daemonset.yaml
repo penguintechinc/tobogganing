@@ -1,0 +1,251 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: tobogganing-cni
+  namespace: kube-system
+  labels:
+    app: tobogganing-cni
+    tier: node
+    k8s-app: tobogganing-cni
+spec:
+  selector:
+    matchLabels:
+      app: tobogganing-cni
+  template:
+    metadata:
+      labels:
+        app: tobogganing-cni
+        tier: node
+        k8s-app: tobogganing-cni
+    spec:
+      hostNetwork: true
+      tolerations:
+      # This toleration is required to schedule on control-plane nodes
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      # This toleration is required to schedule on all nodes
+      - operator: Exists
+        effect: NoExecute
+      - operator: Exists
+        effect: NoSchedule
+      serviceAccountName: tobogganing-cni
+      priorityClassName: system-node-critical
+      initContainers:
+      # Install CNI binary
+      - name: install-cni
+        image: tobogganing/cni:latest
+        imagePullPolicy: Always
+        command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            echo "Installing Tobogganing CNI binary..."
+            cp /tobogganing-cni /host/opt/cni/bin/tobogganing
+            chmod +x /host/opt/cni/bin/tobogganing
+            echo "CNI binary installed successfully"
+        volumeMounts:
+        - mountPath: /host/opt/cni/bin
+          name: cni-bin-dir
+      containers:
+      # CNI config installer and monitor
+      - name: cni-config
+        image: tobogganing/cni:latest
+        imagePullPolicy: Always
+        command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            echo "Installing CNI configuration..."
+            
+            # Create CNI config directory
+            mkdir -p /host/etc/cni/net.d/tobogganing
+            
+            # Install CNI network config
+            envsubst < /etc/cni/tobogganing.conflist > /host/etc/cni/net.d/10-tobogganing.conflist
+            
+            echo "CNI configuration installed successfully"
+            
+            # Monitor and keep container running
+            while true; do
+              sleep 300
+              if [ ! -f /host/etc/cni/net.d/10-tobogganing.conflist ]; then
+                echo "CNI config missing, reinstalling..."
+                envsubst < /etc/cni/tobogganing.conflist > /host/etc/cni/net.d/10-tobogganing.conflist
+              fi
+            done
+        env:
+        - name: TOBOGGANING_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: tobogganing-cni-config
+              key: manager-url
+        - name: TOBOGGANING_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tobogganing-cni-secrets
+              key: api-key
+        - name: TOBOGGANING_CLUSTER_ID
+          valueFrom:
+            configMapKeyRef:
+              name: tobogganing-cni-config
+              key: cluster-id
+        - name: TOBOGGANING_CNI_LOG_LEVEL
+          value: "info"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - mountPath: /host/etc/cni/net.d
+          name: cni-conf-dir
+        - mountPath: /etc/cni
+          name: cni-config
+        - mountPath: /var/log/tobogganing-cni
+          name: log-dir
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - SYS_ADMIN
+      volumes:
+      # Used to install CNI binary
+      - name: cni-bin-dir
+        hostPath:
+          path: /opt/cni/bin
+      # Used to install CNI network config
+      - name: cni-conf-dir
+        hostPath:
+          path: /etc/cni/net.d
+      # CNI config template
+      - name: cni-config
+        configMap:
+          name: tobogganing-cni-config
+          items:
+          - key: cni-config
+            path: tobogganing.conflist
+      # Log directory
+      - name: log-dir
+        hostPath:
+          path: /var/log/tobogganing-cni
+          type: DirectoryOrCreate
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tobogganing-cni
+  namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tobogganing-cni
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["endpoints", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tobogganing-cni
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tobogganing-cni
+subjects:
+- kind: ServiceAccount
+  name: tobogganing-cni
+  namespace: kube-system
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tobogganing-cni-config
+  namespace: kube-system
+data:
+  manager-url: "https://tobogganing-manager.example.com"
+  cluster-id: "production-k8s-cluster"
+  cni-config: |
+    {
+      "cniVersion": "1.0.0",
+      "name": "tobogganing",
+      "plugins": [
+        {
+          "type": "tobogganing",
+          "tobogganing": {
+            "managerURL": "${TOBOGGANING_MANAGER_URL}",
+            "apiKey": "${TOBOGGANING_API_KEY}",
+            "clusterID": "${TOBOGGANING_CLUSTER_ID}",
+            "wireguard": {
+              "interfacePrefix": "tob",
+              "keyPath": "/etc/cni/net.d/tobogganing/keys",
+              "mtu": 1420,
+              "persistentKeepalive": 25
+            },
+            "performance": {
+              "setupTimeout": "30s",
+              "healthCheckTimeout": "10s",
+              "enableFastPath": true
+            },
+            "security": {
+              "forceEncryption": true,
+              "enableAuditLog": true,
+              "auditLogPath": "/var/log/tobogganing-cni/audit.log"
+            },
+            "logging": {
+              "level": "${TOBOGGANING_CNI_LOG_LEVEL:-info}",
+              "format": "json",
+              "output": "/var/log/tobogganing-cni/cni.log"
+            }
+          },
+          "ipam": {
+            "type": "tobogganing-ipam",
+            "subnet": "10.200.0.0/16",
+            "gateway": "10.200.0.1"
+          },
+          "dns": {
+            "nameservers": ["10.200.0.1", "8.8.8.8"],
+            "domain": "cluster.local",
+            "search": ["default.svc.cluster.local", "svc.cluster.local", "cluster.local"]
+          }
+        }
+      ]
+    }
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tobogganing-cni-secrets
+  namespace: kube-system
+type: Opaque
+data:
+  # Base64 encoded API key - replace with actual key
+  api-key: "CHANGEME_BASE64_ENCODED_API_KEY"

@@ -17,7 +17,7 @@ const Hero: React.FC = () => {
           {/* Animated Badge */}
           <div className="inline-flex items-center px-6 py-3 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 text-white text-sm font-semibold mb-8 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
             <ShieldCheckIcon className="h-5 w-5 mr-2 animate-pulse" />
-            🐧 Open Source SASE Solution
+            🐧 Open Source SASE Solution • tobogganing.io
           </div>
 
           {/* Main heading with gradient text */}
@@ -49,7 +49,9 @@ const Hero: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-r from-accent-600 to-primary-700 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </Link>
             <Link
-              href="/docs"
+              href={process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.tobogganing.io'}
+              target="_blank"
+              rel="noopener noreferrer"
               className="group bg-white/80 backdrop-blur-sm text-primary-700 border-3 border-primary-600 px-10 py-5 rounded-xl text-lg font-bold hover:bg-primary-50 hover:border-primary-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
               📚 View Documentation

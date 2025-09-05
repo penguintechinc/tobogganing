@@ -34,6 +34,9 @@
 
 **Tobogganing** is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. Built with modern technologies like WireGuard, Go, and Python, it provides enterprise-grade network security with the flexibility of open source.
 
+🌐 **Website**: [tobogganing.io](https://tobogganing.io)  
+📚 **Documentation**: [docs.tobogganing.io](https://docs.tobogganing.io)
+
 ## 🚀 Features
 
 ### Zero Trust Security
@@ -55,6 +58,7 @@
 ### Enterprise Ready
 - **Multi-Platform**: Native clients for Mac, Windows, and Linux with system tray integration
 - **Cloud Native**: Kubernetes-ready with auto-scaling and monitoring
+- **Kubernetes CNI**: High-performance Container Network Interface plugin for pod-level networking
 - **Traffic Mirroring**: Suricata IDS/IPS integration (VXLAN/GRE/ERSPAN)
 - **Compliance**: Syslog audit logging and compliance reporting
 - **High Availability**: Multi-datacenter orchestration with failover
