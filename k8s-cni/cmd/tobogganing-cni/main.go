@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -161,7 +160,7 @@ func cmdCheck(args *skel.CmdArgs) error {
 	// Parse previous result
 	var prevResult *current.Result
 	if conf.PrevResult != nil {
-		if result, err := current.GetResult(conf.PrevResult); err != nil {
+		if result, err := current.GetResult(*conf.PrevResult); err != nil {
 			return fmt.Errorf("failed to parse previous result: %w", err)
 		} else {
 			prevResult = result

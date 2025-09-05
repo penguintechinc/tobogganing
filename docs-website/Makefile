@@ -85,48 +85,7 @@ lint: ## Run linting and validation
 
 validate: ## Validate documentation structure
 	@echo "✅ Validating documentation structure..."
-	@python3 -c "
-import yaml
-import os
-
-# Validate mkdocs.yml
-with open('mkdocs.yml', 'r') as f:
-    config = yaml.safe_load(f)
-    
-print('📋 Site configuration:')
-print(f'  Name: {config.get(\"site_name\")}')
-print(f'  URL: {config.get(\"site_url\")}')
-print(f'  Theme: {config.get(\"theme\", {}).get(\"name\")}')
-
-# Check for required files
-required_files = ['docs/index.md', 'requirements.txt', 'Dockerfile']
-missing = []
-for file in required_files:
-    if not os.path.exists(file):
-        missing.append(file)
-
-if missing:
-    print(f'❌ Missing files: {missing}')
-    exit(1)
-else:
-    print('✅ All required files present')
-
-# Check documentation links
-nav = config.get('nav', [])
-def check_nav_files(nav_items, prefix=''):
-    for item in nav_items:
-        if isinstance(item, dict):
-            for key, value in item.items():
-                if isinstance(value, str):
-                    file_path = f'docs/{value}'
-                    if not os.path.exists(file_path):
-                        print(f'❌ Missing file: {file_path} (referenced in nav)')
-                elif isinstance(value, list):
-                    check_nav_files(value, f'{prefix}{key}/')
-
-check_nav_files(nav)
-print('✅ Navigation structure validated')
-"
+	@./validate.py
 
 # Deployment targets
 deploy-staging: ## Deploy to staging environment
