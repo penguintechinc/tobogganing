@@ -1,0 +1,110 @@
+name: Create Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.version'
+
+jobs:
+  create-release:
+    name: Create Pre-Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if .version file exists
+        id: check_version
+        run: |
+          if [ ! -f .version ]; then
+            echo "0.0.0" > .version
+            echo "version=0.0.0" >> $GITHUB_OUTPUT
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(cat .version | tr -d '[:space:]')
+            # Extract semantic version (strip build timestamp if present)
+            SEMVER=$(echo "$VERSION" | cut -d'.' -f1-3)
+            echo "version=$SEMVER" >> $GITHUB_OUTPUT
+            echo "full_version=$VERSION" >> $GITHUB_OUTPUT
+
+            # Check if version is default
+            if [ "$SEMVER" = "0.0.0" ]; then
+              echo "should_release=false" >> $GITHUB_OUTPUT
+              echo "Version is default (0.0.0), skipping release"
+            else
+              echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "Version is $SEMVER, proceeding with release"
+            fi
+          fi
+
+      - name: Check if release already exists
+        id: check_release
+        if: steps.check_version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.check_version.outputs.version }}"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release v$VERSION already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release v$VERSION does not exist, will create"
+          fi
+
+      - name: Generate release notes
+        id: release_notes
+        if: steps.check_version.outputs.should_release == 'true' && steps.check_release.outputs.exists != 'true'
+        run: |
+          VERSION="${{ steps.check_version.outputs.version }}"
+          FULL_VERSION="${{ steps.check_version.outputs.full_version }}"
+
+          # Create release notes
+          cat << EOF > release_notes.md
+          ## Pre-Release v$VERSION
+
+          This is an automated pre-release created from version file update.
+
+          **Version Details:**
+          - Semantic Version: \`$VERSION\`
+          - Full Version: \`$FULL_VERSION\`
+          - Commit: \`${{ github.sha }}\`
+          - Branch: \`${{ github.ref_name }}\`
+
+          ### Changes
+
+          See commit history for detailed changes since last release.
+
+          ---
+          *This pre-release was automatically generated when the .version file was updated.*
+          EOF
+
+      - name: Create pre-release
+        if: steps.check_version.outputs.should_release == 'true' && steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.check_version.outputs.version }}"
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --notes-file release_notes.md \
+            --prerelease \
+            --target ${{ github.sha }}
+
+          echo "✅ Created pre-release v$VERSION"
+
+      - name: Skip release (version is default or release exists)
+        if: steps.check_version.outputs.should_release != 'true' || steps.check_release.outputs.exists == 'true'
+        run: |
+          if [ "${{ steps.check_version.outputs.should_release }}" != "true" ]; then
+            echo "⏭️ Skipping release - version is 0.0.0 (default)"
+          else
+            echo "⏭️ Skipping release - v${{ steps.check_version.outputs.version }} already exists"
+          fi
