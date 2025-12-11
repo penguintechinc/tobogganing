@@ -412,115 +412,13 @@ docker buildx inspect --bootstrap
 ### 📝 Current TODO Status
 *Last Updated: 2025-08-21*
 
-## ✅ Recently Completed Features (2025-08-22)
+**Ongoing Tasks:**
+1. Add input validation to all network-facing functions in Go code
+2. Clean up lint warnings in headend
 
-1. ✅ **Split/Full Tunnel Configuration** 
-   - Added tunnel_mode field to clients table (full/split)
-   - Added split_tunnel_routes for domains, IPv4/IPv6 addresses and CIDRs
-   - New API endpoint: `PUT /api/v1/clients/<client_id>/tunnel-config`
-   - Supports bypassing specific domains or IP ranges
+**v1.1.4 Complete Features:**
+Manager Service, Headend Proxy, Client Applications (GUI/Headless), VRF/OSPF routing, Firewall/IDS integration, Prometheus metrics, PyDAL database support, Docker-based builds, GitHub Actions CI/CD
 
-2. ✅ **Enhanced Metrics Collection**
-   - Clients and headends can now submit metrics to manager
-   - New API endpoints: 
-     - `POST /api/v1/clients/<client_id>/metrics`
-     - `POST /api/v1/headends/<headend_id>/metrics`
-   - Prometheus metrics for client/headend monitoring:
-     - Connection statistics (bytes, packets, uptime)
-     - System resources (CPU, memory for headends)
-     - Last check-in timestamps
-   - Authentication required via Bearer token
-
-3. ✅ **System Check-in Dashboard**
-   - New web dashboard at `/checkin-dashboard`
-   - Shows last check-in times for all systems
-   - Differentiates between headends and clients
-   - Identifies headless vs GUI clients
-   - Color-coded status indicators:
-     - Green: Online (< 5 min for clients, < 2 min for headends)
-     - Yellow: Warning (< 15 min for clients, < 5 min for headends)  
-     - Red: Offline (older check-ins)
-   - Summary statistics for quick overview
-
-## 🎁 Bonus Features Added
-
-### Enterprise Licensing System
-- **Community Open Source**: Full VPN features with unlimited clients/headends, no license required
-- **Professional Tier**: Adds metrics collection and monitoring capabilities  
-- **Enterprise Tier**: Adds SSO/SAML2, LDAP, MFA, and advanced security features
-- **License Server**: Available at license.penguintech.io for feature validation
-- **Feature Gating**: Automatic validation ensures licensed features are properly controlled
-- **No Artificial Limits**: Community edition has no client or headend restrictions
-- **Authentication Strategy**: Basic username/password authentication always available in all tiers
-  - SSO/LDAP/MFA are **additional** authentication options for Enterprise customers
-  - No disruption to existing authentication workflows
-
-## 🔄 Ongoing Security & Quality Tasks
-
-1. 🚧 **Add input validation to all network-facing functions in Go code** - Ensure functions receiving data from outside via network connections perform basic input validation
-2. 🚧 **Clean up lint warnings in headend** - Fix remaining golangci-lint issues for clean CI/CD pipeline
-
-## ✅ Development Completion Status
-
-All initial development tasks have been completed! The Tobogganing project now includes:
-
-**🎉 Version v1.1.4 Features Complete:**
-
-1. ✅ **Manager Service** - Complete with PyDAL database, web portal, and API
-2. ✅ **Headend Proxy** - Go-based with firewall, syslog, and traffic mirroring
-3. ✅ **Client Applications** - Native Go client with GUI support and Docker builds
-4. ✅ **Network Features** - VRF/OSPF routing via FRR integration
-5. ✅ **Security Features** - Comprehensive firewall, IDS/IPS integration
-6. ✅ **Monitoring** - Prometheus metrics, syslog logging, health checks
-7. ✅ **Database** - PyDAL with MySQL/PostgreSQL/SQLite support
-8. ✅ **Documentation** - Well-documented Go code with package descriptions
-9. ✅ **Build System** - Docker-based GUI builds with Fyne framework fixes
-10. ✅ **CI/CD Pipeline** - GitHub Actions with cross-platform support
-
-**🔧 Version v1.1.4 Improvements:**
-- **Fixed Fyne GUI Framework Issues**: Corrected type declarations (`fyne.App` vs `app.App`)
-- **Docker-Based GUI Builds**: Reliable GUI client builds using Ubuntu containers
-- **Enhanced GitHub Actions**: Updated workflows with Docker Buildx and QEMU for ARM64
-- **Comprehensive Build Testing**: Added linting and GUI package compilation tests
-- **Cross-Platform Support**: Improved ARM64 build process via Docker containers
-- **Build Documentation**: Complete Docker-based build process documentation
-
-## Legacy Development TODO List (Historical)
-- [x] Implement Manager Service (py4web Docker container with async/multithreading)
-  - [x] JWT token management and validation
-  - [x] WireGuard certificate generation and lifecycle management  
-  - [x] REST API endpoints for client/node registration
-  - [x] Authentication endpoints for headend validation
-  - [x] Multi-thousand request handling with async/threading
-  - [x] py4web frontend for cluster management
-  - [x] Configuration distribution API for headend/clients
-- [x] Implement Headend Server (Go multi-protocol proxy + WireGuard)
-  - [x] WireGuard tunnel termination for authenticated nodes
-  - [x] Multi-protocol proxy (TCP, UDP, HTTPS) with dual authentication:
-    - [x] Certificate-based authentication (X.509 for WireGuard)
-    - [x] JWT validation OR SSO integration (SAML2.0/OAuth2)
-  - [x] Traffic mirroring to third-party IDS containers (VXLAN/GRE/ERSPAN)
-  - [x] Node-to-node communication routing through proxy
-  - [x] Configuration pulling from py4web Manager API
-  - [x] Docker containerization with proper entrypoint
-- [x] Implement Client Applications
-  - [x] Docker client (ARM64/AMD64) with WireGuard and auto-config
-    - [x] Multi-architecture Docker support (ARM64/AMD64)
-    - [x] Automatic registration and configuration pulling
-    - [x] Dual authentication: X.509 certificates + JWT tokens
-    - [x] Health monitoring and connection recovery
-    - [x] Background authentication renewal service
-  - [x] Native Go client for Mac Universal, Windows, Linux
-    - [x] Cross-platform build system (Makefile)
-    - [x] macOS Universal binaries (Intel + Apple Silicon)
-    - [x] Windows x64 and Linux (AMD64/ARM64) support
-    - [x] CLI interface with connect/disconnect/status commands
-    - [x] Configuration management and validation
-    - [x] JWT authentication and token management
-- [ ] Build system and deployment
-  - [ ] Multi-architecture Docker builds (ARM64/AMD64)
-  - [ ] Cross-platform Go binary compilation
-  - [ ] GitHub Actions CI/CD workflows
 
 ## Authentication Architecture
 **Dual Authentication Required:**
@@ -706,74 +604,23 @@ Tobogganing includes enterprise-grade network segmentation and routing capabilit
 - **Hybrid**: Mixed topologies with area-based design
 - **Multi-Area OSPF**: Scalable hierarchical routing
 
-### Example VRF Configurations
-
-#### Customer Isolation VRF
+### Example VRF Configuration
 ```bash
 vrf customer-a
- description Customer A Private Network
  rd 65000:100
  import rt 65000:100
  export rt 65000:100
- exit
-
 router ospf vrf customer-a
  router-id 10.1.1.1
  network 10.1.0.0/16 area 0.0.0.0
- network 192.168.100.0/24 area 0.0.0.1
- exit
 ```
 
-#### Multi-Site Corporate VRF  
-```bash
-vrf corporate-wan
- description Corporate Wide Area Network
- rd 10.0.0.1:200
- import rt 65000:200,65000:300
- export rt 65000:200
- exit
-
-router ospf vrf corporate-wan
- router-id 10.0.0.1
- network 10.0.0.0/8 area 0.0.0.0
- area 0.0.0.1 stub
- area 0.0.0.2 nssa
- exit
-```
-
-### OSPF Area Design Examples
-
-#### Backbone Area (Area 0)
-- **Purpose**: Central routing hub
-- **Networks**: Core infrastructure subnets
-- **Characteristics**: Full LSA flooding, no external routes
-
-#### Stub Areas  
-- **Purpose**: Branch offices with single uplink
-- **Characteristics**: No external LSAs, default route injection
-- **Benefits**: Reduced routing table size, lower memory usage
-
-#### NSSA (Not-So-Stubby Area)
-- **Purpose**: Stub areas with limited external connectivity  
-- **Characteristics**: Type-7 LSA support for external routes
-- **Use case**: Branch offices with local internet breakout
+**OSPF Area Types**: Backbone (Area 0), Stub Areas (branch offices), NSSA (stub with limited external connectivity)
 
 ### Network Management Interface
-
-#### VRF Management Features
-- 📊 **Real-time Dashboard**: VRF status, OSPF neighbor states
-- 🔧 **Configuration Generator**: Automatic FRR config generation
-- 📈 **Route Monitoring**: Live routing table inspection
-- 🔍 **Neighbor Discovery**: OSPF adjacency troubleshooting
-- 📋 **Export/Import**: Configuration backup and restore
-- 🚨 **Alerting**: OSPF neighbor state change notifications
-
-#### OSPF Configuration UI
-- **Area Management**: Create and configure OSPF areas
-- **Network Assignment**: Drag-and-drop network-to-area assignment
-- **Authentication Setup**: MD5 key management per area
-- **Timer Configuration**: Hello, dead, LSA refresh intervals
-- **Route Redistribution**: Configure route filtering and redistribution
+- Real-time VRF/OSPF dashboard with neighbor states
+- Configuration generator and route monitoring
+- Area management with authentication and timer configuration
 
 ## 🔥 Advanced Firewall System
 
@@ -821,31 +668,6 @@ Tobogganing includes a comprehensive firewall system for granular access control
 - **Web interface**: Beautiful admin panel for rule management
 - **Audit logging**: All access decisions logged
 
-### Example Firewall Configuration
-
-```json
-{
-  "user_id": "user123",
-  "rules": {
-    "allow_domains": [
-      {"pattern": "*.company.com", "priority": 10},
-      {"pattern": "github.com", "priority": 20}
-    ],
-    "deny_domains": [
-      {"pattern": "*.social-media.com", "priority": 5}
-    ],
-    "allow_protocol_rules": [
-      {
-        "protocol": "tcp",
-        "dst_ip": "10.0.0.0/8",
-        "dst_port": "22,80,443",
-        "direction": "outbound",
-        "priority": 15
-      }
-    ]
-  }
-}
-```
 
 ## Deployment
 
@@ -856,22 +678,197 @@ Tobogganing includes a comprehensive firewall system for granular access control
 - Multi-region deployment capabilities
 
 ### Website Deployment
-- **Platform**: Cloudflare Pages with Workers
-- **Framework**: Next.js with Edge Runtime
-- **Features**:
-  - Server-side rendering on Cloudflare Edge
-  - API routes using Cloudflare Workers
-  - Global CDN distribution
-  - Automatic SSL/TLS
-  - DDoS protection
-- **Content**:
-  - Product overview and features
-  - Interactive demos
-  - Documentation portal
-  - Download links for clients
-  - API reference
-  - Use case examples
-  - Security architecture diagrams
+- **Platform**: Cloudflare Pages with Workers (Next.js Edge Runtime)
+- **Features**: SSR, global CDN, automatic SSL/TLS, DDoS protection
+- **Content**: Product overview, demos, documentation, downloads, API reference
+
+# CI/CD Pipeline & .WORKFLOW Compliance
+
+## Multi-Component Architecture with 8+ Containers
+
+Tobogganing's comprehensive CI/CD pipeline manages:
+- **Manager** (Python 3.12) - Orchestration service
+- **Headend** (Go 1.23) - WireGuard termination
+- **Docker Client** (Go 1.23) - Containerized deployment
+- **Native Clients** (Go 1.23) - Cross-platform GUI/headless
+- **K8s CNI Plugin** (Go 1.23) - Kubernetes networking
+- **Frontend Website** (Node.js 18) - Marketing site
+- **Documentation** (MkDocs) - Technical docs
+- **Deployment Configs** (K8s/Helm) - Infrastructure
+
+## Version Management System
+
+**Format**: `vMajor.Minor.Patch.build` (e.g., `v1.2.0.1737803600`)
+
+**Version Monitoring (version-monitor.yml)**:
+- Validates semantic versioning with Epoch64 timestamp
+- Checks consistency across all 8+ components
+- Verifies component presence (Manager, Headend, Clients, CNI, Frontend)
+- Scans Python/Go security in version context
+- Logs comprehensive version metadata
+
+**Component Verification**:
+- Manager: `manager/app.py`, `requirements.txt`
+- Headend: `headend/go.mod`, `proxy/` package
+- Docker Client: `clients/docker/Dockerfile`
+- Native Clients: `clients/native/go.mod`, `cmd/` directory
+- K8s CNI: `k8s-cni/go.mod`, `cmd/tobogganing-cni/`
+- Frontend: `website/package.json`, `src/` directory
+
+## Comprehensive Multi-Component CI Workflow
+
+**ci.yml** with parallel execution:
+
+1. **test-manager** (Python 3.12)
+   - Cache pip dependencies
+   - pylint and mypy checks
+   - pytest unit tests
+   - Coverage upload
+
+2. **test-headend** (Go 1.23)
+   - golangci-lint analysis
+   - go test with race detector
+   - Coverage upload
+
+3. **test-client** (Go 1.23)
+   - GUI dependency verification
+   - golangci-lint with nogui tag
+   - go test with nogui tag
+   - Coverage upload
+
+4. **security-scan**
+   - bandit: Python code (manager/)
+   - gosec: Go code (headend, native, K8s CNI)
+   - Trivy: Filesystem vulnerability scan
+
+5. **build-images** (Multi-arch Docker)
+   - Manager, Headend, Docker Client
+   - Platforms: linux/amd64, linux/arm64
+   - Layer caching for optimization
+
+6. **build-native-client** (Cross-platform binaries)
+   - Linux (amd64, arm64)
+   - macOS (amd64, arm64, Universal)
+   - Windows (amd64, arm64)
+   - Artifact uploads
+
+7. **create-release**
+   - Aggregates native client artifacts
+   - Packages for release (ZIP, tar.gz)
+
+8. **integration-test**
+   - Multi-component interaction
+   - Docker Compose environment
+   - Health endpoint validation
+
+## Component-Specific Build Workflows
+
+**go-build.yml**: Cross-platform Go binary compilation
+**gui-build.yml**: Desktop GUI client builds (Fyne)
+**mobile-builds.yml**: iOS/Android native builds
+**manual-builds.yml**: On-demand container builds
+
+## Security Scanning Standards
+
+**Python (bandit)**:
+```bash
+bandit -r manager --format json
+```
+
+**Go (gosec)**:
+```bash
+gosec -no-fail -fmt json ./headend ./clients/native ./k8s-cni
+```
+
+**Filesystem (Trivy)**:
+- Container images
+- Dependencies
+- Configuration files
+- Known CVEs
+
+## Multi-Language Testing Strategy
+
+**Python Manager**:
+- pytest framework
+- Service mocking
+- API endpoint tests
+- Database tests
+- Coverage: 80%+ target
+
+**Go Components** (Headend, Clients, CNI):
+- Go testing with race detector
+- WireGuard/network tests
+- CLI argument validation
+- Coverage: 80%+ target
+
+**Node.js Frontend**:
+- Jest testing
+- Component tests
+- Integration tests
+- Coverage: 80%+ target
+
+**Integration Tests**:
+- Multi-component interaction
+- Docker Compose environment
+- Health checks
+- Connectivity validation
+
+## Docker Multi-Architecture Builds
+
+**Strategy**:
+- Docker Buildx with QEMU
+- Parallel builds: amd64 and arm64
+- GitHub Actions layer cache
+- Minimal image sizes (debian-slim)
+
+**Image Tagging**:
+- Dev: `tobogganing-{component}:dev-{sha}`
+- PR: `tobogganing-{component}:{version}-pr{number}`
+- Release: `tobogganing-{component}:{version}`
+- Latest: `tobogganing-{component}:latest`
+
+## Release Process
+
+1. Update `.version` file with Epoch64 timestamp
+2. Update `docs/RELEASE_NOTES.md`
+3. Create pull request to main
+4. All CI checks must pass (all 8+ components)
+5. Merge to main triggers automatic release
+6. Workflows publish:
+   - Manager, Headend, Docker Client images
+   - Native client binaries (all platforms)
+   - Release notes and checksums
+
+## Environment Variables
+
+**Build Environment**:
+```yaml
+GO_VERSION: '1.23'
+PYTHON_VERSION: '3.12'
+NODE_VERSION: '18'
+REGISTRY: ghcr.io
+```
+
+**Service-Specific**:
+- Manager: DATABASE_URL, JWT_SECRET, METRICS_TOKEN
+- Headend: WIREGUARD_PORT, TRAFFIC_MIRROR_ENABLED, SYSLOG_ENABLED
+- Native Client: MANAGER_URL, API_KEY, LOG_LEVEL
+
+## Dependency Management
+
+**Python**: bandit, safety check
+**Go**: go mod audit, gosec
+**Node.js**: npm audit, npm audit fix
+
+## Documentation
+
+For complete information:
+- **docs/WORKFLOWS.md**: Detailed workflow documentation
+- **docs/STANDARDS.md**: Code quality and compliance standards
+- **Manager**: `manager/README.md`
+- **Headend**: `headend/README.md`
+- **K8s CNI**: `k8s-cni/README.md`
+- **Architecture**: `docs/OVERVIEW.md`
 
 # Important TODOs for Critical Security Updates
 
@@ -894,43 +891,196 @@ Tobogganing includes a comprehensive firewall system for granular access control
 - /workspaces/Tobogganing/headend/wireguard/manager.go (API compatibility fixes)
 - /workspaces/Tobogganing/clients/native/cmd/tray-example/main.go (import path fixes)
 
-## 🔧 Pending: Native Client Build Issues 
-**Status**: PENDING
-**Issue**: GUI dependencies and WireGuard API changes in native client
-**Impact**: Non-critical (headend security fixed)
-**Details**: Native client has build issues related to missing X11/GL libraries and WireGuard API changes for embedded device creation. These are development environment issues, not security vulnerabilities.
+## 🔧 Pending: Native Client Build Issues
+**Status**: PENDING - GUI dependencies and WireGuard API changes (non-critical, dev environment issues)
 
-# important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+## Critical Development Rules
 
-## Documentation Standards
-- All documentation files (except README.md) should be placed in the `docs/` folder
-- Documentation should be colorful and icon-filled for better visual appeal
-- Use emojis, icons, and formatting to make docs more engaging and readable
-- Follow consistent styling across all documentation files
-- Keep README.md in the root directory, but all other docs go in `docs/`
+### Development Philosophy: Safe, Stable, and Feature-Complete
 
-## Current Active Tasks (Updated 2025-08-21)
-1. ✅ **Implement Manager py4web web portal with role-based access**
-2. ✅ **Add Prometheus metrics endpoint to Manager service**  
-3. ✅ **Implement user authentication and role system (admin/reporter)**
-4. ✅ **Add /healthz endpoints to both Manager and Headend**
-5. ✅ **Add authentication to Headend metrics endpoint**
-6. ✅ **Add Suricata service to docker-compose configuration**
-7. ✅ **Configure go-proxy to forward traffic to Suricata for IDS/IPS**
-8. ✅ **Add comprehensive firewall system with domain, IP, protocol, and port control**
-9. ✅ **Configure headend to get firewall rules from manager with Redis caching and randomized refresh**
-10. ✅ **Add syslog logging for user resource access from headend (UDP only)**
-11. ✅ **Add screenshots and connectivity diagrams to Next.js website**
-12. ✅ **Add FRR-based VRFs for IP space segmentation**
-13. ✅ **Implement OSPF routing across WireGuard tunnels**  
-14. ✅ **Create admin portal for VRF and OSPF configuration**
-15. ✅ **Allow admin to specify what ports the go proxy listens on**
-16. ✅ **Migrate Manager to use PyDAL with MySQL as default and read replica support**
-17. ✅ **Create multi-architecture Docker builds (ARM64/AMD64)**
-18. ✅ **Set up cross-platform Go binary compilation**
-19. ✅ **Create GitHub Actions CI/CD workflows**
+**NEVER take shortcuts or the "easy route" - ALWAYS prioritize safety, stability, and feature completeness**
+
+#### Core Principles
+- **No Quick Fixes**: Resist quick workarounds or partial solutions
+- **Complete Features**: Fully implemented with proper error handling and validation
+- **Safety First**: Security, data integrity, and fault tolerance are non-negotiable
+- **Stable Foundations**: Build on solid, tested components
+- **Future-Proof Design**: Consider long-term maintainability and scalability
+- **No Technical Debt**: Address issues properly the first time
+
+#### Red Flags (Never Do These)
+- Skipping input validation, hardcoding credentials, ignoring errors
+- Commenting out failing tests, deploying without testing
+- Using deprecated dependencies, partial features with "TODO" placeholders
+- Bypassing security checks, assuming data validity without verification
+
+#### Quality Checklist Before Completion
+- All error cases handled properly
+- Unit tests cover all code paths
+- Integration tests verify component interactions
+- Security requirements fully implemented
+- Performance meets acceptable standards
+- Documentation complete and accurate
+- Code review standards met
+- No hardcoded secrets or credentials
+- Logging and monitoring in place
+- Build passes in containerized environment
+- No security vulnerabilities in dependencies
+- Edge cases and boundary conditions tested
+
+### Git Workflow
+- **NEVER commit automatically** unless explicitly requested by the user
+- **NEVER push to remote repositories** under any circumstances
+- **ONLY commit when explicitly asked** - never assume commit permission
+- Always use feature branches for development
+- Require pull request reviews for main branch
+- Automated testing must pass before merge
+
+### Local State Management (Crash Recovery)
+- **ALWAYS maintain local .PLAN and .TODO files** for crash recovery
+- **Keep .PLAN file updated** with current implementation plans and progress
+- **Keep .TODO file updated** with task lists and completion status
+- **Update these files in real-time** as work progresses
+- **Add to .gitignore**: Both .PLAN and .TODO files must be in .gitignore
+- **File format**: Use simple text format for easy recovery
+- **Automatic recovery**: Upon restart, check for existing files to resume work
+
+### Dependency Security Requirements
+- **ALWAYS check for Dependabot alerts** before every commit
+- **Monitor vulnerabilities via Socket.dev** for all dependencies
+- **Mandatory security scanning** before any dependency changes
+- **Fix all security alerts immediately** - no commits with outstanding vulnerabilities
+- **Regular security audits**: `npm audit`, `go mod audit`, `safety check`
+
+### Linting & Code Quality Requirements
+- **ALL code must pass linting** before commit - no exceptions
+- **Python**: flake8, black, isort, mypy (type checking), bandit (security)
+- **JavaScript/TypeScript**: ESLint, Prettier
+- **Go**: golangci-lint (includes staticcheck, gosec, etc.)
+- **Ansible**: ansible-lint
+- **Docker**: hadolint
+- **YAML**: yamllint
+- **Markdown**: markdownlint
+- **Shell**: shellcheck
+- **CodeQL**: All code must pass CodeQL security analysis
+- **PEP Compliance**: Python code must follow PEP 8, PEP 257 (docstrings), PEP 484 (type hints)
+
+### Build & Deployment Requirements
+- **NEVER mark tasks as completed until successful build verification**
+- All Go and Python builds MUST be executed within Docker containers
+- Use containerized builds for local development and CI/CD pipelines
+- Build failures must be resolved before task completion
+
+### Documentation Standards
+- **README.md**: Keep as overview and pointer to comprehensive docs/ folder
+- **docs/ folder**: Create comprehensive documentation for all aspects
+- **RELEASE_NOTES.md**: Maintain in docs/ folder, prepend new version releases to top
+- Update CLAUDE.md when adding significant context
+- **Build status badges**: Always include in README.md
+- **ASCII art**: Include catchy, project-appropriate ASCII art in README
+- **Company homepage**: Point to www.penguintech.io
+- **License**: All projects use Limited AGPL3 with preamble for fair use
+
+### File Size Limits
+- **Maximum file size**: 25,000 characters for ALL code and markdown files
+- **Split large files**: Decompose into modules, libraries, or separate documents
+- **CLAUDE.md exception**: Maximum 39,000 characters (only exception to 25K rule)
+- **High-level approach**: CLAUDE.md contains high-level context and references detailed docs
+- **Documentation strategy**: Create detailed documentation in `docs/` folder and link to them from CLAUDE.md
+- **Keep focused**: Critical context, architectural decisions, and workflow instructions only
+- **User approval required**: ALWAYS ask user permission before splitting CLAUDE.md files
+- **Use Task Agents**: Utilize task agents (subagents) to be more expedient and efficient when making changes to large files
+
+## Version Management System
+
+**Format**: `vMajor.Minor.Patch.build`
+- **Major**: Breaking changes, API changes, removed features
+- **Minor**: Significant new features and functionality additions
+- **Patch**: Minor updates, bug fixes, security patches
+- **Build**: Epoch64 timestamp of build time
+
+**Update Commands**:
+```bash
+./scripts/version/update-version.sh          # Increment build timestamp
+./scripts/version/update-version.sh patch    # Increment patch version
+./scripts/version/update-version.sh minor    # Increment minor version
+./scripts/version/update-version.sh major    # Increment major version
+```
+
+## PenguinTech License Server Integration
+
+All projects integrate with the centralized PenguinTech License Server at `https://license.penguintech.io` for feature gating and enterprise functionality.
+
+**IMPORTANT: License enforcement is ONLY enabled when project is marked as release-ready**
+- Development phase: All features available, no license checks
+- Release phase: License validation required, feature gating active
+
+**License Key Format**: `PENG-XXXX-XXXX-XXXX-XXXX-ABCD`
+
+**Core Endpoints**:
+- `POST /api/v2/validate` - Validate license
+- `POST /api/v2/features` - Check feature entitlements
+- `POST /api/v2/keepalive` - Report usage statistics
+
+**Environment Variables**:
+```bash
+LICENSE_KEY=PENG-XXXX-XXXX-XXXX-XXXX-ABCD
+LICENSE_SERVER_URL=https://license.penguintech.io
+PRODUCT_NAME=tobogganing
+RELEASE_MODE=false  # Development (default)
+RELEASE_MODE=true   # Production (explicitly set)
+```
+
+**Tobogganing Licensing Tiers**:
+- **Community Open Source**: Full VPN features with unlimited clients/headends, no license required
+- **Professional Tier**: Adds metrics collection and monitoring capabilities
+- **Enterprise Tier**: Adds SSO/SAML2, LDAP, MFA, and advanced security features
+
+## WaddleAI Integration (Optional)
+
+For projects requiring AI capabilities, integrate with WaddleAI located at `~/code/WaddleAI`.
+
+**When to Use WaddleAI:**
+- Natural language processing (NLP)
+- Machine learning model inference
+- AI-powered features and automation
+- Intelligent data analysis
+- Chatbots and conversational interfaces
+
+**Integration Pattern:**
+- WaddleAI runs as separate microservice container
+- Communicate via REST API or gRPC
+- Environment variable configuration for API endpoints
+- License-gate AI features as enterprise functionality
+
+## Troubleshooting & Support
+
+### Common Issues
+1. **Port Conflicts**: Check docker-compose port mappings
+2. **Database Connections**: Verify connection strings and permissions
+3. **License Validation Failures**: Check license key format and network connectivity
+4. **Build Failures**: Check dependency versions and compatibility
+5. **Test Failures**: Review test environment setup
+
+### Debug Commands
+```bash
+# Container debugging
+docker-compose logs -f service-name
+docker exec -it container-name /bin/bash
+
+# Application debugging
+make debug                    # Start with debug flags
+make logs                     # View application logs
+make health                   # Check service health
+
+# License debugging
+make license-debug            # Test license server connectivity
+make license-validate         # Validate current license
+```
+
+### Support Resources
+- **Technical Documentation**: docs/STANDARDS.md
+- **Integration Support**: support@penguintech.io
+- **License Server Status**: https://status.penguintech.io
+
 
