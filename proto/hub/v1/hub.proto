@@ -1,0 +1,253 @@
+syntax = "proto3";
+
+package hub.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "hub/v1/config.proto";
+import "hub/v1/policy.proto";
+
+option go_package = "github.com/tobogganing/proto/hub/v1;hubv1";
+
+// Client types supported by the hub
+enum ClientType {
+  CLIENT_TYPE_UNSPECIFIED = 0;
+  USER = 1;
+  HYPERVISOR_LXD = 2;
+  HYPERVISOR_KVM = 3;
+  K8S_NODE = 4;
+  K8S_CLUSTER = 5;
+}
+
+// Client registration information
+message ClientInfo {
+  string client_id = 1;
+  ClientType client_type = 2;
+  string hostname = 3;
+  string ip_address = 4;
+  google.protobuf.Timestamp last_seen = 5;
+  bool active = 6;
+  string version = 7;
+}
+
+// Peer information
+message Peer {
+  string peer_id = 1;
+  string public_key = 2;
+  string endpoint = 3;
+  repeated string allowed_ips = 4;
+  google.protobuf.Timestamp created_at = 5;
+  int64 bytes_sent = 6;
+  int64 bytes_received = 7;
+  google.protobuf.Timestamp last_handshake = 8;
+  bool active = 9;
+}
+
+// Hub statistics
+message HubStats {
+  int32 total_clients = 1;
+  int32 active_clients = 2;
+  int32 total_peers = 3;
+  int32 active_peers = 4;
+  int64 total_bytes_sent = 5;
+  int64 total_bytes_received = 6;
+  google.protobuf.Timestamp uptime_since = 7;
+  float cpu_usage_percent = 8;
+  float memory_usage_percent = 9;
+  int32 active_connections = 10;
+}
+
+// Health status
+message HealthStatus {
+  string status = 1; // "healthy", "degraded", "unhealthy"
+  string message = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  map<string, string> details = 4;
+}
+
+// Metrics snapshot
+message MetricsSnapshot {
+  google.protobuf.Timestamp timestamp = 1;
+  int64 bytes_sent = 2;
+  int64 bytes_received = 3;
+  int32 active_connections = 4;
+  float cpu_percent = 5;
+  float memory_percent = 6;
+  int64 packet_loss = 7;
+  int64 latency_ms = 8;
+}
+
+// Configuration request/response
+message GetConfigurationRequest {
+}
+
+message UpdateConfigurationRequest {
+  HubConfiguration configuration = 1;
+}
+
+message WatchConfigurationRequest {
+}
+
+// Client registration/deregistration
+message RegisterClientRequest {
+  string client_id = 1;
+  ClientType client_type = 2;
+  string hostname = 3;
+  string version = 4;
+}
+
+message RegisterClientResponse {
+  bool success = 1;
+  string message = 2;
+  string initial_secret = 3;
+}
+
+message DeregisterClientRequest {
+  string client_id = 1;
+}
+
+message DeregisterClientResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListClientsRequest {
+  ClientType filter_type = 1; // 0 = all types
+  bool active_only = 2;
+}
+
+message ListClientsResponse {
+  repeated ClientInfo clients = 1;
+}
+
+// Peer management
+message AddPeerRequest {
+  string peer_id = 1;
+  string public_key = 2;
+  string endpoint = 3;
+  repeated string allowed_ips = 4;
+}
+
+message AddPeerResponse {
+  bool success = 1;
+  string message = 2;
+  Peer peer = 3;
+}
+
+message RemovePeerRequest {
+  string peer_id = 1;
+}
+
+message RemovePeerResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetPeersRequest {
+  bool active_only = 1;
+}
+
+message GetPeersResponse {
+  repeated Peer peers = 1;
+}
+
+message UpdatePeerRoutesRequest {
+  string peer_id = 1;
+  repeated string allowed_ips = 2;
+}
+
+message UpdatePeerRoutesResponse {
+  bool success = 1;
+  string message = 2;
+  Peer updated_peer = 3;
+}
+
+// Policy management
+message SyncPoliciesRequest {
+  string client_id = 1;
+  int64 last_sync_timestamp = 2;
+}
+
+message SyncPoliciesResponse {
+  repeated NetworkPolicy policies = 1;
+  int64 sync_timestamp = 2;
+}
+
+message WatchPoliciesRequest {
+  string client_id = 1;
+}
+
+// Health and metrics
+message ReportHealthRequest {
+  string client_id = 1;
+  HealthStatus status = 2;
+}
+
+message ReportHealthResponse {
+  bool acknowledged = 1;
+}
+
+message GetHubStatsRequest {
+}
+
+message StreamMetricsRequest {
+  int32 interval_seconds = 1; // 0 = default interval
+}
+
+// Authentication
+message ExchangeInitialSecretRequest {
+  string client_id = 1;
+  string initial_secret = 2;
+  string public_key = 3;
+}
+
+message ExchangeInitialSecretResponse {
+  bool success = 1;
+  string message = 2;
+  string auth_token = 3;
+  int64 token_expiry = 4;
+}
+
+message RefreshTokenRequest {
+  string auth_token = 1;
+  string client_id = 2;
+}
+
+message RefreshTokenResponse {
+  bool success = 1;
+  string message = 2;
+  string new_auth_token = 3;
+  int64 token_expiry = 4;
+}
+
+// Main Hub service
+service Hub {
+  // Configuration management
+  rpc GetConfiguration(GetConfigurationRequest) returns (HubConfiguration);
+  rpc UpdateConfiguration(UpdateConfigurationRequest) returns (HubConfiguration);
+  rpc WatchConfiguration(WatchConfigurationRequest) returns (stream HubConfiguration);
+
+  // Client management
+  rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse);
+  rpc DeregisterClient(DeregisterClientRequest) returns (DeregisterClientResponse);
+  rpc ListClients(ListClientsRequest) returns (ListClientsResponse);
+
+  // Peer management
+  rpc AddPeer(AddPeerRequest) returns (AddPeerResponse);
+  rpc RemovePeer(RemovePeerRequest) returns (RemovePeerResponse);
+  rpc GetPeers(GetPeersRequest) returns (GetPeersResponse);
+  rpc UpdatePeerRoutes(UpdatePeerRoutesRequest) returns (UpdatePeerRoutesResponse);
+
+  // Policy management
+  rpc SyncPolicies(SyncPoliciesRequest) returns (SyncPoliciesResponse);
+  rpc WatchPolicies(WatchPoliciesRequest) returns (stream NetworkPolicy);
+
+  // Health and monitoring
+  rpc ReportHealth(ReportHealthRequest) returns (ReportHealthResponse);
+  rpc GetHubStats(GetHubStatsRequest) returns (HubStats);
+  rpc StreamMetrics(StreamMetricsRequest) returns (stream MetricsSnapshot);
+
+  // Authentication
+  rpc ExchangeInitialSecret(ExchangeInitialSecretRequest) returns (ExchangeInitialSecretResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+}

@@ -1,0 +1,4 @@
+Flask==3.0.0
+Flask-Security-Too==5.4.1
+PyDAL==20231203.1
+python-dotenv==1.0.0

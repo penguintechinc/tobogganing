@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package hub.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/tobogganing/proto/hub/v1;hubv1";
+
+// Policy action types
+enum PolicyAction {
+  POLICY_ACTION_UNSPECIFIED = 0;
+  ALLOW = 1;
+  DENY = 2;
+}
+
+// Policy direction types
+enum PolicyDirection {
+  POLICY_DIRECTION_UNSPECIFIED = 0;
+  INGRESS = 1;
+  EGRESS = 2;
+  BIDIRECTIONAL = 3;
+}
+
+// Protocol types
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  TCP = 1;
+  UDP = 2;
+  ICMP = 3;
+  ALL = 4;
+}
+
+// Port range specification
+message PortRange {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+// Policy rule
+message PolicyRule {
+  string rule_id = 1;
+  string source_cidr = 2;
+  string destination_cidr = 3;
+  Protocol protocol = 4;
+  repeated PortRange source_ports = 5;
+  repeated PortRange destination_ports = 6;
+  string description = 7;
+}
+
+// Network policy
+message NetworkPolicy {
+  string policy_id = 1;
+  string name = 2;
+  string namespace = 3;
+  int32 priority = 4;
+  PolicyAction action = 5;
+  PolicyDirection direction = 6;
+  repeated PolicyRule rules = 7;
+  bool enabled = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  string created_by = 11;
+  map<string, string> labels = 12;
+}

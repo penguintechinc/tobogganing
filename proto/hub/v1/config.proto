@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package hub.v1;
+
+option go_package = "github.com/tobogganing/proto/hub/v1;hubv1";
+
+// WireGuard configuration
+message WireGuardConfig {
+  string interface_name = 1;
+  int32 listen_port = 2;
+  string private_key = 3;
+  string public_key = 4;
+  string network_cidr = 5;
+  string mtu = 6;
+}
+
+// Performance configuration
+message PerformanceConfig {
+  bool xdp_enabled = 1;
+  int32 numa_node = 2;
+  int32 rx_queue_size = 3;
+  int32 tx_queue_size = 4;
+  int32 batch_size = 5;
+  bool enable_busy_polling = 6;
+  int32 poll_timeout_ms = 7;
+}
+
+// Network configuration
+message NetworkConfig {
+  string primary_ipv4 = 1;
+  string primary_ipv6 = 2;
+  repeated string dns_servers = 3;
+  int32 mtu = 4;
+}
+
+// Authentication configuration
+message AuthConfig {
+  bool require_mfa = 1;
+  int32 token_expiry_seconds = 2;
+  int32 refresh_token_expiry_seconds = 3;
+  repeated string allowed_client_types = 4;
+  bool enable_registration = 5;
+}
+
+// Hub configuration
+message HubConfiguration {
+  string hub_id = 1;
+  string hub_name = 2;
+  string version = 3;
+
+  // Component configurations
+  WireGuardConfig wireguard = 4;
+  NetworkConfig network = 5;
+  AuthConfig auth = 6;
+  PerformanceConfig performance = 7;
+
+  // Policy settings
+  bool enforce_policies = 8;
+  int32 policy_sync_interval_seconds = 9;
+
+  // Monitoring settings
+  bool enable_metrics = 10;
+  int32 metrics_interval_seconds = 11;
+
+  // Additional settings
+  map<string, string> metadata = 12;
+}

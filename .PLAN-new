@@ -1,0 +1,437 @@
+# Tobogganing Architecture Conversion Plan
+
+## Overview
+
+Convert tobogganing from current architecture (Manager + Headend + Clients + CNI) to a new multi-layer design with:
+1. **WebUI** - React frontend (new)
+2. **API/Config Server** - Flask backend (replaces manager)
+3. **Hub Node** - High-performance Go hub with XDP/AF_XDP (replaces headend)
+4. **Golang Client** - Unified client with multi-layer support
+
+## Architecture Diagram
+
+```
+                    ┌────────────────────────────────────────┐
+                    │         External Clients               │
+                    │    (WebUI, CLI, K8s, Hypervisors)      │
+                    └──────────────────┬─────────────────────┘
+                                       │ REST API (HTTP/1.1)
+    ┌──────────────────────────────────┴─────────────────────────────┐
+    │                         SERVICE MESH                            │
+    │  ┌─────────────────┐    gRPC    ┌────────────────────────────┐ │
+    │  │   WebUI (React) │◄──────────►│   API/Config Server        │ │
+    │  │   Port: 3000    │   REST     │   (Flask + PyDAL)          │ │
+    │  └─────────────────┘            │   Port: 5000 (REST)        │ │
+    │                                 │   Port: 50051 (gRPC)       │ │
+    │                                 └─────────────┬──────────────┘ │
+    │                                               │ gRPC           │
+    │  ┌────────────────────────────────────────────▼──────────────┐ │
+    │  │                    Hub Node (Go)                          │ │
+    │  │   ┌─────────────────────────────────────────────────────┐ │ │
+    │  │   │              XDP/AF_XDP Layer                       │ │ │
+    │  │   │   - Zero-copy packet processing (100K+ pps)         │ │ │
+    │  │   │   - NUMA-aware memory allocation                    │ │ │
+    │  │   └─────────────────────────────────────────────────────┘ │ │
+    │  │   Port: 8080 (REST), 51820 (WireGuard)                   │ │
+    │  └───────────────────────────┬───────────────────────────────┘ │
+    └──────────────────────────────┼─────────────────────────────────┘
+                                   │ WireGuard + REST
+         ┌─────────────────────────┼─────────────────────────────────┐
+         │                         │                                 │
+         ▼                         ▼                                 ▼
+┌─────────────────┐    ┌───────────────────────┐    ┌─────────────────────────┐
+│ General User    │    │ Hypervisor OS Agent   │    │ Kubernetes Cluster      │
+│ Client          │    │ (per physical node)   │    │                         │
+│                 │    │                       │    │ ┌─────────────────────┐ │
+│ - Desktop/CLI   │    │ ┌───────────────────┐ │    │ │ K8s Operator        │ │
+│ - WireGuard     │    │ │ LXD Router        │ │    │ │ (control plane)     │ │
+│ - JWT auth      │    │ │ - Container traffic│ │    │ │ - Cluster auth      │ │
+│                 │    │ │ - Separate tunnel  │ │    │ │ - Policy CRDs       │ │
+│                 │    │ └───────────────────┘ │    │ └─────────────────────┘ │
+│                 │    │                       │    │                         │
+│                 │    │ ┌───────────────────┐ │    │ ┌─────────────────────┐ │
+│                 │    │ │ QEMU/KVM Router   │ │    │ │ DaemonSet Agent     │ │
+│                 │    │ │ - VM traffic      │ │    │ │ (per node)          │ │
+│                 │    │ │ - Separate tunnel  │ │    │ │ - eBPF/CNI          │ │
+│                 │    │ └───────────────────┘ │    │ │ - Pod routing       │ │
+│                 │    │                       │    │ └─────────────────────┘ │
+└─────────────────┘    └───────────────────────┘    └─────────────────────────┘
+```
+
+## Multi-Layer Routing Architecture
+
+### Layer 1: Hypervisor OS Level (Dumb Routing)
+Routes traffic between physical nodes for:
+- **LXD containers** - Separate WireGuard tunnel and routing table
+- **QEMU/KVM VMs** - Separate WireGuard tunnel and routing table
+
+Each hypervisor runs an OS-level agent that:
+- Creates separate WireGuard interfaces (wg-lxd, wg-kvm)
+- Routes all LXD bridge traffic through wg-lxd
+- Routes all QEMU/KVM bridge traffic through wg-kvm
+- Provides "dumb routing" (no inspection, just forward)
+
+### Layer 2: Kubernetes CNI Level
+For Kubernetes clusters running on the VMs/containers:
+- **DaemonSet Agent** - Per-node, manages pod networking
+- **Operator** - Cluster-wide policy and config management
+- Uses eBPF for fast-path packet processing
+- Separate authentication from OS-level
+
+### Layer 3: User Client Level
+For end users and external systems:
+- Desktop/CLI application
+- Full WireGuard VPN
+- JWT authentication
+
+---
+
+## New Directory Structure
+
+```
+tobogganing/
+├── services/
+│   ├── webui/                          # React frontend
+│   │   ├── Dockerfile
+│   │   ├── package.json
+│   │   └── src/
+│   │       ├── App.tsx
+│   │       ├── api/client.ts
+│   │       ├── components/
+│   │       └── pages/
+│   │
+│   ├── api-server/                     # Flask backend
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── app/
+│   │       ├── __init__.py
+│   │       ├── main.py
+│   │       ├── database/models.py      # Migrate from manager/database/__init__.py
+│   │       ├── auth/
+│   │       │   ├── jwt_manager.py      # Port from manager/auth/jwt_manager.py
+│   │       │   └── initial_secret.py
+│   │       ├── api/v1/
+│   │       └── grpc/server.py
+│   │
+│   └── hub-node/                       # High-performance Go hub
+│       ├── Dockerfile
+│       ├── go.mod
+│       └── cmd/hub-node/main.go
+│       └── internal/
+│           ├── xdp/
+│           │   ├── loader.go           # XDP program loading
+│           │   ├── af_xdp.go           # AF_XDP socket management
+│           │   └── programs/           # Compiled eBPF/XDP programs
+│           ├── numa/
+│           │   └── allocator.go        # NUMA-aware memory pools
+│           ├── wireguard/hub.go        # Port from headend/wireguard/manager.go
+│           ├── grpc/client.go
+│           └── api/rest_server.go
+│
+├── clients/
+│   └── golang/                         # Unified Go client
+│       ├── go.mod
+│       └── cmd/
+│           ├── client/main.go          # Desktop/CLI
+│           ├── hypervisor-agent/main.go # OS-level agent
+│           ├── k8s-agent/main.go       # DaemonSet
+│           └── k8s-operator/main.go    # Control plane
+│       └── internal/
+│           ├── auth/
+│           ├── wireguard/
+│           ├── hypervisor/
+│           │   ├── lxd_router.go       # LXD traffic routing
+│           │   └── kvm_router.go       # QEMU/KVM traffic routing
+│           └── k8s/
+│               └── ebpf/loader.go      # Port from k8s-cni/pkg/ebpf/loader.go
+│
+├── proto/                              # gRPC definitions
+│   └── hub/v1/
+│       ├── hub.proto
+│       ├── config.proto
+│       └── policy.proto
+│
+└── deploy/
+    ├── docker-compose.yml
+    └── kubernetes/
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Foundation
+**Files to create:**
+- `proto/hub/v1/hub.proto` - gRPC service definitions
+- `proto/hub/v1/config.proto` - Configuration messages
+- `proto/hub/v1/policy.proto` - Policy messages
+- `docker-compose.yml` - Updated compose file
+
+**Steps:**
+1. Create proto definitions for gRPC communication
+2. Generate Go and Python code from protos
+3. Set up new directory structure
+4. Create base Dockerfiles for all services
+
+### Phase 2: API Server (Flask)
+**Files to create/migrate:**
+- `services/api-server/app/database/models.py` ← migrate from `manager/database/__init__.py`
+- `services/api-server/app/auth/jwt_manager.py` ← port from `manager/auth/jwt_manager.py`
+- `services/api-server/app/auth/initial_secret.py` - new
+- `services/api-server/app/grpc/server.py` - new
+- `services/api-server/app/api/v1/*.py` - REST endpoints
+
+**Steps:**
+1. Create Flask app with Flask-Security-Too
+2. Migrate PyDAL schema from manager (add client_type for hypervisor/lxd/kvm)
+3. Port JWT manager with initial secret exchange
+4. Implement gRPC server for Hub communication
+5. Create REST API endpoints
+
+### Phase 3: Hub Node (High-Performance Go)
+**Files to create/port:**
+- `services/hub-node/internal/wireguard/hub.go` ← port from `headend/wireguard/manager.go`
+- `services/hub-node/internal/xdp/loader.go` - new XDP program loader
+- `services/hub-node/internal/xdp/af_xdp.go` - new AF_XDP socket manager
+- `services/hub-node/internal/numa/allocator.go` - new NUMA memory allocator
+- `services/hub-node/internal/grpc/client.go` - gRPC client for API server
+- `services/hub-node/internal/api/rest_server.go` - REST API for clients
+
+**Steps:**
+1. Create base Go structure with Viper config
+2. Port WireGuard hub from headend
+3. Implement XDP program loading (using Cilium eBPF library)
+4. Implement AF_XDP zero-copy sockets
+5. Add NUMA-aware memory allocation
+6. Implement gRPC client for API server
+7. Create REST API for client connections
+
+### Phase 4: Golang Client - Hypervisor Agent
+**Files to create:**
+- `clients/golang/cmd/hypervisor-agent/main.go` - entry point
+- `clients/golang/internal/hypervisor/lxd_router.go` - LXD traffic routing
+- `clients/golang/internal/hypervisor/kvm_router.go` - QEMU/KVM traffic routing
+- `clients/golang/internal/hypervisor/bridge_monitor.go` - Monitor bridges
+
+**Steps:**
+1. Implement LXD bridge detection and monitoring
+2. Create separate WireGuard tunnel for LXD traffic (wg-lxd)
+3. Implement QEMU/KVM bridge detection
+4. Create separate WireGuard tunnel for KVM traffic (wg-kvm)
+5. Set up routing tables for each tunnel
+6. Implement initial secret + JWT authentication
+
+### Phase 5: Golang Client - Kubernetes Components
+**Files to port/create:**
+- `clients/golang/cmd/k8s-agent/main.go` - DaemonSet entry
+- `clients/golang/cmd/k8s-operator/main.go` - Operator entry
+- `clients/golang/internal/k8s/ebpf/loader.go` ← port from `k8s-cni/pkg/ebpf/loader.go`
+- `clients/golang/internal/k8s/crd/` - CRD definitions
+
+**Steps:**
+1. Port eBPF loader from existing CNI
+2. Create DaemonSet agent with separate auth from hypervisor
+3. Create Operator with CRD management
+4. Implement policy distribution
+5. Add CNI plugin functionality
+
+### Phase 6: Golang Client - User Client
+**Files to port:**
+- `clients/golang/cmd/client/main.go` ← port from `clients/native/`
+- `clients/golang/internal/auth/` ← port from `clients/native/internal/auth/`
+- `clients/golang/internal/wireguard/` ← port from `clients/native/internal/vpn/`
+
+**Steps:**
+1. Port authentication from native client
+2. Port WireGuard tunnel management
+3. Create CLI interface with Cobra
+4. Optional: Port Fyne GUI
+
+### Phase 7: WebUI (React)
+**Files to create:**
+- `services/webui/src/App.tsx`
+- `services/webui/src/api/client.ts`
+- `services/webui/src/components/*`
+- `services/webui/src/pages/*`
+
+**Steps:**
+1. Create React app with TypeScript
+2. Implement API client with JWT handling
+3. Build dashboard and management pages
+4. Add real-time metrics display
+
+---
+
+## Critical Files Reference
+
+### Files to Migrate/Port
+| Source | Destination | Purpose |
+|--------|-------------|---------|
+| `manager/database/__init__.py` | `services/api-server/app/database/models.py` | PyDAL schema |
+| `manager/auth/jwt_manager.py` | `services/api-server/app/auth/jwt_manager.py` | JWT management |
+| `headend/wireguard/manager.go` | `services/hub-node/internal/wireguard/hub.go` | WireGuard hub |
+| `headend/proxy/main.go` | `services/hub-node/cmd/hub-node/main.go` | Main server structure |
+| `k8s-cni/pkg/ebpf/loader.go` | `clients/golang/internal/k8s/ebpf/loader.go` | eBPF management |
+| `clients/native/internal/auth/` | `clients/golang/internal/auth/` | Client auth |
+
+### New Files (Critical)
+| File | Purpose |
+|------|---------|
+| `proto/hub/v1/hub.proto` | gRPC service definitions |
+| `services/hub-node/internal/xdp/af_xdp.go` | AF_XDP zero-copy sockets |
+| `services/hub-node/internal/numa/allocator.go` | NUMA memory pools |
+| `clients/golang/internal/hypervisor/lxd_router.go` | LXD traffic routing |
+| `clients/golang/internal/hypervisor/kvm_router.go` | KVM traffic routing |
+
+---
+
+## Authentication Flow
+
+```
+1. Initial Secret Exchange:
+   Client ─── POST /api/v1/auth/exchange ───► Hub Node ─── gRPC ───► API Server
+              {client_id, client_type,                               Validate secret
+               initial_secret, public_key}                           Generate JWT
+                                             ◄─────────────────────── Return JWT + config
+
+2. Ongoing Authentication:
+   Client ─── REST with Bearer JWT ───► Hub Node
+              (validated locally with public key)
+
+3. Token Refresh:
+   Client ─── POST /api/v1/auth/refresh ───► Hub Node ─── gRPC ───► API Server
+```
+
+**Client Types:**
+- `user` - General user clients
+- `hypervisor_lxd` - LXD container routing
+- `hypervisor_kvm` - QEMU/KVM VM routing
+- `k8s_node` - Kubernetes node agent
+- `k8s_cluster` - Kubernetes operator
+
+---
+
+## XDP/AF_XDP Implementation
+
+### Performance Targets
+- 100K+ packets/second
+- <1ms latency
+- Zero-copy packet processing
+- NUMA-local memory access
+
+### Key Components
+```go
+// NUMA-aware memory pool
+type NUMAPool struct {
+    nodeID      int
+    frameSize   int
+    umem        *unix.Mmap
+    fillRing    *Ring
+    rxRing      *Ring
+    txRing      *Ring
+    compRing    *Ring
+}
+
+// AF_XDP socket
+type AFXDPSocket struct {
+    fd          int
+    umem        *NUMAPool
+    rxQueue     int
+    txQueue     int
+}
+
+// Worker per NUMA node
+type Worker struct {
+    numaNode    int
+    socket      *AFXDPSocket
+    cpuMask     uint64
+}
+```
+
+---
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  webui:
+    build: ./services/webui
+    ports: ["3000:3000"]
+    depends_on: [api-server]
+
+  api-server:
+    build: ./services/api-server
+    ports: ["5000:5000", "50051:50051"]
+    depends_on: [postgres, redis]
+
+  hub-node:
+    build: ./services/hub-node
+    ports: ["8080:8080", "51820:51820/udp"]
+    cap_add: [NET_ADMIN, SYS_ADMIN, BPF]
+    privileged: true
+    depends_on: [api-server]
+
+  postgres:
+    image: postgres:16-alpine
+
+  redis:
+    image: redis:7-alpine
+```
+
+---
+
+## Implementation Execution Strategy
+
+### Task Agent Usage Guidelines
+
+**Model Selection:**
+- **Haiku model** - Use for most implementation tasks (file creation, migrations, boilerplate)
+- **Sonnet model** - Reserve for complex tasks only (XDP/AF_XDP, NUMA allocation, gRPC service design)
+
+**Parallelization:**
+- Maximum **10 task agents** running concurrently
+- Group related tasks to minimize agent count
+- Prioritize critical path items
+
+**CRITICAL - Context Management:**
+All task agents MUST be instructed to:
+- Return **minimal output** - concise summaries only
+- Avoid returning full file contents
+- Report only: files created/modified, key decisions made, any blockers
+- Use format: "Created X, modified Y, status: complete/blocked"
+
+**Example agent prompt suffix:**
+```
+IMPORTANT: Return a MINIMAL response - only report:
+1. Files created/modified (paths only)
+2. Key implementation decisions (1-2 sentences)
+3. Status (complete/blocked/needs-review)
+DO NOT return file contents or verbose explanations.
+```
+
+### Suggested Agent Distribution
+
+| Phase | Agent Count | Model | Tasks |
+|-------|-------------|-------|-------|
+| 1. Foundation | 2 | haiku | Proto files, directory structure |
+| 2. API Server | 3 | haiku | DB models, auth, REST endpoints |
+| 3. Hub Node | 2 | **sonnet** | XDP/AF_XDP, NUMA (complex) |
+| 4. Hypervisor Agent | 2 | haiku | LXD router, KVM router |
+| 5. K8s Components | 2 | haiku | DaemonSet, Operator |
+| 6. User Client | 1 | haiku | Port from native |
+| 7. WebUI | 2 | haiku | React app, components |
+
+---
+
+## Summary
+
+This plan transforms tobogganing into a multi-layer routing solution:
+1. **WebUI** - Fresh React frontend
+2. **API Server** - Flask + PyDAL + gRPC server
+3. **Hub Node** - XDP/AF_XDP high-performance routing with NUMA
+4. **Unified Client** with:
+   - Hypervisor agent (separate LXD and KVM routing)
+   - Kubernetes components (DaemonSet + Operator)
+   - User client (desktop/CLI)
+
+Internal communication uses gRPC, external uses REST API HTTP/1.1, and all traffic routes through WireGuard VPN via the Hub Node.

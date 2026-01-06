@@ -1,898 +1,299 @@
-# Tobogganing Project Documentation
+# Tobogganing - Claude Code Context
 
 ## Project Overview
-Tobogganing is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. The system consists of multiple integrated components:
 
-## Core System Components
-1. **Manager Service** - Centralized orchestration and certificate management
-2. **Headend Server** - WireGuard termination and proxy authentication  
-3. **Client Applications** - Docker and native clients for various platforms
+Tobogganing is a multi-component SASE (Secure Access Service Edge) platform with WireGuard VPN infrastructure. The project consists of 8+ components spanning Python, Go, and Node.js/TypeScript, designed for enterprise-scale secure network access and zero-trust architecture.
 
-## Additional Platform Components (v1.2.0+)
-4. **Marketing Website** - Next.js website available at [tobogganing.io](https://tobogganing.io)
-   - Interactive solutions showcase with deployment scenarios
-   - Configuration portal mockups demonstrating enterprise capabilities
-   - Responsive design optimized for Cloudflare Pages deployment
+**Project Features:**
+- Multi-platform support (macOS, Linux, Windows)
+- WireGuard VPN infrastructure with headend server
+- Native clients (GUI and headless)
+- Kubernetes CNI plugin for pod networking
+- Manager service with authentication and RBAC
+- High-performance networking with Go
+- Web UI dashboard for management
+- Enterprise security and compliance
 
-5. **Documentation Portal** - MkDocs website available at [docs.tobogganing.io](https://docs.tobogganing.io)
-   - Comprehensive documentation with Material theme
-   - Symlinked to existing markdown documentation in `docs/` folder
-   - Docker-ready with automated builds and deployment workflows
+## Technology Stack
 
-6. **Kubernetes CNI Plugin** - High-performance container networking interface
-   - CNI Spec 1.0.0 compliant with ADD/DEL/CHECK/VERSION command support
-   - WireGuard tunnel management per pod with automatic IP allocation
-   - Enterprise-ready with comprehensive test coverage and CI/CD integration
+### Core Technologies
 
-## Architecture
+**Python 3.12**:
+- Manager service (authentication, RBAC, API)
+- Documentation generation
+- PyDAL for database abstraction (mandatory)
+- Flask + Flask-Security-Too for web services
 
-### Manager Service (Python 3.12)
-- **Purpose**: Coordinate clients across multiple datacenters and clusters
-- **Technology Stack**:
-  - Python 3.12 with asyncio and multithreading for high performance
-  - py4web for web frontend and REST API
-  - Certificate generation and management system
-- **Key Features**:
-  - Multi-datacenter orchestration
-  - Certificate lifecycle management
-  - Client registration and configuration
-  - API key generation for initial client setup
-  - **Advanced Web Management Portal**:
-    - Role-based access control (Admin/Reporter)
-    - Real-time dashboard with live statistics
-    - User management interface
-    - Comprehensive firewall management
-    - Prometheus metrics visualization
-    - Session-based authentication with bcrypt
-  - **Database Backup System**:
-    - Local backup storage with compression and encryption
-    - S3-compatible storage support (AWS S3, MinIO, Google Cloud Storage)
-    - Automated backup scheduling with cron expressions
-    - RESTful API and CLI interface for backup operations
-    - Checksum verification and metadata tracking
-    - Cross-region backup replication support
-  - **Advanced Analytics Dashboard**:
-    - Operating system distribution analytics with version tracking
-    - Real-time traffic monitoring by headend and region
-    - Agent and headend search with advanced filtering
-    - Interactive charts and visualizations using Chart.js
-    - Client connection statistics and system information
-    - Headend performance metrics and health monitoring
-    - Historical data aggregation with hourly/daily summaries
-    - Automated data retention and cleanup processes
-  - **Enterprise-Grade Firewall System**:
-    - Domain-based access control (*.example.com)
-    - IPv4 and IPv6 address filtering
-    - Protocol-level filtering (TCP, UDP, ICMP)
-    - Source and destination port ranges
-    - Directional traffic control (inbound/outbound/both)
-    - Priority-based rule processing
-    - Real-time access testing
-    - Export rules for headend consumption
+**Go 1.23+**:
+- Headend server (WireGuard termination, traffic routing)
+- Native clients (GUI and headless modes)
+- Kubernetes CNI plugin (pod networking)
+- XDP/AF_XDP for performance-critical paths (when needed)
 
-### Headend Server (Docker)
-- **Purpose**: Terminate WireGuard connections and proxy authenticated traffic
-- **Technology Stack**:
-  - WireGuard for VPN termination
-  - Golang-based proxy for authentication
-  - SAML2 and OAuth2 integration with external IdPs
-  - Traffic mirroring for IDS/IPS integration
-- **Key Features**:
-  - WireGuard tunnel termination
-  - User and service authentication
-  - Traffic routing between clients
-  - Internet gateway functionality
-  - External IdP integration
-  - **Advanced Traffic Mirroring & IDS Integration**:
-    - Suricata IDS/IPS integration with EVE JSON format
-    - Multiple mirror destinations (VXLAN, GRE, ERSPAN)
-    - Real-time threat detection and alerting
-    - Zero-copy mirroring for performance
-    - Configurable sample rates and filtering
-  - **Comprehensive Security Logging**:
-    - UDP syslog integration for compliance
-    - User resource access tracking
-    - Connection audit trails
-    - Structured logging with metadata
+**Node.js 18+ / TypeScript**:
+- Web UI dashboard (React)
+- Admin management interface
+- Real-time status monitoring
+- API client integration
 
-### Client Applications
+**Infrastructure**:
+- **Containerization**: Docker with multi-stage builds
+- **Orchestration**: Kubernetes with Helm charts
+- **Networking**: WireGuard for VPN tunnels
+- **Database**: PostgreSQL (primary), MySQL/SQLite supported
+- **CI/CD**: GitHub Actions with multi-arch builds
 
-#### Docker Container Client
-- WireGuard-based VPN client
-- Pulls configuration from Manager using temporary API keys
-- Automatic key rotation and certificate management
-- Containerized deployment for easy scaling
+### Infrastructure & DevOps
+- **Containers**: Docker with multi-stage builds, Docker Compose
+- **Orchestration**: Kubernetes with Helm charts
+- **Configuration Management**: Ansible for infrastructure automation
+- **CI/CD**: GitHub Actions with comprehensive pipelines
+- **Monitoring**: Prometheus metrics, Grafana dashboards
+- **Logging**: Structured logging with configurable levels
 
-#### Native Golang Client
-- **Platforms**: Complete multi-architecture support across all major platforms
-- **Dual Build Architecture** with Go build tags for conditional compilation:
-  - **GUI Builds** (`//go:build !nogui`): Full desktop experience with system tray
-  - **Headless Builds** (`//go:build nogui`): CLI-only for servers and automation
+### Databases & Storage
+- **Primary**: PostgreSQL (default, configurable via `DB_TYPE` environment variable)
+- **Cache**: Redis/Valkey with optional TLS and authentication
+- **Database Abstraction Layers (DALs)**:
+  - **Python**: PyDAL (mandatory for ALL Python applications)
+    - SQLAlchemy for schema initialization
+    - PyDAL for migrations and day-to-day operations
+    - Thread-safe connection pooling
+    - Multi-database support (postgres, mysql, sqlite)
+  - **Go**: GORM or sqlx (mandatory for network services)
+    - Cross-database compatibility required
+    - Connection pooling and retry logic
+- **Migrations**: Automated schema management via PyDAL
+- **Connection Management**: Thread-local connections for Python
 
-## 🏗️ Complete Build Matrix
+**Supported DB_TYPE Values**:
+- `postgres` - PostgreSQL (recommended)
+- `mysql` - MySQL/MariaDB with Galera support
+- `sqlite` - SQLite (development/testing)
 
-### 🖥️ GUI Client Builds (Desktop Experience)
-| **Platform** | **AMD64/x86_64** | **ARM64** | **Build Method** |
-|-------------|------------------|-----------|------------------|
-| **macOS**    | ✅ | ✅ | Native (creates Universal binary) |
-| **Linux**    | ✅ | ✅ | Docker (architecture-specific) |
-| **Windows**  | ✅ | ✅ | Native with CGO |
+### Security & Authentication
+- **Manager Service**: Flask-Security-Too (mandatory)
+  - Role-based access control (RBAC)
+  - JWT token authentication
+  - Password hashing with bcrypt
+  - Multi-factor authentication (2FA)
+  - Session management and timeout
+- **WireGuard**: Certificate-based and pre-shared key authentication
+- **mTLS**: Mutual TLS for service-to-service communication
+- **TLS Enforcement**: TLS 1.2 minimum, prefer TLS 1.3
+- **Network Security**:
+  - Zero-trust architecture
+  - Per-pod WireGuard tunnels
+  - Encrypted inter-service communication
+- **Scanning**: Trivy vulnerability scanning, CodeQL analysis
+- **Code Quality**: All code must pass security analysis
 
-### ⚡ Headless Client Builds (Server/Embedded)
-| **Platform** | **AMD64/x86_64** | **ARM64** | **ARMv7** | **ARMv6** | **MIPS** | **MIPS LE** |
-|-------------|------------------|-----------|-----------|-----------|----------|-------------|
-| **macOS**    | ✅ | ✅ | - | - | - | - |
-| **Linux**    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Windows**  | ✅ | ✅ | - | - | - | - |
+## PenguinTech License Server Integration
 
-### 🏭 Total Build Outputs
-- **GUI Builds**: 6 binaries (macOS AMD64, macOS ARM64 + Universal, Linux AMD64, Linux ARM64, Windows AMD64, Windows ARM64)
-- **Headless Builds**: 8 primary + embedded variants (macOS AMD64, macOS ARM64 + Universal, Linux AMD64, Linux ARM64, Windows AMD64, Windows ARM64, Linux ARMv6/v7, Linux MIPS/MIPS LE)
-- **Cross-Platform**: All major desktop and server architectures covered
-- Lightweight and efficient with direct system network stack integration
-- Auto-update capabilities and certificate management
-- **System Tray Integration** (GUI Builds Only):
-  - Real-time connection status monitoring
-  - Connect/disconnect VPN with single click
-  - Configuration update management with random scheduling (45-60 min intervals)
-  - Manual configuration pull capability
-  - Connection statistics viewer in browser
-  - Settings and about dialogs
-  - Graceful shutdown with automatic disconnection
-- **Headless Features** (Server/Embedded):
-  - Command-line interface only
-  - Daemon mode for background operation
-  - Docker and systemd integration
-  - Wide platform support (ARM, MIPS, embedded systems)
-  - Minimal resource footprint
+All projects integrate with the centralized PenguinTech License Server at `https://license.penguintech.io` for feature gating and enterprise functionality.
 
-## Development Guidelines
+**IMPORTANT: License enforcement is ONLY enabled when project is marked as release-ready**
+- Development phase: All features available, no license checks
+- Release phase: License validation required, feature gating active
 
-### Development Requirements
-- **Operating System**: Ubuntu 24.04 LTS (standardized for all Debian/Ubuntu development and CI/CD)
-- **Go 1.23+** - All Go components (headend server and native clients)
-- **Python 3.12+** - Manager service and web portal
-- **Node.js 18+** - Website and React Native mobile applications
-- **Docker** - Containerized development and deployment
+**License Key Format**: `PENG-XXXX-XXXX-XXXX-XXXX-ABCD`
 
-### Coding Standards
-- **Python**: Follow PEP 8, use type hints, async/await patterns
-- **Golang**: Follow Go formatting standards, use modules
-- **Docker**: Multi-stage builds for security and size optimization
-- **Go Development**: ALWAYS run lint check and build test after creating or modifying Go packages:
-  - `golangci-lint run` for linting
-  - `go build ./...` for build verification
-  - Fix all linting errors before committing code
-- **Build Tags**: Use conditional compilation for GUI vs headless builds:
-  - GUI builds: Default behavior, requires CGO and system dependencies
-  - Headless builds: Use `-tags="nogui"` flag for static compilation
-  - Test both variants when modifying client code
+**Core Endpoints**:
+- `POST /api/v2/validate` - Validate license
+- `POST /api/v2/features` - Check feature entitlements
+- `POST /api/v2/keepalive` - Report usage statistics
 
-### Testing Requirements
-- Unit tests for all components
-- Integration tests for API endpoints
-- End-to-end testing for VPN connectivity
-- Security scanning for all containers
-
-### Build Process
-- All components built via GitHub Actions
-- Version management through `.version` file
-- Semantic versioning (starting at 1.0.0)
-- Automated Docker image publishing
-- Cross-platform binary compilation for Go clients
-- **Dual Client Architecture**: GUI vs Headless builds using Go build tags
-  - **GUI Builds** (Default for Desktop): System tray integration using github.com/getlantern/systray
-    - macOS: Universal binaries (Intel + Apple Silicon)
-    - Linux: Native system tray with libayatana-appindicator
-    - Windows: Native system tray integration
-    - Build with CGO enabled for GUI dependencies
-    - Primary user experience for end users
-  - **Headless Builds** (Servers/Embedded): CLI-only, no GUI dependencies
-    - Static compilation with CGO_ENABLED=0
-    - Minimal resource footprint
-    - Perfect for Docker containers and automation
-    - Wide platform support (ARM, MIPS, embedded systems)
-
-#### Local Testing & Build Process Guidelines
-
-**IMPORTANT**: When performing local builds and testing, replicate the build process from GitHub Actions workflows as closely as possible to ensure consistency and catch issues early.
-
-##### Build Testing Requirements
-1. **Manager Docker Container**:
-   ```bash
-   cd manager && docker build -t sasewaddle-manager:test . --no-cache
-   ```
-
-2. **Headend Server**:
-   ```bash
-   cd headend && docker build -t sasewaddle-headend:test . --no-cache
-   ```
-
-3. **Go Native Clients**:
-   ```bash
-   cd clients/native
-   # Headless builds (for ARM/embedded testing, use Docker)
-   go build -tags="nogui" -o sasewaddle-headless ./cmd/headless
-   # GUI builds (may require system dependencies)
-   go build -o sasewaddle-gui ./cmd/gui
-   ```
-
-4. **Docker Client**:
-   ```bash
-   cd clients/docker && docker build -t sasewaddle-docker-client:test . --no-cache
-   ```
-
-##### Cross-Platform Testing (ARM/Embedded)
-- **Use Docker containers** for ARM builds to ensure consistent environment
-- **Multi-arch Docker builds** should be tested locally before CI/CD
-- **Build tags** (`nogui`) should be tested for embedded/headless deployments
-
-##### GUI Client Build Process
-The GUI client uses the Fyne framework and requires special build considerations:
-
-**Docker-Based GUI Builds (Recommended for Linux/ARM)**
-- Use architecture-specific Dockerfiles for optimal builds:
-  - `Dockerfile.gui-amd64` for Intel/AMD builds
-  - `Dockerfile.gui-arm64` for ARM64 builds with cross-compilation
-- Includes all required system packages: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev, etc.
-- Each Dockerfile optimized for its target architecture
-
-**Important Fyne Framework Notes**
-- Fixed critical type declaration: use `fyne.App` interface, not `app.App`
-- Correct import pattern:
-  ```go
-  import (
-      "fyne.io/fyne/v2"
-      "fyne.io/fyne/v2/app"
-      "fyne.io/fyne/v2/widget"
-  )
-  
-  type App struct {
-      fyneApp fyne.App  // Correct: fyne.App interface
-  }
-  
-  func NewApp() *App {
-      return &App{
-          fyneApp: app.New(),  // app.New() returns fyne.App
-      }
-  }
-  ```
-
-**Build Command Examples**
+**Environment Variables**:
 ```bash
-# Docker-based GUI build (AMD64)
-docker build -f Dockerfile.gui-amd64 -t gui-builder-amd64 .
-docker create --name temp gui-builder-amd64
-docker cp temp:/src/sasewaddle-client-gui ./client-gui-amd64
-docker rm temp
+# License configuration
+LICENSE_KEY=PENG-XXXX-XXXX-XXXX-XXXX-ABCD
+LICENSE_SERVER_URL=https://license.penguintech.io
+PRODUCT_NAME=your-product-identifier
 
-# Docker-based GUI build (ARM64)
-docker buildx build --platform linux/arm64 -f Dockerfile.gui-arm64 -t gui-builder-arm64 .
-docker create --name temp gui-builder-arm64
-docker cp temp:/src/sasewaddle-client-gui ./client-gui-arm64
-docker rm temp
-
-# Test GUI package compilation
-go build -v ./internal/gui
-
-# Native cross-platform build (requires system dependencies)
-CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build ./cmd/gui
+# Release mode (enables license enforcement)
+RELEASE_MODE=false  # Development (default)
+RELEASE_MODE=true   # Production (explicitly set)
 ```
 
-**Troubleshooting GUI Builds**
-- **"undefined: app.App" error**: Check type declaration uses `fyne.App` not `app.App`
-- **ARM64 CGO assembly errors**: Use native runners for each architecture instead of cross-compilation
-  - macOS: Use `macos-13` for Intel AMD64, `macos-latest` for Apple Silicon ARM64
-  - Linux: Use architecture-specific Docker containers with proper toolchains
-- **Missing GUI dependencies**: Use Docker container builds for consistent environment
-- **CGO compilation errors**: Ensure CGO_ENABLED=1 for GUI builds
-- **Cross-compilation issues**: Use Docker Buildx with QEMU for ARM builds
-- **Slow builds**: GUI Docker builds take 5-10 minutes due to large dependency chains
-- **QEMU requirement**: Always set up QEMU for both AMD64/ARM64 in CI/CD environments
+📚 **Detailed Documentation**: [License Server Integration Guide](docs/licensing/license-server-integration.md)
 
-**Build Verification Commands**
-```bash
-# Verify headless builds work (fast test)
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o test-amd64 ./cmd/headless
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o test-arm64 ./cmd/headless
-CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o test-win-arm64.exe ./cmd/headless
+## WaddleAI Integration (Optional)
 
-# Check architecture of binaries
-file test-*
+For projects requiring AI capabilities, integrate with WaddleAI located at `~/code/WaddleAI`.
 
-# Set up QEMU for local cross-platform Docker testing
-docker run --privileged --rm tonistiigi/binfmt --install all
-docker buildx create --name multiarch --driver docker-container --use
-docker buildx inspect --bootstrap
-```
+**When to Use WaddleAI:**
+- Natural language processing (NLP)
+- Machine learning model inference
+- AI-powered features and automation
+- Intelligent data analysis
+- Chatbots and conversational interfaces
 
-##### Linting Requirements
-- **Headend**: `golangci-lint run` (should show 0 issues)
-- **Native Clients**: Use appropriate build tags when linting GUI vs headless code
-- **Fix all linting errors** before committing code
-- **Python code**: Use `pylint` and `mypy` for manager service
+**Integration Pattern:**
+- WaddleAI runs as separate microservice container
+- Communicate via REST API or gRPC
+- Environment variable configuration for API endpoints
+- License-gate AI features as enterprise functionality
 
-### Security Considerations
-- Zero Trust principles throughout
-- Mutual TLS for all communications
-- Certificate rotation and revocation
-- Secure key storage
-- Audit logging for all operations
-- Air-gapped deployment support
-- Traffic mirroring for IDS/IPS integration
-  - Enables external security monitoring
-  - Supports threat detection and analysis
-  - Maintains packet integrity for forensics
-  - Optional encryption for mirrored traffic
+📚 **WaddleAI Documentation**: See WaddleAI project at `~/code/WaddleAI` for integration details
 
 ## Project Structure
-```
-/workspaces/Tobogganing/
-├── manager/                 # Manager service code
-│   ├── api/                # REST API endpoints
-│   ├── web/                # py4web frontend with role-based access
-│   ├── auth/               # User authentication and JWT management
-│   ├── firewall/           # Advanced firewall and access control
-│   ├── metrics/            # Prometheus metrics collection
-│   ├── certs/              # Certificate management
-│   └── orchestrator/       # Client coordination
-├── headend/                # Headend server code
-│   ├── proxy/              # Golang proxy with traffic mirroring
-│   │   └── mirror/         # Traffic mirroring to Suricata IDS
-│   ├── wireguard/          # WireGuard configuration
-│   └── auth/               # IdP integration
-├── clients/                # Client applications
-│   ├── docker/             # Docker client
-│   └── native/             # Golang native client
-├── website/                # Next.js marketing website
-│   ├── pages/              # Next.js pages (including /solutions and /portal)
-│   ├── components/         # React components
-│   ├── public/             # Static assets
-│   └── functions/          # Cloudflare Workers functions
-├── docs-website/           # MkDocs documentation portal
-│   ├── docs/               # Symlinked documentation files
-│   ├── mkdocs.yml          # MkDocs configuration
-│   ├── requirements.txt    # Python dependencies
-│   └── Dockerfile          # Container build configuration
-├── k8s-cni/                # Kubernetes CNI plugin
-│   ├── cmd/tobogganing-cni/ # Main CNI binary
-│   ├── pkg/                # CNI implementation packages
-│   ├── tests/              # Unit test coverage
-│   ├── deploy/             # Kubernetes deployment manifests
-│   └── examples/           # Configuration examples
-├── deploy/                 # Deployment configurations
-│   ├── suricata/           # Suricata IDS configuration
-│   ├── prometheus/         # Prometheus configuration
-│   └── grafana/            # Grafana dashboards
-├── .github/workflows/      # GitHub Actions
-├── tests/                  # Test suites
-└── docs/                   # Documentation
 
 ```
-
-## Commands to Run
-- **Linting**: `make lint` or `python -m pylint manager/` for Python, `golangci-lint run` for Go
-- **Type checking**: `python -m mypy manager/` for Python
-- **Tests**: `make test` or `pytest` for Python, `go test ./...` for Go
-- **Build**: `make build` or use GitHub Actions
-
-## Development TODO List
-
-### ✅ Completed Tasks
-- [x] Implement Manager Service (py4web Docker container with async/multithreading)
-- [x] JWT token management and validation
-- [x] WireGuard certificate generation and lifecycle management  
-- [x] REST API endpoints for client/node registration
-- [x] Authentication endpoints for headend validation
-- [x] Multi-thousand request handling with async/threading
-- [x] py4web frontend for cluster management with role-based access (Admin/Reporter)
-- [x] Configuration distribution API for headend/clients
-- [x] Comprehensive Prometheus metrics endpoints with authentication
-- [x] Health endpoints (/health, /healthz) for Kubernetes compatibility
-- [x] Advanced firewall system with domain, IP, protocol, and port control
-- [x] Implement Headend Server (Go multi-protocol proxy + WireGuard)
-- [x] WireGuard tunnel termination for authenticated nodes
-- [x] Multi-protocol proxy (TCP, UDP, HTTPS) with dual authentication
-- [x] Traffic mirroring to Suricata IDS/IPS (VXLAN/GRE/ERSPAN)
-- [x] Node-to-node communication routing through proxy
-- [x] Docker containerization with proper entrypoint
-- [x] Docker client (ARM64/AMD64) with WireGuard and auto-config
-- [x] Native Go client for Mac Universal, Windows, Linux
-- [x] FRR-based VRFs for IP space segmentation
-- [x] OSPF routing across WireGuard tunnels
-- [x] Admin portal for VRF and OSPF configuration
-- [x] Configure headend to get firewall rules from manager with Redis caching
-- [x] Add syslog logging for user resource access from headend (UDP only)
-- [x] Add screenshots and connectivity diagrams to Next.js website
-- [x] Allow admin to specify what ports the go proxy listens on
-- [x] Ensure all Go files are well documented in code
-- [x] Migrate Manager to use PyDAL with MySQL as default and read replica support
-- [x] Test Go builds for proxy and clients
-
-### 📝 Current TODO Status
-*Last Updated: 2025-08-21*
-
-**Ongoing Tasks:**
-1. Add input validation to all network-facing functions in Go code
-2. Clean up lint warnings in headend
-
-**v1.1.4 Complete Features:**
-Manager Service, Headend Proxy, Client Applications (GUI/Headless), VRF/OSPF routing, Firewall/IDS integration, Prometheus metrics, PyDAL database support, Docker-based builds, GitHub Actions CI/CD
-
-
-## Authentication Architecture
-**Dual Authentication Required:**
-1. **WireGuard Layer**: X.509 certificate-based authentication
-2. **Application Layer**: JWT token OR SSO (SAML2.0/OAuth2) authentication
-
-This ensures both network-level and application-level security for all users and services.
-
-## Environment Variables
-
-### General
-- `MANAGER_API_URL`: Manager service endpoint
-- `HEADEND_URL`: Headend server endpoint
-- `API_KEY`: Temporary API key for initial setup
-- `IDP_URL`: External identity provider URL
-- `IDP_TYPE`: SAML2 or OAUTH2
-- `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR
-
-### Manager Service Authentication & Security
-- `JWT_SECRET`: Secret key for JWT token signing and validation
-- `SESSION_TIMEOUT_HOURS`: Web session timeout in hours (default: 8)
-- `METRICS_TOKEN`: Authentication token for Prometheus metrics scraping
-- `REDIS_URL`: Redis connection string for session storage
-
-### PyDAL Database Configuration
-The Manager service uses PyDAL for database abstraction, supporting MySQL (default), PostgreSQL, and SQLite.
-
-#### Primary Database
-- `DB_TYPE`: Database type (mysql, postgresql, sqlite) - Default: mysql
-- `DB_HOST`: Database host address
-- `DB_PORT`: Database port (3306 for MySQL, 5432 for PostgreSQL)
-- `DB_USER`: Database username
-- `DB_PASSWORD`: Database password
-- `DB_NAME`: Database name/schema
-- `DB_POOL_SIZE`: Connection pool size (default: 10)
-- `DB_CHARSET`: Character set (default: utf8mb4 for MySQL)
-- `DB_COLLATION`: Collation (optional)
-- `DB_CONNECT_TIMEOUT`: Connection timeout in seconds
-
-#### Read Replica Support (Optional)
-- `DB_READ_REPLICA_ENABLED`: Enable read replica (true/false) - Default: false
-- `DB_READ_HOST`: Read replica host address
-- `DB_READ_PORT`: Read replica port
-- `DB_READ_USER`: Read replica username
-- `DB_READ_PASSWORD`: Read replica password
-- `DB_READ_NAME`: Read replica database name
-- `DB_READ_POOL_SIZE`: Read replica connection pool size (default: 5)
-
-#### TLS/SSL Database Connection (Optional)
-- `DB_TLS_ENABLED`: Enable TLS/SSL for database connections (true/false)
-- `DB_TLS_CA_CERT`: Path to CA certificate file
-- `DB_TLS_CLIENT_CERT`: Path to client certificate file  
-- `DB_TLS_CLIENT_KEY`: Path to client private key file
-- `DB_TLS_VERIFY_MODE`: SSL verification mode
-  - MySQL: VERIFY_IDENTITY, VERIFY_CA, DISABLED
-  - PostgreSQL: require, verify-ca, verify-full, disable
-
-#### Database Configuration Examples
-
-**MySQL with TLS (Production)**
-```bash
-DB_TYPE=mysql
-DB_HOST=mysql.example.com
-DB_PORT=3306
-DB_USER=sasewaddle_prod
-DB_PASSWORD=secure_password_here
-DB_NAME=sasewaddle_production
-DB_TLS_ENABLED=true
-DB_TLS_CA_CERT=/certs/ca.pem
-DB_TLS_VERIFY_MODE=VERIFY_CA
+tobogganing/
+├── .github/             # CI/CD pipelines and templates
+│   └── workflows/       # GitHub Actions for builds and releases
+├── manager/             # Manager service (Python 3.12)
+│   ├── api/            # Flask + Flask-Security-Too API
+│   ├── models/         # PyDAL database models
+│   ├── migrations/     # Database migrations
+│   └── tests/          # Manager unit tests
+├── headend/            # Headend server (Go 1.23)
+│   ├── main.go         # WireGuard termination
+│   ├── routing/        # Traffic routing logic
+│   ├── auth/           # Certificate authentication
+│   └── tests/          # Headend unit tests
+├── clients/            # Native clients (Go 1.23)
+│   ├── gui/            # GUI client (Fyne framework)
+│   ├── cli/            # Headless CLI client
+│   ├── common/         # Shared client code
+│   └── tests/          # Client unit tests
+├── k8s-cni/            # Kubernetes CNI plugin (Go 1.23)
+│   ├── plugin/         # CNI plugin implementation
+│   ├── config/         # Network configuration
+│   └── tests/          # CNI plugin tests
+├── webui/              # Web UI dashboard (React/TypeScript)
+│   ├── src/            # React components and pages
+│   ├── public/         # Static assets
+│   └── tests/          # Frontend tests
+├── deploy/             # Deployment configurations
+│   ├── docker-compose/ # Docker Compose files
+│   ├── k8s/            # Kubernetes manifests
+│   └── helm/           # Helm charts
+├── docs/               # Documentation
+├── scripts/            # Build and utility scripts
+├── .version            # Version tracking
+└── CLAUDE.md           # This file
 ```
 
-**PostgreSQL (Alternative)**
-```bash
-DB_TYPE=postgresql
-DB_HOST=postgres.example.com
-DB_PORT=5432
-DB_USER=sasewaddle
-DB_PASSWORD=secure_password
-DB_NAME=sasewaddle
+### Multi-Component Architecture
+
+Tobogganing uses a multi-component architecture with specialized services:
+
+| Component | Technology | Purpose | Deployment |
+|-----------|-----------|---------|-----------|
+| **Manager** | Python 3.12 + Flask | User management, authentication, RBAC, API | Container or VM |
+| **Headend** | Go 1.23 | WireGuard termination, traffic routing | Container or VM |
+| **Native Clients** | Go 1.23 | User-facing WireGuard clients | Desktop, server, mobile |
+| **K8s CNI Plugin** | Go 1.23 | Pod networking with WireGuard | Kubernetes node |
+| **WebUI** | React + TypeScript | Management dashboard | Container |
+
+#### Deployment Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      Internet / Corporate Network                        │
+└──────────────────────────────────────────────────────────────────────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │  Load Balancer     │
+                    │  (Optional: NGINX) │
+                    └─────────┬──────────┘
+                              │
+        ┌─────────────────────┼──────────────────────┐
+        │                     │                      │
+    ┌───┴────┐          ┌─────┴──────┐      ┌───────┴────┐
+    │ WebUI  │          │  Manager   │      │  Headend   │
+    │ (Port  │          │  (Port     │      │  (Port     │
+    │ 3000)  │          │  5000)     │      │  51820)    │
+    │        │          │            │      │            │
+    │React   │          │Flask +     │      │WireGuard   │
+    │UI      │          │Security    │      │Server      │
+    └───┬────┘          └─────┬──────┘      └───────┬────┘
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │   PostgreSQL       │
+                    │   (Port 5432)      │
+                    │                    │
+                    │  - Users & Auth    │
+                    │  - Policies        │
+                    │  - Logs            │
+                    └────────────────────┘
+
+Kubernetes Integration (Optional):
+├── Manager Pod → Database
+├── Headend Pod → WireGuard service
+├── CNI Plugin → Per-pod tunnels
+└── WebUI Pod → React dashboard
 ```
 
-**SQLite (Development)**
-```bash
-DB_TYPE=sqlite
-DB_PATH=/data/sasewaddle.db
-```
+#### Component Communication Patterns
 
-### Traffic Mirroring & IDS Integration (Headend)
-- `TRAFFIC_MIRROR_ENABLED`: Enable/disable traffic mirroring (true/false)
-- `TRAFFIC_MIRROR_DESTINATIONS`: Comma-separated list of mirror destinations (e.g., "10.0.0.100:4789,10.0.0.101:4789")
-- `TRAFFIC_MIRROR_PROTOCOL`: Mirror protocol (ERSPAN, VXLAN, GRE)
-- `TRAFFIC_MIRROR_FILTER`: BPF filter for selective mirroring (optional)
-- `TRAFFIC_MIRROR_SAMPLE_RATE`: Sample rate for mirroring (1-100, default: 100)
-- `TRAFFIC_MIRROR_BUFFER_SIZE`: Buffer size for mirror queue (default: 1000)
-- `TRAFFIC_MIRROR_SURICATA_ENABLED`: Enable Suricata IDS/IPS integration (true/false)
-- `TRAFFIC_MIRROR_SURICATA_HOST`: Suricata host address (e.g., "172.20.0.100")
-- `TRAFFIC_MIRROR_SURICATA_PORT`: Suricata management port (default: 9999)
+- **Manager to Headend**: REST API (HTTPS)
+- **Clients to Headend**: WireGuard protocol
+- **WebUI to Manager**: REST API + WebSockets
+- **Pod to Headend**: WireGuard (via CNI plugin)
+- **Inter-service**: mTLS for security
 
-### Syslog Integration (Headend)
-- `HEADEND_SYSLOG_ENABLED`: Enable syslog logging for user access (true/false)
-- `HEADEND_SYSLOG_SERVER`: Syslog server address (UDP only, e.g., "syslog.example.com:514")
-- `HEADEND_SYSLOG_FACILITY`: Syslog facility (e.g., "local0")
-- `HEADEND_SYSLOG_TAG`: Syslog tag prefix (e.g., "sasewaddle-headend")
+### Default Roles (WebUI)
 
-## API Endpoints
-
-### Manager API
-
-#### Core Management
-- `POST /api/v1/clients/register` - Register new client
-- `GET /api/v1/clients/{id}/config` - Get client configuration (includes tunnel config)
-- `PUT /api/v1/clients/{id}/tunnel-config` - Update client tunnel configuration
-- `POST /api/v1/clients/{id}/metrics` - Submit client metrics
-- `POST /api/v1/headends/{id}/metrics` - Submit headend metrics
-- `POST /api/v1/certs/generate` - Generate certificates
-- `GET /api/v1/status` - System status
-- `GET /health` - Detailed health check
-- `GET /healthz` - Kubernetes-style health check
-- `GET /metrics` - Prometheus metrics (authenticated)
-
-#### Web Portal API
-- `POST /api/web/user` - Create new user (Admin only)
-- `POST /api/web/user/{id}/toggle` - Enable/disable user (Admin only)
-- `GET /api/web/stats` - Real-time dashboard statistics
-- `POST /api/web/client/{id}/revoke` - Revoke client access
-- `GET /checkin-dashboard` - System check-in dashboard page
-
-#### Firewall Management API
-- `POST /api/web/firewall/rule` - Create firewall rule
-- `DELETE /api/web/firewall/rule/{id}` - Delete firewall rule
-- `GET /api/web/firewall/user/{id}/rules` - Get user's firewall rules
-- `POST /api/web/firewall/check` - Test access for user/target
-- `GET /api/web/firewall/user/{id}/export` - Export rules for headend
-
-#### Network/VRF Management API  
-- `POST /api/web/network/vrf` - Create new VRF
-- `DELETE /api/web/network/vrf/{id}` - Delete VRF
-- `PUT /api/web/network/vrf/{id}/ospf` - Configure OSPF for VRF
-- `GET /api/web/network/vrf/{id}/config` - Get FRR configuration
-- `GET /api/web/network/vrf/{id}/neighbors` - Get OSPF neighbors
-
-### Headend API
-- `POST /api/v1/auth` - Authenticate user/service
-- `GET /api/v1/tunnels` - List active tunnels
-- `POST /api/v1/routes` - Configure routing
-- `GET /health` - Detailed health check
-- `GET /healthz` - Kubernetes-style health check
-- `GET /metrics` - Prometheus metrics (authenticated)
-
-## 🌐 Advanced Network Management - VRF & OSPF
-
-Tobogganing includes enterprise-grade network segmentation and routing capabilities using FRR (Free Range Routing):
-
-### Virtual Routing and Forwarding (VRF) Features
-
-#### VRF Configuration Management
-- **Multi-tenant isolation**: Separate routing tables per customer/environment
-- **Route Distinguisher (RD)**: Support for ASN:value and IP:value formats
-- **Route Targets**: Import/Export route target communities for BGP
-- **IP Range Assignment**: CIDR block allocation per VRF
-- **Web-based management**: Beautiful admin interface for VRF lifecycle
-
-#### OSPF Routing Integration
-- **Dynamic routing**: OSPF over WireGuard tunnels
-- **Area-based design**: Support for Normal, Stub, NSSA, and Backbone areas
-- **Multi-VRF OSPF**: Independent OSPF instances per VRF
-- **Neighbor monitoring**: Real-time OSPF neighbor state tracking
-- **Authentication**: MD5 and simple password authentication
-
-### FRR Integration Features
-
-#### Supported Protocols
-- **OSPFv2**: IPv4 dynamic routing
-- **OSPFv3**: IPv6 dynamic routing (future)
-- **BGP**: Border Gateway Protocol for VRF route exchange
-- **Static Routes**: Manual route configuration
-- **Route Redistribution**: Between OSPF areas and protocols
-
-#### Network Topologies Supported
-- **Hub-and-Spoke**: Centralized routing through main sites
-- **Full Mesh**: Direct OSPF peering between all sites
-- **Hybrid**: Mixed topologies with area-based design
-- **Multi-Area OSPF**: Scalable hierarchical routing
-
-### Example VRF Configuration
-```bash
-vrf customer-a
- rd 65000:100
- import rt 65000:100
- export rt 65000:100
-router ospf vrf customer-a
- router-id 10.1.1.1
- network 10.1.0.0/16 area 0.0.0.0
-```
-
-**OSPF Area Types**: Backbone (Area 0), Stub Areas (branch offices), NSSA (stub with limited external connectivity)
-
-### Network Management Interface
-- Real-time VRF/OSPF dashboard with neighbor states
-- Configuration generator and route monitoring
-- Area management with authentication and timer configuration
-
-## 🔥 Advanced Firewall System
-
-Tobogganing includes a comprehensive firewall system for granular access control:
-
-### Rule Types Supported
-
-#### Domain Rules
-- `*.example.com` - Wildcard subdomain matching
-- `example.com` - Exact domain matching
-- Works with both HTTP and HTTPS traffic
-
-#### IP Address Rules
-- `192.168.1.1` - Exact IPv4 address
-- `2001:db8::1` - Exact IPv6 address
-- Supports both source and destination filtering
-
-#### IP Range Rules
-- `192.168.1.0/24` - IPv4 CIDR notation
-- `10.0.0.0/8` - Large network ranges
-- `2001:db8::/32` - IPv6 network ranges
-
-#### Protocol Rules (Advanced)
-- **Format**: `protocol:src_ip:src_port->dst_ip:dst_port:direction`
-- **Examples**:
-  - `tcp:*:*->192.168.1.1:80` - Allow TCP to specific server on port 80
-  - `udp:192.168.1.0/24:*->8.8.8.8:53` - Allow DNS from specific network
-  - `icmp:*->*` - Allow all ICMP traffic
-  - `tcp:10.0.1.5:*->*:443:outbound` - HTTPS from specific host
-
-#### URL Pattern Rules
-- Regular expressions for complex URL matching
-- `https://.*\.secure\.example\.com/api/.*` - API endpoints only
-- Case-insensitive matching supported
-
-### Rule Processing
-- **Priority-based**: Lower numbers processed first (1 = highest priority)
-- **First-match wins**: Processing stops at first matching rule
-- **Default policy**: Deny if no rules match
-
-### Access Control Features
-- **Per-user rules**: Individual firewall policies
-- **Real-time testing**: Test access before deploying rules
-- **Rule export**: Headend servers fetch rules from manager
-- **Web interface**: Beautiful admin panel for rule management
-- **Audit logging**: All access decisions logged
-
-
-## Deployment
-
-### Infrastructure Components
-- Use Docker Compose for local development
-- Kubernetes manifests for production deployment
-- Support for air-gapped environments
-- Multi-region deployment capabilities
-
-### Website Deployment
-- **Platform**: Cloudflare Pages with Workers (Next.js Edge Runtime)
-- **Features**: SSR, global CDN, automatic SSL/TLS, DDoS protection
-- **Content**: Product overview, demos, documentation, downloads, API reference
-
-# CI/CD Pipeline & .WORKFLOW Compliance
-
-## Multi-Component Architecture with 8+ Containers
-
-Tobogganing's comprehensive CI/CD pipeline manages:
-- **Manager** (Python 3.12) - Orchestration service
-- **Headend** (Go 1.23) - WireGuard termination
-- **Docker Client** (Go 1.23) - Containerized deployment
-- **Native Clients** (Go 1.23) - Cross-platform GUI/headless
-- **K8s CNI Plugin** (Go 1.23) - Kubernetes networking
-- **Frontend Website** (Node.js 18) - Marketing site
-- **Documentation** (MkDocs) - Technical docs
-- **Deployment Configs** (K8s/Helm) - Infrastructure
+| Role | Permissions |
+|------|-------------|
+| **Admin** | Full access: user CRUD, settings, all features |
+| **Maintainer** | Read/write access to resources, no user management |
+| **Viewer** | Read-only access to resources |
 
 ## Version Management System
 
-**Format**: `vMajor.Minor.Patch.build` (e.g., `v1.2.0.1737803600`)
+**Format**: `vMajor.Minor.Patch.build`
+- **Major**: Breaking changes, API changes, removed features
+- **Minor**: Significant new features and functionality additions
+- **Patch**: Minor updates, bug fixes, security patches
+- **Build**: Epoch64 timestamp of build time
 
-**Version Monitoring (version-monitor.yml)**:
-- Validates semantic versioning with Epoch64 timestamp
-- Checks consistency across all 8+ components
-- Verifies component presence (Manager, Headend, Clients, CNI, Frontend)
-- Scans Python/Go security in version context
-- Logs comprehensive version metadata
-
-**Component Verification**:
-- Manager: `manager/app.py`, `requirements.txt`
-- Headend: `headend/go.mod`, `proxy/` package
-- Docker Client: `clients/docker/Dockerfile`
-- Native Clients: `clients/native/go.mod`, `cmd/` directory
-- K8s CNI: `k8s-cni/go.mod`, `cmd/tobogganing-cni/`
-- Frontend: `website/package.json`, `src/` directory
-
-## Comprehensive Multi-Component CI Workflow
-
-**ci.yml** with parallel execution:
-
-1. **test-manager** (Python 3.12)
-   - Cache pip dependencies
-   - pylint and mypy checks
-   - pytest unit tests
-   - Coverage upload
-
-2. **test-headend** (Go 1.23)
-   - golangci-lint analysis
-   - go test with race detector
-   - Coverage upload
-
-3. **test-client** (Go 1.23)
-   - GUI dependency verification
-   - golangci-lint with nogui tag
-   - go test with nogui tag
-   - Coverage upload
-
-4. **security-scan**
-   - bandit: Python code (manager/)
-   - gosec: Go code (headend, native, K8s CNI)
-   - Trivy: Filesystem vulnerability scan
-
-5. **build-images** (Multi-arch Docker)
-   - Manager, Headend, Docker Client
-   - Platforms: linux/amd64, linux/arm64
-   - Layer caching for optimization
-
-6. **build-native-client** (Cross-platform binaries)
-   - Linux (amd64, arm64)
-   - macOS (amd64, arm64, Universal)
-   - Windows (amd64, arm64)
-   - Artifact uploads
-
-7. **create-release**
-   - Aggregates native client artifacts
-   - Packages for release (ZIP, tar.gz)
-
-8. **integration-test**
-   - Multi-component interaction
-   - Docker Compose environment
-   - Health endpoint validation
-
-## Component-Specific Build Workflows
-
-**go-build.yml**: Cross-platform Go binary compilation
-**gui-build.yml**: Desktop GUI client builds (Fyne)
-**mobile-builds.yml**: iOS/Android native builds
-**manual-builds.yml**: On-demand container builds
-
-## Security Scanning Standards
-
-**Python (bandit)**:
+**Update Commands**:
 ```bash
-bandit -r manager --format json
+./scripts/version/update-version.sh          # Increment build timestamp
+./scripts/version/update-version.sh patch    # Increment patch version
+./scripts/version/update-version.sh minor    # Increment minor version
+./scripts/version/update-version.sh major    # Increment major version
 ```
 
-**Go (gosec)**:
+## Development Workflow
+
+### Local Development Setup
 ```bash
-gosec -no-fail -fmt json ./headend ./clients/native ./k8s-cni
+git clone <repository-url>
+cd project-name
+make setup                    # Install dependencies
+make dev                      # Start development environment
 ```
 
-**Filesystem (Trivy)**:
-- Container images
-- Dependencies
-- Configuration files
-- Known CVEs
+### Essential Commands
+```bash
+# Development
+make dev                      # Start development services
+make test                     # Run all tests
+make lint                     # Run linting
+make build                    # Build all services
+make clean                    # Clean build artifacts
 
-## Multi-Language Testing Strategy
+# Production
+make docker-build             # Build containers
+make docker-push              # Push to registry
+make deploy-dev               # Deploy to development
+make deploy-prod              # Deploy to production
 
-**Python Manager**:
-- pytest framework
-- Service mocking
-- API endpoint tests
-- Database tests
-- Coverage: 80%+ target
+# Testing
+make test-unit               # Run unit tests
+make test-integration        # Run integration tests
+make test-e2e                # Run end-to-end tests
 
-**Go Components** (Headend, Clients, CNI):
-- Go testing with race detector
-- WireGuard/network tests
-- CLI argument validation
-- Coverage: 80%+ target
-
-**Node.js Frontend**:
-- Jest testing
-- Component tests
-- Integration tests
-- Coverage: 80%+ target
-
-**Integration Tests**:
-- Multi-component interaction
-- Docker Compose environment
-- Health checks
-- Connectivity validation
-
-## Docker Multi-Architecture Builds
-
-**Strategy**:
-- Docker Buildx with QEMU
-- Parallel builds: amd64 and arm64
-- GitHub Actions layer cache
-- Minimal image sizes (debian-slim)
-
-**Image Tagging**:
-- Dev: `tobogganing-{component}:dev-{sha}`
-- PR: `tobogganing-{component}:{version}-pr{number}`
-- Release: `tobogganing-{component}:{version}`
-- Latest: `tobogganing-{component}:latest`
-
-## Release Process
-
-1. Update `.version` file with Epoch64 timestamp
-2. Update `docs/RELEASE_NOTES.md`
-3. Create pull request to main
-4. All CI checks must pass (all 8+ components)
-5. Merge to main triggers automatic release
-6. Workflows publish:
-   - Manager, Headend, Docker Client images
-   - Native client binaries (all platforms)
-   - Release notes and checksums
-
-## Environment Variables
-
-**Build Environment**:
-```yaml
-GO_VERSION: '1.23'
-PYTHON_VERSION: '3.12'
-NODE_VERSION: '18'
-REGISTRY: ghcr.io
+# License Management
+make license-validate        # Validate license
+make license-check-features  # Check available features
 ```
-
-**Service-Specific**:
-- Manager: DATABASE_URL, JWT_SECRET, METRICS_TOKEN
-- Headend: WIREGUARD_PORT, TRAFFIC_MIRROR_ENABLED, SYSLOG_ENABLED
-- Native Client: MANAGER_URL, API_KEY, LOG_LEVEL
-
-## Dependency Management
-
-**Python**: bandit, safety check
-**Go**: go mod audit, gosec
-**Node.js**: npm audit, npm audit fix
-
-## Documentation
-
-For complete information:
-- **docs/WORKFLOWS.md**: Detailed workflow documentation
-- **docs/STANDARDS.md**: Code quality and compliance standards
-- **Manager**: `manager/README.md`
-- **Headend**: `headend/README.md`
-- **K8s CNI**: `k8s-cni/README.md`
-- **Architecture**: `docs/OVERVIEW.md`
-
-# Important TODOs for Critical Security Updates
-
-## ✅ CVE Fix COMPLETED - golang.org/x/crypto 
-**Status**: COMPLETED
-**CVE**: GHSA-v778-237x-gjrc (CRITICAL) - Misuse of ServerConfig.PublicKeyCallback may cause authorization bypass
-**Affected**: golang.org/x/crypto < 0.31.0
-**Resolution**:
-- ✅ Updated /workspaces/Tobogganing/headend/go.mod: v0.17.0 → v0.31.0 
-- ✅ Updated /workspaces/Tobogganing/clients/native/go.mod: v0.16.0 → v0.31.0
-- ✅ FIXED: WireGuard API compatibility issues in /workspaces/Tobogganing/headend/wireguard/manager.go
-  - Fixed ParseEndpoint (removed from wgtypes) → manual parsing with net.UDPAddr
-  - Fixed wgtypes.IPNet and wgtypes.ParseIPNet → using standard net.ParseCIDR
-- ✅ Headend builds successfully with patched crypto library
-- ⚠️ Native client has GUI dependency issues (not CVE-related)
-
-**Files Modified**:
-- /workspaces/Tobogganing/headend/go.mod (crypto: v0.17.0→v0.31.0)
-- /workspaces/Tobogganing/clients/native/go.mod (crypto: v0.16.0→v0.31.0) 
-- /workspaces/Tobogganing/headend/wireguard/manager.go (API compatibility fixes)
-- /workspaces/Tobogganing/clients/native/cmd/tray-example/main.go (import path fixes)
-
-## 🔧 Pending: Native Client Build Issues
-**Status**: PENDING - GUI dependencies and WireGuard API changes (non-critical, dev environment issues)
 
 ## Critical Development Rules
 
@@ -909,24 +310,30 @@ For complete information:
 - **No Technical Debt**: Address issues properly the first time
 
 #### Red Flags (Never Do These)
-- Skipping input validation, hardcoding credentials, ignoring errors
-- Commenting out failing tests, deploying without testing
-- Using deprecated dependencies, partial features with "TODO" placeholders
-- Bypassing security checks, assuming data validity without verification
+- ❌ Skipping input validation "just this once"
+- ❌ Hardcoding credentials or configuration
+- ❌ Ignoring error returns or exceptions
+- ❌ Commenting out failing tests to make CI pass
+- ❌ Deploying without proper testing
+- ❌ Using deprecated or unmaintained dependencies
+- ❌ Implementing partial features with "TODO" placeholders
+- ❌ Bypassing security checks for convenience
+- ❌ Assuming data is valid without verification
+- ❌ Leaving debug code or backdoors in production
 
 #### Quality Checklist Before Completion
-- All error cases handled properly
-- Unit tests cover all code paths
-- Integration tests verify component interactions
-- Security requirements fully implemented
-- Performance meets acceptable standards
-- Documentation complete and accurate
-- Code review standards met
-- No hardcoded secrets or credentials
-- Logging and monitoring in place
-- Build passes in containerized environment
-- No security vulnerabilities in dependencies
-- Edge cases and boundary conditions tested
+- ✅ All error cases handled properly
+- ✅ Unit tests cover all code paths
+- ✅ Integration tests verify component interactions
+- ✅ Security requirements fully implemented
+- ✅ Performance meets acceptable standards
+- ✅ Documentation complete and accurate
+- ✅ Code review standards met
+- ✅ No hardcoded secrets or credentials
+- ✅ Logging and monitoring in place
+- ✅ Build passes in containerized environment
+- ✅ No security vulnerabilities in dependencies
+- ✅ Edge cases and boundary conditions tested
 
 ### Git Workflow
 - **NEVER commit automatically** unless explicitly requested by the user
@@ -935,6 +342,31 @@ For complete information:
 - Always use feature branches for development
 - Require pull request reviews for main branch
 - Automated testing must pass before merge
+
+**Before Every Commit - Security Scanning**:
+- **Run security audits on all modified packages**:
+  - **Go packages**: Run `gosec ./...` on modified Go services
+  - **Node.js packages**: Run `npm audit` on modified Node.js services
+  - **Python packages**: Run `bandit -r .` and `safety check` on modified Python services
+- **Do NOT commit if security vulnerabilities are found** - fix all issues first
+- **Document vulnerability fixes** in commit message if applicable
+
+**Before Every Commit - API Testing**:
+- **Create and run API testing scripts** for each modified container service
+- **Testing scope**: All new endpoints and modified functionality
+- **Test files location**: `tests/api/` directory with service-specific subdirectories
+  - `tests/api/flask-backend/` - Flask backend API tests
+  - `tests/api/go-backend/` - Go backend API tests
+  - `tests/api/webui/` - WebUI container tests
+- **Run before commit**: Each test script should be executable and pass completely
+- **Test coverage**: Health checks, authentication, CRUD operations, error cases
+- **Command pattern**: `cd services/<service-name> && npm run test:api` or equivalent
+
+**Before Every Commit - Screenshots**:
+- **Run screenshot tool to update UI screenshots in documentation**
+  - Run `cd services/webui && npm run screenshots` to capture current UI state
+  - This automatically removes old screenshots and captures fresh ones
+  - Commit updated screenshots with relevant feature/documentation changes
 
 ### Local State Management (Crash Recovery)
 - **ALWAYS maintain local .PLAN and .TODO files** for crash recovery
@@ -965,6 +397,12 @@ For complete information:
 - **CodeQL**: All code must pass CodeQL security analysis
 - **PEP Compliance**: Python code must follow PEP 8, PEP 257 (docstrings), PEP 484 (type hints)
 
+### Pre-Commit Hooks
+- **ESLint**: Configured and enforced in pre-commit hooks for all JavaScript/TypeScript files
+- **Python linters**: Integrated into pre-commit hooks
+- **Security scanning**: Run automatically via pre-commit framework
+- **Automated fixes**: Prettier and black run automatically before each commit
+
 ### Build & Deployment Requirements
 - **NEVER mark tasks as completed until successful build verification**
 - All Go and Python builds MUST be executed within Docker containers
@@ -989,69 +427,302 @@ For complete information:
 - **Documentation strategy**: Create detailed documentation in `docs/` folder and link to them from CLAUDE.md
 - **Keep focused**: Critical context, architectural decisions, and workflow instructions only
 - **User approval required**: ALWAYS ask user permission before splitting CLAUDE.md files
-- **Use Task Agents**: Utilize task agents (subagents) to be more expedient and efficient when making changes to large files
+- **Use Task Agents**: Utilize task agents (subagents) to be more expedient and efficient when making changes to large files, updating or reviewing multiple files, or performing complex multi-step operations
+- **Avoid sed/cat**: Use sed and cat commands only when necessary; prefer dedicated Read/Edit/Write tools for file operations
 
-## Version Management System
+## Development Standards
 
-**Format**: `vMajor.Minor.Patch.build`
-- **Major**: Breaking changes, API changes, removed features
-- **Minor**: Significant new features and functionality additions
-- **Patch**: Minor updates, bug fixes, security patches
-- **Build**: Epoch64 timestamp of build time
+Comprehensive development standards are documented separately to keep this file concise.
 
-**Update Commands**:
-```bash
-./scripts/version/update-version.sh          # Increment build timestamp
-./scripts/version/update-version.sh patch    # Increment patch version
-./scripts/version/update-version.sh minor    # Increment minor version
-./scripts/version/update-version.sh major    # Increment major version
+📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md)
+
+### Quick Reference
+
+**API Versioning**:
+- ALL REST APIs MUST use versioning: `/api/v{major}/endpoint` format
+- Semantic versioning for major versions only in URL
+- Support current and previous versions (N-1) minimum
+- Add deprecation headers to old versions
+- Document migration paths for version changes
+
+**Database Standards**:
+- PyDAL mandatory for ALL Python applications
+- Thread-safe usage with thread-local connections
+- Environment variable configuration for all database settings
+- Connection pooling and retry logic required
+
+**Protocol Support**:
+- REST API, gRPC, HTTP/1.1, HTTP/2, HTTP/3 support
+- Environment variables for protocol configuration
+- Multi-protocol implementation required
+
+**Performance Optimization (Python):**
+- Dataclasses with slots mandatory (30-50% memory reduction)
+- Type hints required for all Python code
+- asyncio for I/O-bound operations
+- threading for blocking I/O
+- multiprocessing for CPU-bound operations
+- Avoid premature optimization - profile first
+
+**High-Performance Networking (Case-by-Case):**
+- XDP (eXpress Data Path): Kernel-level packet processing
+- AF_XDP: Zero-copy socket for user-space packet processing
+- Use only for network-intensive applications requiring >100K packets/sec
+- Evaluate Python vs Go based on traffic requirements
+
+**Microservices Architecture**:
+- Web UI, API, and Connector as **separate containers by default**
+- Single responsibility per service
+- API-first design
+- Independent deployment and scaling
+- Each service has its own Dockerfile and dependencies
+
+**Docker Standards**:
+- Multi-arch builds (amd64/arm64)
+- Debian-slim base images
+- Docker Compose for local development
+- Minimal host port exposure
+
+**Testing**:
+- Unit tests: Network isolated, mocked dependencies
+- Integration tests: Component interactions
+- E2E tests: Critical workflows
+- Performance tests: Scalability validation
+
+**Security**:
+- TLS 1.2+ required
+- Input validation mandatory
+- JWT, MFA, mTLS standard
+- SSO as enterprise feature
+
+## Application Architecture
+
+**ALWAYS use microservices architecture** - decompose into specialized, independently deployable containers:
+
+1. **Web UI Container**: ReactJS frontend (separate container, served via nginx)
+2. **Application API Container**: Flask + Flask-Security-Too backend (separate container)
+3. **Connector Container**: External system integration (separate container)
+
+**Default Container Separation**: Web UI and API are ALWAYS separate containers by default. This provides:
+- Independent scaling of frontend and backend
+- Different resource allocation per service
+- Separate deployment lifecycles
+- Technology-specific optimization
+
+**Benefits**:
+- Independent scaling
+- Technology diversity
+- Team autonomy
+- Resilience
+- Continuous deployment
+
+📚 **Detailed Architecture Patterns**: See [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
+
+## Component Integration Patterns
+
+### Manager Service - Flask + Flask-Security-Too
+The Manager service provides authentication and user management for the entire platform:
+
+```python
+from flask import Flask
+from flask_security import Security, auth_required
+from flask_security.datastore import DataStore
+from pydal import DAL, Field
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+
+# Database setup with PyDAL
+db = DAL(
+    f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASS')}@"
+    f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/tobogganing",
+    pool_size=10
+)
+
+# Define tables for users, roles, policies
+db.define_table('auth_user',
+    Field('email', 'string', unique=True),
+    Field('password', 'string'),
+    Field('active', 'boolean', default=True),
+    Field('fs_uniquifier', 'string', unique=True))
+
+db.define_table('auth_role',
+    Field('name', 'string', unique=True),  # admin, operator, viewer
+    Field('permissions', 'json'))
+
+# Custom PyDAL datastore
+user_datastore = CustomPyDALUserDatastore(db, db.auth_user, db.auth_role)
+security = Security(app, user_datastore)
+
+@app.route('/api/v1/headends', methods=['GET'])
+@auth_required()
+def list_headends():
+    """List all headend servers"""
+    return {'headends': get_all_headends()}
+
+@app.route('/healthz')
+def health():
+    return {'status': 'healthy'}, 200
 ```
 
-## PenguinTech License Server Integration
+### Headend Server - WireGuard Termination (Go)
+The Headend service handles WireGuard tunnel termination and traffic routing:
 
-All projects integrate with the centralized PenguinTech License Server at `https://license.penguintech.io` for feature gating and enterprise functionality.
+```go
+package main
 
-**IMPORTANT: License enforcement is ONLY enabled when project is marked as release-ready**
-- Development phase: All features available, no license checks
-- Release phase: License validation required, feature gating active
+import (
+    "context"
+    "log"
+    "net"
+    "github.com/vishvananda/netlink"
+)
 
-**License Key Format**: `PENG-XXXX-XXXX-XXXX-XXXX-ABCD`
+// Headend manages WireGuard interfaces
+type Headend struct {
+    ListenPort int
+    PrivateKey string
+    Peers      map[string]*Peer
+}
 
-**Core Endpoints**:
-- `POST /api/v2/validate` - Validate license
-- `POST /api/v2/features` - Check feature entitlements
-- `POST /api/v2/keepalive` - Report usage statistics
+// Peer represents a connected client
+type Peer struct {
+    PublicKey   string
+    AllowedIPs  []net.IPNet
+    LastHandshake time.Time
+}
 
-**Environment Variables**:
-```bash
-LICENSE_KEY=PENG-XXXX-XXXX-XXXX-XXXX-ABCD
-LICENSE_SERVER_URL=https://license.penguintech.io
-PRODUCT_NAME=tobogganing
-RELEASE_MODE=false  # Development (default)
-RELEASE_MODE=true   # Production (explicitly set)
+// StartServer creates and manages WireGuard interface
+func (h *Headend) StartServer(ctx context.Context) error {
+    // Create WireGuard interface
+    // Configure routing and iptables
+    // Accept and route traffic
+
+    log.Printf("Headend listening on port %d", h.ListenPort)
+
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    }
+    return nil
+}
+
+// AuthenticatePeer verifies client certificate
+func (h *Headend) AuthenticatePeer(cert []byte) error {
+    // Validate certificate via Manager API
+    // Add peer to WireGuard interface
+    return nil
+}
 ```
 
-**Tobogganing Licensing Tiers**:
-- **Community Open Source**: Full VPN features with unlimited clients/headends, no license required
-- **Professional Tier**: Adds metrics collection and monitoring capabilities
-- **Enterprise Tier**: Adds SSO/SAML2, LDAP, MFA, and advanced security features
+### WebUI Dashboard - React + TypeScript
+The WebUI provides management and monitoring for Tobogganing platform:
 
-## WaddleAI Integration (Optional)
+```typescript
+// API client for Manager backend
+import axios from 'axios';
 
-For projects requiring AI capabilities, integrate with WaddleAI located at `~/code/WaddleAI`.
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-**When to Use WaddleAI:**
-- Natural language processing (NLP)
-- Machine learning model inference
-- AI-powered features and automation
-- Intelligent data analysis
-- Chatbots and conversational interfaces
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true,
+});
 
-**Integration Pattern:**
-- WaddleAI runs as separate microservice container
-- Communicate via REST API or gRPC
-- Environment variable configuration for API endpoints
-- License-gate AI features as enterprise functionality
+// Add JWT token to requests
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('jwt_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Headend status monitoring component
+import React, { useEffect, useState } from 'react';
+
+interface Headend {
+  id: string;
+  name: string;
+  status: 'online' | 'offline';
+  connectedClients: number;
+  throughput: number;
+}
+
+export const HeadendMonitor: React.FC = () => {
+  const [headends, setHeadends] = useState<Headend[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHeadends = async () => {
+      try {
+        const response = await apiClient.get('/api/v1/headends');
+        setHeadends(response.data.headends);
+      } catch (error) {
+        console.error('Failed to fetch headends:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHeadends();
+  }, []);
+
+  return (
+    <div>
+      <h2>Headend Servers</h2>
+      {loading ? <p>Loading...</p> : <HeadendList headends={headends} />}
+    </div>
+  );
+};
+```
+
+### License-Gated Features (Python)
+```python
+from shared.licensing import license_client, requires_feature
+from flask_security import auth_required
+
+@app.route('/api/v1/advanced/analytics')
+@auth_required()
+@requires_feature("advanced_analytics")
+def generate_advanced_report():
+    """Requires authentication AND professional+ license"""
+    return {'report': analytics.generate_report()}
+```
+
+### Monitoring Integration
+```python
+from prometheus_client import Counter, Histogram, generate_latest
+
+REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint'])
+REQUEST_DURATION = Histogram('http_request_duration_seconds', 'HTTP request duration')
+
+@app.route('/metrics')
+def metrics():
+    return generate_latest(), {'Content-Type': 'text/plain'}
+```
+
+## Website Integration Requirements
+
+**Each project MUST have two dedicated websites**:
+- Marketing/Sales website (Node.js based)
+- Documentation website (Markdown based)
+
+**Website Design Preferences**:
+- Multi-page design preferred
+- Modern aesthetic with clean appearance
+- Subtle, sophisticated color schemes
+- Gradient usage encouraged
+- Responsive design
+- Performance focused
+
+**Repository Integration**:
+- Add `github.com/penguintechinc/website` as sparse checkout submodule
+- Only include project-specific folders
+- Folder naming: `{app_name}/` and `{app_name}-docs/`
 
 ## Troubleshooting & Support
 
@@ -1079,8 +750,211 @@ make license-validate         # Validate current license
 ```
 
 ### Support Resources
-- **Technical Documentation**: docs/STANDARDS.md
+- **Technical Documentation**: [Development Standards](docs/STANDARDS.md)
+- **License Integration**: [License Server Guide](docs/licensing/license-server-integration.md)
 - **Integration Support**: support@penguintech.io
+- **Sales Inquiries**: sales@penguintech.io
 - **License Server Status**: https://status.penguintech.io
 
+## CI/CD & Workflows
 
+### Documentation
+- **Complete workflow documentation**: See [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)
+- **CI/CD standards and requirements**: See [`docs/STANDARDS.md`](docs/STANDARDS.md)
+
+### Build Naming Conventions
+
+All container images follow automatic naming based on branch and version changes:
+
+| Scenario | Main Branch | Other Branches |
+|----------|------------|-----------------|
+| Regular build (no `.version` change) | `beta-<epoch64>` | `alpha-<epoch64>` |
+| Version release (`.version` changed) | `vX.X.X-beta` | `vX.X.X-alpha` |
+| Tagged release | `vX.X.X` + `latest` | N/A |
+
+**Example**: Updating `.version` to `1.2.0` on main branch triggers builds tagged `v1.2.0-beta` (and auto-creates a GitHub pre-release).
+
+### Version Management
+
+- **Location**: `.version` file in repository root
+- **Format**: Semantic versioning (e.g., `1.2.3`)
+- **File tracking**: All workflows monitor `.version` for changes
+- **Update command**: Edit `.version` file and commit
+  ```bash
+  echo "1.2.3" > .version
+  git add .version
+  git commit -m "Release v1.2.3"
+  ```
+
+### Pre-Commit Checklist
+
+Before committing, run in this order:
+
+- [ ] **Linters**: `npm run lint` or `golangci-lint run` or equivalent
+- [ ] **Security scans**: `npm audit`, `gosec`, `bandit` (per language)
+- [ ] **Tests**: `npm test`, `go test ./...`, `pytest` (unit tests only)
+- [ ] **Version updates**: Update `.version` if releasing new version
+- [ ] **Documentation**: Update docs if adding/changing workflows
+- [ ] **No secrets**: Verify no credentials, API keys, or tokens in code
+- [ ] **Docker builds**: Verify Dockerfile uses debian-slim base (no alpine)
+
+**Only commit when asked** — follow the pre-commit checklist above, then wait for approval before `git commit`.
+
+### Full Documentation
+
+For complete workflow behavior, troubleshooting, and project-specific details, see [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md).
+
+## Template Customization
+
+### Multi-Component Architecture Customization
+
+Tobogganing's four-component architecture (Manager, Headend, Clients, K8s CNI) provides flexibility for enterprise customization while maintaining security and performance.
+
+#### Manager Service Customization
+**When to customize**:
+- Adding custom authentication providers (SAML, OAuth2, LDAP)
+- Implementing policy engines or rule systems
+- Integrating with external compliance systems
+
+**Customization patterns**:
+```python
+# Custom authentication provider
+from flask_security import UserDatastore
+
+class CustomUserDatastore(UserDatastore):
+    def find_user(self, **kwargs):
+        # Custom lookup logic
+        pass
+
+# Custom API endpoints for policies
+@app.route('/api/v1/policies', methods=['POST'])
+@auth_required()
+@requires_role('admin')
+def create_policy():
+    # Policy creation with validation
+    return {'policy_id': policy.id}
+```
+
+**Database schema extensions**:
+- Add custom policy tables in migrations
+- Track audit logs for compliance
+- Support multi-tenancy via policy namespacing
+
+#### Headend Server Customization
+**When to customize**:
+- Implementing custom traffic routing rules
+- Adding performance monitoring (packet captures, metrics)
+- Supporting additional VPN protocols beyond WireGuard
+- Custom authentication with external services
+
+**Customization patterns**:
+```go
+// Custom routing logic
+type CustomRouter struct {
+    basePath string
+    policies map[string]*Policy
+}
+
+func (cr *CustomRouter) Route(packet *Packet) (*Destination, error) {
+    // Custom routing based on policies
+    return cr.applyPolicies(packet)
+}
+
+// Custom metrics for Prometheus
+type HeadendMetrics struct {
+    packetsProcessed prometheus.Counter
+    routingLatency   prometheus.Histogram
+}
+```
+
+#### Native Clients Customization
+**When to customize**:
+- Adding platform-specific integrations (macOS Keychain, Windows Credential Manager)
+- Custom UI for branded clients
+- Integration with system DNS resolvers
+- Custom logging for audit trails
+
+**Customization patterns**:
+```go
+// Platform-specific credential storage
+type CredentialStore interface {
+    Store(key, value string) error
+    Retrieve(key string) (string, error)
+}
+
+// macOS implementation uses Keychain
+type MacOSCredentialStore struct{}
+
+// Windows implementation uses Credential Manager
+type WindowsCredentialStore struct{}
+```
+
+#### Kubernetes CNI Plugin Customization
+**When to customize**:
+- Integrating with pod security policies
+- Custom IPAM (IP Address Management) schemes
+- Advanced network policies
+- Multi-cluster networking
+
+**Customization patterns**:
+```go
+// Custom IPAM provider
+type CustomIPAM struct {
+    pools map[string]*IPPool
+}
+
+func (ipam *CustomIPAM) AllocateIP(namespace, pod string) (net.IP, error) {
+    // Custom IP allocation based on namespace/policy
+    return ipam.findAvailableIP(namespace)
+}
+
+// Network policy enforcement
+func (cni *Plugin) ApplyNetworkPolicy(namespace string, policy *Policy) error {
+    // Translate policy to iptables/ebpf rules
+    return cni.enforcer.Apply(policy)
+}
+```
+
+### Adding Enterprise Features
+1. **Custom Authentication**: Extend Manager with SAML, OAuth2, or LDAP
+2. **Policy Engine**: Build custom policy evaluation system
+3. **Audit Logging**: Track all administrative actions
+4. **Multi-Tenancy**: Isolate organizations via policy namespacing
+5. **Advanced Analytics**: Monitor traffic patterns and client behavior
+6. **DLP Integration**: Block sensitive data exfiltration at headend
+7. **Geographic Enforcement**: Route through regional headends based on policy
+
+### Adding New Services
+- Create Go service for performance-critical components (traffic inspection, advanced routing)
+- Create Python service for business logic (policy evaluation, reporting)
+- Create TypeScript service for management UI
+- Configure inter-service authentication via mTLS
+- Add service discovery configuration for dynamic scaling
+
+---
+
+**Project Version**: See `.version` file
+**Last Updated**: 2025-12-18
+**Maintained by**: Penguin Tech Inc
+**Based on**: Project Template v1.5.0
+
+## Development Standards Reference
+
+For comprehensive development standards, code quality requirements, and CI/CD compliance specific to Tobogganing, refer to: **[Development Standards](docs/STANDARDS.md)**
+
+Key Standards Coverage:
+- Component-specific requirements (Manager, Headend, Clients, CNI)
+- Python, Go, and TypeScript coding standards
+- Security and testing requirements
+- CI/CD compliance and workflows
+- Kubernetes and infrastructure standards
+- Monitoring, logging, and observability
+
+## Quick Links
+
+- **Repository**: [Tobogganing on GitHub](https://github.com/penguintechinc/tobogganing)
+- **Documentation**: [Full Project Docs](docs/)
+- **Issue Tracker**: GitHub Issues
+- **License**: Limited AGPL3 with fair use preamble
+
+*Tobogganing is an enterprise-grade SASE platform providing secure network access through WireGuard VPN infrastructure with zero-trust architecture.*

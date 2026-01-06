@@ -1,58 +1,85 @@
-# Tobogganing Project Development & CI/CD Standards
+# Development Standards
 
 Development standards, code quality requirements, and CI/CD compliance for Tobogganing's multi-component SASE platform.
 
 ## Table of Contents
 
-1. [Version Management](#version-management)
+1. [Language Selection Criteria](#language-selection-criteria)
 2. [Code Quality Standards](#code-quality-standards)
 3. [Component-Specific Standards](#component-specific-standards)
 4. [Security Standards](#security-standards)
-5. [Testing Standards](#testing-standards)
-6. [CI/CD Compliance](#cicd-compliance)
-7. [Kubernetes & Infrastructure](#kubernetes--infrastructure)
+5. [Testing Requirements](#testing-requirements)
+6. [Protocol Support](#protocol-support)
+7. [API Versioning](#api-versioning)
+8. [Performance Best Practices](#performance-best-practices)
+9. [Microservices Architecture](#microservices-architecture)
+10. [Docker Standards](#docker-standards)
+11. [CI/CD Standards](#cicd-standards)
+12. [Kubernetes & Infrastructure](#kubernetes--infrastructure)
 
-## Version Management
+---
 
-### Version File Format
+## Language Selection Criteria
 
-Tobogganing uses semantic versioning with Epoch64 timestamps: `vMajor.Minor.Patch.build`
+Tobogganing uses a multi-language approach based on component requirements:
 
-**Examples**:
-- `v1.2.0.1737803600` - Release with build metadata
-- `v1.0.0.1737727200` - Initial release
+### Python 3.12 (Manager Service)
+**Use Python for:**
+- Manager service with Flask + Flask-Security-Too
+- Authentication and RBAC management
+- REST API endpoints
+- Business logic and data processing
+- Database operations via PyDAL
 
-**Version Increment Rules**:
+**Advantages:**
+- Rapid development
+- Flask ecosystem for web services
+- PyDAL for database abstraction
+- Strong for API development
 
-| Type | Change | Example |
-|------|--------|---------|
-| Major | Breaking API changes, removed features | v1.x.x → v2.0.0 |
-| Minor | New features, non-breaking enhancements | v1.0.x → v1.1.0 |
-| Patch | Bug fixes, security updates | v1.0.0 → v1.0.1 |
-| Build | Epoch64 timestamp for build identification | v1.0.0.1737727200 |
+### Go 1.23+ (Network Services)
+**Use Go for:**
+- Headend server (WireGuard termination)
+- Native clients (GUI and headless)
+- Kubernetes CNI plugin
+- High-performance networking
+- Traffic routing and proxying
 
-### Synchronized Component Versioning
+**Advantages:**
+- Native compiled binaries
+- Goroutines for concurrency
+- Low memory footprint
+- Cross-platform support
 
-All 8+ components share the same version:
-- Manager, Headend, Docker Client, Native Clients
-- K8s CNI Plugin, Frontend, Docs, Deployment configs
+### TypeScript/React (Web UI)
+**Use for:**
+- Web UI dashboard
+- Admin management interface
+- Real-time monitoring
+- Browser-based client interactions
 
-**Version File Location**: `.version` at project root
+**Advantages:**
+- Rich UI components
+- React ecosystem
+- Type safety with TypeScript
+- Modern frontend development
+
+---
 
 ## Code Quality Standards
 
 ### Universal Requirements
 
 All code MUST:
-- ✅ Pass linting without exceptions
-- ✅ Include comprehensive error handling
-- ✅ Have appropriate logging
-- ✅ Follow security-first design
-- ✅ Have tests covering critical paths
-- ✅ Avoid hardcoded credentials
-- ✅ Use typed variables (strong typing)
+- Pass linting without exceptions
+- Include comprehensive error handling
+- Have appropriate logging
+- Follow security-first design
+- Have tests covering critical paths
+- Avoid hardcoded credentials
+- Use typed variables (strong typing)
 
-### Python Standards (Manager, Docs)
+### Python Standards (Manager)
 
 **Version**: Python 3.12
 
@@ -63,27 +90,41 @@ All code MUST:
 - mypy (type checking)
 - bandit (security)
 - pytest (testing)
+- Flask-Security-Too (authentication)
+- PyDAL (database abstraction)
 
 **Code Example**:
 
 ```python
 """Manager service API endpoints."""
 
-from typing import Optional, Dict, List
-from dataclasses import dataclass
+from typing import Optional, List
+from dataclasses import dataclass, field
 import logging
+from pydal import DAL, Field
 
 logger = logging.getLogger(__name__)
 
-@dataclass
+@dataclass(slots=True)
 class User:
     """System user with role-based access."""
     id: str
     email: str
     roles: List[str]
+    created_at: str
+    metadata: dict = field(default_factory=dict)
 
-async def create_user(email: str, roles: List[str]) -> User:
-    """Create new system user.
+def validate_email(email: str) -> None:
+    """Validate email format.
+
+    Raises:
+        ValueError: If email format invalid
+    """
+    if not email or '@' not in email:
+        raise ValueError("Invalid email format")
+
+def create_user(email: str, roles: List[str]) -> User:
+    """Create new system user with validated input.
 
     Args:
         email: User email address
@@ -95,10 +136,9 @@ async def create_user(email: str, roles: List[str]) -> User:
     Raises:
         ValueError: If email format invalid
     """
-    if not email or '@' not in email:
-        raise ValueError("Invalid email format")
+    validate_email(email)
 
-    user = User(id=generate_id(), email=email, roles=roles)
+    user = User(id=generate_id(), email=email, roles=roles, created_at=now())
     logger.info(f"Created user: {user.id}")
     return user
 ```
@@ -107,11 +147,12 @@ async def create_user(email: str, roles: List[str]) -> User:
 - PEP 8 code style
 - PEP 257 docstrings
 - PEP 484 type hints (mandatory)
+- Dataclasses with slots for memory efficiency
 - 80%+ test coverage
-- Async/await patterns for I/O
-- PyDAL for database abstraction
+- Async/await for I/O operations
+- PyDAL for all database operations
 
-### Go Standards (Headend, Clients, K8s CNI)
+### Go Standards (Headend, Clients, CNI)
 
 **Version**: Go 1.23+
 
@@ -120,7 +161,7 @@ async def create_user(email: str, roles: List[str]) -> User:
 - gosec
 - go fmt
 - go vet
-- go test
+- go test with race detector
 
 **Code Example**:
 
@@ -144,18 +185,28 @@ type Endpoint struct {
 type Client interface {
     Connect(ctx context.Context, endpoint Endpoint) error
     Disconnect(ctx context.Context) error
-    Status(ctx context.Context) (ConnectionStatus, error)
+    Status(ctx context.Context) (string, error)
 }
 
-// Connect establishes WireGuard tunnel
+// Connect establishes WireGuard tunnel with validation
 func (c *Client) Connect(ctx context.Context, ep Endpoint) error {
     if ep.IP == "" || ep.Port == 0 {
-        return errors.New("invalid endpoint")
+        return errors.New("invalid endpoint: IP and Port required")
+    }
+
+    if ep.Port < 1 || ep.Port > 65535 {
+        return fmt.Errorf("invalid port: %d (must be 1-65535)", ep.Port)
     }
 
     log.Printf("Connecting to %s:%d", ep.IP, ep.Port)
-    // Implementation
-    return nil
+
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    default:
+        // Implementation
+        return nil
+    }
 }
 ```
 
@@ -164,8 +215,9 @@ func (c *Client) Connect(ctx context.Context, ep Endpoint) error {
 - Error handling mandatory
 - Interface-based design
 - 80%+ test coverage
-- Race detector: `go test -race`
+- Race detector: `go test -race ./...`
 - Cross-compilation support
+- Static binary builds
 
 **Build Tags for Conditional Compilation**:
 ```go
@@ -179,14 +231,14 @@ func (c *Client) Connect(ctx context.Context, ep Endpoint) error {
 // +build linux,amd64
 ```
 
-### JavaScript/Node.js Standards (Frontend, Website)
+### TypeScript/React Standards (WebUI)
 
 **Version**: Node.js 18+, TypeScript
 
 **Required Tools**:
 - ESLint
 - Prettier
-- TypeScript
+- TypeScript (strict mode)
 - Jest
 - npm audit
 
@@ -214,7 +266,9 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
     useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const response = await fetch('/api/v1/tunnels/status');
+                const response = await fetch('/api/v1/status');
+                if (!response.ok) throw new Error('Failed to fetch status');
+
                 const data = await response.json() as ConnectionStatus;
                 setStatus(data);
                 onStatusChange?.(data);
@@ -244,6 +298,8 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
 - Error boundaries for error handling
 - Accessibility (WCAG 2.1 AA)
 
+---
+
 ## Component-Specific Standards
 
 ### Manager Service (Python 3.12)
@@ -252,24 +308,30 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
 - User and organization management
 - Client orchestration
 - Certificate lifecycle
-- API endpoints
-- Authentication/authorization
+- API endpoints (`/api/v1/...`)
+- Authentication/authorization (JWT)
 - Audit logging
 - Metrics collection
 
 **Key Requirements**:
-- RESTful API design
+- RESTful API design with proper versioning
 - Role-based access control (RBAC)
-- Database migrations
+- Database migrations via PyDAL
 - Comprehensive logging
-- Prometheus metrics endpoint
-- Health check endpoints (/health, /healthz)
+- Prometheus metrics endpoint (`/metrics`)
+- Health check endpoints (`/health`, `/healthz`)
 
 **Database**:
-- PyDAL for database abstraction
+- PyDAL for database abstraction (mandatory)
 - PostgreSQL/MySQL support
-- Connection pooling
+- Connection pooling with thread-local instances
 - Transaction management
+
+**Security**:
+- Flask-Security-Too for authentication
+- JWT token validation
+- Password hashing with bcrypt
+- Input validation on all endpoints
 
 ### Headend Server (Go 1.23)
 
@@ -280,6 +342,7 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
 - Traffic mirroring for IDS
 - Health monitoring
 - Connection logging
+- Certificate validation
 
 **Key Requirements**:
 - High-performance networking
@@ -290,26 +353,32 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
 - Memory management optimization
 
 **Protocols**:
-- WireGuard for VPN
-- TCP/UDP proxying
-- VXLAN/GRE for mirroring
-- syslog for audit
+- WireGuard for VPN tunnels
+- TCP/UDP for traffic proxying
+- VXLAN/GRE for traffic mirroring
+- Syslog for audit logging
+- REST API for Manager integration
+
+**Performance Targets**:
+- Sub-millisecond latency
+- Support 10K+ concurrent connections
+- Handle 1Gbps+ throughput
 
 ### Native Clients (Go 1.23)
 
 **Dual Build Architecture**:
 
 **GUI Builds** (Desktop):
-- Fyne framework
+- Fyne framework for cross-platform UI
 - System tray integration
 - Configuration UI
 - Real-time status display
-- Requires: libayatana-appindicator, libgtk-3, webkit2gtk
+- Requirements: libayatana-appindicator, libgtk-3, webkit2gtk
 
 **Headless Builds** (Servers):
 - CLI interface
 - Daemon mode
-- Configuration via files/env
+- Configuration via files/environment
 - Minimal dependencies
 - Static compilation
 
@@ -317,6 +386,13 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
 - macOS: Universal binaries (Intel + Apple Silicon)
 - Linux: amd64, arm64
 - Windows: amd64, arm64
+
+**Features**:
+- WireGuard tunnel management
+- Certificate/key management
+- Automatic reconnection
+- Connection monitoring
+- Policy enforcement
 
 ### K8s CNI Plugin (Go 1.23)
 
@@ -339,6 +415,8 @@ export const TunnelStatus: React.FC<TunnelStatusProps> = ({ onStatusChange }) =>
 - Error handling
 - Logging support
 - Idempotency
+
+---
 
 ## Security Standards
 
@@ -399,6 +477,7 @@ func ValidateEndpoint(ip string, port int) error {
 - Peer verification
 - Key rotation
 - Endpoint validation
+- Certificate-based authentication
 
 ### Dependency Security
 
@@ -420,7 +499,9 @@ npm audit
 npm audit fix
 ```
 
-## Testing Standards
+---
+
+## Testing Requirements
 
 ### Unit Testing
 
@@ -483,43 +564,230 @@ Validation:
 - Health endpoints respond
 - Services start correctly
 
-## CI/CD Compliance
+---
 
-### Mandatory Checks
+## Protocol Support
 
-✅ **Must Pass**:
-- Linting (black, flake8, golangci-lint, ESLint)
-- Type checking (mypy, TypeScript)
-- Unit tests (pytest, go test, Jest)
-- Security scanning (bandit, gosec, Trivy)
-- Coverage thresholds (80%+)
-- Docker builds (all components)
+**ALL applications MUST support multiple communication protocols:**
 
-❌ **Prohibited**:
-- Committed build artifacts
-- Disabled security checks
-- Skipped failing tests
-- Hardcoded configuration
-- Passwords in code
+### Required Protocol Support
 
-### Pull Request Requirements
+1. **REST API**: RESTful HTTP endpoints
+   - JSON request/response format
+   - Proper HTTP status codes
+   - Resource-based URL design
 
-Before merge to main:
-1. ✅ All CI checks pass
-2. ✅ Code review approval (minimum 1)
-3. ✅ Security scan passes
-4. ✅ Test coverage ≥80%
-5. ✅ Documentation updated
-6. ✅ Version bumped (if applicable)
+2. **gRPC**: High-performance RPC protocol
+   - Protocol Buffers for serialization
+   - Bi-directional streaming
+   - Health checking
 
-### Release Workflow
+3. **HTTP/1.1**: Standard HTTP protocol
+   - Keep-alive connections
+   - Compression (gzip, deflate)
 
-1. Update `.version` file with Epoch64 timestamp
-2. Update `docs/RELEASE_NOTES.md`
-3. Create PR to main
-4. All CI checks must pass
-5. Merge to main (triggers release)
-6. Workflows publish all artifacts
+4. **HTTP/2**: Modern HTTP protocol
+   - Multiplexing
+   - Header compression
+
+5. **WireGuard**: VPN tunnel protocol
+   - UDP-based transport
+   - Peer-to-peer tunneling
+
+### Configuration via Environment Variables
+
+- `HTTP1_ENABLED`: Enable HTTP/1.1 (default: true)
+- `HTTP2_ENABLED`: Enable HTTP/2 (default: true)
+- `GRPC_ENABLED`: Enable gRPC (default: false)
+- `HTTP_PORT`: HTTP/REST API port (default: 8080)
+- `GRPC_PORT`: gRPC port (default: 50051)
+- `METRICS_PORT`: Prometheus metrics port (default: 9090)
+
+---
+
+## API Versioning
+
+**ALL REST APIs MUST use versioning in the URL path**
+
+### URL Structure
+
+**Required Format:** `/api/v{major}/endpoint`
+
+**Examples:**
+- `/api/v1/users` - User management
+- `/api/v1/headends` - Headend management
+- `/api/v1/auth/login` - Authentication
+
+**Key Rules**:
+1. Always include version prefix in URL path
+2. Semantic versioning: `v1`, `v2`, `v3`, etc.
+3. Major version only in URL
+4. Consistent prefix across all endpoints
+5. Version-specific sub-resources
+
+### Version Lifecycle
+
+**Version Strategy**:
+- **Current Version**: Active development
+- **Previous Version (N-1)**: Bug fixes and security patches
+- **Older Versions (N-2+)**: Deprecated
+
+**Deprecation Process**:
+1. Release new major version
+2. Support previous version for 12 months
+3. Add deprecation headers
+4. Include sunset date
+5. Provide migration guidance
+
+---
+
+## Performance Best Practices
+
+**ALWAYS prioritize performance through modern patterns**
+
+### Python Performance Requirements
+
+#### Concurrency Patterns
+
+1. **asyncio** - For I/O-bound operations
+2. **threading** - For blocking I/O with libraries
+3. **multiprocessing** - For CPU-bound operations
+
+#### Dataclasses with Slots - MANDATORY
+
+```python
+@dataclass(slots=True, frozen=True)
+class User:
+    """User model with slots for 30-50% memory reduction."""
+    id: int
+    name: str
+    email: str
+    created_at: str
+```
+
+#### Type Hints - MANDATORY
+
+```python
+async def process_users(
+    user_ids: List[int],
+    batch_size: int = 100,
+    callback: Optional[Callable[[User], None]] = None
+) -> Dict[int, User]:
+    """Process users with full type hints."""
+    results: Dict[int, User] = {}
+    for user_id in user_ids:
+        user = await fetch_user(user_id)
+        results[user_id] = user
+        if callback:
+            callback(user)
+    return results
+```
+
+### Go Performance Requirements
+
+- **Goroutines**: Leverage for concurrent operations
+- **Channels**: For safe data passing
+- **Sync primitives**: Use sync.Pool, sync.Map
+- **Context**: For cancellation and timeouts
+
+---
+
+## Microservices Architecture
+
+**ALWAYS use microservices architecture**
+
+### Components
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Manager** | Python 3.12 + Flask | Authentication, RBAC, API |
+| **Headend** | Go 1.23 | WireGuard termination, routing |
+| **Clients** | Go 1.23 | User-facing VPN clients |
+| **CNI Plugin** | Go 1.23 | Kubernetes pod networking |
+| **WebUI** | React + TypeScript | Management dashboard |
+
+### Design Principles
+
+- **Single Responsibility**: One clear purpose per service
+- **Independent Deployment**: Services update independently
+- **API-First Design**: Well-defined APIs
+- **Data Isolation**: Each service owns its data
+- **Fault Isolation**: Failures don't cascade
+- **Scalability**: Scale individual services per demand
+
+### Service Communication
+
+- **Synchronous**: REST API, gRPC
+- **Asynchronous**: Message queues
+- **Service Discovery**: Docker networking or mesh
+- **Circuit Breakers**: Fallback mechanisms
+
+---
+
+## Docker Standards
+
+### Build Standards
+
+**All builds MUST be executed within Docker containers**
+
+**Use multi-stage builds with debian-slim**:
+```dockerfile
+FROM golang:1.23-slim AS builder
+WORKDIR /build
+COPY . .
+RUN CGO_ENABLED=0 go build -o bin/app ./cmd
+
+FROM debian:bookworm-slim
+COPY --from=builder /build/bin/app /usr/local/bin/
+CMD ["app"]
+```
+
+### Docker Compose Standards
+
+**ALWAYS create docker-compose files for local development**
+
+**Prefer Docker networks over host ports**:
+- Minimize host port exposure
+- Use named networks for service-to-service communication
+- Only expose ports for developer access
+
+### Multi-Arch Build Strategy
+
+GitHub Actions should use multi-arch builds:
+```yaml
+- uses: docker/build-push-action@v5
+  with:
+    platforms: linux/amd64,linux/arm64
+```
+
+---
+
+## CI/CD Standards
+
+### Required Workflows
+
+- **Build workflows**: 1 per component
+- **Security scanning**: Mandatory for all code
+- **Testing**: Unit tests required
+- **Version release**: Auto-release on version bump
+
+### Pre-Commit Checklist
+
+- [ ] Linters pass
+- [ ] Security scans pass
+- [ ] Tests pass (80%+ coverage)
+- [ ] No hardcoded secrets
+- [ ] Documentation updated
+
+### Build Naming Conventions
+
+| Scenario | Tag Pattern |
+|----------|------------|
+| Regular build (no version change) | `{branch}-{epoch64}` |
+| Version release | `v{semver}-{branch}` |
+| Tagged release | `v{semver}`, `latest` |
+
+---
 
 ## Kubernetes & Infrastructure
 
@@ -534,13 +802,6 @@ Before merge to main:
 - ConfigMaps for configuration
 - Secrets for credentials
 
-**CNI Integration**:
-- Implements Kubernetes CNI spec 1.0.0
-- Per-pod WireGuard tunnels
-- Automatic IP allocation
-- Network namespace management
-- Route configuration
-
 ### Helm Chart Standards
 
 **Structure**:
@@ -548,7 +809,6 @@ Before merge to main:
 - templates/ for K8s manifests
 - values.yaml for configuration
 - charts/ for dependencies
-- Documentation in README
 
 ### Infrastructure as Code
 
@@ -558,6 +818,8 @@ Before merge to main:
 - Kustomize for overlays
 - Terraform for infrastructure
 
+---
+
 ## Monitoring & Observability
 
 ### Metrics
@@ -565,7 +827,6 @@ Before merge to main:
 **Prometheus Endpoints**:
 - `/metrics` - All services expose Prometheus metrics
 - Standard metric types: Counter, Gauge, Histogram
-- Custom application metrics
 
 **Key Metrics**:
 - Request latency
@@ -581,69 +842,40 @@ Before merge to main:
 - Log levels: DEBUG, INFO, WARNING, ERROR
 - Correlation IDs for request tracing
 - Syslog for audit logs
-- Cloud logging integration
 
 ### Health Checks
 
 **Endpoints**:
 - `/health` - Detailed health information
-- `/healthz` - Kubernetes-compatible (OK/fail)
-- Database connectivity
-- Service dependencies
-- Certificate validity
+- `/healthz` - Kubernetes-compatible
 
-## Documentation Standards
-
-### Code Comments
-
-**Python**:
-```python
-# Explain WHY, not WHAT
-total = sum(values)  # Use built-in sum() for O(n) efficiency
-```
-
-**Go**:
-```go
-// Connect establishes WireGuard tunnel to endpoint
-// Uses UDP for efficient packet transmission
-func (c *Client) Connect(ctx context.Context, ep Endpoint) error {
-```
-
-### API Documentation
-
-Required:
-- Endpoint descriptions
-- Request/response examples
-- Authentication requirements
-- Error codes and meanings
-- Rate limiting details
+---
 
 ## Compliance Checklist
 
 Before committing:
 - ✅ Code passes local linting
-- ✅ Tests pass locally (all affected components)
+- ✅ Tests pass locally
 - ✅ Coverage ≥80%
-- ✅ Security scan passes locally
+- ✅ Security scan passes
 - ✅ No hardcoded secrets
 - ✅ Error handling complete
 - ✅ Logging appropriate
 - ✅ Documentation updated
-- ✅ Related issues linked
-- ✅ Version updated (if applicable)
 
 Before creating PR:
 - ✅ Branch created from develop
-- ✅ All commits are clean and squashed
-- ✅ Commit messages clear and descriptive
-- ✅ All related tests included
+- ✅ Commits are clean
+- ✅ Commit messages clear
 
 Before merging PR:
-- ✅ All CI passes (Manager, Headend, Clients, K8s CNI, Frontend, Docs)
+- ✅ All CI passes
 - ✅ Approved by reviewer
 - ✅ Conflicts resolved
 - ✅ Documentation complete
 - ✅ Release notes updated
+
+---
 
 ## Tools Reference
 
@@ -663,6 +895,8 @@ Before merging PR:
 | Jest | JavaScript | Testing | `npm test` |
 | docker | All | Containerization | `docker build .` |
 
+---
+
 ## References
 
 - [Go Build Tags](https://golang.org/pkg/go/build/)
@@ -674,3 +908,4 @@ Before merging PR:
 - [PEP 8](https://www.python.org/dev/peps/pep-0008/)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/)
 - [Semantic Versioning](https://semver.org/)
+- [REST API Best Practices](https://restfulapi.net/)
