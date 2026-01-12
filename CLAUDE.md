@@ -1,47 +1,54 @@
-# Tobogganing - Claude Code Context
+# Project Template - Claude Code Context
+
+**⚠️ Important**: Application-specific context should be added to `docs/APP_STANDARDS.md` instead of this file. This allows the template CLAUDE.md to be updated across all projects without losing app-specific information. See `docs/APP_STANDARDS.md` for app-specific architecture, requirements, and context.
 
 ## Project Overview
 
-Tobogganing is a multi-component SASE (Secure Access Service Edge) platform with WireGuard VPN infrastructure. The project consists of 8+ components spanning Python, Go, and Node.js/TypeScript, designed for enterprise-scale secure network access and zero-trust architecture.
+This is a comprehensive project template incorporating best practices and patterns from Penguin Tech Inc projects. It provides a standardized foundation for multi-language projects with enterprise-grade infrastructure and integrated licensing.
 
-**Project Features:**
-- Multi-platform support (macOS, Linux, Windows)
-- WireGuard VPN infrastructure with headend server
-- Native clients (GUI and headless)
-- Kubernetes CNI plugin for pod networking
-- Manager service with authentication and RBAC
-- High-performance networking with Go
-- Web UI dashboard for management
-- Enterprise security and compliance
+**Template Features:**
+- Multi-language support (Go 1.24.x, Python 3.12/3.13, Node.js 18+)
+- Enterprise security and licensing integration
+- Comprehensive CI/CD pipeline
+- Production-ready containerization
+- Monitoring and observability
+- Version management system
+- PenguinTech License Server integration
 
 ## Technology Stack
 
-### Core Technologies
+### Languages & Frameworks
 
-**Python 3.12**:
-- Manager service (authentication, RBAC, API)
-- Documentation generation
-- PyDAL for database abstraction (mandatory)
-- Flask + Flask-Security-Too for web services
+**Language Selection Criteria (Case-by-Case Basis):**
+- **Python 3.13**: Default choice for most applications
+  - Web applications and APIs
+  - Business logic and data processing
+  - Integration services and connectors
+- **Go 1.24.x**: ONLY for high-traffic/performance-critical applications
+  - Applications handling >10K requests/second
+  - Network-intensive services
+  - Low-latency requirements (<10ms)
+  - CPU-bound operations requiring maximum throughput
 
-**Go 1.23+**:
-- Headend server (WireGuard termination, traffic routing)
-- Native clients (GUI and headless modes)
-- Kubernetes CNI plugin (pod networking)
-- XDP/AF_XDP for performance-critical paths (when needed)
+**Python Stack:**
+- **Python**: 3.13 for all applications (3.12+ minimum)
+- **Web Framework**:
+  - **Flask + Flask-Security-Too**: Standard choice for typical applications (mandatory)
+  - **Quart**: Async-first framework for high-performance/high-concurrency applications (>100 concurrent requests, <10ms latency requirements). Drop-in Flask replacement with native async/await support.
+- **Database Libraries** (mandatory for all Python applications):
+  - **SQLAlchemy**: Database initialization and schema creation only
+  - **PyDAL**: Runtime database operations and migrations
+- **Performance**: Dataclasses with slots, type hints, async/await required
 
-**Node.js 18+ / TypeScript**:
-- Web UI dashboard (React)
-- Admin management interface
-- Real-time status monitoring
-- API client integration
+**Frontend Stack:**
+- **React**: ReactJS for all frontend applications
+- **Node.js**: 18+ for build tooling and React development
+- **JavaScript/TypeScript**: Modern ES2022+ standards
 
-**Infrastructure**:
-- **Containerization**: Docker with multi-stage builds
-- **Orchestration**: Kubernetes with Helm charts
-- **Networking**: WireGuard for VPN tunnels
-- **Database**: PostgreSQL (primary), MySQL/SQLite supported
-- **CI/CD**: GitHub Actions with multi-arch builds
+**Go Stack (When Required):**
+- **Go**: 1.24.x (latest patch version, minimum 1.24.2)
+- **Database**: Use DAL with PostgreSQL/MySQL cross-support (e.g., GORM, sqlx)
+- Use only for traffic-intensive applications
 
 ### Infrastructure & DevOps
 - **Containers**: Docker with multi-stage builds, Docker Compose
@@ -54,39 +61,38 @@ Tobogganing is a multi-component SASE (Secure Access Service Edge) platform with
 ### Databases & Storage
 - **Primary**: PostgreSQL (default, configurable via `DB_TYPE` environment variable)
 - **Cache**: Redis/Valkey with optional TLS and authentication
-- **Database Abstraction Layers (DALs)**:
-  - **Python**: PyDAL (mandatory for ALL Python applications)
-    - SQLAlchemy for schema initialization
-    - PyDAL for migrations and day-to-day operations
-    - Thread-safe connection pooling
-    - Multi-database support (postgres, mysql, sqlite)
-  - **Go**: GORM or sqlx (mandatory for network services)
-    - Cross-database compatibility required
-    - Connection pooling and retry logic
-- **Migrations**: Automated schema management via PyDAL
-- **Connection Management**: Thread-local connections for Python
+- **Supported Databases** (ALL must be supported by default):
+  - **PostgreSQL**: Primary/default database for production
+  - **MySQL**: Full support for MySQL 8.0+
+  - **MariaDB Galera**: Cluster support with WSREP, auto-increment, transaction handling
+  - **SQLite**: Development and lightweight deployments
+- **Database Libraries (Python)**:
+  - **SQLAlchemy**: Used ONLY for database initialization and schema creation
+  - **PyDAL**: Used for ALL runtime database operations and migrations
+  - `DB_TYPE` must match PyDAL connection string prefixes exactly
+- **Database Libraries (Go)**: GORM or sqlx (mandatory for cross-database support)
+  - Must support PostgreSQL, MySQL/MariaDB, and SQLite
+  - Stable, well-maintained library required
+- **Migrations**: PyDAL handles all migrations via `migrate=True`
+- **MariaDB Galera Support**: Handle Galera-specific requirements (WSREP, auto-increment, transactions)
 
-**Supported DB_TYPE Values**:
-- `postgres` - PostgreSQL (recommended)
-- `mysql` - MySQL/MariaDB with Galera support
-- `sqlite` - SQLite (development/testing)
+📚 **Supported DB_TYPE Values**: See [Development Standards - Database Standards](docs/STANDARDS.md#database-standards) for complete list and configuration details.
 
 ### Security & Authentication
-- **Manager Service**: Flask-Security-Too (mandatory)
-  - Role-based access control (RBAC)
-  - JWT token authentication
+- **Flask-Security-Too**: Mandatory for all Flask applications
+  - Role-based access control (RBAC) with OAuth2-style scopes
+  - User authentication and session management
   - Password hashing with bcrypt
-  - Multi-factor authentication (2FA)
-  - Session management and timeout
-- **WireGuard**: Certificate-based and pre-shared key authentication
-- **mTLS**: Mutual TLS for service-to-service communication
-- **TLS Enforcement**: TLS 1.2 minimum, prefer TLS 1.3
-- **Network Security**:
-  - Zero-trust architecture
-  - Per-pod WireGuard tunnels
-  - Encrypted inter-service communication
+  - Email confirmation and password reset
+  - Two-factor authentication (2FA)
+- **Permissions Model**: Global, container/team, and resource-level roles with custom scope-based permissions
+- **TLS**: Enforce TLS 1.2 minimum, prefer TLS 1.3
+- **HTTP3/QUIC**: Utilize UDP with TLS for high-performance connections where possible
+- **Authentication**: JWT and MFA (standard), mTLS where applicable
+- **SSO**: SAML/OAuth2 SSO as enterprise-only features
+- **Secrets**: Environment variable management
 - **Scanning**: Trivy vulnerability scanning, CodeQL analysis
-- **Code Quality**: All code must pass security analysis
+- **Code Quality**: All code must pass CodeQL security analysis
 
 ## PenguinTech License Server Integration
 
@@ -139,110 +145,43 @@ For projects requiring AI capabilities, integrate with WaddleAI located at `~/co
 ## Project Structure
 
 ```
-tobogganing/
+project-name/
 ├── .github/             # CI/CD pipelines and templates
-│   └── workflows/       # GitHub Actions for builds and releases
-├── manager/             # Manager service (Python 3.12)
-│   ├── api/            # Flask + Flask-Security-Too API
-│   ├── models/         # PyDAL database models
-│   ├── migrations/     # Database migrations
-│   └── tests/          # Manager unit tests
-├── headend/            # Headend server (Go 1.23)
-│   ├── main.go         # WireGuard termination
-│   ├── routing/        # Traffic routing logic
-│   ├── auth/           # Certificate authentication
-│   └── tests/          # Headend unit tests
-├── clients/            # Native clients (Go 1.23)
-│   ├── gui/            # GUI client (Fyne framework)
-│   ├── cli/            # Headless CLI client
-│   ├── common/         # Shared client code
-│   └── tests/          # Client unit tests
-├── k8s-cni/            # Kubernetes CNI plugin (Go 1.23)
-│   ├── plugin/         # CNI plugin implementation
-│   ├── config/         # Network configuration
-│   └── tests/          # CNI plugin tests
-├── webui/              # Web UI dashboard (React/TypeScript)
-│   ├── src/            # React components and pages
-│   ├── public/         # Static assets
-│   └── tests/          # Frontend tests
-├── deploy/             # Deployment configurations
-│   ├── docker-compose/ # Docker Compose files
-│   ├── k8s/            # Kubernetes manifests
-│   └── helm/           # Helm charts
-├── docs/               # Documentation
-├── scripts/            # Build and utility scripts
-├── .version            # Version tracking
-└── CLAUDE.md           # This file
+│   └── workflows/       # GitHub Actions for each container
+├── services/            # Microservices (separate containers by default)
+│   ├── flask-backend/   # Flask + PyDAL backend (auth, users, standard APIs)
+│   ├── go-backend/      # Go high-performance backend (XDP/AF_XDP, NUMA)
+│   ├── webui/           # Node.js + React frontend shell
+│   └── connector/       # Integration services (placeholder)
+├── shared/              # Shared components
+├── infrastructure/      # Infrastructure as code
+├── scripts/             # Utility scripts
+├── tests/               # Test suites (unit, integration, e2e, performance, smoke)
+│   ├── smoke/           # Smoke tests (build, run, API, page loads)
+│   ├── api/             # API tests
+│   ├── unit/            # Unit tests
+│   ├── integration/     # Integration tests
+│   └── e2e/             # End-to-end tests
+├── docs/                # Documentation
+├── config/              # Configuration files
+├── docker-compose.yml   # Production environment
+├── docker-compose.dev.yml # Local development
+├── Makefile             # Build automation
+├── .version             # Version tracking
+└── CLAUDE.md            # This file
 ```
 
-### Multi-Component Architecture
+### Three-Container Architecture
 
-Tobogganing uses a multi-component architecture with specialized services:
+| Container | Purpose | When to Use |
+|-----------|---------|-------------|
+| **flask-backend** | Standard APIs, auth, CRUD | <10K req/sec, business logic |
+| **go-backend** | High-performance networking | >10K req/sec, <10ms latency |
+| **webui** | Node.js + React frontend | All frontend applications |
 
-| Component | Technology | Purpose | Deployment |
-|-----------|-----------|---------|-----------|
-| **Manager** | Python 3.12 + Flask | User management, authentication, RBAC, API | Container or VM |
-| **Headend** | Go 1.23 | WireGuard termination, traffic routing | Container or VM |
-| **Native Clients** | Go 1.23 | User-facing WireGuard clients | Desktop, server, mobile |
-| **K8s CNI Plugin** | Go 1.23 | Pod networking with WireGuard | Kubernetes node |
-| **WebUI** | React + TypeScript | Management dashboard | Container |
+**Default Roles**: Admin (full access), Maintainer (read/write, no user mgmt), Viewer (read-only)
 
-#### Deployment Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                      Internet / Corporate Network                        │
-└──────────────────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────┴──────────┐
-                    │  Load Balancer     │
-                    │  (Optional: NGINX) │
-                    └─────────┬──────────┘
-                              │
-        ┌─────────────────────┼──────────────────────┐
-        │                     │                      │
-    ┌───┴────┐          ┌─────┴──────┐      ┌───────┴────┐
-    │ WebUI  │          │  Manager   │      │  Headend   │
-    │ (Port  │          │  (Port     │      │  (Port     │
-    │ 3000)  │          │  5000)     │      │  51820)    │
-    │        │          │            │      │            │
-    │React   │          │Flask +     │      │WireGuard   │
-    │UI      │          │Security    │      │Server      │
-    └───┬────┘          └─────┬──────┘      └───────┬────┘
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
-                              │
-                    ┌─────────┴──────────┐
-                    │   PostgreSQL       │
-                    │   (Port 5432)      │
-                    │                    │
-                    │  - Users & Auth    │
-                    │  - Policies        │
-                    │  - Logs            │
-                    └────────────────────┘
-
-Kubernetes Integration (Optional):
-├── Manager Pod → Database
-├── Headend Pod → WireGuard service
-├── CNI Plugin → Per-pod tunnels
-└── WebUI Pod → React dashboard
-```
-
-#### Component Communication Patterns
-
-- **Manager to Headend**: REST API (HTTPS)
-- **Clients to Headend**: WireGuard protocol
-- **WebUI to Manager**: REST API + WebSockets
-- **Pod to Headend**: WireGuard (via CNI plugin)
-- **Inter-service**: mTLS for security
-
-### Default Roles (WebUI)
-
-| Role | Permissions |
-|------|-------------|
-| **Admin** | Full access: user CRUD, settings, all features |
-| **Maintainer** | Read/write access to resources, no user management |
-| **Viewer** | Read-only access to resources |
+📚 **Architecture diagram and details**: [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
 
 ## Version Management System
 
@@ -262,13 +201,48 @@ Kubernetes Integration (Optional):
 
 ## Development Workflow
 
-### Local Development Setup
+### Quick Start
+
 ```bash
 git clone <repository-url>
 cd project-name
 make setup                    # Install dependencies
 make dev                      # Start development environment
+make seed-mock-data          # Populate with 3-4 test items per feature
 ```
+
+### Essential Documentation (Complete for Your Project)
+
+Before starting development on this template, projects MUST complete and maintain these three critical documentation files:
+
+**📚 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - LOCAL DEVELOPMENT SETUP GUIDE
+- Prerequisites and installation for your tech stack
+- Environment configuration specifics
+- Starting your services locally
+- Development workflow with mock data injection
+- Common developer tasks and troubleshooting
+- Tips for your specific architecture
+
+**📚 [docs/TESTING.md](docs/TESTING.md)** - TESTING & VALIDATION GUIDE
+- Mock data scripts (3-4 items per feature pattern)
+- Smoke tests (mandatory verification)
+- Unit, integration, and E2E testing
+- Performance testing procedures
+- Cross-architecture testing with QEMU
+- Pre-commit test execution order
+
+**📚 [docs/PRE_COMMIT.md](docs/PRE_COMMIT.md)** - PRE-COMMIT CHECKLIST
+- Required steps before every git commit
+- Smoke tests (mandatory, <2 min)
+- Mock data seeding for feature testing
+- Screenshot capture with realistic data
+- Security scanning requirements
+- Build and test verification steps
+
+**🔄 Workflow**: DEVELOPMENT.md → TESTING.md → PRE_COMMIT.md (integrated flow)
+- Developers follow DEVELOPMENT.md to set up locally
+- Reference TESTING.md for testing patterns and mock data
+- Run PRE_COMMIT.md checklist before commits (includes smoke tests + screenshots)
 
 ### Essential Commands
 ```bash
@@ -289,6 +263,7 @@ make deploy-prod              # Deploy to production
 make test-unit               # Run unit tests
 make test-integration        # Run integration tests
 make test-e2e                # Run end-to-end tests
+make smoke-test              # Run smoke tests (build, run, API, page loads)
 
 # License Management
 make license-validate        # Validate license
@@ -325,6 +300,7 @@ make license-check-features  # Check available features
 - ✅ All error cases handled properly
 - ✅ Unit tests cover all code paths
 - ✅ Integration tests verify component interactions
+- ✅ Smoke tests verify build, run, API health, and page loads
 - ✅ Security requirements fully implemented
 - ✅ Performance meets acceptable standards
 - ✅ Documentation complete and accurate
@@ -339,6 +315,7 @@ make license-check-features  # Check available features
 - **NEVER commit automatically** unless explicitly requested by the user
 - **NEVER push to remote repositories** under any circumstances
 - **ONLY commit when explicitly asked** - never assume commit permission
+- **Prefer `gh` CLI over direct GitHub access** - use GitHub CLI (`gh`) for all GitHub operations (PRs, issues, releases, repo info) instead of web scraping or direct API calls
 - Always use feature branches for development
 - Require pull request reviews for main branch
 - Automated testing must pass before merge
@@ -363,10 +340,32 @@ make license-check-features  # Check available features
 - **Command pattern**: `cd services/<service-name> && npm run test:api` or equivalent
 
 **Before Every Commit - Screenshots**:
-- **Run screenshot tool to update UI screenshots in documentation**
-  - Run `cd services/webui && npm run screenshots` to capture current UI state
-  - This automatically removes old screenshots and captures fresh ones
-  - Commit updated screenshots with relevant feature/documentation changes
+- **Requirement**: Update UI screenshots with current application state when features change
+- **Prerequisites**: Start development environment with mock data populated
+  ```bash
+  make dev                    # Start all services
+  make seed-mock-data         # Populate with 3-4 test items per feature
+  ```
+- **Capture screenshots**: Run from project root (auto-removes old, captures fresh)
+  ```bash
+  node scripts/capture-screenshots.cjs
+  # Or via npm script if configured
+  npm run screenshots
+  ```
+- **Purpose**: Screenshots should showcase features with realistic mock data (3-4 items)
+  - Demonstrates feature functionality and purpose
+  - Shows data in context (products list, orders, user profiles, etc.)
+  - Updated whenever UI changes or new features added
+- **Location**: Screenshots saved to `docs/screenshots/`
+- **Commit**: Include updated screenshots with relevant feature/UI changes
+
+**Before Every Commit - Smoke Tests**:
+- **Create and run smoke tests** to verify basic functionality (build, runtime, API health, UI loads)
+- **Mandatory requirements**: All must be created and passing before commit
+- **Run before commit**: `make smoke-test` or `./tests/smoke/run-all.sh`
+- **Continuous validation**: Smoke tests prevent regressions in core functionality
+
+📚 **Detailed smoke testing requirements**: [Testing Documentation](docs/TESTING.md#smoke-tests)
 
 ### Local State Management (Crash Recovery)
 - **ALWAYS maintain local .PLAN and .TODO files** for crash recovery
@@ -397,12 +396,6 @@ make license-check-features  # Check available features
 - **CodeQL**: All code must pass CodeQL security analysis
 - **PEP Compliance**: Python code must follow PEP 8, PEP 257 (docstrings), PEP 484 (type hints)
 
-### Pre-Commit Hooks
-- **ESLint**: Configured and enforced in pre-commit hooks for all JavaScript/TypeScript files
-- **Python linters**: Integrated into pre-commit hooks
-- **Security scanning**: Run automatically via pre-commit framework
-- **Automated fixes**: Prettier and black run automatically before each commit
-
 ### Build & Deployment Requirements
 - **NEVER mark tasks as completed until successful build verification**
 - All Go and Python builds MUST be executed within Docker containers
@@ -430,6 +423,31 @@ make license-check-features  # Check available features
 - **Use Task Agents**: Utilize task agents (subagents) to be more expedient and efficient when making changes to large files, updating or reviewing multiple files, or performing complex multi-step operations
 - **Avoid sed/cat**: Use sed and cat commands only when necessary; prefer dedicated Read/Edit/Write tools for file operations
 
+### Task Agent Usage Guidelines
+
+**Model Selection:**
+- **Haiku model**: Use for the majority of task agent work (file searches, simple edits, routine operations)
+- **Sonnet model**: Use for more complex jobs requiring deeper reasoning (architectural decisions, complex refactoring, multi-file coordination)
+- Default to haiku unless the task explicitly requires complex analysis
+
+**Response Size Requirements:**
+- **CRITICAL**: Task agents MUST return minimal responses to avoid context overload of the orchestration model
+- Agents should return only essential information: file paths, line numbers, brief summaries
+- Avoid returning full file contents or verbose explanations in agent responses
+- Use bullet points and concise formatting in agent outputs
+
+**Concurrency Limits:**
+- **Maximum 10 task agents** running concurrently at any time
+- Even with minimal responses, running more than 10 agents risks context overload
+- Queue additional tasks if the limit would be exceeded
+- Monitor active agent count before spawning new agents
+
+**Best Practices:**
+- Provide clear, specific prompts to agents to get focused responses
+- Request only the information needed, not comprehensive analysis
+- Use agents for parallelizable work (searching multiple directories, checking multiple files)
+- Combine related small tasks into single agent calls when possible
+
 ## Development Standards
 
 Comprehensive development standards are documented separately to keep this file concise.
@@ -441,27 +459,50 @@ Comprehensive development standards are documented separately to keep this file 
 **API Versioning**:
 - ALL REST APIs MUST use versioning: `/api/v{major}/endpoint` format
 - Semantic versioning for major versions only in URL
-- Support current and previous versions (N-1) minimum
+- Support current and 2 previous versions (N-2) minimum
 - Add deprecation headers to old versions
 - Document migration paths for version changes
+- Keep APIs simple and extensible: use flexible inputs, backward-compatible responses
+- Leverage and reuse existing APIs where possible
 
 **Database Standards**:
-- PyDAL mandatory for ALL Python applications
+- SQLAlchemy for database initialization and schema creation only
+- PyDAL mandatory for ALL runtime database operations and migrations
+- Supported databases: PostgreSQL, MySQL, MariaDB Galera, SQLite
 - Thread-safe usage with thread-local connections
 - Environment variable configuration for all database settings
 - Connection pooling and retry logic required
+- Async/multi-threading based on workload (see Performance Optimization)
+
+**API Design Principles**:
+- **Simple & Extensible**: Keep REST and gRPC APIs simple, use flexible input structures and backward-compatible responses
+- **Leverage Existing**: Reuse existing APIs where possible, avoid creating duplicate endpoints
+- **Consistent Versioning**: All APIs use `/api/v{major}/endpoint` versioning for REST and semantic versioning for gRPC
+- **Deprecation Support**: Maintain N-2 API versions minimum (current + 2 previous), include deprecation headers and migration paths
 
 **Protocol Support**:
-- REST API, gRPC, HTTP/1.1, HTTP/2, HTTP/3 support
+- **External Communication** (clients, third-party integrations): REST API over HTTPS
+  - Flask REST endpoints for client-facing APIs
+  - Supports external consumers and web UIs
+  - Versioned: `/api/v1/endpoint`, `/api/v2/endpoint`, etc.
+- **Inter-Container Communication** (within cluster): gRPC preferred for best performance
+  - Service-to-service calls between containers in same namespace/cluster
+  - Binary protocol with Protocol Buffers for lower latency and bandwidth
+  - Use for internal APIs between microservices
+  - Fallback to REST over HTTP/2 if gRPC unavailable
+- **HTTP/3 (QUIC)**: Consider for high-performance inter-container scenarios (>10K req/sec)
+  - UDP-based, reduced latency, connection multiplexing
 - Environment variables for protocol configuration
-- Multi-protocol implementation required
+- Multi-protocol implementation: REST for external, gRPC for internal
 
 **Performance Optimization (Python):**
 - Dataclasses with slots mandatory (30-50% memory reduction)
 - Type hints required for all Python code
-- asyncio for I/O-bound operations
-- threading for blocking I/O
-- multiprocessing for CPU-bound operations
+- **Concurrency selection based on workload:**
+  - `asyncio` + `databases` library for I/O-bound operations (>100 concurrent requests)
+  - `threading` + `ThreadPoolExecutor` for blocking I/O and legacy integrations
+  - `multiprocessing` for CPU-bound operations
+- Connection pool sizing: `(2 * CPU_cores) + disk_spindles`
 - Avoid premature optimization - profile first
 
 **High-Performance Networking (Case-by-Case):**
@@ -477,17 +518,33 @@ Comprehensive development standards are documented separately to keep this file 
 - Independent deployment and scaling
 - Each service has its own Dockerfile and dependencies
 
+**MarchProxy API Gateway/LB Integration**:
+- Applications are expected to run behind MarchProxy (`~/code/MarchProxy`)
+- **DO NOT include MarchProxy in default deployment** - it's external infrastructure
+- **Generate MarchProxy-compatible import configuration** in `config/marchproxy/`
+- Import config via MarchProxy's API: `POST /api/v1/services/import`
+- See [Development Standards - MarchProxy Integration](docs/STANDARDS.md#marchproxy-api-gateway-integration)
+
 **Docker Standards**:
 - Multi-arch builds (amd64/arm64)
 - Debian-slim base images
 - Docker Compose for local development
 - Minimal host port exposure
+- **Cross-Architecture Testing**: Before final commit, test on alternate architecture:
+  - If developing on amd64: Use QEMU to build and test arm64 (`docker buildx build --platform linux/arm64 ...`)
+  - If developing on arm64: Use QEMU to build and test amd64 (`docker buildx build --platform linux/amd64 ...`)
+  - Ensures multi-architecture compatibility and prevents platform-specific bugs
+  - Command: `docker buildx build --platform linux/amd64,linux/arm64 -t image:tag --push .`
 
 **Testing**:
 - Unit tests: Network isolated, mocked dependencies
 - Integration tests: Component interactions
 - E2E tests: Critical workflows
 - Performance tests: Scalability validation
+- Smoke tests: Build, run, API health, page/tab load verification (mandatory)
+- Mock data: 3-4 items per feature/entity for development
+
+📚 **Complete Testing Guide**: [Testing Documentation](docs/TESTING.md) includes smoke tests, unit tests, integration tests, E2E tests, performance tests, mock data scripts, and cross-architecture testing with QEMU
 
 **Security**:
 - TLS 1.2+ required
@@ -518,291 +575,94 @@ Comprehensive development standards are documented separately to keep this file 
 
 📚 **Detailed Architecture Patterns**: See [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
 
-## Component Integration Patterns
+## Common Integration Patterns
 
-### Manager Service - Flask + Flask-Security-Too
-The Manager service provides authentication and user management for the entire platform:
+📚 **Complete code examples and integration patterns**: [Development Standards](docs/STANDARDS.md)
 
-```python
-from flask import Flask
-from flask_security import Security, auth_required
-from flask_security.datastore import DataStore
-from pydal import DAL, Field
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-
-# Database setup with PyDAL
-db = DAL(
-    f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASS')}@"
-    f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/tobogganing",
-    pool_size=10
-)
-
-# Define tables for users, roles, policies
-db.define_table('auth_user',
-    Field('email', 'string', unique=True),
-    Field('password', 'string'),
-    Field('active', 'boolean', default=True),
-    Field('fs_uniquifier', 'string', unique=True))
-
-db.define_table('auth_role',
-    Field('name', 'string', unique=True),  # admin, operator, viewer
-    Field('permissions', 'json'))
-
-# Custom PyDAL datastore
-user_datastore = CustomPyDALUserDatastore(db, db.auth_user, db.auth_role)
-security = Security(app, user_datastore)
-
-@app.route('/api/v1/headends', methods=['GET'])
-@auth_required()
-def list_headends():
-    """List all headend servers"""
-    return {'headends': get_all_headends()}
-
-@app.route('/healthz')
-def health():
-    return {'status': 'healthy'}, 200
-```
-
-### Headend Server - WireGuard Termination (Go)
-The Headend service handles WireGuard tunnel termination and traffic routing:
-
-```go
-package main
-
-import (
-    "context"
-    "log"
-    "net"
-    "github.com/vishvananda/netlink"
-)
-
-// Headend manages WireGuard interfaces
-type Headend struct {
-    ListenPort int
-    PrivateKey string
-    Peers      map[string]*Peer
-}
-
-// Peer represents a connected client
-type Peer struct {
-    PublicKey   string
-    AllowedIPs  []net.IPNet
-    LastHandshake time.Time
-}
-
-// StartServer creates and manages WireGuard interface
-func (h *Headend) StartServer(ctx context.Context) error {
-    // Create WireGuard interface
-    // Configure routing and iptables
-    // Accept and route traffic
-
-    log.Printf("Headend listening on port %d", h.ListenPort)
-
-    select {
-    case <-ctx.Done():
-        return ctx.Err()
-    }
-    return nil
-}
-
-// AuthenticatePeer verifies client certificate
-func (h *Headend) AuthenticatePeer(cert []byte) error {
-    // Validate certificate via Manager API
-    // Add peer to WireGuard interface
-    return nil
-}
-```
-
-### WebUI Dashboard - React + TypeScript
-The WebUI provides management and monitoring for Tobogganing platform:
-
-```typescript
-// API client for Manager backend
-import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true,
-});
-
-// Add JWT token to requests
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jwt_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Headend status monitoring component
-import React, { useEffect, useState } from 'react';
-
-interface Headend {
-  id: string;
-  name: string;
-  status: 'online' | 'offline';
-  connectedClients: number;
-  throughput: number;
-}
-
-export const HeadendMonitor: React.FC = () => {
-  const [headends, setHeadends] = useState<Headend[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchHeadends = async () => {
-      try {
-        const response = await apiClient.get('/api/v1/headends');
-        setHeadends(response.data.headends);
-      } catch (error) {
-        console.error('Failed to fetch headends:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHeadends();
-  }, []);
-
-  return (
-    <div>
-      <h2>Headend Servers</h2>
-      {loading ? <p>Loading...</p> : <HeadendList headends={headends} />}
-    </div>
-  );
-};
-```
-
-### License-Gated Features (Python)
-```python
-from shared.licensing import license_client, requires_feature
-from flask_security import auth_required
-
-@app.route('/api/v1/advanced/analytics')
-@auth_required()
-@requires_feature("advanced_analytics")
-def generate_advanced_report():
-    """Requires authentication AND professional+ license"""
-    return {'report': analytics.generate_report()}
-```
-
-### Monitoring Integration
-```python
-from prometheus_client import Counter, Histogram, generate_latest
-
-REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint'])
-REQUEST_DURATION = Histogram('http_request_duration_seconds', 'HTTP request duration')
-
-@app.route('/metrics')
-def metrics():
-    return generate_latest(), {'Content-Type': 'text/plain'}
-```
+Key integration patterns documented:
+- Flask + Flask-Security-Too + PyDAL authentication
+- Database integration with multi-DB support
+- ReactJS frontend with API client
+- License-gated features
+- Prometheus monitoring integration
 
 ## Website Integration Requirements
 
-**Each project MUST have two dedicated websites**:
-- Marketing/Sales website (Node.js based)
-- Documentation website (Markdown based)
+**Required websites**: Marketing/Sales (Node.js) + Documentation (Markdown)
 
-**Website Design Preferences**:
-- Multi-page design preferred
-- Modern aesthetic with clean appearance
-- Subtle, sophisticated color schemes
-- Gradient usage encouraged
-- Responsive design
-- Performance focused
+**Design**: Multi-page, modern aesthetic, subtle gradients, responsive, performance-focused
 
-**Repository Integration**:
-- Add `github.com/penguintechinc/website` as sparse checkout submodule
-- Only include project-specific folders
-- Folder naming: `{app_name}/` and `{app_name}-docs/`
+**Repository**: Sparse checkout submodule from `github.com/penguintechinc/website` with `{app_name}/` and `{app_name}-docs/` folders
 
 ## Troubleshooting & Support
 
-### Common Issues
-1. **Port Conflicts**: Check docker-compose port mappings
-2. **Database Connections**: Verify connection strings and permissions
-3. **License Validation Failures**: Check license key format and network connectivity
-4. **Build Failures**: Check dependency versions and compatibility
-5. **Test Failures**: Review test environment setup
+**Common Issues**: Port conflicts, database connections, license validation, build failures, test failures
 
-### Debug Commands
-```bash
-# Container debugging
-docker-compose logs -f service-name
-docker exec -it container-name /bin/bash
+**Quick Debug**: `docker-compose logs -f <service>` | `make debug` | `make health`
 
-# Application debugging
-make debug                    # Start with debug flags
-make logs                     # View application logs
-make health                   # Check service health
+**Support**: support@penguintech.io | sales@penguintech.io | https://status.penguintech.io
 
-# License debugging
-make license-debug            # Test license server connectivity
-make license-validate         # Validate current license
-```
-
-### Support Resources
-- **Technical Documentation**: [Development Standards](docs/STANDARDS.md)
-- **License Integration**: [License Server Guide](docs/licensing/license-server-integration.md)
-- **Integration Support**: support@penguintech.io
-- **Sales Inquiries**: sales@penguintech.io
-- **License Server Status**: https://status.penguintech.io
+📚 **Detailed troubleshooting**: [Development Standards](docs/STANDARDS.md) | [License Guide](docs/licensing/license-server-integration.md)
 
 ## CI/CD & Workflows
 
-### Documentation
-- **Complete workflow documentation**: See [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)
-- **CI/CD standards and requirements**: See [`docs/STANDARDS.md`](docs/STANDARDS.md)
+**Build Tags**: `beta-<epoch64>` (main) | `alpha-<epoch64>` (other) | `vX.X.X-beta` (version release) | `vX.X.X` (tagged release)
 
-### Build Naming Conventions
-
-All container images follow automatic naming based on branch and version changes:
-
-| Scenario | Main Branch | Other Branches |
-|----------|------------|-----------------|
-| Regular build (no `.version` change) | `beta-<epoch64>` | `alpha-<epoch64>` |
-| Version release (`.version` changed) | `vX.X.X-beta` | `vX.X.X-alpha` |
-| Tagged release | `vX.X.X` + `latest` | N/A |
-
-**Example**: Updating `.version` to `1.2.0` on main branch triggers builds tagged `v1.2.0-beta` (and auto-creates a GitHub pre-release).
-
-### Version Management
-
-- **Location**: `.version` file in repository root
-- **Format**: Semantic versioning (e.g., `1.2.3`)
-- **File tracking**: All workflows monitor `.version` for changes
-- **Update command**: Edit `.version` file and commit
-  ```bash
-  echo "1.2.3" > .version
-  git add .version
-  git commit -m "Release v1.2.3"
-  ```
+**Version**: `.version` file in root, semver format, monitored by all workflows
 
 ### Pre-Commit Checklist
 
-Before committing, run in this order:
+**CRITICAL: You MUST run the pre-commit script before every commit:**
 
-- [ ] **Linters**: `npm run lint` or `golangci-lint run` or equivalent
-- [ ] **Security scans**: `npm audit`, `gosec`, `bandit` (per language)
-- [ ] **Tests**: `npm test`, `go test ./...`, `pytest` (unit tests only)
-- [ ] **Version updates**: Update `.version` if releasing new version
-- [ ] **Documentation**: Update docs if adding/changing workflows
-- [ ] **No secrets**: Verify no credentials, API keys, or tokens in code
-- [ ] **Docker builds**: Verify Dockerfile uses debian-slim base (no alpine)
+```bash
+./scripts/pre-commit/pre-commit.sh
+```
 
-**Only commit when asked** — follow the pre-commit checklist above, then wait for approval before `git commit`.
+Results logged to: `/tmp/pre-commit-<project>-<epoch>/summary.log`
 
-### Full Documentation
+Quick reference (see [docs/PRE_COMMIT.md](docs/PRE_COMMIT.md) for full details):
+1. Linters → 2. Security scans → 3. No secrets → 4. Build & Run → 5. Smoke tests → 6. Tests → 7. Version update → 8. Docker debian-slim
 
-For complete workflow behavior, troubleshooting, and project-specific details, see [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md).
+**Smoke tests are mandatory in pre-commit checklist:**
+- Build verification for all containers
+- Runtime health checks for all services
+- API health endpoint validation
+- Web UI page and tab load verification
+- Must pass before proceeding to full test suite
+
+**Only commit when asked** — run pre-commit script, verify all checks pass, then wait for approval before `git commit`.
+
+### Applying Code Changes
+
+**After making code changes, rebuild and restart containers to apply changes:**
+
+```bash
+# All services
+docker compose down && docker compose up -d --build
+
+# Single service
+docker compose up -d --build <service-name>
+```
+
+**IMPORTANT:** `docker compose restart` and `docker restart` do NOT apply code changes - they only restart the existing container with old code. Always use `--build` to rebuild images with new code.
+
+**Browser Cache & Hard Reload During Development:**
+- Developers will routinely perform hard reloads (Ctrl+Shift+R / Cmd+Shift+R) and cache clearing during development
+- DO NOT assume the browser cache contains stale assets or that developers haven't already cleared it
+- Implement proper cache headers and asset versioning in your frontend/static assets
+- Use content-based cache busting (e.g., hashing filenames: `app.abc123.js`) for production builds
+- Consider setting `Cache-Control: no-cache, must-revalidate` for development builds when appropriate
+
+📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards](docs/STANDARDS.md)
+
+## Template Customization
+
+**Adding Languages/Services**: Create in `services/`, add Dockerfile, update CI/CD, add linting/testing, update docs.
+
+**Enterprise Integration**: License server, multi-tenancy, usage tracking, audit logging, monitoring.
+
+📚 **Detailed customization guides**: [Development Standards](docs/STANDARDS.md)
+
 
 ## License & Legal
 
@@ -812,157 +672,38 @@ For complete workflow behavior, troubleshooting, and project-specific details, s
 
 The `LICENSE.md` file is located at the project root following industry standards. This project uses a modified AGPL-3.0 license with additional exceptions for commercial use and special provisions for companies employing contributors.
 
-## Template Customization
-
-### Multi-Component Architecture Customization
-
-Tobogganing's four-component architecture (Manager, Headend, Clients, K8s CNI) provides flexibility for enterprise customization while maintaining security and performance.
-
-#### Manager Service Customization
-**When to customize**:
-- Adding custom authentication providers (SAML, OAuth2, LDAP)
-- Implementing policy engines or rule systems
-- Integrating with external compliance systems
-
-**Customization patterns**:
-```python
-# Custom authentication provider
-from flask_security import UserDatastore
-
-class CustomUserDatastore(UserDatastore):
-    def find_user(self, **kwargs):
-        # Custom lookup logic
-        pass
-
-# Custom API endpoints for policies
-@app.route('/api/v1/policies', methods=['POST'])
-@auth_required()
-@requires_role('admin')
-def create_policy():
-    # Policy creation with validation
-    return {'policy_id': policy.id}
-```
-
-**Database schema extensions**:
-- Add custom policy tables in migrations
-- Track audit logs for compliance
-- Support multi-tenancy via policy namespacing
-
-#### Headend Server Customization
-**When to customize**:
-- Implementing custom traffic routing rules
-- Adding performance monitoring (packet captures, metrics)
-- Supporting additional VPN protocols beyond WireGuard
-- Custom authentication with external services
-
-**Customization patterns**:
-```go
-// Custom routing logic
-type CustomRouter struct {
-    basePath string
-    policies map[string]*Policy
-}
-
-func (cr *CustomRouter) Route(packet *Packet) (*Destination, error) {
-    // Custom routing based on policies
-    return cr.applyPolicies(packet)
-}
-
-// Custom metrics for Prometheus
-type HeadendMetrics struct {
-    packetsProcessed prometheus.Counter
-    routingLatency   prometheus.Histogram
-}
-```
-
-#### Native Clients Customization
-**When to customize**:
-- Adding platform-specific integrations (macOS Keychain, Windows Credential Manager)
-- Custom UI for branded clients
-- Integration with system DNS resolvers
-- Custom logging for audit trails
-
-**Customization patterns**:
-```go
-// Platform-specific credential storage
-type CredentialStore interface {
-    Store(key, value string) error
-    Retrieve(key string) (string, error)
-}
-
-// macOS implementation uses Keychain
-type MacOSCredentialStore struct{}
-
-// Windows implementation uses Credential Manager
-type WindowsCredentialStore struct{}
-```
-
-#### Kubernetes CNI Plugin Customization
-**When to customize**:
-- Integrating with pod security policies
-- Custom IPAM (IP Address Management) schemes
-- Advanced network policies
-- Multi-cluster networking
-
-**Customization patterns**:
-```go
-// Custom IPAM provider
-type CustomIPAM struct {
-    pools map[string]*IPPool
-}
-
-func (ipam *CustomIPAM) AllocateIP(namespace, pod string) (net.IP, error) {
-    // Custom IP allocation based on namespace/policy
-    return ipam.findAvailableIP(namespace)
-}
-
-// Network policy enforcement
-func (cni *Plugin) ApplyNetworkPolicy(namespace string, policy *Policy) error {
-    // Translate policy to iptables/ebpf rules
-    return cni.enforcer.Apply(policy)
-}
-```
-
-### Adding Enterprise Features
-1. **Custom Authentication**: Extend Manager with SAML, OAuth2, or LDAP
-2. **Policy Engine**: Build custom policy evaluation system
-3. **Audit Logging**: Track all administrative actions
-4. **Multi-Tenancy**: Isolate organizations via policy namespacing
-5. **Advanced Analytics**: Monitor traffic patterns and client behavior
-6. **DLP Integration**: Block sensitive data exfiltration at headend
-7. **Geographic Enforcement**: Route through regional headends based on policy
-
-### Adding New Services
-- Create Go service for performance-critical components (traffic inspection, advanced routing)
-- Create Python service for business logic (policy evaluation, reporting)
-- Create TypeScript service for management UI
-- Configure inter-service authentication via mTLS
-- Add service discovery configuration for dynamic scaling
 
 ---
 
-**Project Version**: See `.version` file
-**Last Updated**: 2025-12-18
+**Template Version**: 1.3.0
+**Last Updated**: 2025-12-03
 **Maintained by**: Penguin Tech Inc
-**Based on**: Project Template v1.5.0
+**License Server**: https://license.penguintech.io
 
-## Development Standards Reference
+**Key Updates in v1.3.0:**
+- Three-container architecture: Flask backend, Go backend, WebUI shell
+- WebUI shell with Node.js + React, role-based access (Admin, Maintainer, Viewer)
+- Flask backend with PyDAL, JWT auth, user management
+- Go backend with XDP/AF_XDP support, NUMA-aware memory pools
+- GitHub Actions workflows for multi-arch builds (AMD64, ARM64)
+- Gold text theme by default, Elder sidebar pattern, WaddlePerf tabs
+- Docker Compose updated for new architecture
 
-For comprehensive development standards, code quality requirements, and CI/CD compliance specific to Tobogganing, refer to: **[Development Standards](docs/STANDARDS.md)**
+**Key Updates in v1.2.0:**
+- Web UI and API as separate containers by default
+- Mandatory linting for all languages (flake8, ansible-lint, eslint, etc.)
+- CodeQL inspection compliance required
+- Multi-database support by design (all PyDAL databases + MariaDB Galera)
+- DB_TYPE environment variable with input validation
+- Flask as sole web framework (PyDAL for database abstraction)
 
-Key Standards Coverage:
-- Component-specific requirements (Manager, Headend, Clients, CNI)
-- Python, Go, and TypeScript coding standards
-- Security and testing requirements
-- CI/CD compliance and workflows
-- Kubernetes and infrastructure standards
-- Monitoring, logging, and observability
+**Key Updates in v1.1.0:**
+- Flask-Security-Too mandatory for authentication
+- ReactJS as standard frontend framework
+- Python 3.13 vs Go decision criteria
+- XDP/AF_XDP guidance for high-performance networking
+- WaddleAI integration patterns
+- Release-mode license enforcement
+- Performance optimization requirements (dataclasses with slots)
 
-## Quick Links
-
-- **Repository**: [Tobogganing on GitHub](https://github.com/penguintechinc/tobogganing)
-- **Documentation**: [Full Project Docs](docs/)
-- **Issue Tracker**: GitHub Issues
-- **License**: Limited AGPL3 with fair use preamble
-
-*Tobogganing is an enterprise-grade SASE platform providing secure network access through WireGuard VPN infrastructure with zero-trust architecture.*
+*This template provides a production-ready foundation for enterprise software development with comprehensive tooling, security, operational capabilities, and integrated licensing management.*
