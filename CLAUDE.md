@@ -614,6 +614,15 @@ Key integration patterns documented:
 
 **Version**: `.version` file in root, semver format, monitored by all workflows
 
+**Deployment Hosts**:
+- **Beta/Development**: `https://{repo_name_lowercase}.penguintech.io` (if online)
+  - Example: `project-template` → `https://project-template.penguintech.io`
+  - Deployed from `main` branch with `beta-*` tags
+- **Production**: Either custom domain or PenguinCloud subdomain
+  - **Custom Domain**: Application-specific (e.g., `https://waddlebot.io`)
+  - **PenguinCloud**: `https://{repo_name_lowercase}.penguincloud.io`
+  - Deployed from tagged releases (`vX.X.X`)
+
 ### Pre-Commit Checklist
 
 **CRITICAL: You MUST run the pre-commit script before every commit:**
