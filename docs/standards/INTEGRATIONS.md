@@ -413,3 +413,439 @@ AI_FEATURES_ENABLED=true
 3. **Performance**: AI inference can be resource-intensive - monitor usage
 4. **Isolation**: Run WaddleAI as separate service for resource isolation
 5. **Documentation**: Refer to WaddleAI documentation at `~/code/WaddleAI`
+
+---
+
+## Configuration Management Standards
+
+**ALL integration and system configuration MUST follow this pattern:**
+
+### Configuration Hierarchy
+
+1. **Initial Setup**: Docker environment variables provide bootstrap configuration
+2. **Database Storage**: Validated config written to database `config` table(s)
+3. **Runtime Management**: APIs and WebUI allow updates by global admins
+4. **Precedence**: Database config overrides environment variables after initial setup
+
+### Database Schema
+
+**REQUIRED: Create `config` table for all configuration storage**
+
+```sql
+CREATE TABLE config (
+    id SERIAL PRIMARY KEY,
+    config_key VARCHAR(255) UNIQUE NOT NULL,
+    config_value TEXT NOT NULL,
+    config_type VARCHAR(50) NOT NULL,  -- 'string', 'integer', 'boolean', 'json'
+    category VARCHAR(100) NOT NULL,     -- 'integration', 'system', 'security', etc.
+    description TEXT,
+    is_sensitive BOOLEAN DEFAULT FALSE,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),            -- User who made the change
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_config_category ON config(category);
+CREATE INDEX idx_config_key ON config(config_key);
+```
+
+**PyDAL Table Definition:**
+```python
+db.define_table('config',
+    Field('config_key', 'string', unique=True, required=True),
+    Field('config_value', 'text', required=True),
+    Field('config_type', 'string', requires=IS_IN_SET(['string', 'integer', 'boolean', 'json'])),
+    Field('category', 'string', requires=IS_IN_SET(['integration', 'system', 'security', 'database', 'email'])),
+    Field('description', 'text'),
+    Field('is_sensitive', 'boolean', default=False),
+    Field('last_updated', 'datetime', default=request.now, update=request.now),
+    Field('updated_by', 'string'),
+    Field('created_at', 'datetime', default=request.now),
+    migrate=True
+)
+```
+
+### Bootstrap Process
+
+**On application startup:**
+
+1. **Load Environment Variables**
+2. **Validate Configuration** (check required fields, validate formats)
+3. **Check Database** for existing config
+4. **Initialize Database Config** if not exists
+5. **Use Database Config** for runtime
+
+**Example Bootstrap Code:**
+
+```python
+# app.py or config/bootstrap.py
+import os
+from pydal import DAL, Field
+
+def bootstrap_configuration(db):
+    """
+    Bootstrap configuration from environment variables on first run.
+    After initial setup, database config takes precedence.
+    """
+
+    # Define config mappings
+    config_mappings = {
+        # Integration settings
+        'smtp_host': {
+            'env': 'SMTP_HOST',
+            'category': 'email',
+            'type': 'string',
+            'description': 'SMTP server hostname',
+            'sensitive': False
+        },
+        'smtp_port': {
+            'env': 'SMTP_PORT',
+            'category': 'email',
+            'type': 'integer',
+            'description': 'SMTP server port',
+            'sensitive': False
+        },
+        'smtp_user': {
+            'env': 'SMTP_USER',
+            'category': 'email',
+            'type': 'string',
+            'description': 'SMTP username',
+            'sensitive': False
+        },
+        'smtp_pass': {
+            'env': 'SMTP_PASS',
+            'category': 'email',
+            'type': 'string',
+            'description': 'SMTP password',
+            'sensitive': True
+        },
+        'waddleai_url': {
+            'env': 'WADDLEAI_URL',
+            'category': 'integration',
+            'type': 'string',
+            'description': 'WaddleAI API endpoint',
+            'sensitive': False
+        },
+        'waddleai_api_key': {
+            'env': 'WADDLEAI_API_KEY',
+            'category': 'integration',
+            'type': 'string',
+            'description': 'WaddleAI API key',
+            'sensitive': True
+        },
+    }
+
+    for config_key, config_meta in config_mappings.items():
+        # Check if config already exists in database
+        existing = db(db.config.config_key == config_key).select().first()
+
+        if not existing:
+            # Get value from environment variable
+            env_value = os.getenv(config_meta['env'])
+
+            if env_value:
+                # Validate and insert into database
+                validated_value = validate_config(
+                    env_value,
+                    config_meta['type']
+                )
+
+                if validated_value is not None:
+                    db.config.insert(
+                        config_key=config_key,
+                        config_value=str(validated_value),
+                        config_type=config_meta['type'],
+                        category=config_meta['category'],
+                        description=config_meta['description'],
+                        is_sensitive=config_meta['sensitive'],
+                        updated_by='system'
+                    )
+                    print(f"✓ Initialized config: {config_key}")
+
+    db.commit()
+
+def validate_config(value, config_type):
+    """Validate configuration value based on type"""
+    try:
+        if config_type == 'integer':
+            return int(value)
+        elif config_type == 'boolean':
+            return value.lower() in ['true', '1', 'yes']
+        elif config_type == 'json':
+            import json
+            return json.dumps(json.loads(value))  # Validate JSON
+        else:  # string
+            return value
+    except Exception as e:
+        print(f"✗ Validation failed for {value}: {e}")
+        return None
+
+def get_config(db, config_key, default=None):
+    """Get configuration value from database"""
+    config = db(db.config.config_key == config_key).select().first()
+    if config:
+        # Parse based on type
+        if config.config_type == 'integer':
+            return int(config.config_value)
+        elif config.config_type == 'boolean':
+            return config.config_value.lower() in ['true', '1', 'yes']
+        elif config.config_type == 'json':
+            import json
+            return json.loads(config.config_value)
+        else:
+            return config.config_value
+    return default
+
+# Call during application startup
+bootstrap_configuration(db)
+```
+
+### API Endpoints for Configuration Management
+
+**REQUIRED: Implement configuration management API**
+
+**Authorization**: Global admin privileges ONLY
+
+```python
+from flask import Flask, request, jsonify
+from flask_security import auth_required, roles_required, current_user
+
+@app.route('/api/v1/config', methods=['GET'])
+@auth_required()
+@roles_required('admin')
+def list_config():
+    """List all configuration settings (masks sensitive values)"""
+    configs = db(db.config).select(orderby=db.config.category)
+
+    result = []
+    for config in configs:
+        result.append({
+            'key': config.config_key,
+            'value': '***SENSITIVE***' if config.is_sensitive else config.config_value,
+            'type': config.config_type,
+            'category': config.category,
+            'description': config.description,
+            'last_updated': config.last_updated.isoformat(),
+            'updated_by': config.updated_by
+        })
+
+    return jsonify({'configs': result})
+
+@app.route('/api/v1/config/<config_key>', methods=['GET'])
+@auth_required()
+@roles_required('admin')
+def get_config_endpoint(config_key):
+    """Get single configuration value"""
+    config = db(db.config.config_key == config_key).select().first()
+
+    if not config:
+        return jsonify({'error': 'Configuration not found'}), 404
+
+    return jsonify({
+        'key': config.config_key,
+        'value': '***SENSITIVE***' if config.is_sensitive else config.config_value,
+        'type': config.config_type,
+        'category': config.category,
+        'description': config.description,
+        'last_updated': config.last_updated.isoformat()
+    })
+
+@app.route('/api/v1/config/<config_key>', methods=['PUT'])
+@auth_required()
+@roles_required('admin')
+def update_config(config_key):
+    """Update configuration value"""
+    data = request.get_json()
+    new_value = data.get('value')
+
+    if new_value is None:
+        return jsonify({'error': 'Value is required'}), 400
+
+    config = db(db.config.config_key == config_key).select().first()
+
+    if not config:
+        return jsonify({'error': 'Configuration not found'}), 404
+
+    # Validate new value
+    validated_value = validate_config(new_value, config.config_type)
+
+    if validated_value is None:
+        return jsonify({'error': 'Invalid value for config type'}), 400
+
+    # Update configuration
+    config.update_record(
+        config_value=str(validated_value),
+        updated_by=current_user.email
+    )
+    db.commit()
+
+    return jsonify({
+        'message': 'Configuration updated successfully',
+        'key': config_key,
+        'updated_by': current_user.email
+    })
+
+@app.route('/api/v1/config/<config_key>', methods=['DELETE'])
+@auth_required()
+@roles_required('admin')
+def delete_config(config_key):
+    """Delete configuration (admin only, use with caution)"""
+    config = db(db.config.config_key == config_key).select().first()
+
+    if not config:
+        return jsonify({'error': 'Configuration not found'}), 404
+
+    db(db.config.config_key == config_key).delete()
+    db.commit()
+
+    return jsonify({
+        'message': 'Configuration deleted successfully',
+        'key': config_key
+    })
+```
+
+### WebUI Configuration Management
+
+**REQUIRED: Implement Settings/Configuration page**
+
+**Location**: `/settings` or `/admin/config`
+
+**Features**:
+- List all configuration by category
+- Edit configuration values (admins only)
+- Mask sensitive values (passwords, API keys)
+- Validate input based on config type
+- Show last updated timestamp and user
+- Search and filter by category
+
+**Example React Component:**
+
+```jsx
+// src/pages/Settings/Configuration.jsx
+import React, { useState, useEffect } from 'react';
+import { apiClient } from '../../services/apiClient';
+
+export function ConfigurationPage() {
+  const [configs, setConfigs] = useState([]);
+  const [editing, setEditing] = useState(null);
+
+  useEffect(() => {
+    loadConfigs();
+  }, []);
+
+  const loadConfigs = async () => {
+    const response = await apiClient.get('/api/v1/config');
+    setConfigs(response.data.configs);
+  };
+
+  const handleUpdate = async (key, value) => {
+    try {
+      await apiClient.put(`/api/v1/config/${key}`, { value });
+      setEditing(null);
+      loadConfigs();
+    } catch (err) {
+      alert('Failed to update configuration');
+    }
+  };
+
+  // Group by category
+  const groupedConfigs = configs.reduce((acc, config) => {
+    if (!acc[config.category]) acc[config.category] = [];
+    acc[config.category].push(config);
+    return acc;
+  }, {});
+
+  return (
+    <div className="configuration-page">
+      <h1>System Configuration</h1>
+
+      {Object.entries(groupedConfigs).map(([category, items]) => (
+        <div key={category} className="config-category">
+          <h2>{category.toUpperCase()}</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Value</th>
+                <th>Description</th>
+                <th>Last Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((config) => (
+                <tr key={config.key}>
+                  <td><code>{config.key}</code></td>
+                  <td>
+                    {editing === config.key ? (
+                      <input
+                        type={config.value === '***SENSITIVE***' ? 'password' : 'text'}
+                        defaultValue={config.value}
+                        onBlur={(e) => handleUpdate(config.key, e.target.value)}
+                      />
+                    ) : (
+                      config.value
+                    )}
+                  </td>
+                  <td>{config.description}</td>
+                  <td>{new Date(config.last_updated).toLocaleString()}</td>
+                  <td>
+                    <button onClick={() => setEditing(config.key)}>
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Security Considerations
+
+1. **Sensitive Values**:
+   - Mark passwords, API keys, tokens as `is_sensitive=True`
+   - Mask sensitive values in API responses and UI
+   - Never log sensitive configuration values
+
+2. **Authorization**:
+   - ONLY global admin role can view/edit configuration
+   - Log all configuration changes with user attribution
+   - Consider additional audit logging for sensitive changes
+
+3. **Validation**:
+   - Always validate configuration values before saving
+   - Prevent SQL injection and XSS attacks
+   - Validate URLs, email addresses, port numbers, etc.
+
+4. **Encryption**:
+   - Consider encrypting sensitive values at rest in database
+   - Use application-level encryption for passwords/API keys
+   - Never store plaintext credentials
+
+### Configuration Categories
+
+**Standard categories**:
+- `integration` - External service integrations (WaddleAI, etc.)
+- `email` - SMTP and email settings
+- `security` - Security-related settings (TLS, auth)
+- `database` - Database connection settings
+- `system` - General system settings
+- `license` - License server configuration
+
+### Key Principles
+
+1. **Environment Variables for Bootstrap**: Initial setup from Docker env vars
+2. **Database as Source of Truth**: Config stored in database after validation
+3. **Admin-Only Management**: Only global admins can modify configuration
+4. **Runtime Updates**: Changes take effect without container restart
+5. **Audit Trail**: Track who changed what and when
+6. **Validation**: Always validate before storing
+7. **Security**: Mask/encrypt sensitive values
+
+📚 **Related Standards**: [Database](DATABASE.md) | [Authentication](AUTHENTICATION.md) | [Security](SECURITY.md)
