@@ -17,6 +17,7 @@ This document serves as an index to comprehensive development standards organize
 | **API & Protocols** | [API_PROTOCOLS.md](standards/API_PROTOCOLS.md) | REST, gRPC, HTTP/3, API versioning, deprecation |
 | **Performance** | [PERFORMANCE.md](standards/PERFORMANCE.md) | Dataclasses, asyncio, threading, XDP/AF_XDP |
 | **Architecture** | [ARCHITECTURE.md](standards/ARCHITECTURE.md) | Microservices, Docker, multi-arch builds, MarchProxy |
+| **Kubernetes** | [KUBERNETES.md](standards/KUBERNETES.md) | Helm v3, Kustomize, K8s deployments, best practices |
 | **Testing** | [TESTING.md](standards/TESTING.md) | Unit, integration, E2E, smoke tests, performance |
 | **Security** | [SECURITY.md](standards/SECURITY.md) | TLS, secrets, vulnerability scanning, CodeQL |
 | **Documentation** | [DOCUMENTATION.md](standards/DOCUMENTATION.md) | README, docs structure, release notes |
@@ -172,6 +173,7 @@ For comprehensive details on each category, refer to the individual standards do
 - **[API and Protocol Standards](standards/API_PROTOCOLS.md)** - REST, gRPC, versioning, deprecation
 - **[Performance Standards](standards/PERFORMANCE.md)** - Optimization, concurrency, high-performance networking
 - **[Architecture Standards](standards/ARCHITECTURE.md)** - Microservices, Docker, containerization
+- **[Kubernetes Standards](standards/KUBERNETES.md)** - Helm, Kustomize, K8s deployments, best practices
 - **[Testing Standards](standards/TESTING.md)** - Unit, integration, E2E, smoke, performance tests
 - **[Security Standards](standards/SECURITY.md)** - TLS, secrets, scanning, vulnerability management
 - **[Documentation Standards](standards/DOCUMENTATION.md)** - README, docs structure, release notes

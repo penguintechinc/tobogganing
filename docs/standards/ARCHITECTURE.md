@@ -457,3 +457,150 @@ GitHub Actions should use multi-arch builds:
 - **If developing on arm64**: Use QEMU to build and test amd64 (`docker buildx build --platform linux/amd64 ...`)
 - Ensures multi-architecture compatibility and prevents platform-specific bugs
 - Command: `docker buildx build --platform linux/amd64,linux/arm64 -t image:tag --push .`
+
+### Health Check Standards
+
+**CRITICAL: Use native container code for health checks, NOT curl/wget**
+
+Most minimal container images (debian-slim, alpine, distroless) do NOT include `curl` or `wget`. Health checks MUST use the native language runtime already in the container.
+
+#### Docker HEALTHCHECK Directive
+
+**Python Containers:**
+```dockerfile
+# ❌ BAD - curl not available in python:3.13-slim
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/healthz || exit 1
+
+# ✅ GOOD - use Python's built-in http.client
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD python3 -c "import http.client; \
+    conn = http.client.HTTPConnection('localhost', 5000); \
+    conn.request('GET', '/healthz'); \
+    r = conn.getresponse(); \
+    exit(0 if r.status == 200 else 1)"
+```
+
+**Go Containers:**
+```dockerfile
+# ❌ BAD - curl not available in distroless or debian-slim
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/healthz || exit 1
+
+# ✅ GOOD - create small health check binary
+# In Dockerfile multi-stage build:
+FROM golang:1.24-slim AS builder
+WORKDIR /app
+COPY . .
+RUN go build -o app ./cmd/app
+RUN go build -o healthcheck ./cmd/healthcheck  # Build health check binary
+
+FROM debian:stable-slim
+COPY --from=builder /app/app /app/app
+COPY --from=builder /app/healthcheck /usr/local/bin/healthcheck
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["/usr/local/bin/healthcheck"]
+
+# cmd/healthcheck/main.go:
+# package main
+# import ("net/http"; "os")
+# func main() {
+#   resp, err := http.Get("http://localhost:8080/healthz")
+#   if err != nil || resp.StatusCode != 200 { os.Exit(1) }
+#   os.Exit(0)
+# }
+```
+
+**Node.js Containers:**
+```dockerfile
+# ❌ BAD - curl not available in node:18-slim
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/healthz || exit 1
+
+# ✅ GOOD - use Node's built-in http module
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/healthz', \
+    (r) => process.exit(r.statusCode === 200 ? 0 : 1)) \
+    .on('error', () => process.exit(1))"
+```
+
+#### Docker Compose Health Checks
+
+**Python service:**
+```yaml
+services:
+  flask-backend:
+    build: ./services/flask-backend
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import http.client; conn = http.client.HTTPConnection('localhost', 5000); conn.request('GET', '/healthz'); r = conn.getresponse(); exit(0 if r.status == 200 else 1)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+```
+
+**Go service:**
+```yaml
+services:
+  go-backend:
+    build: ./services/go-backend
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+```
+
+**Node.js service:**
+```yaml
+services:
+  webui:
+    build: ./services/webui
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/healthz', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+```
+
+#### Health Check Endpoints
+
+All services MUST implement a `/healthz` endpoint:
+
+**Flask:**
+```python
+@app.route('/healthz')
+def health_check():
+    """Health check endpoint for container orchestration"""
+    return {'status': 'healthy'}, 200
+```
+
+**Go:**
+```go
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"status":"healthy"}`))
+}
+
+// In main():
+http.HandleFunc("/healthz", healthHandler)
+```
+
+**Node.js/Express:**
+```javascript
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'healthy' });
+});
+```
+
+#### Key Principles
+
+1. **Never add curl/wget**: Don't install additional packages just for health checks
+2. **Use native runtime**: Python, Go, Node.js are already in the container
+3. **Keep it simple**: Health checks should be fast and lightweight
+4. **Standard endpoint**: Use `/healthz` for HTTP health checks
+5. **Proper exit codes**: Exit 0 for healthy, exit 1 for unhealthy
+6. **gRPC health**: Use standard gRPC health check protocol for gRPC services
