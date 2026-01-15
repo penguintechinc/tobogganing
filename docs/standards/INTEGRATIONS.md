@@ -848,4 +848,250 @@ export function ConfigurationPage() {
 6. **Validation**: Always validate before storing
 7. **Security**: Mask/encrypt sensitive values
 
+---
+
+## License Server Integration
+
+PenguinTech License Server provides feature gating and entitlement management at `https://license.penguintech.io`.
+
+### Environment Variables
+
+```bash
+# License Configuration
+LICENSE_KEY=PENG-XXXX-XXXX-XXXX-XXXX-ABCD
+LICENSE_SERVER_URL=https://license.penguintech.io
+PRODUCT_NAME=project-template
+RELEASE_MODE=false  # Enable license enforcement (dev: false, prod: true)
+```
+
+### Validation Flow
+
+```
+1. Application startup → License validation
+2. Return: { valid, tier, features[], expires_at, limits }
+3. Conditional behavior based on tier and features
+4. Hourly keepalive with usage stats
+```
+
+### Feature Gating
+
+```python
+# Python: Check feature entitlement
+from app.license import license_manager
+
+@require_feature('sso_integration')
+def enable_sso():
+    # Only runs if tier supports SSO
+    pass
+
+# Manual check
+if license_manager.is_feature_enabled('audit_logs'):
+    # Log to audit table
+    pass
+```
+
+### Tiers and Features
+
+```
+Community (free):
+├── Basic authentication (email/password)
+├── Up to 5 users
+└── Single team
+
+Professional:
+├── Community features +
+├── SSO/OAuth2
+├── Multiple teams
+├── API keys
+└── Audit logging
+
+Enterprise:
+├── Professional features +
+├── Custom SAML
+├── Advanced analytics
+└── Priority support
+```
+
+### Keepalive/Checkin
+
+Background task runs hourly:
+
+```python
+{
+  "license_key": "PENG-XXXX-XXXX-XXXX-XXXX-ABCD",
+  "product": "project-template",
+  "usage": {
+    "active_users": 42,
+    "team_count": 8,
+    "storage_gb": 125
+  }
+}
+```
+
+### Error Handling
+
+- **Validation Fails (RELEASE_MODE=true)**: Exit with error
+- **Validation Fails (RELEASE_MODE=false)**: Warn, continue
+- **Network Error**: Cache previous result, retry on next startup
+- **Feature Not Entitled**: Return 403 Forbidden with feature name
+
+---
+
+## KillKrill Integration
+
+KillKrill provides centralized logging and metrics collection for all services.
+
+### Environment Variables
+
+```bash
+# KillKrill Configuration
+KILLKRILL_API_URL=http://killkrill-receiver:8081
+KILLKRILL_GRPC_URL=killkrill-receiver:50051
+KILLKRILL_CLIENT_ID=client_id
+KILLKRILL_CLIENT_SECRET=client_secret
+KILLKRILL_ENABLED=true
+```
+
+### Python Implementation
+
+```python
+from app.killkrill import killkrill_manager
+
+# Initialize during app startup
+killkrill_manager.setup()
+
+# Log structured entries
+killkrill_manager.log('info', 'User logged in',
+    user_id='user_123',
+    team_id='team_abc',
+    ip_address='192.168.1.1')
+
+# Track metrics
+killkrill_manager.metric('api_request_duration', 125,
+    type='histogram',
+    labels={'endpoint': '/api/v1/teams', 'status': '200'})
+
+# Health check
+if not killkrill_manager.health_check():
+    logger.warn("KillKrill unavailable, using local logs")
+```
+
+### Structured Logging
+
+All logs use Elastic Common Schema (ECS):
+
+```json
+{
+  "@timestamp": "2024-01-15T10:30:00Z",
+  "level": "info",
+  "message": "User authentication",
+  "service.name": "flask-backend",
+  "user.id": "user_123",
+  "organization.id": "team_abc",
+  "event.action": "login",
+  "event.outcome": "success",
+  "source.ip": "192.168.1.1"
+}
+```
+
+### Metrics Categories
+
+- **API Metrics**:
+  - `http.request.duration_ms` (histogram)
+  - `http.requests.total` (counter)
+  - `http.request.size_bytes` (histogram)
+
+- **Business Metrics**:
+  - `users.active` (gauge)
+  - `teams.total` (gauge)
+  - `features.used` (counter with feature label)
+
+- **System Metrics**:
+  - `database.connection.pool.used` (gauge)
+  - `database.query.duration_ms` (histogram)
+  - `cache.hits` / `cache.misses` (counter)
+
+### Implementation Patterns
+
+**Middleware Integration**:
+
+```python
+@app.before_request
+def log_request():
+    g.start_time = time.time()
+    g.request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
+
+@app.after_request
+def log_response(response):
+    duration = (time.time() - g.start_time) * 1000  # ms
+    killkrill_manager.log('info', 'HTTP request',
+        request_id=g.request_id,
+        method=request.method,
+        path=request.path,
+        status=response.status_code,
+        duration_ms=duration)
+    return response
+```
+
+**Decorator for Tracking**:
+
+```python
+def track_action(action_name):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            try:
+                result = f(*args, **kwargs)
+                killkrill_manager.log('info', action_name,
+                    outcome='success')
+                return result
+            except Exception as e:
+                killkrill_manager.log('error', action_name,
+                    outcome='failure',
+                    error=str(e))
+                raise
+        return wrapper
+    return decorator
+
+@track_action('team_creation')
+def create_team(name, slug):
+    # Implementation
+    pass
+```
+
+### Error Handling
+
+- **Connection Failure**: Use local logs as fallback, queue for retry
+- **Invalid Credentials**: Log error, disable KillKrill, use local logs
+- **Network Timeout**: Async batching prevents blocking requests
+- **Buffer Full**: Drop oldest entries, prioritize error logs
+
+### Batching
+
+Logs/metrics batched and sent every 5 seconds:
+
+```python
+{
+  "logs": [
+    { "timestamp": "...", "level": "info", ... },
+    { "timestamp": "...", "level": "error", ... }
+  ],
+  "metrics": [
+    { "name": "http.requests.total", "value": 42, ... }
+  ]
+}
+```
+
+---
+
+## Configuration Best Practices
+
+1. **Environment Variables**: Use for sensitive/deployment-specific values
+2. **Database Storage**: Use for user-configurable settings
+3. **Code Defaults**: Use for non-sensitive, stable defaults
+4. **Validation**: Always validate on load and before use
+5. **Audit Trail**: Track configuration changes with timestamps and user info
+6. **Hot Reload**: Implement for non-critical configuration
+7. **Encryption**: Encrypt sensitive values at rest
+
 📚 **Related Standards**: [Database](DATABASE.md) | [Authentication](AUTHENTICATION.md) | [Security](SECURITY.md)

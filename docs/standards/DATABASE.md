@@ -17,21 +17,24 @@ ALL applications MUST support the following databases by default:
 
 ALL Python applications MUST use a dual-library approach for database access:
 
-1. **SQLAlchemy** - Database Initialization ONLY
-   - Create database schemas and initial structure
-   - One-time setup operations
-   - NOT used for runtime queries or migrations
+1. **SQLAlchemy + Alembic** - Schema Definition and Migrations
+   - Define database schemas using SQLAlchemy ORM models
+   - Generate and manage migrations with Alembic
+   - Version-controlled migration history
+   - NOT used for runtime queries
 
-2. **PyDAL** - Runtime Operations and Migrations
+2. **PyDAL** - Runtime Operations Only
    - ALL runtime database queries and operations
-   - Schema migrations via `migrate=True`
    - Connection pooling and thread-safe access
+   - Table definitions matching SQLAlchemy schema
 
 **Why This Approach:**
-- SQLAlchemy provides robust schema creation and DDL generation
-- PyDAL offers simpler runtime query syntax and automatic migrations
-- Separation of concerns between initialization and runtime
+- SQLAlchemy ORM provides type-safe schema definition
+- Alembic enables explicit, version-controlled migrations
+- PyDAL offers simpler runtime query syntax
+- Clear separation: schema (SQLAlchemy/Alembic) vs operations (PyDAL)
 - Better compatibility with MariaDB Galera cluster requirements
+- Explicit migration control with rollback capability
 
 ### SQLAlchemy Initialization Example
 

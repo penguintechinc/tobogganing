@@ -67,13 +67,13 @@ This is a comprehensive project template incorporating best practices and patter
   - **MariaDB Galera**: Cluster support with WSREP, auto-increment, transaction handling
   - **SQLite**: Development and lightweight deployments
 - **Database Libraries (Python)**:
-  - **SQLAlchemy**: Used ONLY for database initialization and schema creation
-  - **PyDAL**: Used for ALL runtime database operations and migrations
+  - **SQLAlchemy + Alembic**: Database schema definition and version-controlled migrations
+  - **PyDAL**: Used for ALL runtime database operations only
   - `DB_TYPE` must match PyDAL connection string prefixes exactly
 - **Database Libraries (Go)**: GORM or sqlx (mandatory for cross-database support)
   - Must support PostgreSQL, MySQL/MariaDB, and SQLite
   - Stable, well-maintained library required
-- **Migrations**: PyDAL handles all migrations via `migrate=True`
+- **Migrations**: Alembic for schema migrations, PyDAL for runtime operations
 - **MariaDB Galera Support**: Handle Galera-specific requirements (WSREP, auto-increment, transactions)
 
 📚 **Supported DB_TYPE Values**: See [Database Standards](docs/standards/DATABASE.md) for complete list and configuration details.
@@ -149,7 +149,7 @@ project-name/
 ├── .github/             # CI/CD pipelines and templates
 │   └── workflows/       # GitHub Actions for each container
 ├── services/            # Microservices (separate containers by default)
-│   ├── flask-backend/   # Flask + PyDAL backend (auth, users, standard APIs)
+│   ├── flask-backend/   # Flask + PyDAL teams API backend (auth, teams, users, standard APIs)
 │   ├── go-backend/      # Go high-performance backend (XDP/AF_XDP, NUMA)
 │   ├── webui/           # Node.js + React frontend shell
 │   └── connector/       # Integration services (placeholder)
@@ -175,11 +175,12 @@ project-name/
 
 | Container | Purpose | When to Use |
 |-----------|---------|-------------|
-| **flask-backend** | Standard APIs, auth, CRUD | <10K req/sec, business logic |
+| **teams-api** (flask-backend) | Standard APIs, auth, teams, user management | <10K req/sec, business logic |
 | **go-backend** | High-performance networking | >10K req/sec, <10ms latency |
 | **webui** | Node.js + React frontend | All frontend applications |
 
 **Default Roles**: Admin (full access), Maintainer (read/write, no user mgmt), Viewer (read-only)
+**Team Roles**: Owner, Admin, Member, Viewer (team-scoped permissions)
 
 📚 **Architecture diagram and details**: [Architecture Standards](docs/standards/ARCHITECTURE.md)
 
