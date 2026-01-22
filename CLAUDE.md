@@ -1,5 +1,48 @@
 # Project Template - Claude Code Context
 
+## 🚫 DO NOT MODIFY THIS FILE OR `.claude/` STANDARDS
+
+**These are centralized template files that will be overwritten when standards are updated.**
+
+- ❌ **NEVER edit** `CLAUDE.md`, `.claude/*.md`, `docs/STANDARDS.md`, or `docs/standards/*.md`
+- ✅ **CREATE NEW FILES** for app-specific context:
+  - `docs/APP_STANDARDS.md` - App-specific architecture, requirements, context
+  - `.claude/app.md` - App-specific rules for Claude (create if needed)
+  - `.claude/[feature].md` - Feature-specific context (create as needed)
+
+---
+
+## ⚠️ CRITICAL RULES - READ FIRST
+
+**Language & Versions:**
+- **Python 3.13** default (3.12+ minimum) - use for most applications
+- **Go 1.24.x** only for >10K req/sec (1.23.x fallback allowed)
+- **Node.js 18+** for React frontend
+
+**Database (MANDATORY):**
+- **SQLAlchemy**: Schema creation and Alembic migrations ONLY
+- **PyDAL**: ALL runtime database operations - NO EXCEPTIONS
+- Support ALL: PostgreSQL, MySQL, MariaDB Galera, SQLite
+
+**Git Rules:**
+- **NEVER commit** unless explicitly requested
+- **NEVER push** to remote repositories
+- Run security scans before commit (bandit, gosec, npm audit)
+
+**Code Quality:**
+- ALL code must pass linting before commit
+- No hardcoded secrets or credentials
+- Input validation mandatory
+
+**Architecture:**
+- Web UI and API are ALWAYS separate containers
+- Flask-Security-Too mandatory for authentication
+- REST APIs use `/api/v{major}/endpoint` versioning
+
+📚 **Detailed Standards**: See `.claude/` directory for language and service-specific rules
+
+---
+
 **⚠️ Important**: Application-specific context should be added to `docs/APP_STANDARDS.md` instead of this file. This allows the template CLAUDE.md to be updated across all projects without losing app-specific information. See `docs/APP_STANDARDS.md` for app-specific architecture, requirements, and context.
 
 ## Project Overview
@@ -29,6 +72,7 @@ This is a comprehensive project template incorporating best practices and patter
   - Network-intensive services
   - Low-latency requirements (<10ms)
   - CPU-bound operations requiring maximum throughput
+  - Go 1.23.x acceptable as fallback if 1.24.x compatibility constraints exist
 
 **Python Stack:**
 - **Python**: 3.13 for all applications (3.12+ minimum)
@@ -46,7 +90,7 @@ This is a comprehensive project template incorporating best practices and patter
 - **JavaScript/TypeScript**: Modern ES2022+ standards
 
 **Go Stack (When Required):**
-- **Go**: 1.24.x (latest patch version, minimum 1.24.2)
+- **Go**: 1.24.x (latest patch version, minimum 1.24.2); Go 1.23.x acceptable as fallback if compatibility constraints exist
 - **Database**: Use DAL with PostgreSQL/MySQL cross-support (e.g., GORM, sqlx)
 - Use only for traffic-intensive applications
 
