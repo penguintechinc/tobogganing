@@ -15,12 +15,12 @@
 
 ## Database Support Matrix
 
-| Database | DB_TYPE | Default Port | Use Case |
-|----------|---------|--------------|----------|
-| PostgreSQL | `postgresql` | 5432 | Production (primary) |
-| MySQL | `mysql` | 3306 | Production alternative |
-| MariaDB Galera | `mysql` | 3306 | HA clusters (special config) |
-| SQLite | `sqlite` | N/A | Development/lightweight |
+| Database | DB_TYPE | Version | Default Port | Use Case |
+|----------|---------|---------|--------------|----------|
+| PostgreSQL | `postgresql` | **16.x** | 5432 | Production (primary) |
+| MySQL | `mysql` | 8.0+ | 3306 | Production alternative |
+| MariaDB Galera | `mysql` | 10.11+ | 3306 | HA clusters (special config) |
+| SQLite | `sqlite` | 3.x | N/A | Development/lightweight |
 
 ---
 

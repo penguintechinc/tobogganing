@@ -9,12 +9,12 @@ Welcome to the database standards! This guide explains how to set up, manage, an
 
 Your application speaks the language of **four databases**. Pick one to start, and your code will work with the rest:
 
-| Database | Identifier | Best For | Emoji |
-|----------|-----------|----------|-------|
-| **PostgreSQL** | `postgresql` | Production, real apps | ⭐⭐⭐⭐⭐ |
-| **MySQL** | `mysql` | Production alternative | ⭐⭐⭐⭐ |
-| **MariaDB Galera** | `mysql` | High-availability clusters | ⭐⭐⭐⭐⭐ |
-| **SQLite** | `sqlite` | Development, testing | ⭐⭐⭐ |
+| Database | Identifier | Version | Best For | Emoji |
+|----------|-----------|---------|----------|-------|
+| **PostgreSQL** | `postgresql` | **16.x** (standard) | Production, real apps | ⭐⭐⭐⭐⭐ |
+| **MySQL** | `mysql` | 8.0+ | Production alternative | ⭐⭐⭐⭐ |
+| **MariaDB Galera** | `mysql` | 10.11+ | High-availability clusters | ⭐⭐⭐⭐⭐ |
+| **SQLite** | `sqlite` | 3.x | Development, testing | ⭐⭐⭐ |
 
 ---
 

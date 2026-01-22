@@ -9,7 +9,7 @@ This directory contains focused standards files for Claude Code to reference whe
 Files you must **NEVER modify**:
 - `go.md`, `python.md`, `react.md` (language standards)
 - `flask-backend.md`, `go-backend.md`, `webui.md` (service standards)
-- `database.md`, `security.md` (domain standards)
+- `database.md`, `security.md`, `testing.md`, `containers.md` (domain standards)
 - `README.md` (this file)
 
 **Instead, CREATE NEW FILES for app-specific context:**
@@ -45,6 +45,7 @@ Every file in this directory starts with a "CRITICAL RULES" section. Claude shou
 | `database.md` | Any database operations (PyDAL, SQLAlchemy, GORM) |
 | `security.md` | Authentication, authorization, security scanning |
 | `testing.md` | Running tests, beta infrastructure, smoke tests |
+| `containers.md` | Docker images, Dockerfiles, container configuration |
 
 ## Usage
 

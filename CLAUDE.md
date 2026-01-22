@@ -39,6 +39,12 @@
 - Flask-Security-Too mandatory for authentication
 - REST APIs use `/api/v{major}/endpoint` versioning
 
+**Container Images (CRITICAL):**
+- **Debian 12 (bookworm) ONLY** - use `-slim` variants when available
+- **NEVER use Alpine** - causes too many compatibility issues
+- Fallback order: Debian 12 → Debian 11 → Debian 13 → Ubuntu (if no Debian option)
+- Examples: `postgres:16-bookworm`, `redis:7-bookworm`, `python:3.13-slim-bookworm`
+
 📚 **Detailed Standards**: See `.claude/` directory for language and service-specific rules
 
 ---

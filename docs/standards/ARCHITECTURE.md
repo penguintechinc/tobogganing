@@ -378,7 +378,7 @@ When Flask starts hitting the database too hard:
 
 ```bash
 # Add Redis
-docker run -d --name redis -p 6379:6379 redis:7-alpine
+docker run -d --name redis -p 6379:6379 redis:7-bookworm
 ```
 
 Then in Flask:

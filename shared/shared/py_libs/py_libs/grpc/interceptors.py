@@ -41,7 +41,7 @@ class AuthInterceptor(grpc.ServerInterceptor):
             public_methods: Set of method names that don't require auth
         """
         self.secret_key = secret_key
-        self.algorithms = algorithms or ['HS256']
+        self.algorithms = algorithms or ["HS256"]
         self.public_methods = public_methods or set()
 
     def intercept_service(
@@ -58,13 +58,13 @@ class AuthInterceptor(grpc.ServerInterceptor):
 
         # Extract token from metadata
         metadata = dict(handler_call_details.invocation_metadata)
-        auth_header = metadata.get('authorization', '')
+        auth_header = metadata.get("authorization", "")
 
-        if not auth_header.startswith('Bearer '):
+        if not auth_header.startswith("Bearer "):
             logger.warning(f"Missing or invalid auth header for {method}")
             return self._abort_with_error(
                 grpc.StatusCode.UNAUTHENTICATED,
-                "Missing or invalid authorization header"
+                "Missing or invalid authorization header",
             )
 
         token = auth_header[7:]  # Remove 'Bearer ' prefix
@@ -78,10 +78,9 @@ class AuthInterceptor(grpc.ServerInterceptor):
             )
 
             # Add user info to context (can be retrieved in handlers)
-            user_id = payload.get('sub')
+            user_id = payload.get("sub")
             logger.info(
-                f"Authenticated request to {method}",
-                extra={'user_id': user_id}
+                f"Authenticated request to {method}", extra={"user_id": user_id}
             )
 
             return continuation(handler_call_details)
@@ -89,14 +88,12 @@ class AuthInterceptor(grpc.ServerInterceptor):
         except jwt.ExpiredSignatureError:
             logger.warning(f"Expired token for {method}")
             return self._abort_with_error(
-                grpc.StatusCode.UNAUTHENTICATED,
-                "Token has expired"
+                grpc.StatusCode.UNAUTHENTICATED, "Token has expired"
             )
         except jwt.InvalidTokenError as e:
             logger.warning(f"Invalid token for {method}: {e}")
             return self._abort_with_error(
-                grpc.StatusCode.UNAUTHENTICATED,
-                "Invalid token"
+                grpc.StatusCode.UNAUTHENTICATED, "Invalid token"
             )
 
     def _abort_with_error(
@@ -105,6 +102,7 @@ class AuthInterceptor(grpc.ServerInterceptor):
         details: str,
     ) -> grpc.RpcMethodHandler:
         """Return an RPC handler that aborts with error."""
+
         def abort(request: Any, context: grpc.ServicerContext) -> None:
             context.abort(code, details)
 
@@ -118,6 +116,7 @@ class AuthInterceptor(grpc.ServerInterceptor):
 @dataclass(slots=True)
 class RateLimitEntry:
     """Track rate limit for a client."""
+
     count: int = 0
     window_start: float = 0.0
 
@@ -157,22 +156,19 @@ class RateLimitInterceptor(grpc.ServerInterceptor):
 
         if self.per_user:
             # Extract user from token
-            auth_header = metadata.get('authorization', '')
-            if auth_header.startswith('Bearer '):
+            auth_header = metadata.get("authorization", "")
+            if auth_header.startswith("Bearer "):
                 try:
                     token = auth_header[7:]
-                    payload = jwt.decode(
-                        token,
-                        options={"verify_signature": False}
-                    )
-                    client_id = payload.get('sub', 'anonymous')
+                    payload = jwt.decode(token, options={"verify_signature": False})
+                    client_id = payload.get("sub", "anonymous")
                 except Exception:
-                    client_id = 'anonymous'
+                    client_id = "anonymous"
             else:
-                client_id = 'anonymous'
+                client_id = "anonymous"
         else:
             # Use peer address (IP)
-            client_id = metadata.get('x-forwarded-for', 'unknown')
+            client_id = metadata.get("x-forwarded-for", "unknown")
 
         # Check rate limit
         current_time = time.time()
@@ -190,13 +186,12 @@ class RateLimitInterceptor(grpc.ServerInterceptor):
                 logger.warning(
                     f"Rate limit exceeded for {client_id}",
                     extra={
-                        'client_id': client_id,
-                        'requests': entry.count,
-                    }
+                        "client_id": client_id,
+                        "requests": entry.count,
+                    },
                 )
                 return self._abort_with_error(
-                    grpc.StatusCode.RESOURCE_EXHAUSTED,
-                    "Rate limit exceeded"
+                    grpc.StatusCode.RESOURCE_EXHAUSTED, "Rate limit exceeded"
                 )
 
             # Increment counter
@@ -210,6 +205,7 @@ class RateLimitInterceptor(grpc.ServerInterceptor):
         details: str,
     ) -> grpc.RpcMethodHandler:
         """Return an RPC handler that aborts with error."""
+
         def abort(request: Any, context: grpc.ServicerContext) -> None:
             context.abort(code, details)
 
@@ -238,14 +234,14 @@ class AuditInterceptor(grpc.ServerInterceptor):
 
         # Get correlation ID from metadata
         metadata = dict(handler_call_details.invocation_metadata)
-        correlation_id = metadata.get('x-correlation-id', 'unknown')
+        correlation_id = metadata.get("x-correlation-id", "unknown")
 
         logger.info(
             f"gRPC request started: {method}",
             extra={
-                'method': method,
-                'correlation_id': correlation_id,
-            }
+                "method": method,
+                "correlation_id": correlation_id,
+            },
         )
 
         handler = continuation(handler_call_details)
@@ -262,11 +258,11 @@ class AuditInterceptor(grpc.ServerInterceptor):
                     logger.info(
                         f"gRPC request completed: {method}",
                         extra={
-                            'method': method,
-                            'duration_ms': duration_ms,
-                            'correlation_id': correlation_id,
-                            'status': 'OK',
-                        }
+                            "method": method,
+                            "duration_ms": duration_ms,
+                            "correlation_id": correlation_id,
+                            "status": "OK",
+                        },
                     )
                     return response
 
@@ -276,12 +272,12 @@ class AuditInterceptor(grpc.ServerInterceptor):
                     logger.error(
                         f"gRPC request failed: {method}",
                         extra={
-                            'method': method,
-                            'duration_ms': duration_ms,
-                            'correlation_id': correlation_id,
-                            'error': str(e),
+                            "method": method,
+                            "duration_ms": duration_ms,
+                            "correlation_id": correlation_id,
+                            "error": str(e),
                         },
-                        exc_info=True
+                        exc_info=True,
                     )
                     raise
 
@@ -310,7 +306,7 @@ class CorrelationInterceptor(grpc.ServerInterceptor):
         metadata = dict(handler_call_details.invocation_metadata)
 
         # Get or create correlation ID
-        correlation_id = metadata.get('x-correlation-id')
+        correlation_id = metadata.get("x-correlation-id")
         if not correlation_id:
             correlation_id = str(uuid.uuid4())
             logger.debug(f"Generated new correlation ID: {correlation_id}")
@@ -355,16 +351,15 @@ class RecoveryInterceptor(grpc.ServerInterceptor):
                     logger.error(
                         f"Unexpected error in {method}",
                         extra={
-                            'method': method,
-                            'error': str(e),
-                            'trace': error_trace,
+                            "method": method,
+                            "error": str(e),
+                            "trace": error_trace,
                         },
-                        exc_info=True
+                        exc_info=True,
                     )
 
                     context.abort(
-                        grpc.StatusCode.INTERNAL,
-                        f"Internal server error: {str(e)}"
+                        grpc.StatusCode.INTERNAL, f"Internal server error: {str(e)}"
                     )
 
             return grpc.unary_unary_rpc_method_handler(

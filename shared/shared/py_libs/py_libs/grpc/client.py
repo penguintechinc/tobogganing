@@ -13,7 +13,7 @@ import grpc
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass(slots=True, frozen=True)
@@ -80,10 +80,10 @@ class GrpcClient:
     def _create_channel(self) -> grpc.Channel:
         """Create gRPC channel with configuration."""
         channel_options = [
-            ('grpc.keepalive_time_ms', self.options.keepalive_time_ms),
-            ('grpc.keepalive_timeout_ms', self.options.keepalive_timeout_ms),
-            ('grpc.keepalive_permit_without_calls', 1),
-            ('grpc.http2.max_pings_without_data', 0),
+            ("grpc.keepalive_time_ms", self.options.keepalive_time_ms),
+            ("grpc.keepalive_timeout_ms", self.options.keepalive_timeout_ms),
+            ("grpc.keepalive_permit_without_calls", 1),
+            ("grpc.http2.max_pings_without_data", 0),
         ]
 
         if self.options.enable_tls:
@@ -107,15 +107,15 @@ class GrpcClient:
         """Create TLS credentials for secure channel."""
         root_certs = None
         if self.options.ca_cert_path:
-            with open(self.options.ca_cert_path, 'rb') as f:
+            with open(self.options.ca_cert_path, "rb") as f:
                 root_certs = f.read()
 
         private_key = None
         certificate_chain = None
         if self.options.client_cert_path and self.options.client_key_path:
-            with open(self.options.client_key_path, 'rb') as f:
+            with open(self.options.client_key_path, "rb") as f:
                 private_key = f.read()
-            with open(self.options.client_cert_path, 'rb') as f:
+            with open(self.options.client_cert_path, "rb") as f:
                 certificate_chain = f.read()
 
         return grpc.ssl_channel_credentials(
@@ -160,8 +160,8 @@ class GrpcClient:
         for attempt in range(self.options.max_retries):
             try:
                 # Set default timeout if not provided
-                if 'timeout' not in kwargs:
-                    kwargs['timeout'] = self.options.timeout_seconds
+                if "timeout" not in kwargs:
+                    kwargs["timeout"] = self.options.timeout_seconds
 
                 return func(*args, **kwargs)
 
@@ -185,9 +185,9 @@ class GrpcClient:
                     logger.warning(
                         f"RPC failed (attempt {attempt + 1}/{self.options.max_retries}): {code}",
                         extra={
-                            'target': self.target,
-                            'backoff_ms': backoff_ms,
-                        }
+                            "target": self.target,
+                            "backoff_ms": backoff_ms,
+                        },
                     )
 
                     # Exponential backoff
@@ -199,7 +199,7 @@ class GrpcClient:
                 else:
                     logger.error(
                         f"RPC failed after {self.options.max_retries} attempts",
-                        exc_info=True
+                        exc_info=True,
                     )
 
         # All retries failed

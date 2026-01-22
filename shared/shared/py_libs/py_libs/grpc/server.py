@@ -62,14 +62,14 @@ def create_server(
 
     # Server configuration options
     server_options = [
-        ('grpc.max_concurrent_streams', options.max_concurrent_rpcs),
-        ('grpc.max_connection_idle_ms', options.max_connection_idle_ms),
-        ('grpc.max_connection_age_ms', options.max_connection_age_ms),
-        ('grpc.keepalive_time_ms', options.keepalive_time_ms),
-        ('grpc.keepalive_timeout_ms', options.keepalive_timeout_ms),
-        ('grpc.http2.max_pings_without_data', 0),
-        ('grpc.http2.min_time_between_pings_ms', 10000),
-        ('grpc.http2.min_ping_interval_without_data_ms', 5000),
+        ("grpc.max_concurrent_streams", options.max_concurrent_rpcs),
+        ("grpc.max_connection_idle_ms", options.max_connection_idle_ms),
+        ("grpc.max_connection_age_ms", options.max_connection_age_ms),
+        ("grpc.keepalive_time_ms", options.keepalive_time_ms),
+        ("grpc.keepalive_timeout_ms", options.keepalive_timeout_ms),
+        ("grpc.http2.max_pings_without_data", 0),
+        ("grpc.http2.min_time_between_pings_ms", 10000),
+        ("grpc.http2.min_ping_interval_without_data_ms", 5000),
     ]
 
     # Create server with thread pool
@@ -90,10 +90,10 @@ def create_server(
     logger.info(
         "gRPC server created",
         extra={
-            'max_workers': options.max_workers,
-            'max_concurrent_rpcs': options.max_concurrent_rpcs,
-            'interceptors': len(interceptors),
-        }
+            "max_workers": options.max_workers,
+            "max_concurrent_rpcs": options.max_concurrent_rpcs,
+            "interceptors": len(interceptors),
+        },
     )
 
     return server
@@ -117,9 +117,7 @@ def register_health_check(server: grpc.Server) -> health.HealthServicer:
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 
     # Set overall server health
-    health_servicer.set(
-        "", health_pb2.HealthCheckResponse.SERVING
-    )
+    health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
 
     logger.info("Health check service registered")
     return health_servicer
@@ -153,7 +151,7 @@ def start_server_with_graceful_shutdown(
         >>> # Add your servicers
         >>> start_server_with_graceful_shutdown(server, port=50051)
     """
-    server.add_insecure_port(f'[::]:{port}')
+    server.add_insecure_port(f"[::]:{port}")
     server.start()
 
     logger.info(f"gRPC server listening on port {port}")

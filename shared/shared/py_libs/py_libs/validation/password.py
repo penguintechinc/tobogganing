@@ -120,12 +120,24 @@ class IsStrongPassword(Validator[str, str]):
             opt_dict = {
                 "min_length": kwargs.get("min_length", default_opts.min_length),
                 "max_length": kwargs.get("max_length", default_opts.max_length),
-                "require_uppercase": kwargs.get("require_uppercase", default_opts.require_uppercase),
-                "require_lowercase": kwargs.get("require_lowercase", default_opts.require_lowercase),
-                "require_digit": kwargs.get("require_digit", default_opts.require_digit),
-                "require_special": kwargs.get("require_special", default_opts.require_special),
-                "special_chars": kwargs.get("special_chars", default_opts.special_chars),
-                "disallow_spaces": kwargs.get("disallow_spaces", default_opts.disallow_spaces),
+                "require_uppercase": kwargs.get(
+                    "require_uppercase", default_opts.require_uppercase
+                ),
+                "require_lowercase": kwargs.get(
+                    "require_lowercase", default_opts.require_lowercase
+                ),
+                "require_digit": kwargs.get(
+                    "require_digit", default_opts.require_digit
+                ),
+                "require_special": kwargs.get(
+                    "require_special", default_opts.require_special
+                ),
+                "special_chars": kwargs.get(
+                    "special_chars", default_opts.special_chars
+                ),
+                "disallow_spaces": kwargs.get(
+                    "disallow_spaces", default_opts.disallow_spaces
+                ),
             }
             self.options = PasswordOptions(**opt_dict)  # type: ignore[arg-type]
 

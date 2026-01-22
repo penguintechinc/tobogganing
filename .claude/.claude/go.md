@@ -123,7 +123,7 @@ go vet ./...
 
 **Multi-stage Docker builds MANDATORY:**
 - Build stage: Full Go toolchain, dependencies
-- Runtime stage: Minimal `debian:bookworm-slim` or `alpine:latest`
+- Runtime stage: Minimal `debian:bookworm-slim` or `debian:bookworm-slim`
 - Final size should be <50MB for most services
 
 **Version injection at build time:**
