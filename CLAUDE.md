@@ -45,6 +45,12 @@
 - Fallback order: Debian 12 → Debian 11 → Debian 13 → Ubuntu (if no Debian option)
 - Examples: `postgres:16-bookworm`, `redis:7-bookworm`, `python:3.13-slim-bookworm`
 
+**Kubernetes Deployments:**
+- **Support BOTH**: Helm v3 (packaged) AND Kustomize (prescriptive) - every project needs both
+- All K8s files in `k8s/` directory (helm/, kustomize/, manifests/)
+- Always set resource limits (cpu/memory) and health checks (liveness/readiness)
+- Environment overlays: dev, staging, prod with appropriate resource scaling
+
 📚 **Detailed Standards**: See `.claude/` directory for language and service-specific rules
 
 ---
