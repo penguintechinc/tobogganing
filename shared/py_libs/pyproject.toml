@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py_libs"
+version = "1.0.0"
+description = "Shared Python libraries for secure application development"
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+requires-python = ">=3.12"
+authors = [
+    {name = "Penguin Tech Inc", email = "dev@penguintech.io"}
+]
+keywords = ["validation", "security", "crypto", "grpc", "flask"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "argon2-cffi>=23.1.0",
+    "cryptography>=41.0.0",
+]
+
+[project.optional-dependencies]
+flask = [
+    "flask>=3.0.0",
+]
+http = [
+    "httpx>=0.26.0",
+]
+grpc = [
+    "grpcio>=1.60.0",
+    "grpcio-tools>=1.60.0",
+    "protobuf>=4.25.0",
+]
+redis = [
+    "redis>=5.0.0",
+]
+all = [
+    "py_libs[flask,grpc,redis,http]",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.8.0",
+    "ruff>=0.1.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0",
+    "bandit>=1.7.0",
+]
+
+[project.urls]
+Homepage = "https://www.penguintech.io"
+Documentation = "https://docs.penguintech.io/py-libs"
+Repository = "https://github.com/penguintechinc/project-template"
+Issues = "https://github.com/penguintechinc/project-template/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["py_libs*"]
+
+[tool.setuptools.package-data]
+py_libs = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312", "py313"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "W", "I", "N", "D", "UP", "S", "B", "A", "C4", "T20", "RET", "SIM"]
+ignore = ["D100", "D104"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --cov=py_libs --cov-report=term-missing"
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]  # Allow assert in tests
