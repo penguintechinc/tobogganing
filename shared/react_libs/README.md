@@ -703,6 +703,278 @@ The sidebar automatically highlights the active item based on the current path:
 />
 ```
 
+### ConsoleVersion
+
+A component that logs build version and epoch information to the browser console on mount, inspired by Elder's console output pattern.
+
+#### Features
+
+- 🚀 **Elder-style output** - Styled console.log with amber/gold colors
+- 📅 **Epoch parsing** - Converts Unix epoch to human-readable date
+- 🎨 **Customizable styling** - Full color configuration
+- 🏷️ **Banner styles** - Elder (emoji + name) or ASCII box
+- 📊 **Metadata support** - Log additional info (API URL, etc.)
+- 🪝 **React hook** - `useVersionInfo` for accessing parsed version data
+- ⚡ **Zero render** - Logs to console without rendering DOM elements
+
+#### Basic Usage
+
+```tsx
+import { ConsoleVersion } from '@penguin/react_libs';
+
+function App() {
+  return (
+    <>
+      <ConsoleVersion
+        appName="My Application"
+        version="1.0.0.1737727200"
+        environment="development"
+      />
+      {/* Rest of your app */}
+    </>
+  );
+}
+```
+
+**Console Output:**
+```
+🚀 My Application
+Version: 1.0.0
+Build Epoch: 1737727200
+Build Date: 2025-01-24 12:00:00 UTC
+Environment: development
+```
+
+#### Elder-Style Usage (Matches Elder's App.tsx)
+
+```tsx
+<ConsoleVersion
+  appName="Elder - Entity Relationship Tracking System"
+  version={`1.0.0.${import.meta.env.VITE_BUILD_TIME}`}
+  environment={import.meta.env.MODE}
+  emoji="🏛️"
+  metadata={{
+    'API URL': import.meta.env.VITE_API_URL || '(relative)',
+  }}
+/>
+```
+
+#### ASCII Box Banner Style
+
+```tsx
+<ConsoleVersion
+  appName="Project Template"
+  version="1.2.3.1737727200"
+  bannerStyle="box"
+  environment="production"
+/>
+```
+
+**Console Output:**
+```
+╔════════════════════════╗
+║   Project Template     ║
+╚════════════════════════╝
+Version: 1.2.3
+Build Epoch: 1737727200
+Build Date: 2025-01-24 12:00:00 UTC
+Environment: production
+```
+
+#### Custom Colors
+
+```tsx
+import { ConsoleStyleConfig } from '@penguin/react_libs';
+
+const greenTheme: ConsoleStyleConfig = {
+  primaryColor: '#22c55e',    // Green
+  secondaryColor: '#a1a1aa',  // Zinc
+};
+
+<ConsoleVersion
+  appName="Green App"
+  version="1.0.0"
+  styleConfig={greenTheme}
+  emoji="🌿"
+/>
+```
+
+#### Using the Hook
+
+```tsx
+import { useVersionInfo } from '@penguin/react_libs';
+
+function VersionBadge() {
+  const info = useVersionInfo('1.0.0.1737727200');
+
+  return (
+    <span className="text-sm text-gray-500">
+      v{info.semver} ({info.buildDate})
+    </span>
+  );
+}
+```
+
+#### Standalone Parse Function
+
+```tsx
+import { parseVersion } from '@penguin/react_libs';
+
+const info = parseVersion('2.5.1.1737727200');
+// info.semver = "2.5.1"
+// info.buildEpoch = 1737727200
+// info.buildDate = "2025-01-24 12:00:00 UTC"
+```
+
+#### Props
+
+```typescript
+interface ConsoleVersionProps {
+  appName: string;                   // Application name to display
+  version: string;                   // Version string (e.g., "1.0.0.1737727200")
+  buildEpoch?: number;               // Optional epoch override
+  environment?: string;              // Environment name (development, production)
+  styleConfig?: ConsoleStyleConfig;  // Custom color configuration
+  showBanner?: boolean;              // Show banner/header (default: true)
+  bannerStyle?: 'elder' | 'box';     // Banner style (default: 'elder')
+  emoji?: string;                    // Emoji for elder style (default: '🚀')
+  logOnMount?: boolean;              // Log on mount (default: true)
+  metadata?: Record<string, string | number>;  // Additional metadata
+  onLog?: (info: VersionInfo) => void;         // Callback after logging
+  children?: React.ReactNode;        // Optional children to render
+}
+```
+
+#### VersionInfo Interface
+
+```typescript
+interface VersionInfo {
+  full: string;       // Full version string ("1.0.0.1737727200")
+  major: number;      // Major version (1)
+  minor: number;      // Minor version (0)
+  patch: number;      // Patch version (0)
+  buildEpoch: number; // Unix epoch (1737727200)
+  buildDate: string;  // Human-readable date ("2025-01-24 12:00:00 UTC")
+  semver: string;     // Semantic version ("1.0.0")
+}
+```
+
+#### Default Colors (Elder Theme)
+
+| Property | Value | Description |
+|----------|-------|-------------|
+| `primaryColor` | `#f59e0b` | Amber-500 (banner/values) |
+| `secondaryColor` | `#64748b` | Slate-500 (labels) |
+| `accentColor` | `#60a5fa` | Blue-400 (environment badge) |
+
+### AppConsoleVersion (RECOMMENDED)
+
+A single component that logs both **WebUI version** and **API version** to the browser console. The WebUI version logs immediately on mount, and the API version is fetched from a status endpoint and logged when received.
+
+#### Basic Usage
+
+```tsx
+import { AppConsoleVersion } from '@penguin/react_libs';
+
+function App() {
+  return (
+    <>
+      <AppConsoleVersion
+        appName="Elder"
+        webuiVersion={import.meta.env.VITE_VERSION || '0.0.0'}
+        webuiBuildEpoch={Number(import.meta.env.VITE_BUILD_TIME) || 0}
+        environment={import.meta.env.MODE}
+        metadata={{
+          'API URL': import.meta.env.VITE_API_URL || '(relative)',
+        }}
+      />
+      {/* Rest of your app */}
+    </>
+  );
+}
+```
+
+**Console Output:**
+```
+🖥️ Elder - WebUI
+Version: 1.0.0
+Build Epoch: 1737727200
+Build Date: 2025-01-24 12:00:00 UTC
+Environment: development
+API URL: http://localhost:5000
+⚙️ Elder - API
+Version: 1.2.3
+Build Epoch: 1737720000
+Build Date: 2025-01-24 10:00:00 UTC
+```
+
+#### Custom API Endpoint
+
+```tsx
+<AppConsoleVersion
+  appName="MyApp"
+  webuiVersion="2.0.0.1737727200"
+  environment="production"
+  apiStatusUrl="/api/v2/health"  // Custom endpoint
+  webuiEmoji="🌐"
+  apiEmoji="🔧"
+  onApiError={(error) => console.error('API fetch failed:', error)}
+/>
+```
+
+#### Props
+
+```typescript
+interface AppConsoleVersionProps {
+  appName: string;                   // App name (prefix for WebUI/API labels)
+  webuiVersion: string;              // WebUI version string
+  webuiBuildEpoch?: number;          // WebUI build epoch (optional)
+  environment?: string;              // Environment name
+  apiStatusUrl?: string;             // API status endpoint (default: "/api/v1/status")
+  styleConfig?: ConsoleStyleConfig;  // Custom color configuration
+  bannerStyle?: 'elder' | 'box';     // Banner style (default: 'elder')
+  webuiEmoji?: string;               // WebUI emoji (default: '🖥️')
+  apiEmoji?: string;                 // API emoji (default: '⚙️')
+  metadata?: Record<string, string | number>;  // Additional metadata
+  onWebuiLog?: (info: VersionInfo) => void;    // WebUI log callback
+  onApiLog?: (info: VersionInfo) => void;      // API log callback
+  onApiError?: (error: Error) => void;         // API error callback
+  children?: React.ReactNode;
+}
+```
+
+#### API Status Endpoint Requirements
+
+The API status endpoint should return JSON with these fields:
+
+```json
+{
+  "version": "1.2.3.1737720000",
+  "build_epoch": 1737720000
+}
+```
+
+Either `version` with embedded epoch or separate `build_epoch` field is supported.
+
+#### useApiVersionInfo Hook
+
+Fetch API version info for custom display:
+
+```tsx
+import { useApiVersionInfo } from '@penguin/react_libs';
+
+function VersionBadge() {
+  const { apiVersion, loading, error } = useApiVersionInfo('/api/v1/status');
+
+  if (loading) return <span>Loading...</span>;
+  if (error) return <span>Error</span>;
+
+  return <span>API v{apiVersion?.semver}</span>;
+}
+```
+
+See `examples/ConsoleVersionExample.tsx` for complete usage examples.
+
 ## Development
 
 ```bash

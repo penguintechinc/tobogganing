@@ -12,6 +12,7 @@
 - **Dark theme default** - gold text (amber-400) with slate backgrounds
 - **TailwindCSS v4** for styling - use CSS variables for design system
 - **Responsive design** - mobile-first approach, all layouts must be responsive
+- **ConsoleVersion MANDATORY** - Every React app MUST include ConsoleVersion component (see below)
 
 ## Technology Stack
 
@@ -47,6 +48,90 @@ services/webui/
 ├── Dockerfile
 └── .env
 ```
+
+## ConsoleVersion Component (MANDATORY)
+
+**Every React application MUST include the `AppConsoleVersion` component** from `@penguin/react_libs` to log build version and epoch information to the browser console on startup.
+
+**Required Information:**
+- WebUI version and build epoch (from Vite build-time env vars)
+- API version and build epoch (fetched from `/api/v1/status` endpoint)
+
+**Implementation in App.tsx (RECOMMENDED - Single Component):**
+
+```tsx
+import { AppConsoleVersion } from '@penguin/react_libs';
+
+function App() {
+  return (
+    <>
+      {/* Logs both WebUI and API versions automatically */}
+      <AppConsoleVersion
+        appName="MyApp"
+        webuiVersion={import.meta.env.VITE_VERSION || '0.0.0'}
+        webuiBuildEpoch={Number(import.meta.env.VITE_BUILD_TIME) || 0}
+        environment={import.meta.env.MODE}
+        apiStatusUrl="/api/v1/status"
+        metadata={{
+          'API URL': import.meta.env.VITE_API_URL || '(relative)',
+        }}
+      />
+
+      {/* Rest of app */}
+    </>
+  );
+}
+```
+
+**Vite Configuration (vite.config.ts):**
+
+```typescript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  define: {
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(
+      Math.floor(Date.now() / 1000)
+    ),
+    'import.meta.env.VITE_VERSION': JSON.stringify(
+      process.env.npm_package_version || '0.0.0'
+    ),
+  },
+});
+```
+
+**API Status Endpoint Requirements:**
+
+The API must expose a `/api/v1/status` endpoint returning:
+
+```json
+{
+  "version": "1.2.3.1737720000",
+  "build_epoch": 1737720000
+}
+```
+
+**Expected Console Output:**
+```
+🖥️ MyApp - WebUI
+Version: 1.2.3
+Build Epoch: 1737727200
+Build Date: 2025-01-24 12:00:00 UTC
+Environment: development
+API URL: http://localhost:5000
+⚙️ MyApp - API
+Version: 1.2.3
+Build Epoch: 1737720000
+Build Date: 2025-01-24 10:00:00 UTC
+```
+
+**Why This Is Required:**
+- Debugging: Quickly verify deployed versions match expectations
+- Support: Users can report exact versions when filing issues
+- Audit: Track which versions are running in production
+- CI/CD: Verify deployments completed successfully
 
 ## API Client Integration
 
