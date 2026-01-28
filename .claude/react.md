@@ -266,3 +266,172 @@ CMD ["nginx", "-g", "daemon off;"]
 - ARIA labels for screen readers
 - Color contrast minimum 4.5:1
 - Respect `prefers-reduced-motion` preference
+
+## Shared React Libraries (MANDATORY)
+
+**All React applications MUST use `@penguin/react_libs` shared components** instead of implementing custom versions. This ensures consistency across all Penguin Tech applications.
+
+### Required Components
+
+| Component | Purpose | When to Use |
+|-----------|---------|-------------|
+| `AppConsoleVersion` | Console version logging | **REQUIRED** - Every React app |
+| `SidebarMenu` | Navigation sidebar | Apps with sidebar navigation |
+| `FormModalBuilder` | Modal forms | All modal dialogs with forms |
+| `LoginPageBuilder` | Login page | **REQUIRED** - All apps with authentication |
+
+### Installation
+
+```bash
+# In your React application
+npm install @penguin/react_libs
+# or
+yarn add @penguin/react_libs
+```
+
+### LoginPageBuilder (MANDATORY for Auth)
+
+**Every application with authentication MUST use `LoginPageBuilder`** from `@penguin/react_libs`.
+
+**Features included:**
+- Elder-style dark theme (gold/amber accents)
+- ALTCHA proof-of-work CAPTCHA (after failed attempts)
+- MFA/2FA support with 6-digit TOTP input
+- Social login (OAuth2, OIDC, SAML)
+- GDPR cookie consent banner
+- Full theming customization
+
+**Basic Implementation:**
+
+```tsx
+import { LoginPageBuilder, LoginResponse } from '@penguin/react_libs';
+
+function LoginPage() {
+  const handleSuccess = (response: LoginResponse) => {
+    if (response.token) {
+      localStorage.setItem('authToken', response.token);
+    }
+    window.location.href = '/dashboard';
+  };
+
+  return (
+    <LoginPageBuilder
+      api={{ loginUrl: '/api/v1/auth/login' }}
+      branding={{
+        appName: 'My Application',
+        logo: '/images/logo.png',
+        tagline: 'Welcome back!',
+        githubRepo: 'penguintechinc/my-app',
+      }}
+      onSuccess={handleSuccess}
+      gdpr={{
+        enabled: true,
+        privacyPolicyUrl: '/privacy',
+      }}
+    />
+  );
+}
+```
+
+**With MFA and CAPTCHA:**
+
+```tsx
+<LoginPageBuilder
+  api={{ loginUrl: '/api/v1/auth/login' }}
+  branding={{
+    appName: 'Secure App',
+    githubRepo: 'penguintechinc/secure-app',
+  }}
+  onSuccess={handleSuccess}
+  gdpr={{
+    enabled: true,
+    privacyPolicyUrl: '/privacy',
+  }}
+  captcha={{
+    enabled: true,
+    provider: 'altcha',
+    challengeUrl: '/api/v1/captcha/challenge',
+    failedAttemptsThreshold: 3,
+  }}
+  mfa={{
+    enabled: true,
+    codeLength: 6,
+    allowRememberDevice: true,
+  }}
+/>
+```
+
+**With Social Login:**
+
+```tsx
+<LoginPageBuilder
+  api={{ loginUrl: '/api/v1/auth/login' }}
+  branding={{ appName: 'Community App' }}
+  onSuccess={handleSuccess}
+  gdpr={{ enabled: true, privacyPolicyUrl: '/privacy' }}
+  socialLogins={[
+    { provider: 'google', clientId: 'your-google-client-id' },
+    { provider: 'github', clientId: 'your-github-client-id' },
+    { provider: 'oidc', issuerUrl: 'https://auth.company.com', clientId: 'app-id', label: 'Company SSO' },
+  ]}
+/>
+```
+
+### SidebarMenu Usage
+
+```tsx
+import { SidebarMenu } from '@penguin/react_libs';
+
+<SidebarMenu
+  logo={<img src="/logo.png" alt="Logo" />}
+  categories={[
+    {
+      header: 'Main',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+        { name: 'Users', href: '/users', icon: UsersIcon },
+      ],
+    },
+  ]}
+  currentPath={location.pathname}
+  onNavigate={(href) => navigate(href)}
+/>
+```
+
+### FormModalBuilder Usage
+
+```tsx
+import { FormModalBuilder } from '@penguin/react_libs';
+
+<FormModalBuilder
+  title="Create User"
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+  onSubmit={handleSubmit}
+  fields={[
+    { name: 'email', type: 'email', label: 'Email', required: true },
+    { name: 'name', type: 'text', label: 'Name', required: true },
+    { name: 'role', type: 'select', label: 'Role', options: [
+      { value: 'admin', label: 'Admin' },
+      { value: 'user', label: 'User' },
+    ]},
+  ]}
+/>
+```
+
+### Why Shared Libraries?
+
+1. **Consistency**: Uniform look and feel across all applications
+2. **Security**: Centralized security features (CAPTCHA, MFA, CSRF protection)
+3. **Maintenance**: Bug fixes and improvements benefit all apps
+4. **Compliance**: GDPR consent handled consistently
+5. **Efficiency**: No duplicating complex authentication logic
+
+### Do NOT Implement Custom Versions Of:
+
+- ❌ Login pages/forms - use `LoginPageBuilder`
+- ❌ Navigation sidebars - use `SidebarMenu`
+- ❌ Modal forms - use `FormModalBuilder`
+- ❌ Console version logging - use `AppConsoleVersion`
+- ❌ Cookie consent banners - use `LoginPageBuilder` with GDPR config
+- ❌ Social login buttons - use `LoginPageBuilder` with socialLogins config

@@ -345,3 +345,43 @@ CMD ["nginx", "-g", "daemon off;"]
 ```
 
 Build locally with `npm run build`, Docker serves the static files with nginx. Fast and lightweight!
+
+## 📦 Shared React Libraries (MANDATORY)
+
+All React applications **MUST** use `@penguin/react_libs` for common components. See the [React Libraries Standards](REACT_LIBS.md) for complete documentation.
+
+**Required components:**
+
+| Component | Purpose | When to Use |
+|-----------|---------|-------------|
+| `AppConsoleVersion` | Console version logging | **Every app** |
+| `LoginPageBuilder` | Login/auth page | Apps with authentication |
+| `SidebarMenu` | Navigation sidebar | Apps with sidebar navigation |
+| `FormModalBuilder` | Modal forms | All modal dialogs with forms |
+
+**Quick example:**
+
+```tsx
+import { LoginPageBuilder, AppConsoleVersion, SidebarMenu } from '@penguin/react_libs';
+
+// In App.tsx
+function App() {
+  return (
+    <>
+      <AppConsoleVersion appName="MyApp" webuiVersion="1.0.0" />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/*" element={<MainLayout />} />
+      </Routes>
+    </>
+  );
+}
+```
+
+**Do NOT implement custom versions of:**
+- ❌ Login pages → use `LoginPageBuilder`
+- ❌ Navigation sidebars → use `SidebarMenu`
+- ❌ Modal forms → use `FormModalBuilder`
+- ❌ Version logging → use `AppConsoleVersion`
+
+📚 **Full documentation**: [React Libraries Standards](REACT_LIBS.md)

@@ -458,4 +458,46 @@ AZURE_CLIENT_SECRET=your-secret
 
 ---
 
-**Next Steps:** Check out [Database Standards](DATABASE.md) for data storage patterns and [API Standards](API.md) for endpoint design.
+## Frontend Login Implementation
+
+For React frontend applications, **use the `LoginPageBuilder` component** from `@penguin/react_libs`. It provides:
+
+- Elder-style dark theme with gold accents
+- ALTCHA CAPTCHA (proof-of-work) after failed attempts
+- MFA/2FA support with 6-digit TOTP input
+- Social login (OAuth2, OIDC, SAML)
+- GDPR cookie consent banner
+
+```tsx
+import { LoginPageBuilder } from '@penguin/react_libs';
+
+function LoginPage() {
+  return (
+    <LoginPageBuilder
+      api={{ loginUrl: '/api/v1/auth/login' }}
+      branding={{
+        appName: 'My Application',
+        githubRepo: 'penguintechinc/my-app',
+      }}
+      onSuccess={(response) => {
+        localStorage.setItem('authToken', response.token);
+        window.location.href = '/dashboard';
+      }}
+      gdpr={{ enabled: true, privacyPolicyUrl: '/privacy' }}
+      captcha={{
+        enabled: true,
+        provider: 'altcha',
+        challengeUrl: '/api/v1/captcha/challenge',
+        failedAttemptsThreshold: 3,
+      }}
+      mfa={{ enabled: true, codeLength: 6 }}
+    />
+  );
+}
+```
+
+📚 **Full documentation**: [React Libraries Standards](REACT_LIBS.md)
+
+---
+
+**Next Steps:** Check out [Database Standards](DATABASE.md) for data storage patterns and [API Standards](API_PROTOCOLS.md) for endpoint design.
