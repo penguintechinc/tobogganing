@@ -460,7 +460,7 @@ AZURE_CLIENT_SECRET=your-secret
 
 ## Frontend Login Implementation
 
-For React frontend applications, **use the `LoginPageBuilder` component** from `@penguin/react_libs`. It provides:
+For React frontend applications, **use the `LoginPageBuilder` component** from `@penguintechinc/react-libs`. It provides:
 
 - Elder-style dark theme with gold accents
 - ALTCHA CAPTCHA (proof-of-work) after failed attempts
@@ -469,7 +469,7 @@ For React frontend applications, **use the `LoginPageBuilder` component** from `
 - GDPR cookie consent banner
 
 ```tsx
-import { LoginPageBuilder } from '@penguin/react_libs';
+import { LoginPageBuilder } from '@penguintechinc/react-libs';
 
 function LoginPage() {
   return (

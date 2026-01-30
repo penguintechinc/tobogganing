@@ -2,14 +2,14 @@
 
 Part of [Development Standards](../STANDARDS.md)
 
-The `@penguin/react_libs` package provides shared React components that **MUST** be used across all Penguin Tech applications. This ensures consistency, reduces code duplication, and centralizes security-critical functionality.
+The `@penguintechinc/react-libs` package provides shared React components that **MUST** be used across all Penguin Tech applications. This ensures consistency, reduces code duplication, and centralizes security-critical functionality.
 
 ## Installation
 
 ```bash
-npm install @penguin/react_libs
+npm install @penguintechinc/react-libs
 # or
-yarn add @penguin/react_libs
+yarn add @penguintechinc/react-libs
 ```
 
 ## Required Components
@@ -39,7 +39,7 @@ A comprehensive login page component with built-in security features.
 ### Basic Usage
 
 ```tsx
-import { LoginPageBuilder, LoginResponse } from '@penguin/react_libs';
+import { LoginPageBuilder, LoginResponse } from '@penguintechinc/react-libs';
 
 function LoginPage() {
   const handleSuccess = (response: LoginResponse) => {
@@ -302,7 +302,7 @@ A flexible modal form builder with validation, tabs, and file uploads.
 ### Basic Usage
 
 ```tsx
-import { FormModalBuilder } from '@penguin/react_libs';
+import { FormModalBuilder } from '@penguintechinc/react-libs';
 
 <FormModalBuilder
   title="Create User"
@@ -421,7 +421,7 @@ A collapsible navigation sidebar with role-based visibility.
 ### Basic Usage
 
 ```tsx
-import { SidebarMenu } from '@penguin/react_libs';
+import { SidebarMenu } from '@penguintechinc/react-libs';
 import { Home, Users, Settings } from 'lucide-react';
 
 <SidebarMenu
@@ -485,7 +485,7 @@ Logs version info to the browser console on app startup.
 ### Usage
 
 ```tsx
-import { AppConsoleVersion } from '@penguin/react_libs';
+import { AppConsoleVersion } from '@penguintechinc/react-libs';
 
 function App() {
   return (
@@ -549,7 +549,7 @@ import {
   validateState,
   getProviderLabel,
   getProviderColors,
-} from '@penguin/react_libs';
+} from '@penguintechinc/react-libs';
 ```
 
 ### SAML Utilities
@@ -560,13 +560,13 @@ import {
   buildSAMLRedirectUrl,
   initiateSAMLLogin,
   validateRelayState,
-} from '@penguin/react_libs';
+} from '@penguintechinc/react-libs';
 ```
 
 ### Hooks
 
 ```typescript
-import { useCaptcha, useCookieConsent } from '@penguin/react_libs';
+import { useCaptcha, useCookieConsent } from '@penguintechinc/react-libs';
 
 // CAPTCHA state management
 const { showCaptcha, incrementFailedAttempts, resetFailedAttempts } = useCaptcha(config);
@@ -578,7 +578,7 @@ const { consent, showBanner, acceptAll, acceptEssential } = useCookieConsent(gdp
 ### Theme
 
 ```typescript
-import { ELDER_LOGIN_THEME, mergeWithElderTheme } from '@penguin/react_libs';
+import { ELDER_LOGIN_THEME, mergeWithElderTheme } from '@penguintechinc/react-libs';
 
 // Use default theme
 const theme = ELDER_LOGIN_THEME;
@@ -613,7 +613,7 @@ To maintain consistency and security, **never** implement custom versions of:
 
 ## Examples
 
-See `shared/react_libs/examples/` for complete usage examples:
+See the [penguin-libs repository](https://github.com/penguintechinc/penguin-libs/tree/main/packages/react-libs/examples) for complete usage examples:
 
 - `LoginPageExample.tsx` - 8 different login configurations
 - `SidebarMenuExample.tsx` - Navigation patterns

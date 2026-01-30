@@ -13,6 +13,8 @@
 - **TailwindCSS v4** for styling - use CSS variables for design system
 - **Responsive design** - mobile-first approach, all layouts must be responsive
 - **ConsoleVersion MANDATORY** - Every React app MUST include ConsoleVersion component (see below)
+- **Shared Library Components MANDATORY** - Use `@penguintechinc/react-libs` components by default (see below)
+- **Console Logging REQUIRED** - All components must include sanitized console logging for troubleshooting
 
 ## Technology Stack
 
@@ -51,7 +53,7 @@ services/webui/
 
 ## ConsoleVersion Component (MANDATORY)
 
-**Every React application MUST include the `AppConsoleVersion` component** from `@penguin/react_libs` to log build version and epoch information to the browser console on startup.
+**Every React application MUST include the `AppConsoleVersion` component** from `@penguintechinc/react-libs` to log build version and epoch information to the browser console on startup.
 
 **Required Information:**
 - WebUI version and build epoch (from Vite build-time env vars)
@@ -60,7 +62,7 @@ services/webui/
 **Implementation in App.tsx (RECOMMENDED - Single Component):**
 
 ```tsx
-import { AppConsoleVersion } from '@penguin/react_libs';
+import { AppConsoleVersion } from '@penguintechinc/react-libs';
 
 function App() {
   return (
@@ -132,6 +134,78 @@ Build Date: 2025-01-24 10:00:00 UTC
 - Support: Users can report exact versions when filing issues
 - Audit: Track which versions are running in production
 - CI/CD: Verify deployments completed successfully
+
+## Console Logging Standards (MANDATORY)
+
+**All shared library components and React applications MUST include sanitized console logging** for troubleshooting. This allows debugging without exposing sensitive information.
+
+### Logging Principles
+
+1. **Log lifecycle events**: Component mount, unmount, state changes
+2. **Log user actions**: Form submissions, button clicks, navigation
+3. **Log errors**: API failures, validation errors, exceptions
+4. **NEVER log sensitive data**: Passwords, tokens, full emails, MFA codes, security thresholds
+
+### Sanitization Rules
+
+```typescript
+// NEVER log these values directly
+const SENSITIVE_KEYS = [
+  'password', 'token', 'secret', 'credential', 'mfaCode',
+  'captchaToken', 'apiKey', 'authToken', 'refreshToken'
+];
+
+// Sanitize emails - only log domain
+const sanitizeEmail = (email: string) => {
+  const parts = email.split('@');
+  return parts.length === 2 ? parts[1] : '[invalid]';
+};
+
+// Example sanitized log
+console.log('[LoginPage] Login attempt', { emailDomain: 'example.com' });
+// NOT: console.log('[LoginPage] Login attempt', { email: 'user@example.com', password: 'secret' });
+```
+
+### Standard Log Format
+
+All shared components use prefixed logging:
+
+```
+[ComponentName] Action description { sanitizedData }
+[ComponentName:SubFeature] Specific action { data }
+```
+
+**Examples:**
+```
+[LoginPage] LoginPage mounted { appName: 'MyApp', captchaEnabled: true }
+[LoginPage] Login attempt started { emailDomain: 'example.com', rememberMe: true }
+[LoginPage:CAPTCHA] Failed login attempt recorded { attemptNumber: 2 }
+[LoginPage:MFA] MFA verification started { rememberDevice: false }
+[FormModal] Modal opened { title: 'Create User', fieldCount: 3 }
+[FormModal] Form submitted successfully { tabCount: 1 }
+```
+
+### Security Logging Rules
+
+**NEVER log:**
+- ❌ Passwords or password hints
+- ❌ Authentication tokens (JWT, refresh tokens, API keys)
+- ❌ Full email addresses (only log domain)
+- ❌ MFA/TOTP codes
+- ❌ CAPTCHA tokens or solutions
+- ❌ Security thresholds (e.g., "CAPTCHA triggers after 3 attempts" - tells attackers limits)
+- ❌ Session IDs or cookies
+- ❌ Form field values that might contain sensitive data
+
+**Safe to log:**
+- ✅ Component lifecycle events (mount, unmount)
+- ✅ User action types (not content)
+- ✅ Email domains (not full addresses)
+- ✅ Attempt counts (but not thresholds)
+- ✅ Error codes and types
+- ✅ Validation failure field names (not values)
+- ✅ Navigation events
+- ✅ Feature flags and configuration (non-sensitive)
 
 ## API Client Integration
 
@@ -237,9 +311,251 @@ export default apiClient;
 - Props validation for all components
 
 **Testing:**
-- Smoke tests: Build, run, API health, page loads
+- Smoke tests: Build, run, API health, page loads, tab loads
 - Unit tests for custom hooks and utilities
 - Integration tests for component interactions
+- Shared component validation (see Smoke Tests section below)
+
+## Smoke Tests for Shared Components (MANDATORY)
+
+**All React applications using shared library components MUST include smoke tests** to validate:
+1. Page loads correctly (including auth-protected pages)
+2. Tab navigation works
+3. Forms render and submit properly
+4. Shared components initialize without errors
+
+### Page Load Smoke Tests
+
+Test that all pages load without JavaScript errors:
+
+```typescript
+// tests/smoke/pageLoads.spec.ts
+import { test, expect } from '@playwright/test';
+
+const PAGES = [
+  { path: '/login', name: 'Login Page', requiresAuth: false },
+  { path: '/dashboard', name: 'Dashboard', requiresAuth: true },
+  { path: '/users', name: 'Users List', requiresAuth: true },
+  { path: '/settings', name: 'Settings', requiresAuth: true },
+];
+
+test.describe('Page Load Smoke Tests', () => {
+  for (const page of PAGES) {
+    test(`${page.name} loads without errors`, async ({ page: browserPage }) => {
+      const errors: string[] = [];
+      browserPage.on('pageerror', (err) => errors.push(err.message));
+
+      if (page.requiresAuth) {
+        // Login first for protected pages
+        await browserPage.goto('/login');
+        await browserPage.fill('input[name="email"]', 'admin@localhost.local');
+        await browserPage.fill('input[name="password"]', 'admin123');
+        await browserPage.click('button[type="submit"]');
+        await browserPage.waitForURL('/dashboard');
+      }
+
+      await browserPage.goto(page.path);
+      await browserPage.waitForLoadState('networkidle');
+
+      expect(errors).toEqual([]);
+    });
+  }
+});
+```
+
+### Tab Load Smoke Tests
+
+Test tab navigation on pages with multiple tabs:
+
+```typescript
+// tests/smoke/tabLoads.spec.ts
+import { test, expect } from '@playwright/test';
+
+const TABBED_PAGES = [
+  {
+    path: '/settings',
+    tabs: ['General', 'Security', 'Notifications'],
+  },
+  {
+    path: '/users/1',
+    tabs: ['Profile', 'Permissions', 'Activity'],
+  },
+];
+
+test.describe('Tab Load Smoke Tests', () => {
+  test.beforeEach(async ({ page }) => {
+    // Login for protected pages
+    await page.goto('/login');
+    await page.fill('input[name="email"]', 'admin@localhost.local');
+    await page.fill('input[name="password"]', 'admin123');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/dashboard');
+  });
+
+  for (const tabPage of TABBED_PAGES) {
+    for (const tab of tabPage.tabs) {
+      test(`${tabPage.path} - ${tab} tab loads`, async ({ page }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (err) => errors.push(err.message));
+
+        await page.goto(tabPage.path);
+        await page.click(`[data-testid="tab-${tab.toLowerCase()}"]`);
+        await page.waitForLoadState('networkidle');
+
+        expect(errors).toEqual([]);
+      });
+    }
+  }
+});
+```
+
+### Form Component Smoke Tests
+
+Test that FormModalBuilder forms render and validate:
+
+```typescript
+// tests/smoke/formModals.spec.ts
+import { test, expect } from '@playwright/test';
+
+const FORMS = [
+  { trigger: '[data-testid="create-user-btn"]', title: 'Create User' },
+  { trigger: '[data-testid="edit-settings-btn"]', title: 'Edit Settings' },
+];
+
+test.describe('Form Modal Smoke Tests', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/login');
+    await page.fill('input[name="email"]', 'admin@localhost.local');
+    await page.fill('input[name="password"]', 'admin123');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/dashboard');
+  });
+
+  for (const form of FORMS) {
+    test(`${form.title} form opens and closes`, async ({ page }) => {
+      await page.goto('/users'); // Navigate to page with form
+      await page.click(form.trigger);
+
+      // Verify modal opened
+      await expect(page.locator('[role="dialog"]')).toBeVisible();
+      await expect(page.locator('h2')).toContainText(form.title);
+
+      // Close modal
+      await page.click('[data-testid="modal-close"]');
+      await expect(page.locator('[role="dialog"]')).not.toBeVisible();
+    });
+
+    test(`${form.title} form shows validation errors`, async ({ page }) => {
+      await page.goto('/users');
+      await page.click(form.trigger);
+
+      // Submit empty form
+      await page.click('button[type="submit"]');
+
+      // Should show validation errors (not submit)
+      await expect(page.locator('[role="dialog"]')).toBeVisible();
+      await expect(page.locator('.text-red-400')).toBeVisible();
+    });
+  }
+});
+```
+
+### LoginPageBuilder Smoke Tests
+
+Test the login page shared component:
+
+```typescript
+// tests/smoke/loginPage.spec.ts
+import { test, expect } from '@playwright/test';
+
+test.describe('LoginPageBuilder Smoke Tests', () => {
+  test('login page renders correctly', async ({ page }) => {
+    await page.goto('/login');
+
+    // Verify LoginPageBuilder components rendered
+    await expect(page.locator('input[name="email"]')).toBeVisible();
+    await expect(page.locator('input[name="password"]')).toBeVisible();
+    await expect(page.locator('button[type="submit"]')).toBeVisible();
+  });
+
+  test('login page shows validation errors for empty form', async ({ page }) => {
+    await page.goto('/login');
+    await page.click('button[type="submit"]');
+
+    // Should show validation error
+    await expect(page.locator('.text-red-400')).toBeVisible();
+  });
+
+  test('login page shows error for invalid credentials', async ({ page }) => {
+    await page.goto('/login');
+    await page.fill('input[name="email"]', 'wrong@example.com');
+    await page.fill('input[name="password"]', 'wrongpassword');
+    await page.click('button[type="submit"]');
+
+    // Should show error message
+    await expect(page.locator('[data-testid="login-error"]')).toBeVisible();
+  });
+
+  test('successful login redirects to dashboard', async ({ page }) => {
+    await page.goto('/login');
+    await page.fill('input[name="email"]', 'admin@localhost.local');
+    await page.fill('input[name="password"]', 'admin123');
+    await page.click('button[type="submit"]');
+
+    await page.waitForURL('/dashboard');
+    expect(page.url()).toContain('/dashboard');
+  });
+
+  test('GDPR consent banner appears on first visit', async ({ page, context }) => {
+    // Clear cookies/storage for fresh visit
+    await context.clearCookies();
+
+    await page.goto('/login');
+
+    // GDPR banner should be visible
+    await expect(page.locator('[data-testid="cookie-consent"]')).toBeVisible();
+  });
+});
+```
+
+### Running Smoke Tests
+
+```bash
+# Install Playwright
+npm install -D @playwright/test
+
+# Run all smoke tests
+npx playwright test tests/smoke/
+
+# Run specific smoke test category
+npx playwright test tests/smoke/pageLoads.spec.ts
+npx playwright test tests/smoke/loginPage.spec.ts
+
+# Run with UI for debugging
+npx playwright test --ui
+```
+
+### Test Data Attributes
+
+Add these data-testid attributes to your components for reliable testing:
+
+```tsx
+// In LoginPageBuilder usage
+<LoginPageBuilder
+  data-testid="login-form"
+  // ... other props
+/>
+
+// In FormModalBuilder usage
+<FormModalBuilder
+  data-testid="user-form-modal"
+  // ... other props
+/>
+
+// Tab buttons
+<button data-testid="tab-general">General</button>
+<button data-testid="tab-security">Security</button>
+```
 
 ## Docker Configuration
 
@@ -267,9 +583,16 @@ CMD ["nginx", "-g", "daemon off;"]
 - Color contrast minimum 4.5:1
 - Respect `prefers-reduced-motion` preference
 
-## Shared React Libraries (MANDATORY)
+## Shared React Libraries (MANDATORY - DEFAULT BEHAVIOR)
 
-**All React applications MUST use `@penguin/react_libs` shared components** instead of implementing custom versions. This ensures consistency across all Penguin Tech applications.
+**All React applications MUST use `@penguintechinc/react-libs` shared components BY DEFAULT** unless explicitly told otherwise. This is the default behavior - do not implement custom versions.
+
+**IMPORTANT:** When building any React application:
+1. **Always start with shared components** from `@penguintechinc/react-libs`
+2. **Only deviate if explicitly instructed** by the user/requirements
+3. **Document any exceptions** in the project's APP_STANDARDS.md
+
+This ensures consistency, security, and maintainability across all Penguin Tech applications.
 
 ### Required Components
 
@@ -282,16 +605,36 @@ CMD ["nginx", "-g", "daemon off;"]
 
 ### Installation
 
+**Step 1: Configure npm for GitHub Packages**
+
 ```bash
-# In your React application
-npm install @penguin/react_libs
+# Add to ~/.npmrc (one-time setup)
+echo "@penguintechinc:registry=https://npm.pkg.github.com" >> ~/.npmrc
+```
+
+**Step 2: Install the package**
+
+```bash
+npm install @penguintechinc/react-libs
 # or
-yarn add @penguin/react_libs
+yarn add @penguintechinc/react-libs
+```
+
+**For CI/CD (GitHub Actions)**:
+
+```yaml
+- name: Configure npm for GitHub Packages
+  run: echo "@penguintechinc:registry=https://npm.pkg.github.com" >> ~/.npmrc
+  env:
+    NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Install dependencies
+  run: npm ci
 ```
 
 ### LoginPageBuilder (MANDATORY for Auth)
 
-**Every application with authentication MUST use `LoginPageBuilder`** from `@penguin/react_libs`.
+**Every application with authentication MUST use `LoginPageBuilder`** from `@penguintechinc/react-libs`.
 
 **Features included:**
 - Elder-style dark theme (gold/amber accents)
@@ -304,7 +647,7 @@ yarn add @penguin/react_libs
 **Basic Implementation:**
 
 ```tsx
-import { LoginPageBuilder, LoginResponse } from '@penguin/react_libs';
+import { LoginPageBuilder, LoginResponse } from '@penguintechinc/react-libs';
 
 function LoginPage() {
   const handleSuccess = (response: LoginResponse) => {
@@ -380,7 +723,7 @@ function LoginPage() {
 ### SidebarMenu Usage
 
 ```tsx
-import { SidebarMenu } from '@penguin/react_libs';
+import { SidebarMenu } from '@penguintechinc/react-libs';
 
 <SidebarMenu
   logo={<img src="/logo.png" alt="Logo" />}
@@ -401,7 +744,7 @@ import { SidebarMenu } from '@penguin/react_libs';
 ### FormModalBuilder Usage
 
 ```tsx
-import { FormModalBuilder } from '@penguin/react_libs';
+import { FormModalBuilder } from '@penguintechinc/react-libs';
 
 <FormModalBuilder
   title="Create User"

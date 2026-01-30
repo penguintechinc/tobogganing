@@ -348,7 +348,7 @@ Build locally with `npm run build`, Docker serves the static files with nginx. F
 
 ## 📦 Shared React Libraries (MANDATORY)
 
-All React applications **MUST** use `@penguin/react_libs` for common components. See the [React Libraries Standards](REACT_LIBS.md) for complete documentation.
+All React applications **MUST** use `@penguintechinc/react-libs` for common components. See the [React Libraries Standards](REACT_LIBS.md) for complete documentation.
 
 **Required components:**
 
@@ -362,7 +362,7 @@ All React applications **MUST** use `@penguin/react_libs` for common components.
 **Quick example:**
 
 ```tsx
-import { LoginPageBuilder, AppConsoleVersion, SidebarMenu } from '@penguin/react_libs';
+import { LoginPageBuilder, AppConsoleVersion, SidebarMenu } from '@penguintechinc/react-libs';
 
 // In App.tsx
 function App() {

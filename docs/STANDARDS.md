@@ -34,6 +34,7 @@ Here's what you'll find in our comprehensive standards library:
 | 🛡️ | [Security](standards/SECURITY.md) | TLS, secrets management, vulnerability scanning |
 | 📚 | [Documentation](standards/DOCUMENTATION.md) | READMEs, release notes, keeping it clean |
 | 🎨 | [UI Design](standards/UI_DESIGN.md) | Components, patterns, responsive design |
+| 📱 | [Mobile](standards/MOBILE.md) | Flutter, native modules, phone + tablet support |
 | 🔗 | [Integrations](standards/INTEGRATIONS.md) | WaddleAI, MarchProxy, License Server |
 
 ## The Core Five (Most Important)
@@ -137,6 +138,7 @@ Dive into the individual standards documents for the full picture:
 - [Security](standards/SECURITY.md) - TLS, secrets, scanning
 - [Documentation](standards/DOCUMENTATION.md) - READMEs, release notes
 - [UI Design](standards/UI_DESIGN.md) - Components, patterns, styling
+- [Mobile](standards/MOBILE.md) - Flutter, native modules, iOS + Android, phone + tablet
 - [Integrations](standards/INTEGRATIONS.md) - WaddleAI, MarchProxy, License Server
 
 ---
