@@ -10,57 +10,53 @@
   - `.claude/app.md` - App-specific rules for Claude (create if needed)
   - `.claude/[feature].md` - Feature-specific context (create as needed)
 
+**App-Specific Addendums to Standardized Files:**
+
+If your app needs to add exceptions, clarifications, or context to standardized `.claude/` files (e.g., `react.md`, `python.md`, `testing.md`), **DO NOT edit those files**. Instead, create a `.local` variant:
+
+- `react.md` (standardized) → Create `react.local.md` for app-specific React patterns
+- `python.md` (standardized) → Create `python.local.md` for app-specific Python decisions
+- `testing.md` (standardized) → Create `testing.local.md` for app-specific test requirements
+- `security.md` (standardized) → Create `security.local.md` for app-specific security rules
+
+**Example `.local` file structure:**
+```markdown
+# React (App-Specific Addendums)
+
+## Additional Requirements for [ProjectName]
+- Custom build process for feature X
+- Performance constraints for Y
+- Team-specific patterns for Z
+```
+
+This keeps standardized files clean while allowing each app to extend them without conflicts. Local addendums will NOT be overwritten by standard updates.
+
+**Local Repository Overrides:**
+
+This repository may contain `.local.md` variant files that provide project-specific overrides or addendums:
+- `CLAUDE.local.md` - Project-specific additions or clarifications to this CLAUDE.md
+- `.claude/*.local.md` - Project-specific overrides to standardized `.claude/` rules
+
+**Always check for and read `.local.md` files** alongside standard files to ensure you have the complete context for this specific repository.
+
 ---
 
 ## ⚠️ CRITICAL RULES - READ FIRST
 
-**Language & Versions:**
-- **Python 3.13** default (3.12+ minimum) - use for most applications
-- **Go 1.24.x** only for >10K req/sec (1.23.x fallback allowed)
-- **Node.js 18+** for React frontend
-
-**Database (MANDATORY):**
-- **SQLAlchemy**: Schema creation and Alembic migrations ONLY
-- **PyDAL**: ALL runtime database operations - NO EXCEPTIONS
-- Support ALL: PostgreSQL, MySQL, MariaDB Galera, SQLite
-
 **Git Rules:**
 - **NEVER commit** unless explicitly requested
-- **NEVER push** to remote repositories
-- Run security scans before commit (bandit, gosec, npm audit)
+- **NEVER push** to remote repositories - only push when explicitly asked
+- **NEVER ask about pushing** - do not suggest or prompt for git push operations
+- Run security scans before commit
 
 **Code Quality:**
 - ALL code must pass linting before commit
 - No hardcoded secrets or credentials
 - Input validation mandatory
 
-**Architecture:**
-- Web UI and API are ALWAYS separate containers
-- Flask-Security-Too mandatory for authentication
-- REST APIs use `/api/v{major}/endpoint` versioning
+📚 **Complete Technical Standards**: See [`.claude/`](.claude/) directory for all language-specific, database, architecture, container image, Kubernetes, and development standards.
 
-**Container Images (CRITICAL):**
-- **Debian 12 (bookworm) ONLY** - use `-slim` variants when available
-- **NEVER use Alpine** - causes too many compatibility issues
-- Fallback order: Debian 12 → Debian 11 → Debian 13 → Ubuntu (if no Debian option)
-- Examples: `postgres:16-bookworm`, `redis:7-bookworm`, `python:3.13-slim-bookworm`
-
-**Kubernetes Deployments:**
-- **Support BOTH**: Helm v3 (packaged) AND Kustomize (prescriptive) - every project needs both
-- All K8s files in `k8s/` directory (helm/, kustomize/, manifests/)
-- Always set resource limits (cpu/memory) and health checks (liveness/readiness)
-- Environment overlays: dev, staging, prod with appropriate resource scaling
-
-**Orchestration Model Rules (MANDATORY):**
-- **The main model (Opus or Sonnet) NEVER does the work directly** — it plans, orchestrates, and validates
-- **ALL implementation work MUST be delegated to task agents** — file edits, searches, code writing, builds, tests, linting
-- **Builds and tests MUST be run by task agents** — agents report pass/fail summary back to the main model, not raw output
-- **Default to Haiku task agents** for all work; only escalate to Sonnet agents if Haiku fails or the task requires complex reasoning
-- **Task agent output MUST be minimal** — errors and brief completion summaries only, never full file contents or raw command output
-- **Every plan MUST explicitly note this orchestration pattern** to prevent token waste
-- 📚 See [`.claude/orchestration.md`](.claude/orchestration.md) for full details
-
-📚 **Detailed Standards**: See `.claude/` directory for language and service-specific rules
+📚 **Orchestration Model Rules**: See [`.claude/orchestration.md`](.claude/orchestration.md) for complete orchestration details — main model role (planning, delegating, validating), task agent model selection (Haiku vs Sonnet), output requirements, and concurrency limits.
 
 ---
 
@@ -71,7 +67,7 @@
 This is a comprehensive project template incorporating best practices and patterns from Penguin Tech Inc projects. It provides a standardized foundation for multi-language projects with enterprise-grade infrastructure and integrated licensing.
 
 **Template Features:**
-- Multi-language support (Go 1.24.x, Python 3.12/3.13, Node.js 18+)
+- Multi-language support with consistent standards
 - Enterprise security and licensing integration
 - Comprehensive CI/CD pipeline
 - Production-ready containerization
@@ -79,144 +75,22 @@ This is a comprehensive project template incorporating best practices and patter
 - Version management system
 - PenguinTech License Server integration
 
-## Technology Stack
+📚 **Technology Stack & Standards**: See [`.claude/technology.md`](.claude/technology.md) for complete language selection, framework, infrastructure, database, security, API design, performance optimization, and container standards.
 
-### Languages & Frameworks
+📚 **License Server Integration**: See [`.claude/licensing.md`](.claude/licensing.md) for PenguinTech License Server integration details, including license key format, endpoints, environment variables, and release-mode activation.
 
-**Language Selection Criteria (Case-by-Case Basis):**
-- **Python 3.13**: Default choice for most applications
-  - Web applications and APIs
-  - Business logic and data processing
-  - Integration services and connectors
-- **Go 1.24.x**: ONLY for high-traffic/performance-critical applications
-  - Applications handling >10K requests/second
-  - Network-intensive services
-  - Low-latency requirements (<10ms)
-  - CPU-bound operations requiring maximum throughput
-  - Go 1.23.x acceptable as fallback if 1.24.x compatibility constraints exist
-
-**Python Stack:**
-- **Python**: 3.13 for all applications (3.12+ minimum)
-- **Web Framework**:
-  - **Flask + Flask-Security-Too**: Standard choice for typical applications (mandatory)
-  - **Quart**: Async-first framework for high-performance/high-concurrency applications (>100 concurrent requests, <10ms latency requirements). Drop-in Flask replacement with native async/await support.
-- **Database Libraries** (mandatory for all Python applications):
-  - **SQLAlchemy**: Database initialization and schema creation only
-  - **PyDAL**: Runtime database operations and migrations
-- **Performance**: Dataclasses with slots, type hints, async/await required
-
-**Frontend Stack:**
-- **React**: ReactJS for all frontend applications
-- **Node.js**: 18+ for build tooling and React development
-- **JavaScript/TypeScript**: Modern ES2022+ standards
-
-**Go Stack (When Required):**
-- **Go**: 1.24.x (latest patch version, minimum 1.24.2); Go 1.23.x acceptable as fallback if compatibility constraints exist
-- **Database**: Use DAL with PostgreSQL/MySQL cross-support (e.g., GORM, sqlx)
-- Use only for traffic-intensive applications
-
-### Infrastructure & DevOps
-- **Containers**: Docker with multi-stage builds, Docker Compose
-- **Orchestration**: Kubernetes with Helm charts
-- **Configuration Management**: Ansible for infrastructure automation
-- **CI/CD**: GitHub Actions with comprehensive pipelines
-- **Monitoring**: Prometheus metrics, Grafana dashboards
-- **Logging**: Structured logging with configurable levels
-
-### Databases & Storage
-- **Primary**: PostgreSQL (default, configurable via `DB_TYPE` environment variable)
-- **Cache**: Redis/Valkey with optional TLS and authentication
-- **Supported Databases** (ALL must be supported by default):
-  - **PostgreSQL**: Primary/default database for production
-  - **MySQL**: Full support for MySQL 8.0+
-  - **MariaDB Galera**: Cluster support with WSREP, auto-increment, transaction handling
-  - **SQLite**: Development and lightweight deployments
-- **Database Libraries (Python)**:
-  - **SQLAlchemy + Alembic**: Database schema definition and version-controlled migrations
-  - **PyDAL**: Used for ALL runtime database operations only
-  - `DB_TYPE` must match PyDAL connection string prefixes exactly
-- **Database Libraries (Go)**: GORM or sqlx (mandatory for cross-database support)
-  - Must support PostgreSQL, MySQL/MariaDB, and SQLite
-  - Stable, well-maintained library required
-- **Migrations**: Alembic for schema migrations, PyDAL for runtime operations
-- **MariaDB Galera Support**: Handle Galera-specific requirements (WSREP, auto-increment, transactions)
-
-📚 **Supported DB_TYPE Values**: See [Database Standards](docs/standards/DATABASE.md) for complete list and configuration details.
-
-### Security & Authentication
-- **Flask-Security-Too**: Mandatory for all Flask applications
-  - Role-based access control (RBAC) with OAuth2-style scopes
-  - User authentication and session management
-  - Password hashing with bcrypt
-  - Email confirmation and password reset
-  - Two-factor authentication (2FA)
-- **Permissions Model**: Global, container/team, and resource-level roles with custom scope-based permissions
-- **TLS**: Enforce TLS 1.2 minimum, prefer TLS 1.3
-- **HTTP3/QUIC**: Utilize UDP with TLS for high-performance connections where possible
-- **Authentication**: JWT and MFA (standard), mTLS where applicable
-- **SSO**: SAML/OAuth2 SSO as enterprise-only features
-- **Secrets**: Environment variable management
-- **Scanning**: Trivy vulnerability scanning, CodeQL analysis
-- **Code Quality**: All code must pass CodeQL security analysis
-
-## PenguinTech License Server Integration
-
-All projects integrate with the centralized PenguinTech License Server at `https://license.penguintech.io` for feature gating and enterprise functionality.
-
-**IMPORTANT: License enforcement is ONLY enabled when project is marked as release-ready**
-- Development phase: All features available, no license checks
-- Release phase: License validation required, feature gating active
-
-**License Key Format**: `PENG-XXXX-XXXX-XXXX-XXXX-ABCD`
-
-**Core Endpoints**:
-- `POST /api/v2/validate` - Validate license
-- `POST /api/v2/features` - Check feature entitlements
-- `POST /api/v2/keepalive` - Report usage statistics
-
-**Environment Variables**:
-```bash
-# License configuration
-LICENSE_KEY=PENG-XXXX-XXXX-XXXX-XXXX-ABCD
-LICENSE_SERVER_URL=https://license.penguintech.io
-PRODUCT_NAME=your-product-identifier
-
-# Release mode (enables license enforcement)
-RELEASE_MODE=false  # Development (default)
-RELEASE_MODE=true   # Production (explicitly set)
-```
-
-📚 **Detailed Documentation**: [License Server Integration Guide](docs/licensing/license-server-integration.md)
-
-## WaddleAI Integration (Optional)
-
-For projects requiring AI capabilities, integrate with WaddleAI located at `~/code/WaddleAI`.
-
-**When to Use WaddleAI:**
-- Natural language processing (NLP)
-- Machine learning model inference
-- AI-powered features and automation
-- Intelligent data analysis
-- Chatbots and conversational interfaces
-
-**Integration Pattern:**
-- WaddleAI runs as separate microservice container
-- Communicate via REST API or gRPC
-- Environment variable configuration for API endpoints
-- License-gate AI features as enterprise functionality
-
-📚 **WaddleAI Documentation**: See WaddleAI project at `~/code/WaddleAI` for integration details
+📚 **WaddleAI Integration**: See [`.claude/waddleai-integration.md`](.claude/waddleai-integration.md) for AI capabilities integration, including when to use WaddleAI, service communication patterns, license gating, and Docker Compose setup.
 
 ## Project Structure
 
 ```
 project-name/
 ├── .github/             # CI/CD pipelines and templates
-│   └── workflows/       # GitHub Actions for each container
+│   └── workflows/       # GitHub Actions workflows
 ├── services/            # Microservices (separate containers by default)
-│   ├── flask-backend/   # Flask + PyDAL teams API backend (auth, teams, users, standard APIs)
-│   ├── go-backend/      # Go high-performance backend (XDP/AF_XDP, NUMA)
-│   ├── webui/           # Node.js + React frontend shell
+│   ├── backend-api/     # API backend service
+│   ├── high-perf/       # High-performance service (optional)
+│   ├── frontend/        # Frontend service
 │   └── connector/       # Integration services (placeholder)
 ├── shared/              # Shared components
 ├── infrastructure/      # Infrastructure as code
@@ -236,18 +110,10 @@ project-name/
 └── CLAUDE.md            # This file
 ```
 
-### Three-Container Architecture
-
-| Container | Purpose | When to Use |
-|-----------|---------|-------------|
-| **teams-api** (flask-backend) | Standard APIs, auth, teams, user management | <10K req/sec, business logic |
-| **go-backend** | High-performance networking | >10K req/sec, <10ms latency |
-| **webui** | Node.js + React frontend | All frontend applications |
-
 **Default Roles**: Admin (full access), Maintainer (read/write, no user mgmt), Viewer (read-only)
 **Team Roles**: Owner, Admin, Member, Viewer (team-scoped permissions)
 
-📚 **Architecture diagram and details**: [Architecture Standards](docs/standards/ARCHITECTURE.md)
+📚 **Architecture diagram and details**: See [`.claude/technology.md`](.claude/technology.md) and [Architecture Standards](docs/standards/ARCHITECTURE.md)
 
 ## Version Management System
 
@@ -336,137 +202,7 @@ make license-validate        # Validate license
 make license-check-features  # Check available features
 ```
 
-## Critical Development Rules
-
-### Development Philosophy: Safe, Stable, and Feature-Complete
-
-**NEVER take shortcuts or the "easy route" - ALWAYS prioritize safety, stability, and feature completeness**
-
-#### Core Principles
-- **No Quick Fixes**: Resist quick workarounds or partial solutions
-- **Complete Features**: Fully implemented with proper error handling and validation
-- **Safety First**: Security, data integrity, and fault tolerance are non-negotiable
-- **Stable Foundations**: Build on solid, tested components
-- **Future-Proof Design**: Consider long-term maintainability and scalability
-- **No Technical Debt**: Address issues properly the first time
-
-#### Red Flags (Never Do These)
-- ❌ Skipping input validation "just this once"
-- ❌ Hardcoding credentials or configuration
-- ❌ Ignoring error returns or exceptions
-- ❌ Commenting out failing tests to make CI pass
-- ❌ Deploying without proper testing
-- ❌ Using deprecated or unmaintained dependencies
-- ❌ Implementing partial features with "TODO" placeholders
-- ❌ Bypassing security checks for convenience
-- ❌ Assuming data is valid without verification
-- ❌ Leaving debug code or backdoors in production
-
-#### Quality Checklist Before Completion
-- ✅ All error cases handled properly
-- ✅ Unit tests cover all code paths
-- ✅ Integration tests verify component interactions
-- ✅ Smoke tests verify build, run, API health, and page loads
-- ✅ Security requirements fully implemented
-- ✅ Performance meets acceptable standards
-- ✅ Documentation complete and accurate
-- ✅ Code review standards met
-- ✅ No hardcoded secrets or credentials
-- ✅ Logging and monitoring in place
-- ✅ Build passes in containerized environment
-- ✅ No security vulnerabilities in dependencies
-- ✅ Edge cases and boundary conditions tested
-
-### Git Workflow
-- **NEVER commit automatically** unless explicitly requested by the user
-- **NEVER push to remote repositories** under any circumstances
-- **ONLY commit when explicitly asked** - never assume commit permission
-- **Prefer `gh` CLI over direct GitHub access** - use GitHub CLI (`gh`) for all GitHub operations (PRs, issues, releases, repo info) instead of web scraping or direct API calls
-- Always use feature branches for development
-- Require pull request reviews for main branch
-- Automated testing must pass before merge
-
-**Before Every Commit - Security Scanning**:
-- **Run security audits on all modified packages**:
-  - **Go packages**: Run `gosec ./...` on modified Go services
-  - **Node.js packages**: Run `npm audit` on modified Node.js services
-  - **Python packages**: Run `bandit -r .` and `safety check` on modified Python services
-- **Do NOT commit if security vulnerabilities are found** - fix all issues first
-- **Document vulnerability fixes** in commit message if applicable
-
-**Before Every Commit - API Testing**:
-- **Create and run API testing scripts** for each modified container service
-- **Testing scope**: All new endpoints and modified functionality
-- **Test files location**: `tests/api/` directory with service-specific subdirectories
-  - `tests/api/flask-backend/` - Flask backend API tests
-  - `tests/api/go-backend/` - Go backend API tests
-  - `tests/api/webui/` - WebUI container tests
-- **Run before commit**: Each test script should be executable and pass completely
-- **Test coverage**: Health checks, authentication, CRUD operations, error cases
-- **Command pattern**: `cd services/<service-name> && npm run test:api` or equivalent
-
-**Before Every Commit - Screenshots**:
-- **Requirement**: Update UI screenshots with current application state when features change
-- **Prerequisites**: Start development environment with mock data populated
-  ```bash
-  make dev                    # Start all services
-  make seed-mock-data         # Populate with 3-4 test items per feature
-  ```
-- **Capture screenshots**: Run from project root (auto-removes old, captures fresh)
-  ```bash
-  node scripts/capture-screenshots.cjs
-  # Or via npm script if configured
-  npm run screenshots
-  ```
-- **Purpose**: Screenshots should showcase features with realistic mock data (3-4 items)
-  - Demonstrates feature functionality and purpose
-  - Shows data in context (products list, orders, user profiles, etc.)
-  - Updated whenever UI changes or new features added
-- **Location**: Screenshots saved to `docs/screenshots/`
-- **Commit**: Include updated screenshots with relevant feature/UI changes
-
-**Before Every Commit - Smoke Tests**:
-- **Create and run smoke tests** to verify basic functionality (build, runtime, API health, UI loads)
-- **Mandatory requirements**: All must be created and passing before commit
-- **Run before commit**: `make smoke-test` or `./tests/smoke/run-all.sh`
-- **Continuous validation**: Smoke tests prevent regressions in core functionality
-
-📚 **Detailed smoke testing requirements**: [Testing Documentation](docs/TESTING.md#smoke-tests)
-
-### Local State Management (Crash Recovery)
-- **ALWAYS maintain local .PLAN and .TODO files** for crash recovery
-- **Keep .PLAN file updated** with current implementation plans and progress
-- **Keep .TODO file updated** with task lists and completion status
-- **Update these files in real-time** as work progresses
-- **Add to .gitignore**: Both .PLAN and .TODO files must be in .gitignore
-- **File format**: Use simple text format for easy recovery
-- **Automatic recovery**: Upon restart, check for existing files to resume work
-
-### Dependency Security Requirements
-- **ALWAYS check for Dependabot alerts** before every commit
-- **Monitor vulnerabilities via Socket.dev** for all dependencies
-- **Mandatory security scanning** before any dependency changes
-- **Fix all security alerts immediately** - no commits with outstanding vulnerabilities
-- **Regular security audits**: `npm audit`, `go mod audit`, `safety check`
-
-### Linting & Code Quality Requirements
-- **ALL code must pass linting** before commit - no exceptions
-- **Python**: flake8, black, isort, mypy (type checking), bandit (security)
-- **JavaScript/TypeScript**: ESLint, Prettier
-- **Go**: golangci-lint (includes staticcheck, gosec, etc.)
-- **Ansible**: ansible-lint
-- **Docker**: hadolint
-- **YAML**: yamllint
-- **Markdown**: markdownlint
-- **Shell**: shellcheck
-- **CodeQL**: All code must pass CodeQL security analysis
-- **PEP Compliance**: Python code must follow PEP 8, PEP 257 (docstrings), PEP 484 (type hints)
-
-### Build & Deployment Requirements
-- **NEVER mark tasks as completed until successful build verification**
-- All Go and Python builds MUST be executed within Docker containers
-- Use containerized builds for local development and CI/CD pipelines
-- Build failures must be resolved before task completion
+📚 **Critical Development Rules**: See [`.claude/development-rules.md`](.claude/development-rules.md) for complete development philosophy, red flags, quality checklist, security requirements, linting standards, and build deployment rules.
 
 ### Documentation Standards
 - **README.md**: Keep as overview and pointer to comprehensive docs/ folder
@@ -489,42 +225,7 @@ make license-check-features  # Check available features
 - **Use Task Agents**: Utilize task agents (subagents) to be more expedient and efficient when making changes to large files, updating or reviewing multiple files, or performing complex multi-step operations
 - **Avoid sed/cat**: Use sed and cat commands only when necessary; prefer dedicated Read/Edit/Write tools for file operations
 
-### Task Agent Orchestration (MANDATORY)
-
-**The main model (Opus or Sonnet) is the orchestrator, NOT the worker.** This applies regardless of which model is running as the main model. The main model:
-- **Plans** what needs to be done
-- **Delegates** all implementation work to task agents
-- **Validates** task agent output
-- **Never writes code, edits files, or performs searches directly** — always delegate to task agents
-
-**Every plan MUST call out this pattern explicitly** to prevent accidentally burning expensive orchestrator tokens on work that task agents should handle.
-
-**Model Selection:**
-- **Haiku model (DEFAULT)**: Use for ALL task agent work — file searches, edits, code writing, routine operations, most implementation tasks
-- **Sonnet model (ESCALATION ONLY)**: Use ONLY when Haiku fails, produces incorrect results, or the task genuinely requires complex reasoning (architectural decisions, intricate refactoring, multi-file coordination with complex dependencies)
-- **Never start with Sonnet** — always try Haiku first, escalate to Sonnet only on failure or proven complexity
-
-**Response Size Requirements (CRITICAL — prevents context overruns):**
-- Task agents MUST return **errors and brief completion summaries ONLY**
-- **Never return** full file contents, verbose explanations, or raw command output
-- Agent prompts MUST explicitly instruct: "Return only errors and a brief summary of what was done"
-- Acceptable responses: file paths changed, line numbers, error messages, 1-2 sentence summary
-- Unacceptable responses: full file dumps, lengthy explanations, unchanged file contents
-
-**Concurrency Limits:**
-- **Maximum 10 task agents** running concurrently at any time
-- Even with minimal responses, running more than 10 agents risks context overload
-- Queue additional tasks if the limit would be exceeded
-- Monitor active agent count before spawning new agents
-
-**Best Practices:**
-- Provide clear, specific prompts to agents to get focused responses
-- Request only the information needed, not comprehensive analysis
-- Use agents for parallelizable work (searching multiple directories, checking multiple files)
-- Combine related small tasks into single agent calls when possible
-- If a Haiku agent fails, retry once before escalating to Sonnet
-
-📚 **Full orchestration rules**: See [`.claude/orchestration.md`](.claude/orchestration.md)
+📚 **Task Agent Orchestration**: See [`.claude/orchestration.md`](.claude/orchestration.md) for complete details on orchestration model, task agent selection, response requirements, and concurrency limits.
 
 ## Development Standards
 
@@ -534,139 +235,11 @@ make license-check-features  # Check available features
 
 Comprehensive development standards are organized by category in `docs/standards/` directory. The main STANDARDS.md serves as an index with quick reference.
 
-📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md) (index to 12 category files)
+📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md) | [Technology Stack](`.claude/technology.md`) | [Development Rules](`.claude/development-rules.md`) | [Git Workflow](`.claude/git-workflow.md`)
 
-### Quick Reference
+📚 **Application Architecture**: See [`.claude/technology.md`](.claude/technology.md) for microservices architecture patterns and [Architecture Standards](docs/standards/ARCHITECTURE.md) for detailed architecture guidance.
 
-**API Versioning**:
-- ALL REST APIs MUST use versioning: `/api/v{major}/endpoint` format
-- Semantic versioning for major versions only in URL
-- Support current and 2 previous versions (N-2) minimum
-- Add deprecation headers to old versions
-- Document migration paths for version changes
-- Keep APIs simple and extensible: use flexible inputs, backward-compatible responses
-- Leverage and reuse existing APIs where possible
-
-**Database Standards**:
-- SQLAlchemy for database initialization and schema creation only
-- PyDAL mandatory for ALL runtime database operations and migrations
-- Supported databases: PostgreSQL, MySQL, MariaDB Galera, SQLite
-- Thread-safe usage with thread-local connections
-- Environment variable configuration for all database settings
-- Connection pooling and retry logic required
-- Async/multi-threading based on workload (see Performance Optimization)
-
-**API Design Principles**:
-- **Simple & Extensible**: Keep REST and gRPC APIs simple, use flexible input structures and backward-compatible responses
-- **Leverage Existing**: Reuse existing APIs where possible, avoid creating duplicate endpoints
-- **Consistent Versioning**: All APIs use `/api/v{major}/endpoint` versioning for REST and semantic versioning for gRPC
-- **Deprecation Support**: Maintain N-2 API versions minimum (current + 2 previous), include deprecation headers and migration paths
-
-**Protocol Support**:
-- **External Communication** (clients, third-party integrations): REST API over HTTPS
-  - Flask REST endpoints for client-facing APIs
-  - Supports external consumers and web UIs
-  - Versioned: `/api/v1/endpoint`, `/api/v2/endpoint`, etc.
-- **Inter-Container Communication** (within cluster): gRPC preferred for best performance
-  - Service-to-service calls between containers in same namespace/cluster
-  - Binary protocol with Protocol Buffers for lower latency and bandwidth
-  - Use for internal APIs between microservices
-  - Fallback to REST over HTTP/2 if gRPC unavailable
-- **HTTP/3 (QUIC)**: Consider for high-performance inter-container scenarios (>10K req/sec)
-  - UDP-based, reduced latency, connection multiplexing
-- Environment variables for protocol configuration
-- Multi-protocol implementation: REST for external, gRPC for internal
-
-**Performance Optimization (Python):**
-- Dataclasses with slots mandatory (30-50% memory reduction)
-- Type hints required for all Python code
-- **Concurrency selection based on workload:**
-  - `asyncio` + `databases` library for I/O-bound operations (>100 concurrent requests)
-  - `threading` + `ThreadPoolExecutor` for blocking I/O and legacy integrations
-  - `multiprocessing` for CPU-bound operations
-- Connection pool sizing: `(2 * CPU_cores) + disk_spindles`
-- Avoid premature optimization - profile first
-
-**High-Performance Networking (Case-by-Case):**
-- XDP (eXpress Data Path): Kernel-level packet processing
-- AF_XDP: Zero-copy socket for user-space packet processing
-- Use only for network-intensive applications requiring >100K packets/sec
-- Evaluate Python vs Go based on traffic requirements
-
-**Microservices Architecture**:
-- Web UI, API, and Connector as **separate containers by default**
-- Single responsibility per service
-- API-first design
-- Independent deployment and scaling
-- Each service has its own Dockerfile and dependencies
-
-**MarchProxy API Gateway/LB Integration**:
-- Applications are expected to run behind MarchProxy (`~/code/MarchProxy`)
-- **DO NOT include MarchProxy in default deployment** - it's external infrastructure
-- **Generate MarchProxy-compatible import configuration** in `config/marchproxy/`
-- Import config via MarchProxy's API: `POST /api/v1/services/import`
-- See [Integration Standards - MarchProxy](docs/standards/INTEGRATIONS.md)
-
-**Docker Standards**:
-- Multi-arch builds (amd64/arm64)
-- Debian-slim base images
-- Docker Compose for local development
-- Minimal host port exposure
-- **Cross-Architecture Testing**: Before final commit, test on alternate architecture:
-  - If developing on amd64: Use QEMU to build and test arm64 (`docker buildx build --platform linux/arm64 ...`)
-  - If developing on arm64: Use QEMU to build and test amd64 (`docker buildx build --platform linux/amd64 ...`)
-  - Ensures multi-architecture compatibility and prevents platform-specific bugs
-  - Command: `docker buildx build --platform linux/amd64,linux/arm64 -t image:tag --push .`
-
-**Testing**:
-- Unit tests: Network isolated, mocked dependencies
-- Integration tests: Component interactions
-- E2E tests: Critical workflows
-- Performance tests: Scalability validation
-- Smoke tests: Build, run, API health, page/tab load verification (mandatory)
-- Mock data: 3-4 items per feature/entity for development
-
-📚 **Complete Testing Guide**: [Testing Documentation](docs/TESTING.md) includes smoke tests, unit tests, integration tests, E2E tests, performance tests, mock data scripts, and cross-architecture testing with QEMU
-
-**Security**:
-- TLS 1.2+ required
-- Input validation mandatory
-- JWT, MFA, mTLS standard
-- SSO as enterprise feature
-
-## Application Architecture
-
-**ALWAYS use microservices architecture** - decompose into specialized, independently deployable containers:
-
-1. **Web UI Container**: ReactJS frontend (separate container, served via nginx)
-2. **Application API Container**: Flask + Flask-Security-Too backend (separate container)
-3. **Connector Container**: External system integration (separate container)
-
-**Default Container Separation**: Web UI and API are ALWAYS separate containers by default. This provides:
-- Independent scaling of frontend and backend
-- Different resource allocation per service
-- Separate deployment lifecycles
-- Technology-specific optimization
-
-**Benefits**:
-- Independent scaling
-- Technology diversity
-- Team autonomy
-- Resilience
-- Continuous deployment
-
-📚 **Detailed Architecture Patterns**: See [Architecture Standards](docs/standards/ARCHITECTURE.md)
-
-## Common Integration Patterns
-
-📚 **Complete code examples and integration patterns**: [Standards Index](docs/STANDARDS.md) | [Authentication](docs/standards/AUTHENTICATION.md) | [Database](docs/standards/DATABASE.md)
-
-Key integration patterns documented:
-- Flask + Flask-Security-Too + PyDAL authentication
-- Database integration with multi-DB support
-- ReactJS frontend with API client
-- License-gated features
-- Prometheus monitoring integration
+📚 **Integration Patterns**: See [Standards Index](docs/STANDARDS.md) | [Authentication](docs/standards/AUTHENTICATION.md) | [Database](docs/standards/DATABASE.md) for complete code examples and integration patterns.
 
 ## Website Integration Requirements
 
@@ -701,50 +274,7 @@ Key integration patterns documented:
   - **PenguinCloud**: `https://{repo_name_lowercase}.penguincloud.io`
   - Deployed from tagged releases (`vX.X.X`)
 
-### Pre-Commit Checklist
-
-**CRITICAL: You MUST run the pre-commit script before every commit:**
-
-```bash
-./scripts/pre-commit/pre-commit.sh
-```
-
-Results logged to: `/tmp/pre-commit-<project>-<epoch>/summary.log`
-
-Quick reference (see [docs/PRE_COMMIT.md](docs/PRE_COMMIT.md) for full details):
-1. Linters → 2. Security scans → 3. No secrets → 4. Build & Run → 5. Smoke tests → 6. Tests → 7. Version update → 8. Docker debian-slim
-
-**Smoke tests are mandatory in pre-commit checklist:**
-- Build verification for all containers
-- Runtime health checks for all services
-- API health endpoint validation
-- Web UI page and tab load verification
-- Must pass before proceeding to full test suite
-
-**Only commit when asked** — run pre-commit script, verify all checks pass, then wait for approval before `git commit`.
-
-### Applying Code Changes
-
-**After making code changes, rebuild and restart containers to apply changes:**
-
-```bash
-# All services
-docker compose down && docker compose up -d --build
-
-# Single service
-docker compose up -d --build <service-name>
-```
-
-**IMPORTANT:** `docker compose restart` and `docker restart` do NOT apply code changes - they only restart the existing container with old code. Always use `--build` to rebuild images with new code.
-
-**Browser Cache & Hard Reload During Development:**
-- Developers will routinely perform hard reloads (Ctrl+Shift+R / Cmd+Shift+R) and cache clearing during development
-- DO NOT assume the browser cache contains stale assets or that developers haven't already cleared it
-- Implement proper cache headers and asset versioning in your frontend/static assets
-- Use content-based cache busting (e.g., hashing filenames: `app.abc123.js`) for production builds
-- Consider setting `Cache-Control: no-cache, must-revalidate` for development builds when appropriate
-
-📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards Index](docs/STANDARDS.md)
+📚 **Git Workflow & Pre-Commit**: See [`.claude/git-workflow.md`](.claude/git-workflow.md) for complete pre-commit checklist, security scanning requirements, API testing, screenshot updates, smoke tests, and code change application procedures.
 
 ## Template Customization
 
