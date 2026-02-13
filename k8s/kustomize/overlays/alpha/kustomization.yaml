@@ -1,0 +1,93 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tobogganing-alpha
+
+namePrefix: alpha-
+
+resources:
+  - ../../base
+
+commonLabels:
+  environment: alpha
+
+## Override ConfigMap for alpha
+configMapGenerator:
+  - name: tobogganing-config
+    behavior: replace
+    literals:
+      - LOG_LEVEL=debug
+      - HUB_API_URL=http://alpha-hub-api:8080
+      - HUB_ROUTER_METRICS_URL=http://alpha-hub-router:9090
+      - REDIS_URL=redis://alpha-redis:6379
+      - DB_TYPE=sqlite
+
+patches:
+  ## Hub API - 1 replica, low resources
+  - target:
+      kind: Deployment
+      name: hub-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+
+  ## Hub Router - 1 replica, low resources
+  - target:
+      kind: Deployment
+      name: hub-router
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+
+  ## Hub WebUI - 1 replica, low resources
+  - target:
+      kind: Deployment
+      name: hub-webui
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+
+  ## Redis - low resources
+  - target:
+      kind: Deployment
+      name: redis
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"

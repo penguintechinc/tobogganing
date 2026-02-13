@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-router
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-router
+spec:
+  replicas: {{ .Values.hubRouter.replicas }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-router
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hub-router
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
+      hostNetwork: {{ .Values.hubRouter.hostNetwork }}
+      {{- if .Values.hubRouter.sysctls }}
+      securityContext:
+        sysctls:
+          {{- toYaml .Values.hubRouter.sysctls | nindent 10 }}
+      {{- end }}
+      containers:
+        - name: hub-router
+          image: "{{ .Values.hubRouter.image.repository }}:{{ .Values.hubRouter.image.tag }}"
+          imagePullPolicy: {{ .Values.hubRouter.image.pullPolicy }}
+          ports:
+            - name: wireguard
+              containerPort: {{ .Values.hubRouter.ports.wireguard }}
+              protocol: UDP
+            - name: https
+              containerPort: {{ .Values.hubRouter.ports.https }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.hubRouter.ports.metrics }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tobogganing.fullname" . }}-config
+            - secretRef:
+                name: {{ include "tobogganing.fullname" . }}-secrets
+          livenessProbe:
+            exec:
+              command:
+                {{- toYaml .Values.hubRouter.probes.liveness.exec.command | nindent 16 }}
+            initialDelaySeconds: {{ .Values.hubRouter.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.hubRouter.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.hubRouter.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.hubRouter.probes.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                {{- toYaml .Values.hubRouter.probes.readiness.exec.command | nindent 16 }}
+            initialDelaySeconds: {{ .Values.hubRouter.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.hubRouter.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.hubRouter.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.hubRouter.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.hubRouter.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: {{ .Values.hubRouter.securityContext.runAsNonRoot }}
+            runAsUser: {{ .Values.hubRouter.securityContext.runAsUser }}
+            allowPrivilegeEscalation: {{ .Values.hubRouter.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              add:
+                {{- toYaml .Values.hubRouter.securityContext.capabilities.add | nindent 16 }}
+          volumeMounts:
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-router
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-router
+spec:
+  type: ClusterIP
+  ports:
+    - name: wireguard
+      port: {{ .Values.hubRouter.ports.wireguard }}
+      targetPort: wireguard
+      protocol: UDP
+    - name: https
+      port: {{ .Values.hubRouter.ports.https }}
+      targetPort: https
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.hubRouter.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "tobogganing.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-router

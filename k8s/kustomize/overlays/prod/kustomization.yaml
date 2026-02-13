@@ -1,0 +1,94 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tobogganing-prod
+
+namePrefix: prod-
+
+resources:
+  - ../../base
+  - hpa.yaml
+
+commonLabels:
+  environment: production
+
+## Override ConfigMap for production
+configMapGenerator:
+  - name: tobogganing-config
+    behavior: replace
+    literals:
+      - LOG_LEVEL=warn
+      - HUB_API_URL=http://prod-hub-api:8080
+      - HUB_ROUTER_METRICS_URL=http://prod-hub-router:9090
+      - REDIS_URL=redis://prod-redis:6379
+      - DB_TYPE=mariadb
+
+patches:
+  ## Hub API - 3 replicas, full resources
+  - target:
+      kind: Deployment
+      name: hub-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+  ## Hub Router - 3 replicas, full resources
+  - target:
+      kind: Deployment
+      name: hub-router
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+  ## Hub WebUI - 3 replicas, full resources
+  - target:
+      kind: Deployment
+      name: hub-webui
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+
+  ## Redis - full resources
+  - target:
+      kind: Deployment
+      name: redis
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

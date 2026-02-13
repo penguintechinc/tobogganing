@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-webui
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-webui
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.hubWebui.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-webui
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hub-webui
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: {{ .Values.hubWebui.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.hubWebui.securityContext.runAsUser }}
+      containers:
+        - name: hub-webui
+          image: "{{ .Values.hubWebui.image.repository }}:{{ .Values.hubWebui.image.tag }}"
+          imagePullPolicy: {{ .Values.hubWebui.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.hubWebui.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tobogganing.fullname" . }}-config
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.hubWebui.probes.liveness.httpGet.path }}
+              port: {{ .Values.hubWebui.probes.liveness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.hubWebui.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.hubWebui.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.hubWebui.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.hubWebui.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.hubWebui.probes.readiness.httpGet.path }}
+              port: {{ .Values.hubWebui.probes.readiness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.hubWebui.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.hubWebui.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.hubWebui.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.hubWebui.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.hubWebui.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.hubWebui.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.hubWebui.securityContext.readOnlyRootFilesystem }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-webui
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-webui
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.hubWebui.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "tobogganing.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-webui

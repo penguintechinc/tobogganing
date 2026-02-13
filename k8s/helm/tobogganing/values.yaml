@@ -1,0 +1,211 @@
+## Tobogganing - Default Helm Values
+## Zero Trust SASE Platform
+
+namespace: tobogganing
+
+## Hub API Service
+hubApi:
+  image:
+    repository: tobogganing/hub-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 8080
+  grpcPort: 50051
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  probes:
+    liveness:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+## Hub Router Service
+hubRouter:
+  image:
+    repository: tobogganing/hub-router
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  ports:
+    wireguard: 51820
+    https: 8443
+    metrics: 9090
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    allowPrivilegeEscalation: true
+    capabilities:
+      add:
+        - NET_ADMIN
+        - SYS_MODULE
+  probes:
+    liveness:
+      exec:
+        command:
+          - /app/healthcheck
+      initialDelaySeconds: 20
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      exec:
+        command:
+          - /app/healthcheck
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+  hostNetwork: false
+  sysctls:
+    - name: net.ipv4.ip_forward
+      value: "1"
+    - name: net.ipv4.conf.all.src_valid_mark
+      value: "1"
+
+## Hub WebUI Service
+hubWebui:
+  image:
+    repository: tobogganing/hub-webui
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 80
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  probes:
+    liveness:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readiness:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+## Redis
+redis:
+  image:
+    repository: redis
+    tag: 7-bookworm
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 6379
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  storage:
+    size: 1Gi
+    storageClass: ""
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    allowPrivilegeEscalation: false
+
+## Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  hosts:
+    - host: tobogganing.penguintech.io
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: hub-api
+          port: 8080
+        - path: /
+          pathType: Prefix
+          service: hub-webui
+          port: 80
+  tls:
+    - secretName: tobogganing-tls
+      hosts:
+        - tobogganing.penguintech.io
+
+## Autoscaling
+autoscaling:
+  enabled: false
+  hubApi:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  hubWebui:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+## Monitoring
+monitoring:
+  enabled: true
+  prometheus:
+    scrapeInterval: 30s
+  grafana:
+    enabled: true
+
+## Service Account
+serviceAccount:
+  create: true
+  name: tobogganing
+  annotations: {}
+
+## Config
+config:
+  logLevel: info
+  hubApiUrl: "http://hub-api:8080"
+  hubRouterMetricsUrl: "http://hub-router:9090"
+  redisUrl: "redis://redis:6379"
+  dbType: "sqlite"

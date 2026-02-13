@@ -1,0 +1,54 @@
+## Tobogganing - Alpha Environment Overrides
+## Minimal resources for development/testing
+
+namespace: tobogganing-alpha
+
+hubApi:
+  replicas: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+
+hubRouter:
+  replicas: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+
+hubWebui:
+  replicas: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+
+redis:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  storage:
+    size: 512Mi
+
+autoscaling:
+  enabled: false
+
+monitoring:
+  enabled: false
+
+config:
+  logLevel: debug

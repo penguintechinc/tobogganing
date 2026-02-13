@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-router
+  namespace: tobogganing
+  labels:
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-router
+spec:
+  type: ClusterIP
+  ports:
+    - name: wireguard
+      port: 51820
+      targetPort: wireguard
+      protocol: UDP
+    - name: https
+      port: 8443
+      targetPort: https
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-router

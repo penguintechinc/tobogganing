@@ -1,0 +1,6 @@
+apiVersion: v2
+name: tobogganing
+description: Tobogganing - Zero Trust SASE Platform
+type: application
+version: 2.0.0
+appVersion: "2.0.0"

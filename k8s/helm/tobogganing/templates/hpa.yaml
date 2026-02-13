@@ -1,0 +1,47 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-api
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "tobogganing.fullname" . }}-hub-api
+  minReplicas: {{ .Values.autoscaling.hubApi.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.hubApi.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.hubApi.targetCPUUtilizationPercentage }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-webui
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-webui
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "tobogganing.fullname" . }}-hub-webui
+  minReplicas: {{ .Values.autoscaling.hubWebui.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.hubWebui.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.hubWebui.targetCPUUtilizationPercentage }}
+{{- end }}

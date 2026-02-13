@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-api
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-api
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.hubApi.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-api
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hub-api
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: {{ .Values.hubApi.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.hubApi.securityContext.runAsUser }}
+      containers:
+        - name: hub-api
+          image: "{{ .Values.hubApi.image.repository }}:{{ .Values.hubApi.image.tag }}"
+          imagePullPolicy: {{ .Values.hubApi.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.hubApi.port }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.hubApi.grpcPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tobogganing.fullname" . }}-config
+            - secretRef:
+                name: {{ include "tobogganing.fullname" . }}-secrets
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.hubApi.probes.liveness.httpGet.path }}
+              port: {{ .Values.hubApi.probes.liveness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.hubApi.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.hubApi.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.hubApi.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.hubApi.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.hubApi.probes.readiness.httpGet.path }}
+              port: {{ .Values.hubApi.probes.readiness.httpGet.port }}
+            initialDelaySeconds: {{ .Values.hubApi.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.hubApi.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.hubApi.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.hubApi.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.hubApi.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.hubApi.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.hubApi.securityContext.readOnlyRootFilesystem }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-api
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.hubApi.port }}
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.hubApi.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    {{- include "tobogganing.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-api

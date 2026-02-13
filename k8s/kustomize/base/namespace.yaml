@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tobogganing
+  labels:
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/part-of: tobogganing

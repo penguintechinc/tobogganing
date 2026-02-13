@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub-api
+  namespace: tobogganing
+  labels:
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tobogganing
+      app.kubernetes.io/component: hub-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tobogganing
+        app.kubernetes.io/component: hub-api
+    spec:
+      serviceAccountName: tobogganing
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: hub-api
+          image: registry-dal2.penguintech.io/tobogganing/hub-api:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: tobogganing-config
+                  key: LOG_LEVEL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tobogganing-config
+                  key: REDIS_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tobogganing-secrets
+                  key: JWT_SECRET
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tobogganing-secrets
+                  key: DB_PASSWORD
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true

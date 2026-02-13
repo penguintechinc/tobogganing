@@ -1,0 +1,51 @@
+## Tobogganing - Beta Environment Overrides
+## Moderate resources for staging/QA
+
+namespace: tobogganing-beta
+
+hubApi:
+  replicas: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+hubRouter:
+  replicas: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+hubWebui:
+  replicas: 2
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+redis:
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  storage:
+    size: 1Gi
+
+autoscaling:
+  enabled: false
+
+config:
+  logLevel: info

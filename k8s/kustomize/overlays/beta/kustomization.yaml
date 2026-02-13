@@ -1,0 +1,93 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tobogganing-beta
+
+namePrefix: beta-
+
+resources:
+  - ../../base
+
+commonLabels:
+  environment: beta
+
+## Override ConfigMap for beta
+configMapGenerator:
+  - name: tobogganing-config
+    behavior: replace
+    literals:
+      - LOG_LEVEL=info
+      - HUB_API_URL=http://beta-hub-api:8080
+      - HUB_ROUTER_METRICS_URL=http://beta-hub-router:9090
+      - REDIS_URL=redis://beta-redis:6379
+      - DB_TYPE=sqlite
+
+patches:
+  ## Hub API - 2 replicas, moderate resources
+  - target:
+      kind: Deployment
+      name: hub-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+  ## Hub Router - 1 replica, moderate resources
+  - target:
+      kind: Deployment
+      name: hub-router
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+  ## Hub WebUI - 2 replicas, moderate resources
+  - target:
+      kind: Deployment
+      name: hub-webui
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+  ## Redis - moderate resources
+  - target:
+      kind: Deployment
+      name: redis
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"

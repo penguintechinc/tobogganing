@@ -1,0 +1,95 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hub-api-monitor
+  labels:
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tobogganing
+      app.kubernetes.io/component: hub-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hub-router-monitor
+  labels:
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-router
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tobogganing
+      app.kubernetes.io/component: hub-router
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tobogganing-grafana-dashboard
+  labels:
+    app.kubernetes.io/name: tobogganing
+    grafana_dashboard: "true"
+data:
+  tobogganing-overview.json: |
+    {
+      "annotations": { "list": [] },
+      "description": "Tobogganing Zero Trust SASE Platform Overview",
+      "editable": true,
+      "panels": [
+        {
+          "title": "Hub API - Request Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "rate(http_requests_total{service=\"hub-api\"}[5m])",
+              "legendFormat": "{{ method }} {{ status }}"
+            }
+          ]
+        },
+        {
+          "title": "Hub Router - Active WireGuard Peers",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "targets": [
+            {
+              "expr": "wireguard_peers_active",
+              "legendFormat": "Active Peers"
+            }
+          ]
+        },
+        {
+          "title": "Hub Router - Traffic Throughput",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            {
+              "expr": "rate(wireguard_bytes_transmitted_total[5m])",
+              "legendFormat": "TX"
+            },
+            {
+              "expr": "rate(wireguard_bytes_received_total[5m])",
+              "legendFormat": "RX"
+            }
+          ]
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["tobogganing", "sase"],
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Tobogganing Overview",
+      "uid": "tobogganing-overview"
+    }
