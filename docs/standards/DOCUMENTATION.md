@@ -41,7 +41,7 @@ docs/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Docker & Docker Compose | Git
+- Docker | kubectl | Helm | Git | Local K8s cluster (MicroK8s, Docker Desktop K8s, or Podman)
 
 ### Get Running (60 seconds)
 ```bash

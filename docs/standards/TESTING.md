@@ -184,19 +184,34 @@ echo "=== Flask Backend Smoke Test ==="
 echo "Building container..."
 docker build -t flask-backend:test ./services/flask-backend
 
-# 2. Run container
-echo "Starting container..."
-CONTAINER_ID=$(docker run -d \
-  -e DB_TYPE=sqlite \
-  -e DB_NAME=test.db \
-  flask-backend:test)
+# 2. Deploy to local K8s cluster
+echo "Deploying to Kubernetes..."
+kubectl apply --context local-alpha -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: flask-backend-smoke-test
+  namespace: default
+spec:
+  containers:
+  - name: flask-backend
+    image: flask-backend:test
+    ports:
+    - containerPort: 5000
+    env:
+    - name: DB_TYPE
+      value: sqlite
+    - name: DB_NAME
+      value: test.db
+  restartPolicy: Never
+EOF
 
 # Wait for startup
-sleep 5
+sleep 10
 
 # 3. Health check
 echo "Checking health endpoint..."
-docker exec $CONTAINER_ID python3 -c "
+kubectl exec --context local-alpha pod/flask-backend-smoke-test -- python3 -c "
 import http.client
 conn = http.client.HTTPConnection('localhost', 5000)
 conn.request('GET', '/healthz')
@@ -206,17 +221,17 @@ if r.status != 200:
 print('✓ Health check passed')
 "
 
-# 4. Run unit tests inside container
+# 4. Run unit tests
 echo "Running unit tests..."
-docker exec $CONTAINER_ID pytest tests/unit -v
+kubectl exec --context local-alpha pod/flask-backend-smoke-test -- pytest tests/unit -v
 
 # 5. Run basic integration tests
 echo "Running integration tests..."
-docker exec $CONTAINER_ID pytest tests/integration/test_api_basic.py -v
+kubectl exec --context local-alpha pod/flask-backend-smoke-test -- pytest tests/integration/test_api_basic.py -v
 
 # 6. API endpoint smoke tests
 echo "Testing API endpoints..."
-docker exec $CONTAINER_ID python3 -c "
+kubectl exec --context local-alpha pod/flask-backend-smoke-test -- python3 -c "
 import http.client, json
 conn = http.client.HTTPConnection('localhost', 5000)
 
@@ -234,8 +249,7 @@ print('✓ Users endpoint responding')
 "
 
 # Cleanup
-docker stop $CONTAINER_ID
-docker rm $CONTAINER_ID
+kubectl delete --context local-alpha pod flask-backend-smoke-test
 
 echo "✓ Flask Backend Smoke Test PASSED"
 ```
@@ -251,24 +265,41 @@ echo "=== WebUI Smoke Test ==="
 echo "Building container..."
 docker build -t webui:test ./services/webui
 
-# 2. Run container
-echo "Starting container..."
-CONTAINER_ID=$(docker run -d -p 3000:3000 webui:test)
+# 2. Deploy to Kubernetes
+echo "Deploying to Kubernetes..."
+kubectl apply --context local-alpha -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webui-smoke-test
+  namespace: default
+spec:
+  containers:
+  - name: webui
+    image: webui:test
+    ports:
+    - containerPort: 3000
+  restartPolicy: Never
+EOF
 
 # Wait for startup
 sleep 10
 
-# 3. Health check
+# 3. Health check (port-forward and check)
 echo "Checking health endpoint..."
+kubectl port-forward --context local-alpha pod/webui-smoke-test 3000:3000 &
+PORT_FWD_PID=$!
+sleep 2
 curl -f http://localhost:3000/healthz || exit 1
+kill $PORT_FWD_PID 2>/dev/null || true
 
 # 4. Run unit tests
 echo "Running unit tests..."
-docker exec $CONTAINER_ID npm run test:unit
+kubectl exec --context local-alpha pod/webui-smoke-test -- npm run test:unit
 
 # 5. Page load tests
 echo "Testing page loads..."
-docker exec $CONTAINER_ID node -e "
+kubectl exec --context local-alpha pod/webui-smoke-test -- node -e "
 const http = require('http');
 
 function testPage(path) {
@@ -294,11 +325,10 @@ function testPage(path) {
 
 # 6. Build production bundle
 echo "Testing production build..."
-docker exec $CONTAINER_ID npm run build
+kubectl exec --context local-alpha pod/webui-smoke-test -- npm run build
 
 # Cleanup
-docker stop $CONTAINER_ID
-docker rm $CONTAINER_ID
+kubectl delete --context local-alpha pod webui-smoke-test
 
 echo "✓ WebUI Smoke Test PASSED"
 ```
@@ -314,32 +344,44 @@ echo "=== Go Backend Smoke Test ==="
 echo "Building container..."
 docker build -t go-backend:test ./services/go-backend
 
-# 2. Run container
-echo "Starting container..."
-CONTAINER_ID=$(docker run -d go-backend:test)
+# 2. Deploy to Kubernetes
+echo "Deploying to Kubernetes..."
+kubectl apply --context local-alpha -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: go-backend-smoke-test
+  namespace: default
+spec:
+  containers:
+  - name: go-backend
+    image: go-backend:test
+    ports:
+    - containerPort: 8080
+  restartPolicy: Never
+EOF
 
 # Wait for startup
 sleep 5
 
 # 3. Health check
 echo "Checking health endpoint..."
-docker exec $CONTAINER_ID /usr/local/bin/healthcheck || exit 1
+kubectl exec --context local-alpha pod/go-backend-smoke-test -- /usr/local/bin/healthcheck || exit 1
 
 # 4. Run unit tests
 echo "Running unit tests..."
-docker exec $CONTAINER_ID go test ./... -v
+kubectl exec --context local-alpha pod/go-backend-smoke-test -- go test ./... -v
 
 # 5. Run integration tests
 echo "Running integration tests..."
-docker exec $CONTAINER_ID go test ./tests/integration/... -v
+kubectl exec --context local-alpha pod/go-backend-smoke-test -- go test ./tests/integration/... -v
 
 # 6. Performance smoke test
 echo "Running performance smoke test..."
-docker exec $CONTAINER_ID go test -bench=. -benchtime=1s ./tests/benchmarks/smoke_test.go
+kubectl exec --context local-alpha pod/go-backend-smoke-test -- go test -bench=. -benchtime=1s ./tests/benchmarks/smoke_test.go
 
 # Cleanup
-docker stop $CONTAINER_ID
-docker rm $CONTAINER_ID
+kubectl delete --context local-alpha pod go-backend-smoke-test
 
 echo "✓ Go Backend Smoke Test PASSED"
 ```
@@ -477,19 +519,20 @@ tests/integration/
 │   └── test_database.py         # Database CRUD works
 ├── go-backend/
 │   └── integration_test.go      # Go service tests
-└── docker-compose.test.yml      # Test environment (real database)
+└── k8s/
+    └── kustomization.yaml       # Test environment (real database in K8s)
 ```
 
 **Running Integration Tests**:
 ```bash
-# Start test database and services
-docker-compose -f tests/integration/docker-compose.test.yml up -d
+# Deploy test environment to local K8s cluster
+kubectl apply --context local-alpha -k tests/integration/k8s
 
 # Run tests
 pytest tests/integration/ -v
 
 # Clean up
-docker-compose -f tests/integration/docker-compose.test.yml down -v
+kubectl delete --context local-alpha -k tests/integration/k8s
 ```
 
 **Real Example** - Testing user login:
@@ -550,14 +593,20 @@ E2E tests answer: "Can users actually do the thing they came to do?" This is the
 
 **Running E2E Tests**:
 ```bash
-# Start all services (UI, API, database)
-docker-compose up -d
+# Deploy all services to local Kubernetes cluster
+kubectl apply --context local-alpha -k k8s/kustomize/overlays/alpha
+
+# Port-forward WebUI for testing
+kubectl port-forward --context local-alpha svc/webui 3000:80 &
 
 # Run tests (uses Playwright for browser automation)
 npm run test:e2e
 
 # Or specifically
 npx playwright test tests/e2e/
+
+# Clean up
+kubectl delete --context local-alpha -k k8s/kustomize/overlays/alpha
 ```
 
 **Real Example** - User login and dashboard:
@@ -655,7 +704,8 @@ MOCK_USERS = [
 #!/bin/bash
 echo "Seeding test database..."
 
-docker exec flask-backend python3 -c "
+# Execute seed script inside Flask pod
+kubectl exec --context local-alpha -n myapp deploy/flask-backend -- python3 -c "
 from app import create_app, db
 from app.models import User
 from tests.fixtures import users
@@ -730,7 +780,7 @@ make test-performance
 
 | Problem | Solution |
 |---------|----------|
-| "Connection refused" | Is the service running? `docker-compose ps` |
+| "Connection refused" | Is the service running? `kubectl --context local-alpha get pods -n {product}` |
 | "Table doesn't exist" | Did you run migrations? `make migrate` |
 | "Timeout" | Is the test too slow? Increase timeout or optimize code |
 | "Random failures" | Test is flaky—make it more deterministic |
