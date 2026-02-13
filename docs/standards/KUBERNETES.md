@@ -180,7 +180,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: myapp.penguintech.io
+  - host: myapp.penguintech.cloud
     http:
       paths:
       - path: /

@@ -123,7 +123,7 @@ kubectl get pods -n myapp | grep Running
 kubectl get svc -n myapp
 
 # Test the live API
-curl -f https://myapp.penguintech.io/healthz
+curl -f https://myapp.penguintech.cloud/healthz
 
 # Run live integration tests
 kubectl exec -n myapp deploy/flask-backend -- pytest tests/live/

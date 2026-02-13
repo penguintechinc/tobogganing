@@ -266,8 +266,10 @@ Comprehensive development standards are organized by category in `docs/standards
 **Version**: `.version` file in root, semver format, monitored by all workflows
 
 **Deployment Hosts**:
-- **Beta/Development**: `https://{repo_name_lowercase}.penguintech.io` (if online)
-  - Example: `project-template` → `https://project-template.penguintech.io`
+- **Alpha/Local**: `https://{repo_name_lowercase}.localhost.local` (local K8s)
+  - Deployed via Kustomize to `--context local-alpha`
+- **Beta/Development**: `https://{repo_name_lowercase}.penguintech.cloud` (if online)
+  - Example: `project-template` → `https://project-template.penguintech.cloud`
   - Deployed from `main` branch with `beta-*` tags
 - **Production**: Either custom domain or PenguinCloud subdomain
   - **Custom Domain**: Application-specific (e.g., `https://waddlebot.io`)
