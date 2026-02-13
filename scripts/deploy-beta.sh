@@ -20,7 +20,7 @@
 #   RELEASE_NAME            Helm release name (default: tobogganing)
 #   NAMESPACE               Kubernetes namespace (default: tobogganing)
 #   IMAGE_REGISTRY          Docker registry URL (default: registry-dal2.penguintech.io)
-#   APP_HOST                Application hostname (default: tobogganing.penguintech.io)
+#   APP_HOST                Application hostname (default: tobogganing.penguintech.cloud)
 #
 # =============================================================================
 
@@ -40,7 +40,7 @@ readonly RELEASE_NAME="${RELEASE_NAME:-tobogganing}"
 readonly NAMESPACE="${NAMESPACE:-tobogganing}"
 readonly IMAGE_REGISTRY="${IMAGE_REGISTRY:-registry-dal2.penguintech.io}"
 readonly KUBE_CONTEXT="${KUBE_CONTEXT:-dal2-beta}"
-readonly APP_HOST="${APP_HOST:-tobogganing.penguintech.io}"
+readonly APP_HOST="${APP_HOST:-tobogganing.penguintech.cloud}"
 readonly CHART_PATH="${PROJECT_ROOT}/k8s/helm/tobogganing"
 readonly MANIFESTS_PATH="${PROJECT_ROOT}/k8s/manifests"
 

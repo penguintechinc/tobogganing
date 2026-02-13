@@ -52,3 +52,26 @@ monitoring:
 
 config:
   logLevel: debug
+
+## Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  hosts:
+    - host: tobogganing.localhost.local
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: hub-api
+          port: 8080
+        - path: /
+          pathType: Prefix
+          service: hub-webui
+          port: 80
+  tls:
+    - secretName: tobogganing-tls
+      hosts:
+        - tobogganing.localhost.local
