@@ -1,0 +1,1 @@
+/home/penguin/code/.claude/skills/migrating-to-penguin-libs/SKILL.md

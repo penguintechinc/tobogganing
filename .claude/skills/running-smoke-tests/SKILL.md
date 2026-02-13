@@ -1,0 +1,1 @@
+/home/penguin/code/.claude/skills/running-smoke-tests/SKILL.md
