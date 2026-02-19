@@ -53,6 +53,16 @@ This repository may contain `.local.md` variant files that provide project-speci
 - No hardcoded secrets or credentials
 - Input validation mandatory
 
+**Tool Usage:**
+- **NEVER use `sed`, `awk`, `cat`, `head`, `tail`, `echo`, `grep`, `find`, or `rg` via Bash** when a dedicated tool exists — use the dedicated tools instead:
+  - Read files → **Read** tool (not `cat`, `head`, `tail`)
+  - Edit files → **Edit** tool (not `sed`, `awk`)
+  - Write/create files → **Write** tool (not `echo >`, `cat <<EOF`)
+  - Search file contents → **Grep** tool (not `grep`, `rg`)
+  - Find files by name → **Glob** tool (not `find`, `ls`)
+- Only fall back to Bash for these commands when the dedicated tool genuinely cannot accomplish the task (e.g., piped shell pipelines, complex transformations)
+- This reduces unnecessary approval prompts and keeps operations auditable
+
 📚 **Complete Technical Standards**: See [`.claude/`](.claude/) directory for all language-specific, database, architecture, container image, Kubernetes, and development standards.
 
 📚 **Orchestration Model Rules**: See [`.claude/orchestration.md`](.claude/orchestration.md) for complete orchestration details — main model role (planning, delegating, validating), task agent model selection (Haiku vs Sonnet), output requirements, and concurrency limits.
@@ -227,7 +237,6 @@ make license-check-features  # Check available features
 - **Keep focused**: Critical context, architectural decisions, and workflow instructions only
 - **User approval required**: ALWAYS ask user permission before splitting CLAUDE.md files
 - **Use Task Agents**: Utilize task agents (subagents) to be more expedient and efficient when making changes to large files, updating or reviewing multiple files, or performing complex multi-step operations
-- **Avoid sed/cat**: Use sed and cat commands only when necessary; prefer dedicated Read/Edit/Write tools for file operations
 
 📚 **Task Agent Orchestration**: See [`.claude/orchestration.md`](.claude/orchestration.md) for complete details on orchestration model, task agent selection, response requirements, and concurrency limits.
 
