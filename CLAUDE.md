@@ -7,8 +7,7 @@
 - ❌ **NEVER edit** `CLAUDE.md`, `.claude/*.md`, `docs/STANDARDS.md`, or `docs/standards/*.md`
 - ✅ **CREATE NEW FILES** for app-specific context:
   - `docs/APP_STANDARDS.md` - App-specific architecture, requirements, context
-  - `.claude/app.md` - App-specific rules for Claude (create if needed)
-  - `.claude/[feature].md` - Feature-specific context (create as needed)
+  - `.claude/{subject}.local.md` - Project-specific overrides (e.g., `architecture.local.md`, `python.local.md`)
 
 **App-Specific Addendums to Standardized Files:**
 
@@ -57,6 +56,8 @@ This repository may contain `.local.md` variant files that provide project-speci
 📚 **Complete Technical Standards**: See [`.claude/`](.claude/) directory for all language-specific, database, architecture, container image, Kubernetes, and development standards.
 
 📚 **Orchestration Model Rules**: See [`.claude/orchestration.md`](.claude/orchestration.md) for complete orchestration details — main model role (planning, delegating, validating), task agent model selection (Haiku vs Sonnet), output requirements, and concurrency limits.
+
+📚 **Testing Standards**: See [`.claude/testing.md`](.claude/testing.md) for complete testing framework — Test Controller CLI, test categories (build, unit, integration, functional, e2e, security, api, performance), smoke test designations, per-container requirements, and test execution order.
 
 ---
 
@@ -191,11 +192,14 @@ make docker-push              # Push to registry
 make deploy-dev               # Deploy to development
 make deploy-prod              # Deploy to production
 
-# Testing
+# Testing (see .claude/testing.md for full framework)
+./scripts/test-controller.sh <type> [container]  # Unified test entry point
 make test-unit               # Run unit tests
 make test-integration        # Run integration tests
 make test-e2e                # Run end-to-end tests
-make smoke-test              # Run smoke tests (build, run, API, page loads)
+make test-functional         # Run functional tests (APIs, pages, tabs, modals, buttons)
+make test-security           # Run security tests (gosec, bandit, npm audit, trivy)
+make smoke-test              # Run smoke tests (curated subset, <2 min, pre-commit)
 
 # License Management
 make license-validate        # Validate license

@@ -69,6 +69,79 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 
 These belong in `.gitignore` and should be managed by your CI/CD system or secrets vault.
 
+## Token & Secret Hygiene in Scripts and Shell
+
+### The Shell History Leak (The Demo Disaster)
+
+**The danger:** Tokens and passwords passed as command-line arguments are permanently written to `~/.bash_history` — and are visible to anyone on the same machine via `ps aux` while the process runs.
+
+**Bad code:**
+```bash
+# DON'T DO THIS! The token lives in your shell history forever.
+curl -H "Authorization: Bearer ghp_abc123XYZ" https://api.github.com/user
+my-tool --api-key "sk-live-abc123" --action deploy
+
+# Also bad: literal value in an export ends up in history too
+export MY_TOKEN="sk-live-abc123"
+```
+
+**How we protect:** Read tokens from environment variables, files, or stdin — never type or interpolate literal values on the command line.
+
+```bash
+# ✅ Token already in the environment; nothing sensitive in history
+curl -H "Authorization: Bearer $MY_TOKEN" https://api.github.com/user
+
+# ✅ Tools that accept --password-stdin keep secrets out of the process list
+echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
+
+# ✅ Silent interactive prompt (no echo, not stored in history)
+read -rsp "API token: " MY_TOKEN && export MY_TOKEN
+```
+
+**In Python** — read from the environment, never from `sys.argv` or `argparse`:
+```python
+import os
+
+# ✅ Never visible in shell history or process list
+token = os.environ["MY_API_TOKEN"]
+
+# ❌ DON'T DO THIS — shows up in `ps aux` and shell history
+# parser.add_argument('--token')
+```
+
+**In Go** — same rule:
+```go
+// ✅ Read from environment
+token := os.Getenv("MY_API_TOKEN")
+
+// ❌ Don't accept secrets via flag.String or os.Args
+```
+
+### Don't Log Secrets
+
+Even if a token never hits the command line, it can leak through logs:
+
+```python
+# ❌ Full token in logs — survives forever in log aggregators
+logger.debug(f"Using token: {api_token}")
+
+# ✅ Log only a masked representation
+masked = f"{api_token[:4]}****{api_token[-4:]}"
+logger.debug(f"Using token: {masked}")
+```
+
+**CI/CD pipelines:** Register secrets as masked variables in GitHub Actions / GitLab CI — the platform will automatically scrub them from all log output.
+
+### Quick Checklist Before a Demo or Screen Share
+
+- [ ] Tokens are loaded from `.env` files or a secrets vault, not typed in the terminal
+- [ ] Terminal history doesn't contain any recent token/password commands (`history | grep token`)
+- [ ] Log output is visible — check it doesn't print raw secrets
+- [ ] No credential files are open in your editor's visible tabs
+- [ ] **Over-the-shoulder / camera aware:** close or minimise any terminal, file, or browser tab containing secrets before screen sharing or recording — assume any visible text can be read, paused, or zoomed by viewers
+
+---
+
 ## Authentication & Authorization
 
 ### Three-Tier Role System
@@ -259,7 +332,8 @@ Before every commit and deploy:
 - [ ] Passwords hashed (bcrypt, not plaintext)
 - [ ] API keys hidden (environment variables, not hardcoded)
 - [ ] Error messages don't leak sensitive info (no "user admin@company.com not found")
-- [ ] Logs don't contain passwords or secrets
+- [ ] Logs don't contain passwords or secrets — tokens masked (e.g. `tok_****1234`)
+- [ ] Tokens/secrets read from env vars or files — never passed as CLI arguments
 - [ ] Dependencies updated to patched versions
 
 ## Found a Vulnerability?
