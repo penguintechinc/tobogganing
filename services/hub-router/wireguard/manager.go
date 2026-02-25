@@ -49,14 +49,15 @@ type PeerConfig = wgtypes.PeerConfig
 
 // Manager handles WireGuard interface configuration and peer management
 type Manager struct {
-    interfaceName string
-    managerURL    string
-    client        *wgctrl.Client
-    httpClient    *http.Client
-    privateKey    wgtypes.Key
-    publicKey     wgtypes.Key
-    listenPort    int
-    network       string
+    interfaceName   string
+    managerURL      string
+    client          *wgctrl.Client
+    httpClient      *http.Client
+    privateKey      wgtypes.Key
+    publicKey       wgtypes.Key
+    listenPort      int
+    network         string
+    clientPeersOnly bool // When true, skip node-type peers (Cilium handles node-to-node encryption)
 }
 
 // Peer represents a WireGuard peer configuration
@@ -97,6 +98,13 @@ func NewManagerWithParams(interfaceName, managerURL string, listenPort int, netw
     }
     
     return manager, nil
+}
+
+// SetClientPeersOnly configures whether node-type peers are skipped during sync.
+// Set to true when Cilium WireGuard node encryption is active so that hub-router
+// only manages client (end-user device) peers and Cilium handles node-to-node tunnels.
+func (m *Manager) SetClientPeersOnly(enabled bool) {
+    m.clientPeersOnly = enabled
 }
 
 func (m *Manager) initializeKeys() error {
@@ -218,6 +226,13 @@ func (m *Manager) syncPeers() error {
     var wgPeers []wgtypes.PeerConfig
     
     for _, peer := range peers {
+        // When Cilium handles node-to-node encryption, skip node-type peers to
+        // avoid double-encrypting traffic between cluster nodes.
+        if m.clientPeersOnly && peer.NodeType == "node" {
+            log.Debugf("Skipping node peer %s (clientPeersOnly=true, Cilium handles node encryption)", peer.NodeID)
+            continue
+        }
+
         publicKey, err := wgtypes.ParseKey(peer.PublicKey)
         if err != nil {
             log.Errorf("Invalid public key for peer %s: %v", peer.NodeID, err)

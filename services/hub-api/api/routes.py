@@ -1,6 +1,8 @@
 from py4web import action, request, response, abort
 import json
+import os
 import structlog
+from datetime import datetime
 from typing import Optional
 import uuid
 
@@ -892,6 +894,330 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             response.status = 500
             return {"error": "Internal server error"}
     
+    # ------------------------------------------------------------------
+    # Policy CRUD routes — unified policy model
+    # ------------------------------------------------------------------
+
+    def _validate_cidrs(cidrs):
+        """Validate a list of CIDR strings. Returns error string or None."""
+        import ipaddress
+        if not isinstance(cidrs, list):
+            return "must be a JSON array"
+        for cidr in cidrs:
+            try:
+                ipaddress.ip_network(cidr, strict=False)
+            except (ValueError, TypeError) as exc:
+                return f"invalid CIDR '{cidr}': {exc}"
+        return None
+
+    def _validate_ports(ports):
+        """Validate a list of port/range strings. Returns error string or None."""
+        if not isinstance(ports, list):
+            return "must be a JSON array"
+        for p in ports:
+            parts = str(p).split("-")
+            for part in parts:
+                try:
+                    n = int(part)
+                    if n < 1 or n > 65535:
+                        return f"port out of range: {part}"
+                except (ValueError, TypeError):
+                    return f"invalid port: {part}"
+        return None
+
+    def _policy_to_dict(row):
+        return {
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "action": row.action,
+            "priority": row.priority,
+            "scope": row.scope,
+            "direction": row.direction,
+            "domains": row.domains or [],
+            "ports": row.ports or [],
+            "protocol": row.protocol,
+            "src_cidrs": row.src_cidrs or [],
+            "dst_cidrs": row.dst_cidrs or [],
+            "users": row.users or [],
+            "groups": row.groups or [],
+            "identity_provider": row.identity_provider,
+            "enabled": row.enabled,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    @action("api/v1/policies", method=["GET"])
+    @action.uses("json")
+    async def list_policies():
+        """List all policy rules."""
+        try:
+            from database import get_read_db
+            db = get_read_db()
+            rows = db(db.policy_rules).select(orderby=db.policy_rules.priority)
+            policies = [_policy_to_dict(row) for row in rows]
+            return {"status": "success", "data": {"policies": policies, "total": len(policies)}}
+        except Exception as e:
+            logger.error("List policies error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies", method=["POST"])
+    @action.uses("json")
+    async def create_policy():
+        """Create a new policy rule."""
+        try:
+            data = await request.json()
+            required = ["name", "action"]
+            for field in required:
+                if field not in data:
+                    response.status = 400
+                    return {"error": f"Missing required field: {field}"}
+
+            if data["action"] not in ("allow", "deny"):
+                response.status = 400
+                return {"error": "action must be 'allow' or 'deny'"}
+
+            scope = data.get("scope", "both")
+            if scope not in ("wireguard", "k8s", "both"):
+                response.status = 400
+                return {"error": "scope must be one of: wireguard, k8s, both"}
+
+            direction = data.get("direction", "both")
+            if direction not in ("inbound", "outbound", "both"):
+                response.status = 400
+                return {"error": "direction must be one of: inbound, outbound, both"}
+
+            protocol = data.get("protocol", "any")
+            if protocol not in ("tcp", "udp", "icmp", "any"):
+                response.status = 400
+                return {"error": "protocol must be one of: tcp, udp, icmp, any"}
+
+            idp = data.get("identity_provider", "local")
+            if idp not in ("local", "oidc", "saml", "scim"):
+                response.status = 400
+                return {"error": "identity_provider must be one of: local, oidc, saml, scim"}
+
+            # Validate arrays
+            if "src_cidrs" in data:
+                err = _validate_cidrs(data["src_cidrs"])
+                if err:
+                    response.status = 400
+                    return {"error": f"src_cidrs {err}"}
+            if "dst_cidrs" in data:
+                err = _validate_cidrs(data["dst_cidrs"])
+                if err:
+                    response.status = 400
+                    return {"error": f"dst_cidrs {err}"}
+            if "ports" in data:
+                err = _validate_ports(data["ports"])
+                if err:
+                    response.status = 400
+                    return {"error": f"ports {err}"}
+
+            from database import get_db
+            db = get_db()
+            row_id = db.policy_rules.insert(
+                name=data["name"],
+                description=data.get("description", ""),
+                action=data["action"],
+                priority=data.get("priority", 100),
+                scope=scope,
+                direction=direction,
+                domains=data.get("domains", []),
+                ports=data.get("ports", []),
+                protocol=protocol,
+                src_cidrs=data.get("src_cidrs", []),
+                dst_cidrs=data.get("dst_cidrs", []),
+                users=data.get("users", []),
+                groups=data.get("groups", []),
+                identity_provider=idp,
+                enabled=data.get("enabled", True),
+            )
+            db.commit()
+
+            row = db.policy_rules[row_id]
+            policy_dict = _policy_to_dict(row)
+
+            # Publish policy creation to Redis for gRPC streaming
+            try:
+                import redis as _redis
+                _r = _redis.Redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost:6379")
+                )
+                _r.publish("policy:updates", json.dumps({
+                    "action": "created",
+                    "policy": policy_dict,
+                    "timestamp": datetime.now().isoformat(),
+                }))
+            except Exception:
+                pass  # Redis unavailable is non-fatal
+
+            response.status = 201
+            return {"status": "success", "data": policy_dict}
+        except Exception as e:
+            logger.error("Create policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies/<policy_id:int>", method=["GET"])
+    @action.uses("json")
+    async def get_policy(policy_id):
+        """Get a single policy rule by ID."""
+        try:
+            from database import get_read_db
+            db = get_read_db()
+            row = db.policy_rules[policy_id]
+            if not row:
+                response.status = 404
+                return {"error": "Policy not found"}
+            return {"status": "success", "data": _policy_to_dict(row)}
+        except Exception as e:
+            logger.error("Get policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies/<policy_id:int>", method=["PUT"])
+    @action.uses("json")
+    async def update_policy(policy_id):
+        """Update an existing policy rule."""
+        try:
+            from database import get_db
+            db = get_db()
+            row = db.policy_rules[policy_id]
+            if not row:
+                response.status = 404
+                return {"error": "Policy not found"}
+
+            data = await request.json()
+
+            if "action" in data and data["action"] not in ("allow", "deny"):
+                response.status = 400
+                return {"error": "action must be 'allow' or 'deny'"}
+            if "scope" in data and data["scope"] not in ("wireguard", "k8s", "both"):
+                response.status = 400
+                return {"error": "scope must be one of: wireguard, k8s, both"}
+            if "direction" in data and data["direction"] not in ("inbound", "outbound", "both"):
+                response.status = 400
+                return {"error": "direction must be one of: inbound, outbound, both"}
+            if "protocol" in data and data["protocol"] not in ("tcp", "udp", "icmp", "any"):
+                response.status = 400
+                return {"error": "protocol must be one of: tcp, udp, icmp, any"}
+            if "src_cidrs" in data:
+                err = _validate_cidrs(data["src_cidrs"])
+                if err:
+                    response.status = 400
+                    return {"error": f"src_cidrs {err}"}
+            if "dst_cidrs" in data:
+                err = _validate_cidrs(data["dst_cidrs"])
+                if err:
+                    response.status = 400
+                    return {"error": f"dst_cidrs {err}"}
+            if "ports" in data:
+                err = _validate_ports(data["ports"])
+                if err:
+                    response.status = 400
+                    return {"error": f"ports {err}"}
+
+            updatable = [
+                "name", "description", "action", "priority", "scope",
+                "direction", "domains", "ports", "protocol", "src_cidrs",
+                "dst_cidrs", "users", "groups", "identity_provider", "enabled",
+            ]
+            update_fields = {k: v for k, v in data.items() if k in updatable}
+
+            if update_fields:
+                row.update_record(**update_fields)
+                db.commit()
+
+            updated_row = db.policy_rules[policy_id]
+            updated_dict = _policy_to_dict(updated_row)
+
+            # Publish policy update to Redis for gRPC streaming
+            try:
+                import redis as _redis
+                _r = _redis.Redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost:6379")
+                )
+                _r.publish("policy:updates", json.dumps({
+                    "action": "updated",
+                    "policy": updated_dict,
+                    "timestamp": datetime.now().isoformat(),
+                }))
+            except Exception:
+                pass  # Redis unavailable is non-fatal
+
+            return {"status": "success", "data": updated_dict}
+        except Exception as e:
+            logger.error("Update policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies/<policy_id:int>", method=["DELETE"])
+    @action.uses("json")
+    async def delete_policy(policy_id):
+        """Delete a policy rule."""
+        try:
+            from database import get_db
+            db = get_db()
+            row = db.policy_rules[policy_id]
+            if not row:
+                response.status = 404
+                return {"error": "Policy not found"}
+            deleted_dict = _policy_to_dict(row)
+            db(db.policy_rules.id == policy_id).delete()
+            db.commit()
+
+            # Publish policy deletion to Redis for gRPC streaming
+            try:
+                import redis as _redis
+                _r = _redis.Redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost:6379")
+                )
+                _r.publish("policy:updates", json.dumps({
+                    "action": "deleted",
+                    "policy": deleted_dict,
+                    "timestamp": datetime.now().isoformat(),
+                }))
+            except Exception:
+                pass  # Redis unavailable is non-fatal
+
+            return {"status": "success", "data": {"id": policy_id, "status": "deleted"}}
+        except Exception as e:
+            logger.error("Delete policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/firewall/rules", method=["GET"])
+    @action.uses("json")
+    async def get_firewall_rules_compat():
+        """Compatibility shim: serves policy_rules in legacy firewall format."""
+        try:
+            from database import get_read_db
+            db = get_read_db()
+            rows = db(db.policy_rules).select(orderby=db.policy_rules.priority)
+            rules = []
+            for row in rows:
+                rules.append({
+                    "id": row.id,
+                    "name": row.name,
+                    "action": row.action,
+                    "priority": row.priority,
+                    "domain": (row.domains or [None])[0],
+                    "src_ip": (row.src_cidrs or [None])[0],
+                    "dst_ip": (row.dst_cidrs or [None])[0],
+                    "protocol": row.protocol,
+                    "src_port": (row.ports or [None])[0],
+                    "dst_port": (row.ports or [None])[0],
+                    "direction": row.direction,
+                    "enabled": row.enabled,
+                })
+            return {"status": "success", "data": {"rules": rules}}
+        except Exception as e:
+            logger.error("Compat firewall rules error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
     @action("api/v1/status", method=["GET"])
     @action.uses("json")
     async def get_status():

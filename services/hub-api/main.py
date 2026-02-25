@@ -72,16 +72,38 @@ async def lifespan(app):
         asyncio.create_task(_periodic_metrics_update())
     ]
     
+    # Start gRPC policy streaming server
+    grpc_port = int(os.getenv("GRPC_PORT", "50051"))
+    grpc_srv = None
+    try:
+        import sys as _sys
+        import os as _os
+        _grpc_dir = _os.path.join(_os.path.dirname(__file__), "grpc")
+        if _grpc_dir not in _sys.path:
+            _sys.path.insert(0, _grpc_dir)
+        from server import start_grpc_server  # services/hub-api/grpc/server.py
+        grpc_srv = await start_grpc_server(
+            redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
+            port=grpc_port,
+        )
+        logger.info("gRPC server started", port=grpc_port)
+    except Exception as e:
+        logger.warning("gRPC server failed to start", error=str(e))
+
     logger.info("SASEWaddle Manager Service started successfully")
-    
+
     yield
-    
+
     logger.info("Shutting down SASEWaddle Manager Service")
-    
+
     # Cancel background tasks
     for task in background_tasks:
         task.cancel()
-    
+
+    # Shutdown gRPC server
+    if grpc_srv:
+        await grpc_srv.stop(grace=5)
+
     # Shutdown services concurrently
     await asyncio.gather(
         cluster_manager.shutdown(),
@@ -90,7 +112,7 @@ async def lifespan(app):
         jwt_manager.close(),
         return_exceptions=True
     )
-    
+
     # Close database connections
     close_database()
     

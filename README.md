@@ -44,7 +44,8 @@
 - **Never Trust, Always Verify**: Every connection authenticated and authorized
 - **Certificate Management**: Automated certificate lifecycle management
 - **Multi-Factor Authentication**: Support for various authentication methods
-- **Advanced Firewall System**: Domain, IP, protocol, and port-based access control
+- **Unified Policy Engine**: Single policy schema enforced across WireGuard clients AND Kubernetes services via Cilium CRDs
+- **gRPC Policy Streaming**: Sub-second policy push via Redis pub/sub fanout to all connected hub-routers
 - **Real-time Access Testing**: Test access rules before deployment
 
 ### High Performance
@@ -62,7 +63,9 @@
 - **Traffic Mirroring**: Suricata IDS/IPS integration (VXLAN/GRE/ERSPAN)
 - **Compliance**: Syslog audit logging and compliance reporting
 - **High Availability**: Multi-datacenter orchestration with failover
-- **VRF & OSPF Support**: Enterprise network segmentation with FRR integration
+- **VRF + iBGP/OSPF Underlay**: Enterprise network segmentation with FRR, iBGP AS 65001 inter-site routing
+- **Cilium WireGuard Encryption**: Node-to-node WireGuard encryption managed by Cilium CNI with L7 policy enforcement
+- **Zeek Network Analysis**: Deep packet inspection alongside Suricata IDS/IPS via VXLAN mirror tap
 - **Database Backup System**: Local and S3-compatible storage with encryption
 
 ### Advanced Management
@@ -82,11 +85,13 @@
 
 ## 🏗️ Architecture
 
-SASEWaddle implements a comprehensive SASE architecture with three main components:
+![Tobogganing Concept Diagram](concept-diagram.png)
+
+Tobogganing implements a comprehensive SASE architecture with three main components:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           SASEWADDLE ARCHITECTURE                        │
+│                        TOBOGGANING SASE ARCHITECTURE                     │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │   ┌──────────────┐        ┌──────────────┐        ┌──────────────┐    │
@@ -94,7 +99,7 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 │   │              │        │   SERVER     │        │   SERVICE    │    │
 │   │ • Native GUI │◄──────►│ • WireGuard  │◄──────►│ • Web Portal │    │
 │   │ • Docker     │        │ • Go Proxy   │        │ • REST API   │    │
-│   │ • Mobile     │        │ • Firewall   │        │ • PyDAL DB   │    │
+│   │ • Mobile     │        │ • PolicyEng. │        │ • PyDAL DB   │    │
 │   │ • Embedded   │        │ • IDS/IPS    │        │ • Metrics    │    │
 │   └──────────────┘        └──────────────┘        └──────────────┘    │
 │         ▲                        ▲                        ▲            │
@@ -102,12 +107,12 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 │   ┌─────▼──────────────────────▼────────────────────────▼─────┐      │
 │   │               SUPPORTING INFRASTRUCTURE                     │      │
 │   │  • Redis Cache  • MySQL/PostgreSQL  • Prometheus/Grafana   │      │
-│   │  • Suricata IDS • FRR (VRF/OSPF)   • Syslog Server        │      │
+│   │  • Suricata IDS • Zeek Analysis    • Syslog Server        │      │
 │   └─────────────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Manager Service (Python 3.12)
+### Manager Service (Python 3.13)
 - **Web Management Portal**: py4web-based interface with role-based access control
 - **Certificate Authority**: Automated X.509 certificate generation and lifecycle management
 - **Database Backend**: PyDAL with MySQL/PostgreSQL/SQLite and read replica support
@@ -115,10 +120,10 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 - **Analytics Engine**: Real-time metrics collection and aggregation
 - **Backup System**: Local and S3-compatible storage with encryption
 
-### Headend Server (Go 1.23)
+### Headend Server (Go 1.24)
 - **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
 - **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
-- **Traffic Security**: Firewall rules with domain/IP/protocol/port filtering
+- **Traffic Security**: Unified policy engine — 6-dimension rule matching (domains, ports, CIDRs, users, groups, protocols)
 - **IDS/IPS Integration**: Traffic mirroring to Suricata via VXLAN/GRE/ERSPAN
 - **Authentication**: JWT validation and external IdP integration (SAML2/OAuth2)
 - **Network Routing**: VRF and OSPF support through FRR integration
@@ -136,8 +141,8 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-org/sasewaddle.git
-   cd sasewaddle/deploy/docker-compose
+   git clone https://github.com/penguintechinc/tobogganing.git
+   cd tobogganing/deploy/docker-compose
    ```
 
 2. **Configure environment**:
@@ -157,24 +162,24 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 
 ### Native Client Installation
 
-SASEWaddle provides two types of client applications optimized for different use cases:
+Tobogganing provides two types of client applications optimized for different use cases:
 
 #### 🖼️ **Desktop GUI Clients** (Recommended for End Users)
 **Full system tray integration with one-click connect/disconnect**
 
 ```bash
 # Quick install with GUI support
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-gui.sh | bash
 
 # Manual download
 # macOS (Universal - Intel + Apple Silicon)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal -o tobogganing-client
 
 # Linux (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o tobogganing-client
 
 # Windows (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64.exe -o sasewaddle-client.exe
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-windows-amd64.exe -o tobogganing-client.exe
 ```
 
 **GUI Features:**
@@ -190,10 +195,10 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Quick install headless version
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-headless.sh | bash
 
 # Manual download - add "-headless" to any platform name
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64-headless -o tobogganing-client
 ```
 
 **Headless Features:**
@@ -208,31 +213,31 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Initialize client (both GUI and headless)
-./sasewaddle-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
+./tobogganing-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
 
 # GUI Mode - Start with system tray
-./sasewaddle-client gui
+./tobogganing-client gui
 
 # Headless Mode - Connect as daemon
-./sasewaddle-client connect --daemon
+./tobogganing-client connect --daemon
 
 # Check connection status
-./sasewaddle-client status
+./tobogganing-client status
 ```
 
 ## 📖 Documentation
 
-- **[Installation Guide](https://docs.sasewaddle.com/installation)** - Get up and running quickly
-- **[Architecture Guide](https://docs.sasewaddle.com/architecture)** - Understand the system design
-- **[Deployment Guide](https://docs.sasewaddle.com/deployment)** - Production deployment instructions
-- **[API Reference](https://docs.sasewaddle.com/api)** - Complete API documentation
-- **[Use Cases](https://docs.sasewaddle.com/use-cases)** - Real-world examples and configurations
+- **[Installation Guide](https://docs.tobogganing.io/installation)** - Get up and running quickly
+- **[Architecture Guide](https://docs.tobogganing.io/architecture)** - Understand the system design
+- **[Deployment Guide](https://docs.tobogganing.io/deployment)** - Production deployment instructions
+- **[API Reference](https://docs.tobogganing.io/api)** - Complete API documentation
+- **[Use Cases](https://docs.tobogganing.io/use-cases)** - Real-world examples and configurations
 
 ## 🛠️ Development
 
 ### Prerequisites
-- Go 1.23+ (for headend and client)
-- Python 3.12+ (for manager)
+- Go 1.24+ (for headend and client)
+- Python 3.13+ (for manager)
 - Node.js 18+ (for website)
 - Docker (for containerized development)
 
@@ -240,8 +245,8 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/sasewaddle.git
-cd sasewaddle
+git clone https://github.com/penguintechinc/tobogganing.git
+cd tobogganing
 
 # Quick build all React applications + screenshots
 ./scripts/build-apps.sh
@@ -343,7 +348,7 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 
 Security is our top priority. We follow responsible disclosure practices:
 
-- Report security issues to: security@sasewaddle.com
+- Report security issues to: security@penguintech.io
 - See our [Security Policy](SECURITY.md) for details
 - Regular security audits and updates
 
@@ -377,6 +382,35 @@ See [LICENSE.md](docs/LICENSE.md) for complete licensing details.
 
 ---
 
+## 🆕 What's New in v0.1.0 — Unified Networking Layer
+
+This release unifies three previously disconnected policy systems into a single, coherent control plane:
+
+| Before | After |
+|--------|-------|
+| `policy_rules`, `firewall_rules`, `access_control_manager` — 3 separate systems | One canonical `policy_rules` schema with `scope`, `direction`, and JSON array fields |
+| Go PolicyEngine dead code | PolicyEngine wired into all 5 proxy check sites |
+| Standard K8s NetworkPolicy | Cilium `CiliumNetworkPolicy` CRDs with L7 FQDN matching |
+| Suricata-only IDS | Zeek + Suricata dual IDS via VXLAN mirror tap |
+| REST polling (with envelope bug) | gRPC streaming + Redis pub/sub fanout |
+| OSPF-only routing | FRR iBGP AS 65001 + OSPF underlay for inter-site VRF exchange |
+
+**Key components shipped:**
+- `services/hub-api/database/__init__.py` — unified `policy_rules` table
+- `services/hub-api/api/routes.py` — CRUD + Redis pub/sub triggers
+- `services/hub-api/grpc/server.py` — gRPC policy streaming server (port 50051)
+- `services/hub-api/network/cilium_translator.py` — `policy_rules` → `CiliumNetworkPolicy` CRD translator
+- `services/hub-api/network/k8s_client.py` — Kubernetes CRD apply/delete client
+- `services/hub-router/internal/policy/engine.go` — enhanced 6-dimension policy engine
+- `services/hub-router/proxy/policy_adapter.go` — API → engine policy conversion
+- `services/hub-router/proxy/main.go` — PolicyEngine wired at all 5 firewall check sites
+- `services/hub-router/proxy/mirror/manager.go` — Zeek VXLAN mirror support
+- `deploy/frr/` — FRR iBGP + OSPF config for us-east and eu-west
+- `deploy/zeek/` — Zeek site scripts for WireGuard + TLS analysis
+- `k8s/helm/tobogganing/values-cilium.yaml` — Cilium WireGuard encryption overlay
+
+---
+
 **Made with ❤️ by the open source community**
 
-*SASEWaddle - Secure Access, Simplified*
+*Tobogganing - Secure Access, Simplified*

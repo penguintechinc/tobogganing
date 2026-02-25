@@ -236,30 +236,36 @@ def define_schema() -> None:
         migrate='clients.table'
     )
     
-    # Firewall rules table
-    db.define_table('firewall_rules',
+    # Unified policy rules table
+    # All dimension fields use JSON arrays so a single policy can match
+    # multiple domains, ports, CIDRs, users, or groups.  The `scope` field
+    # controls which enforcement path receives the policy: the Go PolicyEngine
+    # (wireguard clients), CiliumNetworkPolicy CRDs (k8s services), or both.
+    db.define_table('policy_rules',
         Field('id', 'id'),
-        Field('user_id', 'reference users', ondelete='CASCADE'),
-        Field('rule_type', 'string', length=50,
-              requires=IS_IN_SET(['domain', 'ip', 'ip_range', 'url_pattern', 'protocol_rule'])),
         Field('name', 'string', length=255, requires=IS_NOT_EMPTY()),
         Field('description', 'text'),
         Field('action', 'string', length=20, default='allow',
               requires=IS_IN_SET(['allow', 'deny'])),
+        Field('priority', 'integer', default=100),
+        Field('scope', 'string', length=20, default='both',
+              requires=IS_IN_SET(['wireguard', 'k8s', 'both'])),
         Field('direction', 'string', length=20, default='both',
               requires=IS_IN_SET(['inbound', 'outbound', 'both'])),
-        Field('priority', 'integer', default=100),
-        Field('src_ip', 'string', length=100),
-        Field('dst_ip', 'string', length=100),
-        Field('protocol', 'string', length=20),
-        Field('src_port', 'string', length=100),
-        Field('dst_port', 'string', length=100),
-        Field('domain', 'string', length=255),
-        Field('url_pattern', 'text'),
+        Field('domains', 'json'),           # ["*.example.com", "app.internal"]
+        Field('ports', 'json'),             # ["443", "8000-9000"]
+        Field('protocol', 'string', length=20, default='any',
+              requires=IS_IN_SET(['tcp', 'udp', 'icmp', 'any'])),
+        Field('src_cidrs', 'json'),         # ["10.0.0.0/8", "172.16.0.0/12"]
+        Field('dst_cidrs', 'json'),         # ["192.168.1.0/24"]
+        Field('users', 'json'),             # ["user-id-1", "user-id-2"]
+        Field('groups', 'json'),            # ["admins", "developers"]
+        Field('identity_provider', 'string', length=50, default='local',
+              requires=IS_IN_SET(['local', 'oidc', 'saml', 'scim'])),
         Field('enabled', 'boolean', default=True),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='firewall_rules.table'
+        migrate='policy_rules.table'
     )
     
     # VRF (Virtual Routing and Forwarding) table

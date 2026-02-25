@@ -1,3 +1,4 @@
+{{- if not .Values.cilium.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -58,3 +59,46 @@ spec:
       ports:
         - port: 443
           protocol: TCP
+{{- end }}
+---
+{{- if .Values.cilium.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-base
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubRouter.ports.wireguard }}"
+              protocol: UDP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+{{- end }}

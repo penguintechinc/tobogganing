@@ -1,0 +1,159 @@
+{{- if .Values.frr.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-frr
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frr
+  annotations:
+    checksum/config: {{ include (print $.Template.BasePath "/frr-configmap.yaml") . | sha256sum }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frr
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frr
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/frr-configmap.yaml") . | sha256sum }}
+    spec:
+      hostNetwork: true
+      hostPID: false
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.frr.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frr.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frr.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        sysctls:
+          - name: net.ipv4.ip_forward
+            value: "1"
+          - name: net.ipv6.conf.all.forwarding
+            value: "1"
+          - name: net.ipv4.conf.all.rp_filter
+            value: "0"
+          - name: net.ipv4.conf.default.rp_filter
+            value: "0"
+      initContainers:
+        - name: frr-init
+          image: frrouting/frr:{{ .Values.frr.image.tag | default "latest" }}
+          imagePullPolicy: {{ .Values.frr.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /etc/frr-config/daemons /etc/frr/daemons
+              cp /etc/frr-config/frr.conf /etc/frr/frr.conf
+              chmod 640 /etc/frr/daemons /etc/frr/frr.conf
+              chown frr:frr /etc/frr/daemons /etc/frr/frr.conf
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          volumeMounts:
+            - name: frr-config
+              mountPath: /etc/frr-config
+              readOnly: true
+            - name: frr-etc
+              mountPath: /etc/frr
+      containers:
+        - name: frr
+          image: frrouting/frr:{{ .Values.frr.image.tag | default "latest" }}
+          imagePullPolicy: {{ .Values.frr.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+                - SYS_ADMIN
+              drop:
+                - ALL
+          ports:
+            - name: bgp
+              containerPort: 179
+              protocol: TCP
+            - name: ospf
+              containerPort: 2604
+              protocol: TCP
+            - name: vtysh
+              containerPort: 2601
+              protocol: TCP
+            - name: bfd
+              containerPort: 3784
+              protocol: UDP
+          livenessProbe:
+            tcpSocket:
+              port: 2601
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            exec:
+              command:
+                - /usr/bin/vtysh
+                - -c
+                - "show version"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {{- toYaml .Values.frr.resources | nindent 12 }}
+          volumeMounts:
+            - name: frr-etc
+              mountPath: /etc/frr
+            - name: frr-run
+              mountPath: /var/run/frr
+            - name: frr-log
+              mountPath: /var/log/frr
+            - name: lib-modules
+              mountPath: /lib/modules
+              readOnly: true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      volumes:
+        - name: frr-config
+          configMap:
+            name: {{ include "tobogganing.fullname" . }}-frr-config
+            defaultMode: 0440
+        - name: frr-etc
+          emptyDir: {}
+        - name: frr-run
+          emptyDir:
+            medium: Memory
+        - name: frr-log
+          emptyDir: {}
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+      serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
+      priorityClassName: {{ .Values.frr.priorityClassName | default "system-node-critical" }}
+      terminationGracePeriodSeconds: 30
+{{- end }}
