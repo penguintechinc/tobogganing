@@ -8,6 +8,9 @@ export interface User {
   name: string;
   role: "admin" | "maintainer" | "viewer";
   created_at: string;
+  scopes: string[];
+  tenant: string;
+  teams: string[];
 }
 
 export interface AuthResponse {
@@ -95,6 +98,44 @@ export interface DashboardStats {
   total_policies: number;
   active_policies: number;
   active_sessions: number;
+}
+
+export interface Tenant {
+  id: string;
+  tenant_id: string;
+  name: string;
+  domain: string;
+  spiffe_trust_domain: string;
+  is_active: boolean;
+  config: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface Team {
+  id: string;
+  team_id: string;
+  name: string;
+  description: string;
+  tenant_id: string;
+  created_at: string;
+}
+
+export interface TeamMembership {
+  user_id: string;
+  team_id: string;
+  role_in_team: "admin" | "maintainer" | "viewer";
+}
+
+export interface SpiffeEntry {
+  id: string;
+  spiffe_id: string;
+  tenant_id: string;
+  parent_id: string;
+  selectors: Record<string, string>;
+  ttl: number;
+  dns_names: string[];
+  status: "active" | "expired" | "pending";
+  created_at: string;
 }
 
 // ---- API Client ----
@@ -323,6 +364,85 @@ export const dashboardApi = {
   stats: async (): Promise<DashboardStats> => {
     const { data } = await apiClient.get<DashboardStats>("/dashboard/stats");
     return data;
+  },
+};
+
+// ---- Tenants API ----
+
+export const tenantsApi = {
+  list: async (): Promise<Tenant[]> => {
+    const { data } = await apiClient.get<ApiEnvelope<{ tenants: Tenant[]; total: number }>>("/tenants");
+    return data.data.tenants;
+  },
+
+  get: async (id: string): Promise<Tenant> => {
+    const { data } = await apiClient.get<ApiEnvelope<Tenant>>(`/tenants/${id}`);
+    return data.data;
+  },
+
+  create: async (tenant: Omit<Tenant, "id" | "created_at">): Promise<Tenant> => {
+    const { data } = await apiClient.post<ApiEnvelope<Tenant>>("/tenants", tenant);
+    return data.data;
+  },
+
+  update: async (id: string, tenant: Partial<Tenant>): Promise<Tenant> => {
+    const { data } = await apiClient.put<ApiEnvelope<Tenant>>(`/tenants/${id}`, tenant);
+    return data.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/tenants/${id}`);
+  },
+};
+
+// ---- Teams API ----
+
+export const teamsApi = {
+  list: async (tenantId?: string): Promise<Team[]> => {
+    const { data } = await apiClient.get<ApiEnvelope<{ teams: Team[]; total: number }>>("/teams", {
+      params: tenantId ? { tenant_id: tenantId } : undefined,
+    });
+    return data.data.teams;
+  },
+
+  get: async (id: string): Promise<Team> => {
+    const { data } = await apiClient.get<ApiEnvelope<Team>>(`/teams/${id}`);
+    return data.data;
+  },
+
+  create: async (team: Omit<Team, "id" | "created_at">): Promise<Team> => {
+    const { data } = await apiClient.post<ApiEnvelope<Team>>("/teams", team);
+    return data.data;
+  },
+
+  addMember: async (teamId: string, membership: TeamMembership): Promise<void> => {
+    await apiClient.post(`/teams/${teamId}/members`, membership);
+  },
+
+  removeMember: async (teamId: string, userId: string): Promise<void> => {
+    await apiClient.delete(`/teams/${teamId}/members/${userId}`);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/teams/${id}`);
+  },
+};
+
+// ---- SPIFFE API ----
+
+export const spiffeApi = {
+  list: async (): Promise<SpiffeEntry[]> => {
+    const { data } = await apiClient.get<ApiEnvelope<{ entries: SpiffeEntry[]; total: number }>>("/spiffe");
+    return data.data.entries;
+  },
+
+  create: async (entry: Omit<SpiffeEntry, "id" | "created_at" | "status">): Promise<SpiffeEntry> => {
+    const { data } = await apiClient.post<ApiEnvelope<SpiffeEntry>>("/spiffe", entry);
+    return data.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/spiffe/${id}`);
   },
 };
 

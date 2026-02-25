@@ -16,6 +16,7 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  hasScope: (scope: string) => boolean;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -83,6 +84,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const hasScope = useCallback((required: string) => {
+    if (!user?.scopes) return false;
+    const [reqResource, reqAction] = required.split(":");
+    return user.scopes.some((available) => {
+      if (available === required) return true;
+      const [availResource, availAction] = available.split(":");
+      if (availResource === "*" && availAction === "*") return true;
+      if (availResource === "*" && availAction === reqAction) return true;
+      if (availResource === reqResource && availAction === "*") return true;
+      return false;
+    });
+  }, [user]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg-primary">
@@ -95,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasScope }}>
       {children}
     </AuthContext.Provider>
   );
@@ -121,4 +135,17 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+export function ScopeGate({
+  scope,
+  children,
+  fallback = null,
+}: {
+  scope: string;
+  children: ReactNode;
+  fallback?: ReactNode;
+}) {
+  const { hasScope } = useAuth();
+  return hasScope(scope) ? <>{children}</> : <>{fallback}</>;
 }

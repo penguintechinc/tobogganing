@@ -6,12 +6,16 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
+from auth.middleware import require_scope, tenant_required, scope_required
+from auth.scopes import parse_scope_string
+
 logger = structlog.get_logger()
 
 def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manager):
     
     @action("api/v1/clusters/register", method=["POST"])
     @action.uses("json")
+    @require_scope("clusters:write")
     async def register_cluster():
         try:
             data = await request.json()
@@ -52,6 +56,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clusters/<cluster_id>/heartbeat", method=["POST"])
     @action.uses("json")
+    @require_scope("hubs:write")
     async def cluster_heartbeat(cluster_id):
         try:
             data = await request.json()
@@ -71,29 +76,38 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clusters", method=["GET"])
     @action.uses("json")
+    @require_scope("clusters:read")
     async def list_clusters():
         try:
-            clusters = await cluster_manager.get_all_clusters()
+            tenant_id = getattr(request, "tenant", None)
+            clusters = await cluster_manager.get_all_clusters(
+                tenant_id=tenant_id.tenant_id if tenant_id else None
+            )
             return {
-                "clusters": [
-                    {
-                        "id": c.id,
-                        "name": c.name,
-                        "region": c.region,
-                        "datacenter": c.datacenter,
-                        "status": c.status,
-                        "client_count": c.client_count
-                    }
-                    for c in clusters
-                ]
+                "status": "success",
+                "data": {
+                    "clusters": [
+                        {
+                            "id": c.id,
+                            "name": c.name,
+                            "region": c.region,
+                            "datacenter": c.datacenter,
+                            "status": c.status,
+                            "client_count": c.client_count,
+                        }
+                        for c in clusters
+                    ]
+                },
+                "meta": {"total": len(clusters)},
             }
         except Exception as e:
             logger.error(f"List clusters error: {e}")
             response.status = 500
-            return {"error": "Internal server error"}
+            return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
     
     @action("api/v1/clients/register", method=["POST"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def register_client():
         try:
             data = await request.json()
@@ -153,6 +167,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clients/<client_id>/config", method=["GET"])
     @action.uses("json")
+    @require_scope("clients:read")
     async def get_client_config(client_id):
         try:
             # Authenticate using API key
@@ -194,6 +209,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clients/<client_id>/tunnel-config", method=["PUT"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def update_tunnel_config(client_id):
         try:
             # Authenticate using API key or admin token
@@ -285,6 +301,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clients/<client_id>/rotate-key", method=["POST"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def rotate_client_key(client_id):
         try:
             # Authenticate using current API key
@@ -318,6 +335,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clients/<client_id>/metrics", method=["POST"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def submit_client_metrics(client_id):
         try:
             # Check if metrics feature is licensed
@@ -375,6 +393,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/headends/<headend_id>/metrics", method=["POST"])
     @action.uses("json")
+    @require_scope("hubs:write")
     async def submit_headend_metrics(headend_id):
         try:
             # Authenticate using JWT or headend token
@@ -422,32 +441,38 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/clients", method=["GET"])
     @action.uses("json")
+    @require_scope("clients:read")
     async def list_clients():
         try:
-            # This endpoint should require admin authentication
-            # For now, we'll allow it for testing
-            
-            clients = await client_registry.get_all_clients()
+            tenant_id = getattr(request, "tenant", None)
+            clients = await client_registry.get_all_clients(
+                tenant_id=tenant_id.tenant_id if tenant_id else None
+            )
             return {
-                "clients": [
-                    {
-                        "id": c.id,
-                        "name": c.name,
-                        "type": c.type,
-                        "cluster_id": c.cluster_id,
-                        "status": c.status,
-                        "last_seen": c.last_seen.isoformat()
-                    }
-                    for c in clients
-                ]
+                "status": "success",
+                "data": {
+                    "clients": [
+                        {
+                            "id": c.id,
+                            "name": c.name,
+                            "type": c.type,
+                            "cluster_id": c.cluster_id,
+                            "status": c.status,
+                            "last_seen": c.last_seen.isoformat(),
+                        }
+                        for c in clients
+                    ]
+                },
+                "meta": {"total": len(clients)},
             }
         except Exception as e:
             logger.error(f"List clients error: {e}")
             response.status = 500
-            return {"error": "Internal server error"}
+            return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
     
     @action("api/v1/certs/generate", method=["POST"])
     @action.uses("json")
+    @require_scope("certificates:write")
     async def generate_certificate():
         try:
             data = await request.json()
@@ -654,6 +679,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     # WireGuard Certificate Management Endpoints
     @action("api/v1/wireguard/keys", method=["POST"])
     @action.uses("json")
+    @require_scope("hubs:write")
     async def generate_wireguard_keys():
         """Generate WireGuard keys and certificates for authenticated nodes"""
         try:
@@ -727,6 +753,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     
     @action("api/v1/wireguard/peers", method=["GET"])
     @action.uses("json")
+    @require_scope("hubs:read")
     async def get_wireguard_peers():
         """Get all WireGuard peer configurations (for headend servers)"""
         try:
@@ -765,7 +792,8 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             return {"error": "Internal server error"}
     
     @action("api/v1/wireguard/<node_id>/revoke", method=["POST"])
-    @action.uses("json") 
+    @action.uses("json")
+    @require_scope("hubs:write")
     async def revoke_wireguard_keys(node_id):
         """Revoke WireGuard keys for a specific node"""
         try:
@@ -791,6 +819,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     # Headend Configuration Endpoint
     @action("api/v1/clusters/<cluster_id>/headend-config", method=["GET"])
     @action.uses("json")
+    @require_scope("hubs:read")
     async def get_headend_config(cluster_id):
         """Get complete headend configuration for a cluster"""
         try:
@@ -949,14 +978,24 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
     @action("api/v1/policies", method=["GET"])
     @action.uses("json")
+    @require_scope("policies:read")
     async def list_policies():
-        """List all policy rules."""
+        """List all policy rules, scoped to the authenticated tenant."""
         try:
             from database import get_read_db
             db = get_read_db()
-            rows = db(db.policy_rules).select(orderby=db.policy_rules.priority)
+            query = db.policy_rules
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx:
+                query = db(
+                    (db.policy_rules.id > 0)
+                    & (db.policy_rules.tenant_id == tenant_ctx.tenant_id)
+                )
+            else:
+                query = db(db.policy_rules)
+            rows = query.select(orderby=db.policy_rules.priority)
             policies = [_policy_to_dict(row) for row in rows]
-            return {"status": "success", "data": {"policies": policies, "total": len(policies)}}
+            return {"status": "success", "data": {"policies": policies, "total": len(policies)}, "meta": {}}
         except Exception as e:
             logger.error("List policies error", error=str(e))
             response.status = 500
@@ -964,6 +1003,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
     @action("api/v1/policies", method=["POST"])
     @action.uses("json")
+    @require_scope("policies:write")
     async def create_policy():
         """Create a new policy rule."""
         try:
@@ -1017,6 +1057,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
             from database import get_db
             db = get_db()
+            tenant_ctx = getattr(request, "tenant", None)
             row_id = db.policy_rules.insert(
                 name=data["name"],
                 description=data.get("description", ""),
@@ -1033,6 +1074,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 groups=data.get("groups", []),
                 identity_provider=idp,
                 enabled=data.get("enabled", True),
+                tenant_id=tenant_ctx.tenant_id if tenant_ctx else None,
             )
             db.commit()
 
@@ -1062,6 +1104,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
     @action("api/v1/policies/<policy_id:int>", method=["GET"])
     @action.uses("json")
+    @require_scope("policies:read")
     async def get_policy(policy_id):
         """Get a single policy rule by ID."""
         try:
@@ -1070,8 +1113,12 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             row = db.policy_rules[policy_id]
             if not row:
                 response.status = 404
-                return {"error": "Policy not found"}
-            return {"status": "success", "data": _policy_to_dict(row)}
+                return {"status": "error", "data": None, "meta": {"error": "Policy not found"}}
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx and row.tenant_id != tenant_ctx.tenant_id:
+                response.status = 403
+                return {"status": "error", "data": None, "meta": {"error": "Access denied"}}
+            return {"status": "success", "data": _policy_to_dict(row), "meta": {}}
         except Exception as e:
             logger.error("Get policy error", error=str(e))
             response.status = 500
@@ -1079,6 +1126,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
     @action("api/v1/policies/<policy_id:int>", method=["PUT"])
     @action.uses("json")
+    @require_scope("policies:write")
     async def update_policy(policy_id):
         """Update an existing policy rule."""
         try:
@@ -1087,7 +1135,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             row = db.policy_rules[policy_id]
             if not row:
                 response.status = 404
-                return {"error": "Policy not found"}
+                return {"status": "error", "data": None, "meta": {"error": "Policy not found"}}
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx and row.tenant_id != tenant_ctx.tenant_id:
+                response.status = 403
+                return {"status": "error", "data": None, "meta": {"error": "Access denied"}}
 
             data = await request.json()
 
@@ -1155,6 +1207,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
     @action("api/v1/policies/<policy_id:int>", method=["DELETE"])
     @action.uses("json")
+    @require_scope("policies:delete")
     async def delete_policy(policy_id):
         """Delete a policy rule."""
         try:
@@ -1163,7 +1216,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             row = db.policy_rules[policy_id]
             if not row:
                 response.status = 404
-                return {"error": "Policy not found"}
+                return {"status": "error", "data": None, "meta": {"error": "Policy not found"}}
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx and row.tenant_id != tenant_ctx.tenant_id:
+                response.status = 403
+                return {"status": "error", "data": None, "meta": {"error": "Access denied"}}
             deleted_dict = _policy_to_dict(row)
             db(db.policy_rules.id == policy_id).delete()
             db.commit()
@@ -1190,12 +1247,21 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
     @action("api/v1/firewall/rules", method=["GET"])
     @action.uses("json")
+    @require_scope("policies:read")
     async def get_firewall_rules_compat():
         """Compatibility shim: serves policy_rules in legacy firewall format."""
         try:
             from database import get_read_db
             db = get_read_db()
-            rows = db(db.policy_rules).select(orderby=db.policy_rules.priority)
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx:
+                query = db(
+                    (db.policy_rules.id > 0)
+                    & (db.policy_rules.tenant_id == tenant_ctx.tenant_id)
+                )
+            else:
+                query = db(db.policy_rules)
+            rows = query.select(orderby=db.policy_rules.priority)
             rules = []
             for row in rows:
                 rules.append({

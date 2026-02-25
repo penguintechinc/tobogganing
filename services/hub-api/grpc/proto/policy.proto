@@ -22,6 +22,9 @@ message PolicyRule {
   bool enabled = 13;
   string scope = 14;               // wireguard, k8s, both
   string direction = 15;           // inbound, outbound, both
+  string tenant_id = 16;
+  repeated string required_scopes = 17;
+  repeated string spiffe_ids = 18;
 }
 
 message PolicySet {

@@ -8,6 +8,9 @@ import ClientManagement from "./pages/ClientManagement";
 import HubManagement from "./pages/HubManagement";
 import UserManagement from "./pages/UserManagement";
 import IdentityProviders from "./pages/IdentityProviders";
+import TenantManagement from "./pages/TenantManagement";
+import TeamManagement from "./pages/TeamManagement";
+import WorkloadIdentity from "./pages/WorkloadIdentity";
 import Settings from "./pages/Settings";
 import AuditLogs from "./pages/AuditLogs";
 
@@ -32,6 +35,9 @@ function App() {
         <Route path="/hubs" element={<ProtectedRoute><HubManagement /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
         <Route path="/identity" element={<ProtectedRoute><IdentityProviders /></ProtectedRoute>} />
+        <Route path="/tenants" element={<ProtectedRoute><TenantManagement /></ProtectedRoute>} />
+        <Route path="/teams" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />
+        <Route path="/workload-identity" element={<ProtectedRoute><WorkloadIdentity /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />

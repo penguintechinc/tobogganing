@@ -15,7 +15,11 @@ Translation mapping:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
+
+import structlog
+
+logger = structlog.get_logger()
 
 
 @dataclass(slots=True)
@@ -25,19 +29,23 @@ class CiliumPolicy:
     namespace: str
     labels: dict[str, str] = field(default_factory=dict)
     spec: dict[str, Any] = field(default_factory=dict)
+    tenant_id: Optional[str] = None
 
     def to_manifest(self) -> dict[str, Any]:
         """Serialize to a Kubernetes CiliumNetworkPolicy manifest."""
+        meta_labels: dict[str, str] = {
+            "app.kubernetes.io/managed-by": "tobogganing-hub-api",
+            **self.labels,
+        }
+        if self.tenant_id:
+            meta_labels["tobogganing.io/tenant"] = self.tenant_id
         return {
             "apiVersion": "cilium.io/v2",
             "kind": "CiliumNetworkPolicy",
             "metadata": {
                 "name": self.name,
                 "namespace": self.namespace,
-                "labels": {
-                    "app.kubernetes.io/managed-by": "tobogganing-hub-api",
-                    **self.labels,
-                },
+                "labels": meta_labels,
             },
             "spec": self.spec,
         }
@@ -85,6 +93,14 @@ def translate_policy(
     src_cidrs = policy_row.src_cidrs if isinstance(policy_row.src_cidrs, list) else []
     dst_cidrs = policy_row.dst_cidrs if isinstance(policy_row.dst_cidrs, list) else []
     protocol = getattr(policy_row, "protocol", "any")
+    tenant_id = getattr(policy_row, "tenant_id", None) or None
+    users = policy_row.users if isinstance(getattr(policy_row, "users", None), list) else []
+    groups = policy_row.groups if isinstance(getattr(policy_row, "groups", None), list) else []
+    spiffe_ids = (
+        policy_row.spiffe_ids
+        if isinstance(getattr(policy_row, "spiffe_ids", None), list)
+        else []
+    )
 
     spec: dict[str, Any] = {
         "endpointSelector": {
@@ -93,6 +109,21 @@ def translate_policy(
             },
         },
     }
+
+    # Build identity-based fromEndpoints selectors (users, groups, SPIFFE IDs)
+    identity_selectors: list[dict[str, Any]] = []
+    for user_id in users:
+        identity_selectors.append({
+            "matchLabels": {"tobogganing.io/user-id": user_id},
+        })
+    for group_id in groups:
+        identity_selectors.append({
+            "matchLabels": {"tobogganing.io/group-id": group_id},
+        })
+    for spiffe_id in spiffe_ids:
+        identity_selectors.append({
+            "matchLabels": {"tobogganing.io/spiffe-id": spiffe_id},
+        })
 
     # Build egress rules
     if direction in ("outbound", "both"):
@@ -130,6 +161,9 @@ def translate_policy(
             else:
                 ingress_rule["fromCIDRSet"] = [{"cidr": c} for c in src_cidrs]
 
+        if identity_selectors:
+            ingress_rule["fromEndpoints"] = identity_selectors
+
         if ports:
             port_specs = []
             for p in ports:
@@ -148,6 +182,7 @@ def translate_policy(
         namespace=namespace,
         labels={"tobogganing.io/policy-id": str(policy_row.id)},
         spec=spec,
+        tenant_id=tenant_id,
     )
 
 
@@ -159,6 +194,74 @@ def translate_all(policy_rows, namespace: str = "tobogganing") -> list[dict[str,
         if cp is not None:
             manifests.append(cp.to_manifest())
     return manifests
+
+
+def generate_cilium_identity(spiffe_entry) -> dict[str, Any]:
+    """Generate a CiliumIdentity manifest from a SPIFFE entry.
+
+    Args:
+        spiffe_entry: Object with attributes spiffe_id, tenant_id,
+                      selectors (dict), and dns_names (list).
+
+    Returns:
+        A CiliumIdentity Kubernetes manifest dict.
+    """
+    spiffe_id: str = getattr(spiffe_entry, "spiffe_id", "")
+    tenant_id: str = getattr(spiffe_entry, "tenant_id", "")
+    selectors: dict = getattr(spiffe_entry, "selectors", {}) or {}
+    dns_names: list = getattr(spiffe_entry, "dns_names", []) or []
+
+    sanitized = _sanitize(spiffe_id.replace("spiffe://", "").replace("/", "-"))
+    resource_name = f"identity-{sanitized}"
+
+    identity_labels: dict[str, str] = {
+        "tobogganing.io/spiffe-id": spiffe_id,
+        "tobogganing.io/tenant": tenant_id,
+    }
+    # Merge any additional selectors from the SPIFFE entry
+    for key, value in selectors.items():
+        identity_labels[str(key)] = str(value)
+
+    manifest: dict[str, Any] = {
+        "apiVersion": "cilium.io/v2",
+        "kind": "CiliumIdentity",
+        "metadata": {
+            "name": resource_name,
+            "labels": identity_labels,
+        },
+    }
+
+    if dns_names:
+        manifest["spec"] = {"dns-names": dns_names}
+
+    return manifest
+
+
+def translate_all_with_identities(
+    policy_rows,
+    spiffe_entries,
+    namespace: str = "tobogganing",
+) -> dict[str, list[dict[str, Any]]]:
+    """Translate policies and SPIFFE entries into Cilium manifests.
+
+    Returns a dict with two keys:
+      - "network_policies": list of CiliumNetworkPolicy manifests
+      - "identities": list of CiliumIdentity manifests
+    """
+    network_policies: list[dict[str, Any]] = []
+    for row in policy_rows:
+        cp = translate_policy(row, namespace)
+        if cp is not None:
+            network_policies.append(cp.to_manifest())
+
+    identities: list[dict[str, Any]] = []
+    for entry in spiffe_entries:
+        identities.append(generate_cilium_identity(entry))
+
+    return {
+        "network_policies": network_policies,
+        "identities": identities,
+    }
 
 
 def _sanitize(name: str) -> str:

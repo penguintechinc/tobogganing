@@ -1,0 +1,81 @@
+# Cilium Cluster Mesh configuration for Tobogganing cross-cloud connectivity.
+# Apply alongside base values: helm upgrade -f values.yaml -f values-clustermesh.yaml
+
+cilium:
+  cluster:
+    name: ""  # REQUIRED: unique cluster name (e.g., "aws-us-east-1", "gcp-europe-west1")
+    id: 0     # REQUIRED: unique numeric cluster ID (1-255)
+
+  clustermesh:
+    useAPIServer: true
+    apiserver:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      tls:
+        auto:
+          enabled: true
+          method: certmanager
+          certManagerIssuerRef:
+            name: tobogganing-ca-issuer
+            kind: ClusterIssuer
+
+  # Identity allocation mode — CRD-based for cross-cluster consistency
+  identityAllocationMode: crd
+
+  # Enable WireGuard encryption for node-to-node traffic
+  encryption:
+    enabled: true
+    type: wireguard
+    wireguard:
+      userspaceFallback: false
+
+  # OIDC identity source configuration
+  authentication:
+    mutual:
+      spiffe:
+        enabled: true
+        install:
+          enabled: false  # SPIRE managed separately by deploy/helm/spire/
+        trustDomain: ""   # Set per-tenant: e.g., "acme.tobogganing.io"
+
+  # Hub-router integration for cross-cloud mesh bridging
+  externalWorkloadSupport:
+    enabled: true
+
+# Tobogganing-specific mesh bridge settings
+tobogganing:
+  meshBridge:
+    enabled: true
+    hubRouterEndpoint: ""  # Auto-discovered from hub-api
+    refreshInterval: 30s
+    authentication:
+      # How hub-routers authenticate to each other for mesh peering
+      method: "token_exchange"  # "token_exchange" | "mutual_tls" | "spiffe"
+      tokenExchange:
+        hubApiUrl: ""  # hub-api URL for token exchange
+      mutualTLS:
+        secretName: "hub-router-mesh-tls"
+      spiffe:
+        trustDomain: ""
+
+  identityProviders:
+    # Priority-ordered list of identity providers per cluster
+    # Hub-router validator tries these in order
+    - type: auto_detect  # Detect EKS/GCP/Azure automatically
+      priority: 10
+      enabled: true
+    - type: spire
+      priority: 50
+      enabled: false  # Enable for on-prem / bare-metal
+      issuer: ""
+      audience: "tobogganing"
+    - type: k8s_sa
+      priority: 90
+      enabled: true
+      audience: "tobogganing"

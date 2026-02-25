@@ -31,6 +31,14 @@ type Packet struct {
 	Domain   string
 	UserID   string
 	GroupIDs []string
+	// Tenant is the tenant identifier attached to the connection context.
+	Tenant string
+	// Scopes holds the OAuth2/OIDC scopes granted to the connecting workload
+	// or user (resource:action pairs, e.g. "policies:read").
+	Scopes []string
+	// SpiffeID is the SPIFFE Verifiable Identity Document URI presented by
+	// the workload TLS certificate (e.g. "spiffe://domain/path/...").
+	SpiffeID string
 }
 
 // RawPolicy is the un-compiled policy representation received from the API layer.
@@ -44,32 +52,52 @@ type RawPolicy struct {
 	Ports     []string
 	Protocols []string
 	// CIDRs holds destination address ranges (legacy combined field).
-	CIDRs    []string
+	CIDRs []string
 	// SrcCIDRs holds source address ranges.
 	SrcCIDRs []string
 	Users    []string
 	Groups   []string
 	Enabled  bool
+	// TenantID restricts the rule to connections originating within the named
+	// tenant.  Empty string means the rule applies to all tenants.
+	TenantID string
+	// RequiredScopes lists OAuth2/OIDC scopes that the connecting workload or
+	// user must hold before this rule fires.  ALL listed scopes must be
+	// satisfied (logical AND).  An empty slice is a wildcard.
+	RequiredScopes []string
+	// SpiffeIDs lists SPIFFE ID patterns that the workload certificate must
+	// match.  Matching is exact or path-segment wildcard (see spiffeIDMatches).
+	// An empty slice is a wildcard.
+	SpiffeIDs []string
 }
 
 // PolicyRule is the compiled, match-ready form of a RawPolicy.
 // CIDR strings are pre-parsed into net.IPNet pointers for efficient evaluation.
 type PolicyRule struct {
-	ID          string
-	Name        string
-	Priority    int
-	Action      string
-	Domains     map[string]struct{}
-	Ports       map[string]struct{}
-	Protocols   map[string]struct{}
+	ID        string
+	Name      string
+	Priority  int
+	Action    string
+	Domains   map[string]struct{}
+	Ports     map[string]struct{}
+	Protocols map[string]struct{}
 	// CIDRNets contains compiled destination CIDR networks.
-	CIDRNets    []*net.IPNet
+	CIDRNets []*net.IPNet
 	// SrcCIDRNets contains compiled source CIDR networks.
 	SrcCIDRNets []*net.IPNet
 	Users       map[string]struct{}
 	Groups      map[string]struct{}
 	// Specificity is used to sort rules: more-specific rules are evaluated first.
 	Specificity int
+	// TenantID restricts matching to a single tenant.  Empty = wildcard.
+	TenantID string
+	// Scopes is the compiled set of required OAuth2/OIDC scopes for O(1)
+	// membership testing.  The packet must carry ALL entries in the set.
+	Scopes map[string]bool
+	// SpiffeIDs holds SPIFFE ID patterns verbatim from the raw policy.
+	// Kept as a slice because matching requires segment-by-segment comparison
+	// rather than a simple hash lookup.
+	SpiffeIDs []string
 }
 
 // Engine evaluates network packets against a compiled set of PolicyRules.
@@ -138,6 +166,54 @@ func (pe *Engine) Evaluate(pkt *Packet) string {
 // ruleMatches returns true when every non-empty criterion in rule matches pkt.
 // An empty criterion is treated as a wildcard (matches anything).
 func (pe *Engine) ruleMatches(rule *PolicyRule, pkt *Packet) bool {
+	// -----------------------------------------------------------------------
+	// Identity dimensions — checked first because string/map operations are
+	// cheaper than the CIDR containment loops that follow.
+	// -----------------------------------------------------------------------
+
+	// Check tenant: if the rule is tenant-scoped, the packet must originate
+	// from that same tenant.
+	if rule.TenantID != "" && pkt.Tenant != rule.TenantID {
+		return false
+	}
+
+	// Check scopes: the packet must carry ALL required scopes.  Each required
+	// scope may be satisfied by any scope in pkt.Scopes via wildcard rules
+	// (mirrors the Python scope_matches logic in auth/scopes.py).
+	if len(rule.Scopes) > 0 {
+		for required := range rule.Scopes {
+			satisfied := false
+			for _, available := range pkt.Scopes {
+				if scopeMatches(required, available) {
+					satisfied = true
+					break
+				}
+			}
+			if !satisfied {
+				return false
+			}
+		}
+	}
+
+	// Check SPIFFE ID: the workload certificate must match at least one of
+	// the patterns listed in the rule.
+	if len(rule.SpiffeIDs) > 0 {
+		matched := false
+		for _, pattern := range rule.SpiffeIDs {
+			if spiffeIDMatches(pattern, pkt.SpiffeID) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Existing network / identity (user/group) dimensions
+	// -----------------------------------------------------------------------
+
 	// Check users
 	if len(rule.Users) > 0 {
 		if _, ok := rule.Users[pkt.UserID]; !ok {
@@ -272,6 +348,27 @@ func compileRule(p RawPolicy) (*PolicyRule, error) {
 		rule.Specificity++
 	}
 
+	// Identity dimensions — evaluated before network dimensions in ruleMatches
+	// because string comparisons are cheaper than CIDR containment checks.
+	if p.TenantID != "" {
+		rule.TenantID = p.TenantID
+		rule.Specificity++
+	}
+
+	if len(p.RequiredScopes) > 0 {
+		rule.Scopes = make(map[string]bool, len(p.RequiredScopes))
+		for _, s := range p.RequiredScopes {
+			rule.Scopes[s] = true
+		}
+		rule.Specificity++
+	}
+
+	if len(p.SpiffeIDs) > 0 {
+		rule.SpiffeIDs = make([]string, len(p.SpiffeIDs))
+		copy(rule.SpiffeIDs, p.SpiffeIDs)
+		rule.Specificity++
+	}
+
 	return rule, nil
 }
 
@@ -291,4 +388,109 @@ func portToString(port int) string {
 	}
 	// Simple int-to-string without fmt to avoid unnecessary allocations.
 	return fmt.Sprintf("%d", port)
+}
+
+// scopeMatches returns true when available satisfies the required scope.
+//
+// Matching rules (mirrors auth/scopes.py#scope_matches):
+//   - Exact match: "policies:read" satisfies "policies:read".
+//   - "*:*" satisfies any scope.
+//   - "*:<action>" satisfies "<any-resource>:<action>".
+//   - "<resource>:*" satisfies "<resource>:<any-action>".
+func scopeMatches(required, available string) bool {
+	if available == required {
+		return true
+	}
+
+	availRes, _, availAction := partitionScope(available)
+	reqRes, _, reqAction := partitionScope(required)
+
+	// "*:*" matches everything.
+	if availRes == "*" && availAction == "*" {
+		return true
+	}
+
+	// "*:<action>" matches any resource with the same action.
+	if availRes == "*" && availAction == reqAction {
+		return true
+	}
+
+	// "<resource>:*" matches any action on the same resource.
+	if availRes == reqRes && availAction == "*" {
+		return true
+	}
+
+	return false
+}
+
+// partitionScope splits a "resource:action" scope string at the first colon.
+// If there is no colon the entire string is returned as the resource with an
+// empty action — callers should treat that as a malformed scope.
+func partitionScope(scope string) (resource, sep, action string) {
+	for i := 0; i < len(scope); i++ {
+		if scope[i] == ':' {
+			return scope[:i], ":", scope[i+1:]
+		}
+	}
+	return scope, "", ""
+}
+
+// spiffeIDMatches reports whether actual matches pattern.
+//
+// Pattern syntax: path segments separated by "/".  A "*" in any single
+// segment position matches exactly one corresponding segment in actual.
+// Both pattern and actual must have the same number of segments.
+//
+// Examples:
+//
+//	spiffeIDMatches("spiffe://acme.io/*/backend/*", "spiffe://acme.io/cluster1/backend/api") → true
+//	spiffeIDMatches("spiffe://acme.io/ns/svc",      "spiffe://acme.io/ns/svc")              → true
+//	spiffeIDMatches("spiffe://acme.io/*/svc",        "spiffe://acme.io/ns/other/svc")        → false
+func spiffeIDMatches(pattern, actual string) bool {
+	// Fast-path: exact match.
+	if pattern == actual {
+		return true
+	}
+
+	// Split both URIs into path segments.
+	patternSegs := splitPath(pattern)
+	actualSegs := splitPath(actual)
+
+	// Segment counts must match (no recursive "**" support yet).
+	if len(patternSegs) != len(actualSegs) {
+		return false
+	}
+
+	for i, seg := range patternSegs {
+		if seg == "*" {
+			// Wildcard: matches any single segment (including empty).
+			continue
+		}
+		if seg != actualSegs[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// splitPath splits a URI or path string on "/" without allocating a temporary
+// slice via strings.Split — keeps the hot path allocation-lean.
+func splitPath(s string) []string {
+	// Pre-count slashes to allocate exactly the right capacity.
+	n := 1
+	for i := 0; i < len(s); i++ {
+		if s[i] == '/' {
+			n++
+		}
+	}
+	out := make([]string, 0, n)
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '/' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	out = append(out, s[start:])
+	return out
 }

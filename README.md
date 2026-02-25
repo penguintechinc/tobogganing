@@ -47,6 +47,9 @@
 - **Unified Policy Engine**: Single policy schema enforced across WireGuard clients AND Kubernetes services via Cilium CRDs
 - **gRPC Policy Streaming**: Sub-second policy push via Redis pub/sub fanout to all connected hub-routers
 - **Real-time Access Testing**: Test access rules before deployment
+- **OIDC-Compliant Authorization**: Scope-based access control per RFC 9068 — `resource:action` model with wildcard support
+- **SPIFFE/SPIRE Workload Identity**: Hardware-rooted service authentication via TPM DevID or cloud hypervisor attestation
+- **Cross-Cloud Cluster Mesh**: Cilium Cluster Mesh over hub-router WireGuard tunnels for identity-aware east-west networking
 
 ### High Performance
 - **WireGuard VPN**: Modern, fast, and secure VPN protocol
@@ -112,21 +115,27 @@ Tobogganing implements a comprehensive SASE architecture with three main compone
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Manager Service (Python 3.13)
+### Manager Service / Hub-API (Python 3.13)
 - **Web Management Portal**: py4web-based interface with role-based access control
 - **Certificate Authority**: Automated X.509 certificate generation and lifecycle management
 - **Database Backend**: PyDAL with MySQL/PostgreSQL/SQLite and read replica support
 - **API Gateway**: RESTful API for client registration and configuration distribution
 - **Analytics Engine**: Real-time metrics collection and aggregation
 - **Backup System**: Local and S3-compatible storage with encryption
+- **Built-in OIDC Provider**: Discovery, JWKS, token exchange, and userinfo endpoints — hub-api acts as IdP
+- **Identity Bridge**: SPIFFE ↔ OIDC bidirectional mapping with convention-based fallback
+- **Workload Identity**: Priority-based provider chain (EKS Pod Identity / GCP WI / Azure WI → SPIRE → K8s SA)
+- **Multi-Tenant Isolation**: Hard tenant boundary in DB, JWT, and API; Global → Tenant → Team → Resource scope narrowing
 
-### Headend Server (Go 1.24)
+### Headend Server / Hub-Router (Go 1.24)
 - **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
 - **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
 - **Traffic Security**: Unified policy engine — 6-dimension rule matching (domains, ports, CIDRs, users, groups, protocols)
 - **IDS/IPS Integration**: Traffic mirroring to Suricata via VXLAN/GRE/ERSPAN
-- **Authentication**: JWT validation and external IdP integration (SAML2/OAuth2)
+- **Authentication**: JWT validation with scope-based authorization (RFC 9068)
 - **Network Routing**: VRF and OSPF support through FRR integration
+- **Identity-Aware Middleware**: Tenant and scope validation on every inbound request
+- **Cross-Cloud Mesh Bridge**: WireGuard site-to-site tunnels carrying Cilium Cluster Mesh API traffic
 
 ### Client Applications
 - **Native Desktop**: Go-based clients for Windows, macOS, and Linux with system tray
@@ -379,6 +388,32 @@ See [LICENSE.md](docs/LICENSE.md) for complete licensing details.
 - **Discussions**: Questions and community help
 - **Discord**: Real-time chat and support
 - **Documentation**: Comprehensive guides and tutorials
+
+---
+
+## 🆕 What's New in v0.2.0 — Identity-Aware Networking
+
+This release adds a full identity mesh to the Tobogganing platform: a built-in OIDC provider,
+SPIFFE/SPIRE workload identity, multi-tenant isolation, and cross-cloud Cilium Cluster Mesh.
+
+| Feature | Description |
+|---------|-------------|
+| OIDC Provider | hub-api acts as a standards-compliant IdP (RFC 9068 access tokens, JWKS rotation) |
+| Scope-Based AuthZ | `resource:action` scopes replace role-string checks at every API endpoint |
+| Multi-Tenant Isolation | Hard DB + JWT tenant boundary; Global → Tenant → Team scope narrowing |
+| Team Hierarchy | Tenant-scoped teams with per-user role assignments |
+| SPIFFE/SPIRE | Hardware-rooted workload identity via TPM DevID or cloud attestors |
+| Cloud-Native WI | EKS Pod Identity, GCP Workload Identity Federation, Azure WI — priority over SPIRE |
+| Identity Bridge | SPIFFE ↔ OIDC mapping; convention-based fallback when no explicit mapping exists |
+| Cross-Cloud Mesh | Cilium Cluster Mesh over hub-router WireGuard tunnels |
+| Identity-Aware Peering | Each side of a hub-router peering presents its workload identity; hub-api validates before tunnel |
+| External IdP Federation | OIDC token exchange with claim mapping; SAML + SCIM reserved for premium tier |
+
+**New pages in hub-webui:** Tenant Management, Team Management, Workload Identity
+
+**New `ScopeGate` component:** wraps any UI element; renders fallback or nothing when required scope is absent
+
+See [docs/IDENTITY.md](docs/IDENTITY.md) for the full identity architecture deep-dive.
 
 ---
 

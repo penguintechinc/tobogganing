@@ -4,6 +4,60 @@ All notable changes to Tobogganing will be documented in this file. New releases
 
 ---
 
+# v0.2.0 — Identity-Aware Networking
+
+**Release Date**: TBD (development branch)
+
+## Highlights
+- OIDC-compliant JWT tokens with scope-based authorization (RFC 9068)
+- Multi-tenant isolation with Global → Tenant → Team → Resource hierarchy
+- SPIFFE/SPIRE workload identity with hardware-rooted attestation
+- Cloud-native identity integration (EKS Pod Identity, GCP WI, Azure WI)
+- Cross-cloud Cilium Cluster Mesh via hub-router WireGuard tunnels
+- Built-in OIDC provider (hub-api as IdP)
+- External IdP federation (OIDC, SAML placeholder, SCIM placeholder)
+
+## New Components
+
+| Component | Description |
+|-----------|-------------|
+| Scope Vocabulary | `resource:action` permission model with wildcard support |
+| Tenant System | Hard tenant isolation in DB, JWT, and API |
+| Team Hierarchy | Tenant-scoped teams with role-based membership |
+| OIDC Provider | Discovery, JWKS, token, authorize, userinfo endpoints |
+| Identity Bridge | SPIFFE ↔ OIDC bidirectional mapping |
+| Workload Identity | Cloud-native + SPIRE with priority-based provider chain |
+| Mesh Bridge | Hub-to-hub WireGuard for cross-cloud Cilium ClusterMesh |
+| SPIRE Helm Chart | Full deployment with cloud + bare-metal attestors |
+
+## Breaking Changes
+- JWT token format changed: new mandatory claims (`scope`, `tenant`, `teams`, `roles`)
+- `permissions` and `node_type` claims removed from JWTs
+- `require_role()` / `has_permission()` replaced by `require_scope()`
+- All API endpoints now require `tenant` claim + scope authorization
+
+## Database Changes
+
+New tables: `tenants`, `teams`, `user_team_memberships`, `role_scope_bundles`, `spiffe_entries`, `identity_mappings`
+
+Modified: `users` (added `tenant_id`), `policy_rules` (added `tenant_id`)
+
+## API Changes
+
+New endpoints: `/api/v1/tenants`, `/api/v1/teams`, `/api/v1/spiffe`, `/api/v1/identity/mappings`, `/api/v1/identity/exchange`
+
+OIDC endpoints: `/.well-known/openid-configuration`, `/oauth2/jwks`, `/oauth2/token`, `/oauth2/authorize`, `/oauth2/userinfo`
+
+## WebUI Changes
+
+New pages: Tenant Management, Team Management, Workload Identity
+
+Scope-gated UI controls via `ScopeGate` component
+
+Identity section added to sidebar navigation
+
+---
+
 ## 🔧 v1.1.4 - "Build System Enhancement" (2025-08-22)
 
 ### 🎯 Major Improvements

@@ -11,24 +11,75 @@ import {
   Snowflake,
   ChevronLeft,
   ChevronRight,
+  Building2,
+  KeySquare,
 } from "lucide-react";
 import clsx from "clsx";
+import { ScopeGate } from "../lib/auth";
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
 }
 
-const navItems = [
+const mainNavItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/policies", icon: Shield, label: "Policies" },
   { to: "/clients", icon: Monitor, label: "Clients" },
   { to: "/hubs", icon: Server, label: "Hubs" },
   { to: "/users", icon: Users, label: "Users" },
   { to: "/identity", icon: Fingerprint, label: "Identity" },
+];
+
+const identityNavItems = [
+  { to: "/tenants", icon: Building2, label: "Tenants", scope: "tenants:read" },
+  { to: "/teams", icon: Users, label: "Teams", scope: "teams:read" },
+  {
+    to: "/workload-identity",
+    icon: KeySquare,
+    label: "Workload Identity",
+    scope: "spiffe:read",
+  },
+];
+
+const bottomNavItems = [
   { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/audit", icon: ScrollText, label: "Audit Logs" },
 ];
+
+function NavItem({
+  to,
+  icon: Icon,
+  label,
+  collapsed,
+}: {
+  to: string;
+  icon: React.ElementType;
+  label: string;
+  collapsed: boolean;
+}) {
+  return (
+    <li>
+      <NavLink
+        to={to}
+        end={to === "/"}
+        className={({ isActive }) =>
+          clsx(
+            "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            isActive
+              ? "bg-accent/10 text-text-gold"
+              : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
+            collapsed && "justify-center",
+          )
+        }
+        title={collapsed ? label : undefined}
+      >
+        <Icon className="h-5 w-5 shrink-0" />
+        {!collapsed && <span className="ml-3">{label}</span>}
+      </NavLink>
+    </li>
+  );
+}
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
@@ -50,29 +101,43 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-4">
+        {/* Main nav */}
         <ul className="space-y-1">
-          {navItems.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.to === "/"}
-                className={({ isActive }) =>
-                  clsx(
-                    "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-accent/10 text-text-gold"
-                      : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
-                    collapsed && "justify-center",
-                  )
-                }
-                title={collapsed ? item.label : undefined}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!collapsed && <span className="ml-3">{item.label}</span>}
-              </NavLink>
-            </li>
+          {mainNavItems.map((item) => (
+            <NavItem key={item.to} {...item} collapsed={collapsed} />
           ))}
         </ul>
+
+        {/* Identity section */}
+        <div className="mt-4">
+          {!collapsed && (
+            <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Identity
+            </p>
+          )}
+          {collapsed && (
+            <div className="mb-1 border-t border-border" />
+          )}
+          <ul className="space-y-1">
+            {identityNavItems.map((item) => (
+              <ScopeGate key={item.to} scope={item.scope}>
+                <NavItem {...item} collapsed={collapsed} />
+              </ScopeGate>
+            ))}
+          </ul>
+        </div>
+
+        {/* Bottom nav */}
+        <div className="mt-4">
+          {!collapsed && (
+            <div className="mb-1 border-t border-border" />
+          )}
+          <ul className="mt-2 space-y-1">
+            {bottomNavItems.map((item) => (
+              <NavItem key={item.to} {...item} collapsed={collapsed} />
+            ))}
+          </ul>
+        </div>
       </nav>
 
       {/* Collapse toggle */}

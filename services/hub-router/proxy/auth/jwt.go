@@ -19,6 +19,7 @@ import (
     "fmt"
     "io"
     "net/http"
+    "os"
     "strings"
     "time"
 
@@ -29,27 +30,40 @@ import (
 
 // JWTProvider implements JWT-based authentication for the headend proxy
 type JWTProvider struct {
-    managerURL    string
-    publicKey     *rsa.PublicKey
-    publicKeyPEM  []byte
-    client        *http.Client
-    lastKeyFetch  time.Time
+    managerURL   string
+    publicKey    *rsa.PublicKey
+    publicKeyPEM []byte
+    client       *http.Client
+    lastKeyFetch time.Time
+    issuerURL    string
+    audience     string
 }
 
 // NewJWTProvider creates a new JWT authentication provider
 func NewJWTProvider(managerURL, publicKeyPath string) (Provider, error) {
+    issuerURL := os.Getenv("OIDC_ISSUER_URL")
+    if issuerURL == "" {
+        issuerURL = "https://hub-api.tobogganing.io"
+    }
+    audience := os.Getenv("OIDC_AUDIENCE")
+    if audience == "" {
+        audience = "tobogganing"
+    }
+
     provider := &JWTProvider{
         managerURL: managerURL,
         client: &http.Client{
             Timeout: 30 * time.Second,
         },
+        issuerURL: issuerURL,
+        audience:  audience,
     }
-    
+
     // Fetch public key from manager
     if err := provider.fetchPublicKey(); err != nil {
         return nil, fmt.Errorf("failed to fetch public key: %w", err)
     }
-    
+
     log.Info("JWT provider initialized successfully")
     return provider, nil
 }
@@ -135,12 +149,35 @@ func (j *JWTProvider) ValidateToken(tokenString string) (*User, error) {
     if tokenType != "access" {
         return nil, fmt.Errorf("invalid token type: %s", tokenType)
     }
-    
+
+    // Validate issuer
+    iss, _ := claims["iss"].(string)
+    if iss != j.issuerURL {
+        return nil, fmt.Errorf("invalid token issuer: %q (expected %q)", iss, j.issuerURL)
+    }
+
+    // Validate audience — aud may be a string or []interface{}
+    audOK := false
+    switch v := claims["aud"].(type) {
+    case string:
+        audOK = v == j.audience
+    case []interface{}:
+        for _, a := range v {
+            if s, ok := a.(string); ok && s == j.audience {
+                audOK = true
+                break
+            }
+        }
+    }
+    if !audOK {
+        return nil, fmt.Errorf("token audience does not contain %q", j.audience)
+    }
+
     // Extract user information
     nodeID, _ := claims["sub"].(string)
     nodeType, _ := claims["node_type"].(string)
     permissions := []string{}
-    
+
     if permsInterface, ok := claims["permissions"].([]interface{}); ok {
         for _, perm := range permsInterface {
             if permStr, ok := perm.(string); ok {
@@ -148,25 +185,55 @@ func (j *JWTProvider) ValidateToken(tokenString string) (*User, error) {
             }
         }
     }
-    
+
     // Extract metadata
     metadata := make(map[string]interface{})
     if metaInterface, ok := claims["metadata"].(map[string]interface{}); ok {
         metadata = metaInterface
     }
-    
+
+    // Extract OIDC identity fields
+    tenant, _ := claims["tenant"].(string)
+
+    scopes := []string{}
+    if scopeStr, ok := claims["scope"].(string); ok && scopeStr != "" {
+        scopes = strings.Fields(scopeStr)
+    }
+
+    teams := []string{}
+    if teamsInterface, ok := claims["teams"].([]interface{}); ok {
+        for _, t := range teamsInterface {
+            if ts, ok := t.(string); ok {
+                teams = append(teams, ts)
+            }
+        }
+    }
+
+    roles := []string{}
+    if rolesInterface, ok := claims["roles"].([]interface{}); ok {
+        for _, r := range rolesInterface {
+            if rs, ok := r.(string); ok {
+                roles = append(roles, rs)
+            }
+        }
+    }
+
     user := &User{
-        ID:       nodeID,
-        Name:     fmt.Sprintf("%s-%s", nodeType, nodeID),
-        Email:    fmt.Sprintf("%s@sasewaddle.local", nodeID),
-        Groups:   []string{nodeType},
+        ID:     nodeID,
+        Name:   fmt.Sprintf("%s-%s", nodeType, nodeID),
+        Email:  fmt.Sprintf("%s@sasewaddle.local", nodeID),
+        Groups: []string{nodeType},
         Metadata: map[string]interface{}{
             "permissions": permissions,
             "node_type":   nodeType,
             "extra":       metadata,
         },
+        Tenant: tenant,
+        Scopes: scopes,
+        Teams:  teams,
+        Roles:  roles,
     }
-    
+
     return user, nil
 }
 
