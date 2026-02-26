@@ -173,31 +173,122 @@ def init_app():
 
 ---
 
-## Protected Routes (How to Use Them)
+## Protected Routes & Authorization (Scope-Based)
+
+**⚠️ CRITICAL: All authorization decisions MUST be based on OIDC-style scopes in the JWT, not role names.**
+
+Roles (`admin`, `maintainer`, `viewer`) are informational/audit only. At token issuance, the auth service expands roles into scope bundles:
+```
+admin      → *:read *:write *:admin *:delete settings:write users:admin
+maintainer → *:read *:write teams:read reports:read analytics:read
+viewer     → *:read
+```
+
+Authorization middleware checks scopes only — never branch on role names in application code.
+
+### Mandatory JWT Structure
+
+Every token MUST include:
+```json
+{
+  "sub":    "<user-or-service-id>",
+  "iss":    "https://<auth-service>",
+  "aud":    ["<target-service>"],
+  "iat":    1234567890,
+  "exp":    1234567890,
+  "scope":  "users:read reports:write",
+  "tenant": "<tenant-id>",
+  "teams":  ["<team-id>"],
+  "roles":  ["maintainer"]
+}
+```
+
+### Tenant Isolation (Mandatory)
+
+Every token carries a `tenant` claim. Tenant middleware runs first — before any scope or role check. Tenant mismatch is an immediate 403.
 
 ```python
-from flask_security import auth_required, roles_required
-from flask import current_user
+# Pseudo-code: all endpoints must enforce tenant isolation
+@app.route('/api/v1/users')
+@auth_required()
+def list_users():
+    # Middleware validates token and extracts tenant claim
+    tenant_id = current_user.tenant
 
-# Any authenticated user can access
+    # Query MUST be scoped to tenant
+    users = db(
+        (db.auth_user.tenant == tenant_id) &
+        (db.auth_user.active == True)
+    ).select()
+    return {'users': [u.as_dict() for u in users]}
+```
+
+### Scope-Based Endpoint Protection
+
+```python
+from functools import wraps
+from flask import current_user, abort
+
+def require_scope(*required_scopes):
+    """Decorator: endpoint requires one or more scopes"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Tenant validation (middleware does this first)
+            request_tenant = request.headers.get('X-Tenant-ID')
+            if request_tenant != current_user.tenant:
+                abort(403, 'Tenant mismatch')
+
+            # Scope validation
+            token_scopes = set(current_user.scope.split())
+            if not any(s in token_scopes for s in required_scopes):
+                abort(403, 'Insufficient scope')
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Examples:
 @app.route('/api/v1/profile')
 @auth_required()
+@require_scope('users:read')  # Any user with users:read can access
 def get_profile():
     return {'user': current_user.email}
 
-# Only admins can access
 @app.route('/api/v1/admin/users')
 @auth_required()
-@roles_required('admin')
+@require_scope('users:admin')  # Only admins (or accounts with users:admin scope)
 def list_all_users():
     return {'users': []}
 
-# Multiple roles (OR logic)
 @app.route('/api/v1/reports')
 @auth_required()
-@roles_required('admin', 'maintainer')
+@require_scope('reports:read', 'reports:write')  # Either scope is acceptable
 def view_reports():
     return {'reports': []}
+```
+
+### ❌ Never Do This (Role-Based Checks are Wrong)
+
+```python
+# WRONG - checking role name in code
+@app.route('/api/v1/admin/users')
+@auth_required()
+def list_all_users():
+    if 'admin' not in current_user.roles:  # ❌ NO - this is wrong
+        abort(403)
+    return {'users': []}
+```
+
+### ✅ Always Do This (Scope-Based Checks)
+
+```python
+# RIGHT - checking scope in middleware
+@app.route('/api/v1/admin/users')
+@auth_required()
+@require_scope('users:admin')  # ✅ Scope-based, tenant-isolated
+def list_all_users():
+    # Middleware already validated tenant and scope
+    return {'users': []}
 ```
 
 ---
@@ -366,6 +457,32 @@ GOOGLE_CLIENT_SECRET=your-secret
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-secret
 ```
+
+---
+
+## Service-to-Service Authentication
+
+When your microservices talk to each other, they need solid authentication too. No long-lived API keys or shared secrets allowed.
+
+**SPIFFE/SPIRE is the preferred approach:**
+- Automatic X.509 SVID certificates with short lifespans (default: 1 hour)
+- mTLS between services with automatic key rotation
+- No static secrets to rotate or manage
+- SPIFFE ID format: `spiffe://penguintech.io/{environment}/{service}`
+
+**OIDC machine JWTs are also acceptable:**
+- Machine-to-machine tokens issued by your auth service
+- Same JWT structure as user tokens (includes `sub`, `iss`, `aud`, `scope`)
+- Short expiration times (15-60 minutes recommended)
+
+**Authorization still uses scopes:**
+Regardless of whether you use SPIFFE or OIDC JWTs, authorization checks remain scope-based. A backend service calling another service must present a token with the required scope (e.g., `reports:read`, `users:write`).
+
+**Never use:**
+- ❌ Long-lived static API keys
+- ❌ Shared secrets between services
+- ❌ Service names as passwords
+- ❌ Certificates with years of validity
 
 ---
 

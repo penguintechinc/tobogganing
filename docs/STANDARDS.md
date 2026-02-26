@@ -22,39 +22,39 @@ Here's what you'll find in our comprehensive standards library:
 | Icon | Category | Focus Area |
 |------|----------|-----------|
 | 🐍 | [Language Selection](standards/LANGUAGE_SELECTION.md) | Python 3.13 or Go 1.24.x? We'll help you decide |
-| 🔐 | [Authentication](standards/AUTHENTICATION.md) | Flask-Security-Too, RBAC, SSO, password magic |
+| 🔐 | [Authentication](standards/AUTHENTICATION.md) | OIDC scopes, SPIFFE/SPIRE, tenant isolation, SSO |
 | ⚛️ | [Frontend](standards/FRONTEND.md) | ReactJS patterns, hooks, components galore |
 | 📦 | [React Libraries](standards/REACT_LIBS.md) | Shared components: LoginPageBuilder, FormModal, Sidebar |
 | 🗄️ | [Database](standards/DATABASE.md) | PyDAL, SQLAlchemy, PostgreSQL + 3 others |
 | 🔌 | [API & Protocols](standards/API_PROTOCOLS.md) | REST, gRPC, versioning, deprecation strategies |
 | ⚡ | [Performance](standards/PERFORMANCE.md) | Dataclasses, asyncio, threading, blazing fast |
 | 🏗️ | [Architecture](standards/ARCHITECTURE.md) | Microservices, Docker, multi-arch builds |
-| ☸️ | [Kubernetes](standards/KUBERNETES.md) | Helm, Kustomize, cloud-native deployments |
+| ☸️ | [Kubernetes](standards/KUBERNETES.md) | Helm, Kustomize, Cilium CNI, XDP profiles, `.app` domains |
 | 🧪 | [Testing](standards/TESTING.md) | Unit, integration, E2E, smoke tests |
-| 🛡️ | [Security](standards/SECURITY.md) | TLS, secrets management, vulnerability scanning |
+| 🛡️ | [Security](standards/SECURITY.md) | OIDC scopes, tenant isolation, network policies, Cilium CNI |
 | 📚 | [Documentation](standards/DOCUMENTATION.md) | READMEs, release notes, keeping it clean |
 | 🎨 | [UI Design](standards/UI_DESIGN.md) | Components, patterns, responsive design |
 | 📱 | [Mobile](standards/MOBILE.md) | Flutter, native modules, phone + tablet support |
 | 🔗 | [Integrations](standards/INTEGRATIONS.md) | WaddleAI, MarchProxy, License Server |
 
-## The Core Five (Most Important)
+## The Core Six (Most Important)
 
 ### 1. Language Selection: Python or Go?
-Start with Python 3.13 for most applications. Go is for speed demons only (>10K req/sec). Profile first, switch only when you really need to.
+Start with Python 3.13 for most applications. Go is for speed demons only (>10K req/sec). Profile first, switch only when you really need to. **All Go services must include XDP, AF_XDP, and NUMA support** with a build flag toggle (`-tags xdp` / `-tags noxdp`) for Cilium CNI environments.
 
 > **Pro tip**: 9 out of 10 times, Python will do the job beautifully and get you to market faster.
 
 [Learn more](standards/LANGUAGE_SELECTION.md)
 
-### 2. Authentication: Flask-Security-Too
-All Flask apps get security out of the box. RBAC, JWT, password reset, 2FA, even SSO for enterprise customers. Auto-creates an admin user on startup (credentials: admin@localhost.local / admin123).
+### 2. Authentication & Authorization: OIDC Scopes
+All permission checks use **OIDC-style claims and scopes** — no ad-hoc role strings. Roles (admin, maintainer, viewer) are pre-bundled scope sets expanded at token issuance. Authorization middleware checks scopes only, never role names. **Tenant isolation is mandatory** — every token carries a `tenant` claim validated before scope checks.
 
 > **Remember**: Never skip security. It's not "nice to have" - it's required.
 
-[Learn more](standards/AUTHENTICATION.md)
+[Learn more](standards/AUTHENTICATION.md) | [Security details](standards/SECURITY.md)
 
 ### 3. Database: Multi-DB Support by Default
-Use PyDAL for runtime operations (required) and SQLAlchemy for schema creation. We support PostgreSQL (your default), MySQL, MariaDB Galera, and SQLite. Choose via the `DB_TYPE` environment variable.
+Use PyDAL for runtime operations (required) and SQLAlchemy for schema creation. We support PostgreSQL (your default), MySQL, MariaDB Galera, and SQLite. Choose via the `DB_TYPE` environment variable. **Database migrations must be applied before deploying new code** to any environment.
 
 > **Key insight**: Pick PostgreSQL unless you have a specific reason not to. It's rock solid.
 
@@ -67,7 +67,14 @@ All REST APIs use `/api/v{major}/endpoint`. Inter-container communication prefer
 
 [Learn more](standards/API_PROTOCOLS.md)
 
-### 5. Testing: Smoke Tests Are Non-Negotiable
+### 5. Kubernetes & Networking: Cilium CNI + Default Deny
+**Cilium CNI is always preferred** for network policy enforcement (eBPF-level, not iptables). All namespaces get a **default deny inter-namespace NetworkPolicy** (intra-namespace is fine). No NodePort/HostPort/externalIPs in beta/prod (alpha exempt). Go services use XDP deployment profiles — standard (Cilium handles XDP) or elevated (app-managed XDP with NET_ADMIN/SYS_ADMIN caps).
+
+> **Key rule**: Production domains use registered `.app` TLDs as canonical. `penguincloud.io` subdomains redirect.
+
+[Learn more](standards/KUBERNETES.md) | [Security policies](standards/SECURITY.md)
+
+### 6. Testing: Smoke Tests Are Non-Negotiable
 Run smoke tests before every commit. They verify your build works, services start, APIs respond, and the UI loads. Five minutes of testing saves you hours of debugging later.
 
 > **Golden rule**: If smoke tests pass, you can commit with confidence.
@@ -126,16 +133,16 @@ This document covers company-wide best practices. Your app is unique, so app-spe
 Dive into the individual standards documents for the full picture:
 
 - [Language Selection](standards/LANGUAGE_SELECTION.md) - Python vs Go decision matrix
-- [Authentication](standards/AUTHENTICATION.md) - Flask-Security-Too, RBAC, SSO
+- [Authentication](standards/AUTHENTICATION.md) - OIDC scopes, tenant isolation, RBAC, SSO
 - [Frontend Development](standards/FRONTEND.md) - ReactJS patterns and best practices
 - [React Libraries](standards/REACT_LIBS.md) - Shared components (LoginPageBuilder, FormModal, Sidebar)
 - [Database Standards](standards/DATABASE.md) - PyDAL, multi-database support
 - [API and Protocols](standards/API_PROTOCOLS.md) - REST, gRPC, versioning
 - [Performance](standards/PERFORMANCE.md) - Optimization, concurrency, speed
 - [Architecture](standards/ARCHITECTURE.md) - Microservices, Docker
-- [Kubernetes](standards/KUBERNETES.md) - Helm, Kustomize, deployments
+- [Kubernetes](standards/KUBERNETES.md) - Helm, Kustomize, Cilium CNI, XDP profiles, `.app` domains
 - [Testing](standards/TESTING.md) - Unit, integration, E2E, smoke tests
-- [Security](standards/SECURITY.md) - TLS, secrets, scanning
+- [Security](standards/SECURITY.md) - OIDC scopes, tenant isolation, network policies, Cilium CNI
 - [Documentation](standards/DOCUMENTATION.md) - READMEs, release notes
 - [UI Design](standards/UI_DESIGN.md) - Components, patterns, styling
 - [Mobile](standards/MOBILE.md) - Flutter, native modules, iOS + Android, phone + tablet
@@ -145,4 +152,4 @@ Dive into the individual standards documents for the full picture:
 
 **Happy coding!** These standards exist to help you build reliable, secure, performant software. Questions? Check the docs. Still stuck? Ping your team!
 
-**Template Version**: 1.3.0 | **Last Updated**: 2026-01-22 | **Maintained by**: Penguin Tech Inc
+**Template Version**: 1.3.0 | **Last Updated**: 2026-02-26 | **Maintained by**: Penguin Tech Inc

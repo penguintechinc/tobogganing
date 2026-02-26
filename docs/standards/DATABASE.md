@@ -465,6 +465,152 @@ def get_users():
 
 ---
 
+## Migrations: Deploy Before New Code
+
+**Database migrations MUST be applied before deploying new code to any environment.**
+
+**Why:** Schema mismatches between code and database cause runtime errors. Always run migrations first, then deploy the application.
+
+```bash
+# Production deployment checklist:
+1. Apply migrations:   ./scripts/migrate.sh <environment>
+2. Wait for completion (database is updated)
+3. Deploy new code:    make deploy-<environment>
+4. Verify health:      ./scripts/health-check.sh <environment>
+```
+
+**In Kubernetes:** Use an init container or Job to apply migrations before the main application Pod starts.
+
+---
+
+## Per-Service Database Accounts (Mandatory)
+
+Every microservice and container **must have its own database account** with fine-grained permissions. You're not creating separate databases—all services share one database, but each gets separate credentials scoped to only the tables and operations it needs.
+
+**Reference implementation:** Check out Waddlebot (`~/code/waddlebot`) for a real example. It uses 34+ module-specific accounts with RLS (Row-Level Security) policies and column-level grants on shared tables.
+
+### The Strategy
+
+| Principle | What to Do |
+|-----------|-----------|
+| **Separate tables per service** | Preferred — each service owns its tables where possible (backend-api owns users/sessions, connector owns integrations/webhooks) |
+| **Shared tables when needed** | Acceptable if unavoidable — protect with RLS policies or column-level grants so services only see their data |
+| **Per-service credentials** | Mandatory — each container reads its own `DB_USER` and `DB_PASS` from environment variables |
+| **Cache/Redis accounts** | Same pattern — per-service credentials for caching layers |
+| **Migration accounts** | Separate admin account used ONLY for schema changes, NEVER at runtime |
+
+### Access Levels
+
+What permissions each type of service needs:
+
+| Level | Permissions | When to Use |
+|-------|-------------|------------|
+| Read-only | `SELECT` only | Services that only query data (analytics, reporting, read replicas) |
+| Read-write | `SELECT, INSERT, UPDATE, DELETE` | Services that manage their own data |
+| Scoped read-write | Read-write + RLS policies | Services sharing tables but restricted to specific rows (e.g., platform-scoped data) |
+| Admin | `ALL` + DDL | Migration runners only — never used by runtime services |
+
+### Example: Creating Per-Service Accounts
+
+Here's what it looks like in SQL. Each service gets its own user with exactly the permissions it needs:
+
+```sql
+-- Backend API service (read-write on its tables)
+CREATE USER 'backend-api-rw' IDENTIFIED BY '${BACKEND_API_DB_PASS}';
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_db.users TO 'backend-api-rw';
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_db.sessions TO 'backend-api-rw';
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_db.settings TO 'backend-api-rw';
+
+-- Connector service (read-write on its tables)
+CREATE USER 'connector-rw' IDENTIFIED BY '${CONNECTOR_DB_PASS}';
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_db.integrations TO 'connector-rw';
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_db.webhooks TO 'connector-rw';
+
+-- Analytics service (read-only on shared tables)
+CREATE USER 'analytics-ro' IDENTIFIED BY '${ANALYTICS_DB_PASS}';
+GRANT SELECT ON app_db.users TO 'analytics-ro';
+GRANT SELECT ON app_db.sessions TO 'analytics-ro';
+GRANT SELECT ON app_db.events TO 'analytics-ro';
+
+-- Shared platform integrations table with Row-Level Security (PostgreSQL)
+ALTER TABLE platform_integrations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY twitch_platform_policy ON platform_integrations
+  FOR ALL TO 'twitch-trigger'
+  USING (platform = 'twitch');
+
+CREATE POLICY discord_platform_policy ON platform_integrations
+  FOR ALL TO 'discord-trigger'
+  USING (platform = 'discord');
+
+-- Migration runner account (admin, for schema changes only)
+CREATE USER 'migrate-admin' IDENTIFIED BY '${MIGRATE_DB_PASS}';
+GRANT ALL ON app_db.* TO 'migrate-admin';
+```
+
+### Each Container Gets Its Own Credentials
+
+In your `docker-compose.yml` or Kubernetes manifests, pass different credentials to each service:
+
+```bash
+# Backend API container
+DB_USER=backend-api-rw
+DB_PASS=<secret-backend-api>
+
+# Connector container
+DB_USER=connector-rw
+DB_PASS=<secret-connector>
+
+# Analytics container
+DB_USER=analytics-ro
+DB_PASS=<secret-analytics>
+
+# Migration jobs only
+DB_USER=migrate-admin
+DB_PASS=<secret-admin>
+```
+
+### Benefits
+
+✅ **Security:** Services can't access tables they don't need
+✅ **Compliance:** Easy audit trail of who accessed what
+✅ **Isolation:** One compromised service doesn't give access to everything
+✅ **Least privilege:** Each service has minimal required permissions
+
+### Per-Service Cache (Redis/Valkey) Accounts
+
+Apply the same security model to your caching layer. Each service gets separate Redis/Valkey credentials with ACL restrictions on key prefixes.
+
+**Key prefix convention:** `{service-name}:{key}` (e.g., `backend-api:users`, `connector:webhooks`)
+
+```bash
+# Redis/Valkey ACL setup for per-service cache isolation
+# Backend API (read-write on backend-api:* keys)
+ACL SETUSER backend-api-cache on >api_cache_pass +@all ~backend-api:*
+
+# Connector (read-write on connector:* keys)
+ACL SETUSER connector-cache on >connector_cache_pass +@all ~connector:*
+
+# Analytics (read-only on analytics:* keys)
+ACL SETUSER analytics-cache on >analytics_cache_pass +@read ~analytics:*
+```
+
+Each container gets its own `CACHE_USER` and `CACHE_PASS`:
+
+```bash
+# Backend API container
+CACHE_USER=backend-api-cache
+CACHE_PASS=<secret-api>
+
+# Analytics container (read-only)
+CACHE_USER=analytics-cache
+CACHE_PASS=<secret-analytics>
+```
+
+**Blast radius:** One compromised container accessing only its key prefix means data from other services remains protected. Read-only services get `+@read` only, not `+@all`.
+
+---
+
 ## Summary: Database Recipe
 
 1. **Setup Once:** Use SQLAlchemy to define your schema
@@ -473,5 +619,7 @@ def get_users():
 4. **Wait for Database:** Implement retry logic on startup
 5. **Thread Safety:** Each thread gets its own connection
 6. **Pool Your Connections:** Formula is (2 × CPU cores) + spindles
+7. **Migrations First:** Always apply migrations before deploying new code
+8. **Per-Service Accounts:** Each microservice gets its own database credentials with minimal required permissions
 
 **Your data is safe, fast, and ready to scale!** 🚀

@@ -102,6 +102,41 @@ XDP/AF_XDP packet processing? 🦫
 ⚠️ Deployment complexity (you manage binaries now)
 ⚠️ Only worth the overhead if performance is *actually* required
 
+### Go Services: XDP, AF_XDP, and NUMA Support (Mandatory)
+
+**All Go services MUST include XDP, AF_XDP, and NUMA-aware memory pool support.**
+
+**Build flags:**
+```bash
+# Default: XDP enabled (handles most cases)
+go build -tags xdp
+
+# Cilium mode: XDP disabled (Cilium handles networking)
+go build -tags noxdp
+```
+
+**NUMA-aware memory pools are mandatory** for all Go services. Use package like `github.com/ebitengine/purego` or custom implementation:
+
+```go
+// Example: NUMA-aware memory allocation
+import (
+    "github.com/scylladb/go-set/u64set"
+)
+
+func AllocateNUMAPool(numCores int) {
+    // Detect NUMA topology via /proc/self/numa_maps
+    // Allocate memory local to each NUMA node
+    // Return pools indexed by NUMA node ID
+}
+
+func GetLocalMemory(nodeID int) *MemoryPool {
+    // Return pre-allocated pool for this NUMA node
+    // Prevents cross-node memory traffic
+}
+```
+
+**Why:** NUMA awareness prevents expensive inter-node memory traffic on multi-socket systems. XDP/AF_XDP enables kernel-space packet processing with zero-copy semantics.
+
 ---
 
 ## Traffic Decision Matrix

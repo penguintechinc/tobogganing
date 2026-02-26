@@ -192,6 +192,179 @@ spec:
               number: 80
 ```
 
+## 🌐 Production Domains & Routing
+
+### Domain Strategy by Environment
+
+Production deployments use registered `.app` domains as the canonical URL, with `.penguincloud.io` subdomains redirecting.
+
+| Repo | `.app` Domain (Canonical) | `.penguincloud.io` (Redirects) |
+|------|--------------------------|-------------------------------|
+| articdbm | `articdbm.app` | `articdbm.penguincloud.io` |
+| darwin | `darwincode.app` | `darwin.penguincloud.io` |
+| elder | `elderrms.app` | `elder.penguincloud.io` |
+| icecharts | `icecharts.app` | `icecharts.penguincloud.io` |
+| killkrill | `killkrill.app` | `killkrill.penguincloud.io` |
+| marchproxy | `marchproxy.app` | `marchproxy.penguincloud.io` |
+| skauswatch | `skauswatch.app` | `skauswatch.penguincloud.io` |
+| squawk | `squawkmgr.app` | `squawk.penguincloud.io` |
+| tobogganing | `tobogganing.app` | `tobogganing.penguincloud.io` |
+| waddlebot | `waddles.app` | `waddlebot.penguincloud.io` |
+
+**Rule**: If your product has a registered `.app` domain, use it as the canonical production URL. The `.penguincloud.io` subdomain provides a fallback and should redirect to the `.app` domain.
+
+### Domain Usage by Environment
+
+| Environment | Domain Pattern | Example |
+|-------------|---|---|
+| **Alpha** (Local) | `.localhost.local` | `myapp.localhost.local` |
+| **Beta** (Development) | `.penguintech.cloud` | `myapp.penguintech.cloud` |
+| **Prod** (Production) | `.app` (canonical) or `.penguincloud.io` | `myapp.app` → `myapp.penguincloud.io` |
+
+## 🚀 XDP Deployment Profiles for Go Services
+
+Go services support XDP/AF_XDP for high-performance packet processing. Because XDP requires elevated Linux capabilities, K8s manifests must support **two deployment profiles** controlled via Helm values.
+
+### Standard Profile (Cilium CNI Handles XDP)
+
+Use this profile when your cluster runs **Cilium CNI with XDP acceleration enabled**. The application is built with `-tags noxdp` and requires no special privileges.
+
+```yaml
+# values-alpha.yaml, values-beta.yaml, or values-prod.yaml
+xdp:
+  enabled: false    # Cilium CNI provides XDP acceleration
+  buildTags: noxdp
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  capabilities: {}
+```
+
+**When to use**: All Penguin Tech managed clusters (alpha, beta, prod) run Cilium with XDP. Use this profile by default.
+
+### XDP Profile (Application-Managed XDP)
+
+Use this profile when the **application manages its own XDP/AF_XDP stack** and the cluster does NOT have Cilium XDP. This requires elevated Linux capabilities and host network access.
+
+```yaml
+# values.yaml (custom deployments only)
+xdp:
+  enabled: true     # Application manages XDP stack
+  buildTags: xdp
+
+securityContext:
+  runAsUser: 0                           # XDP requires root
+  allowPrivilegeEscalation: true
+  capabilities:
+    add:
+      - NET_ADMIN   # Required for XDP program attachment
+      - SYS_ADMIN   # Required for BPF map operations
+      - BPF         # Required for BPF syscalls (kernel 5.8+)
+      - NET_RAW     # Required for raw socket/AF_XDP access
+
+hostNetwork: true                        # Required for direct NIC access
+```
+
+**When to use**: Only for on-premise or custom cluster deployments without Cilium XDP. Document the cluster's XDP strategy in deployment guides.
+
+### Helm Template Pattern
+
+Use this conditional template pattern in your deployment manifests:
+
+```yaml
+# templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }}
+spec:
+  template:
+    spec:
+      securityContext:
+        {{- if .Values.xdp.enabled }}
+        # XDP Profile: Application-managed
+        runAsUser: 0
+        allowPrivilegeEscalation: true
+        capabilities:
+          add: [NET_ADMIN, SYS_ADMIN, BPF, NET_RAW]
+        {{- else }}
+        # Standard Profile: Cilium-managed
+        runAsNonRoot: true
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        {{- end }}
+
+      {{- if .Values.xdp.enabled }}
+      hostNetwork: true
+      {{- end }}
+
+      containers:
+      - name: {{ .Values.app.name }}
+        env:
+        - name: XDP_MODE
+          value: {{ if .Values.xdp.enabled }}"native"{{ else }}"cilium"{{ end }}
+```
+
+**Default**: Set `xdp.enabled: false` in base `values.yaml` for Penguin Tech deployments. Override only if deploying to a non-Cilium cluster.
+
+## 🔒 Cilium CNI Preference
+
+**Cilium is the preferred Container Network Interface (CNI) for all Penguin Tech K8s clusters.** Cilium provides:
+
+- **eBPF-based NetworkPolicy enforcement** — Network policies are enforced at the kernel level, not userspace proxies
+- **XDP acceleration** — Packet filtering and load balancing at the XDP layer without application code changes
+- **Service mesh capabilities** — Automatic service-to-service encryption (mTLS) and observability
+- **High performance** — Lower latency, higher throughput than traditional CNI plugins
+
+### Cilium and XDP
+
+By default, Cilium handles XDP offloading transparently. Applications do NOT need to manage XDP themselves when running on Cilium clusters. Deploy with the **Standard Profile** (`xdp.enabled: false`) on all Penguin Tech managed clusters.
+
+**Rule**: If you see XDP-related errors in production, check that Cilium is installed and healthy:
+
+```bash
+kubectl get pods -n kube-system | grep cilium
+kubectl logs -n kube-system -l k8s-app=cilium --tail=50
+```
+
+### NetworkPolicy and Cilium
+
+Always define Kubernetes NetworkPolicies in your deployments. Cilium enforces them at the eBPF level:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: frontend
+    ports:
+    - protocol: TCP
+      port: 5000
+```
+
+Cilium will compile these policies into BPF programs and enforce them in the kernel.
+
 ## 🔧 Troubleshooting K8s (Common Fixes)
 
 **Pod stuck in "Pending"?**
