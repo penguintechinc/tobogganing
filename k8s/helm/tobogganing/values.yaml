@@ -209,3 +209,21 @@ config:
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
   dbType: "sqlite"
+
+## Network Policies
+networkPolicy:
+  defaultDeny: true
+  squawkNamespace: squawk
+  waddleperfNamespace: waddleperf
+
+## Squawk DNS Integration (optional)
+squawk:
+  enabled: false
+
+## WaddlePerf Metrics Integration (optional)
+waddleperf:
+  enabled: false
+
+## Cilium CNI (optional)
+cilium:
+  enabled: false

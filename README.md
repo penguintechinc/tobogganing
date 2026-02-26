@@ -50,6 +50,8 @@
 - **OIDC-Compliant Authorization**: Scope-based access control per RFC 9068 — `resource:action` model with wildcard support
 - **SPIFFE/SPIRE Workload Identity**: Hardware-rooted service authentication via TPM DevID or cloud hypervisor attestation
 - **Cross-Cloud Cluster Mesh**: Cilium Cluster Mesh over hub-router WireGuard tunnels for identity-aware east-west networking
+- **Dual Overlay Architecture**: Runtime-selectable WireGuard (L3) + OpenZiti (L7) dark services — same binary, config-driven
+- **XDP/eBPF Edge Protection**: Kernel-level rate limiting, SYN/UDP flood protection, and IP blocklist at NIC speed (build-tag gated)
 
 ### High Performance
 - **WireGuard VPN**: Modern, fast, and secure VPN protocol
@@ -58,6 +60,8 @@
 - **Optimized Protocols**: Support for HTTP/HTTPS, TCP, and UDP traffic
 - **Dynamic Port Configuration**: Admin-configurable proxy listening ports
 - **PyDAL Database**: MySQL/PostgreSQL/SQLite with read replica support
+- **AF_XDP Zero-Copy Sockets**: NIC-to-userspace packet delivery bypassing the kernel network stack
+- **NUMA-Aware Memory Pools**: Buffer allocation pinned to NIC-local NUMA nodes for optimal latency
 
 ### Enterprise Ready
 - **Multi-Platform**: Native clients for Mac, Windows, and Linux with system tray integration
@@ -130,19 +134,22 @@ Tobogganing implements a comprehensive SASE architecture with three main compone
 ### Headend Server / Hub-Router (Go 1.24)
 - **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
 - **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
-- **Traffic Security**: Unified policy engine — 6-dimension rule matching (domains, ports, CIDRs, users, groups, protocols)
+- **Traffic Security**: Unified policy engine — 7-dimension rule matching (domains, ports, CIDRs, users, groups, protocols, overlay scope)
 - **IDS/IPS Integration**: Traffic mirroring to Suricata via VXLAN/GRE/ERSPAN
 - **Authentication**: JWT validation with scope-based authorization (RFC 9068)
 - **Network Routing**: VRF and OSPF support through FRR integration
 - **Identity-Aware Middleware**: Tenant and scope validation on every inbound request
 - **Cross-Cloud Mesh Bridge**: WireGuard site-to-site tunnels carrying Cilium Cluster Mesh API traffic
+- **Dual Overlay**: L3 WireGuard kernel tunnel + L7 OpenZiti dark service listener, config-driven selection
+- **XDP/eBPF Protection**: Kernel-level packet filtering, rate limiting, and blocklist enforcement
 
 ### Client Applications
-- **Native Desktop**: Go-based clients for Windows, macOS, and Linux with system tray
+- **Unified Modular Client**: Desktop client migrated to [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — unified cross-platform client with modular overlay support
 - **Docker Container**: Containerized client for Kubernetes and Docker deployments
 - **Mobile Apps**: React Native applications for iOS and Android
 - **Embedded Support**: Lightweight clients for ARM, MIPS, and IoT devices
 - **Auto-Configuration**: Automatic certificate rotation and configuration updates
+- **Dual-Mode Overlay**: WireGuard + OpenZiti simultaneously — WG for general traffic, Ziti for sensitive dark services
 
 ## 🚀 Quick Start
 
@@ -170,6 +177,8 @@ Tobogganing implements a comprehensive SASE architecture with three main compone
    - API Documentation: http://localhost:8000/api/docs
 
 ### Native Client Installation
+
+> **Note**: The desktop client has been migrated to the unified modular client at [penguintechinc/penguin](https://github.com/penguintechinc/penguin). The overlay library code (`clients/native/internal/overlay/`) remains here for reference and is imported by the unified client. See the penguin repo for current installation instructions.
 
 Tobogganing provides two types of client applications optimized for different use cases:
 
@@ -388,6 +397,34 @@ See [LICENSE.md](docs/LICENSE.md) for complete licensing details.
 - **Discussions**: Questions and community help
 - **Discord**: Real-time chat and support
 - **Documentation**: Comprehensive guides and tutorials
+
+---
+
+## 🆕 What's New in v0.3.0 — Overlay Rework + XDP Edge Protection
+
+This release reworks the overlay abstraction (replacing the broken L3/HandlePacket model with correct L7 semantics), adds dual-mode WireGuard+OpenZiti for clients, and introduces XDP/eBPF kernel-level edge protection.
+
+| Feature | Description |
+|---------|-------------|
+| Revised Overlay Interface | `OverlayProvider` with `Listener() net.Listener` for L7 overlays, `nil` for L3 (WireGuard) |
+| Config-Driven Selection | Same binary, runtime switch via `overlay.type` — no build tags for overlay |
+| OpenZiti Dark Services | Hub-router accepts OpenZiti connections via `edge.Listener`, JWT+HOST handshake |
+| Dual-Mode Client | WireGuard (L3 kernel) + OpenZiti (L7 userspace) simultaneously, default `"dual"` |
+| OverlayScope Policy Dim. | 7th policy dimension — rules can target `wireguard`, `openziti`, or `both` |
+| XDP Rate Limiting | Per-source-IP token bucket at NIC level (build-tag gated: `-tags xdp`) |
+| SYN/UDP Flood Protection | Protocol-aware rate limiting in eBPF — drops floods before they reach Go |
+| IP Blocklist at XDP | Policy-engine deny rules pushed to BPF map for kernel-level enforcement |
+| AF_XDP Zero-Copy | NIC → userspace bypassing kernel stack for WireGuard proxy fast path |
+| NUMA-Aware Pools | `mmap` + `mbind(MPOL_BIND)` for NIC-local buffer allocation |
+
+**Key files shipped:**
+- `services/hub-router/internal/overlay/` — revised provider interface, WG + OpenZiti providers, manager
+- `services/hub-router/internal/xdp/` — XDP loader, AF_XDP sockets, NUMA pools, blocklist sync
+- `services/hub-router/bpf/xdp_ratelimit.c` — eBPF program with 3-stage pipeline
+- `clients/native/internal/overlay/` — client WG, OpenZiti, and dual-mode providers
+- `services/hub-router/internal/policy/engine.go` — OverlayScope dimension added
+
+See [OpenZiti Integration](docs/OPENZITI_INTEGRATION.md) | [XDP Guide](docs/XDP_GUIDE.md) | [Hub-Router Deployment](docs/HUB_ROUTER_DEPLOYMENT.md)
 
 ---
 

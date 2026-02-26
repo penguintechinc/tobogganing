@@ -4,6 +4,89 @@ All notable changes to Tobogganing will be documented in this file. New releases
 
 ---
 
+# v0.3.0 — Platform Integrations & Input Security
+
+**Release Date:** 2026-02-26
+**Branch:** v0.3.x
+
+## Highlights
+
+- **Input Validation**: Pydantic 2.x schemas on all API endpoints (422 responses for invalid input), Zod frontend schemas, PyDAL validators
+- **Squawk DNS Integration**: DNS-over-HTTPS via PenguinTech's Squawk proxy, policy-based DNS filtering, client/hub-router/Docker support
+- **WaddlePerf Fabric Metrics**: Cluster-to-cluster and client-to-cluster latency/jitter/packet-loss monitoring, WebUI metrics dashboard
+- **OpenZiti Overlay Rework**: L7 dark-service model replacing broken L3/HandlePacket abstraction — config-driven, same binary, dual-mode default
+- **XDP/eBPF Edge Protection**: Kernel-level rate limiting, SYN/UDP flood protection, IP blocklist, AF_XDP zero-copy (build-tag gated: `-tags xdp`)
+- **Default-Deny NetworkPolicy**: Namespace-wide default-deny with explicit allowlists for Helm and Kustomize deployments
+- **Resource Sizing Guide**: Comprehensive CPU/RAM/bandwidth planning documentation
+
+## New Features
+
+### Input Security (Phase 1)
+- Pydantic `BaseModel` schemas for all POST/PUT API endpoints with `model_validate()`
+- New py_libs validators: `IsCIDR`, `IsPortRange`, `IsProtocol`
+- Frontend Zod schemas mirroring backend validation
+- PyDAL `requires` validators updated with `openziti` scope
+
+### Squawk DNS Integration (Phase 2)
+- Hub-router DNS forwarder module (`internal/dns/`) with miekg/dns
+- Native client DNS module with platform-specific resolv.conf management
+- Docker client DNS support via `SQUAWK_ENABLED` env var
+- Squawk Helm sub-chart (optional dependency)
+- Prometheus metrics: queries, duration, blocked count
+
+### WaddlePerf Fabric Metrics (Phase 3)
+- Hub-router FabricMonitor with HTTP/TCP/UDP/ICMP protocol probes
+- Performance API routes: POST/GET /api/v1/perf/metrics, GET /api/v1/perf/summary
+- Native client performance monitor
+- WebUI Fabric Metrics page (/metrics/fabric) with latency matrix
+- Prometheus gauges for latency, jitter, packet loss, throughput
+
+### OpenZiti Overlay Rework (Phase 4)
+- Revised `OverlayProvider` interface: `Listener() net.Listener` (L7) / `nil` (L3 WireGuard)
+- Config-driven overlay selection — removed build-tag gating, same binary
+- Hub-router OpenZiti listener accepts `edge.Listener` connections with JWT+HOST handshake
+- Client dual-mode provider: WireGuard (L3 kernel) + OpenZiti (L7 userspace) simultaneously
+- Client default overlay type changed to `"dual"` (both active)
+- OverlayScope added as 7th policy engine dimension (`wireguard`, `openziti`, `both`)
+- All 5 existing policy evaluation sites now set `OverlayScope: "wireguard"` (bug fix)
+
+### XDP/eBPF Edge Protection (Phase 5)
+- BPF C program (`bpf/xdp_ratelimit.c`): 3-stage XDP pipeline (blocklist → flood protection → rate limit)
+- Go XDP loader with build-tag gating (`//go:build xdp`), no-op stubs for default builds
+- AF_XDP zero-copy sockets for NIC → userspace packet delivery
+- NUMA-aware memory pools (`mmap` + `mbind`) for NIC-local buffer allocation
+- Blocklist sync: policy engine deny-by-IP rules pushed to BPF map
+- Prometheus metrics: `tobogganing_xdp_packets_total`, SYN/UDP flood drops, blocklist size
+- Hub-router Makefile: `make build-xdp` target for BPF-enabled builds
+
+### Default-Deny NetworkPolicy (Phase 6)
+- Helm template: `networkpolicy-default-deny.yaml`
+- Restructured allowlist with Squawk/WaddlePerf namespace rules
+- Kustomize base: `networkpolicy-default-deny.yaml` + `networkpolicy-allow.yaml`
+
+### Documentation (Phase 6)
+- Resource Sizing Guide (`docs/RESOURCE_SIZING.md`)
+- Squawk Integration Guide (`docs/SQUAWK_INTEGRATION.md`)
+- WaddlePerf Integration Guide (`docs/WADDLEPERF_INTEGRATION.md`)
+- OpenZiti Integration Guide (`docs/OPENZITI_INTEGRATION.md`)
+
+## Breaking Changes
+- API validation errors now return HTTP 422 (was 400) with structured Pydantic error details
+- Policy rule `scope` field now accepts `openziti` in addition to `wireguard`, `k8s`, `both`
+- OpenZiti overlay is now config-driven (removed `//go:build openziti` tag) — rebuild without `-tags openziti` flag
+- Client default overlay type changed from `"wireguard"` to `"dual"` (WireGuard + OpenZiti)
+- Desktop client migrated to unified modular client at [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — overlay library remains in `clients/native/internal/overlay/`
+
+## Dependencies Added
+- Python: pydantic>=2.5 (already in requirements, now used)
+- Go (hub-router): github.com/miekg/dns v1.1.62
+- Frontend: zod ^3.23.0
+- Helm: squawk sub-chart (optional), waddleperf sub-chart (optional)
+- Go (hub-router, client): github.com/openziti/sdk-golang v0.23.44
+- Go (hub-router, XDP build only): github.com/cilium/ebpf, github.com/asavie/xdp
+
+---
+
 # v0.2.0 — Identity-Aware Networking
 
 **Release Date**: TBD (development branch)

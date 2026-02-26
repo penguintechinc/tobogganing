@@ -51,6 +51,21 @@ type Config struct {
     
     // Authentication settings
     AuthRefreshThreshold int `mapstructure:"auth_refresh_threshold" json:"auth_refresh_threshold"`
+
+    // Squawk DNS settings
+    SquawkEnabled   bool   `mapstructure:"squawk_enabled" json:"squawk_enabled"`
+    SquawkServerURL string `mapstructure:"squawk_server_url" json:"squawk_server_url"`
+    DNSListenAddr   string `mapstructure:"dns_listen_addr" json:"dns_listen_addr"`
+
+    // Performance monitoring (WaddlePerf)
+    PerfEnabled  bool `mapstructure:"perf_enabled" json:"perf_enabled"`
+    PerfInterval int  `mapstructure:"perf_interval" json:"perf_interval"`
+
+    // Overlay configuration
+    // OverlayType selects the network overlay used to reach the hub-router.
+    // Valid values: "wireguard" (default) or "openziti" (requires binary
+    // compiled with the "openziti" build tag).
+    OverlayType string `mapstructure:"overlay_type" json:"overlay_type"`
 }
 
 // DefaultConfig returns a configuration with default values
@@ -64,6 +79,12 @@ func DefaultConfig() *Config {
         ServiceMode:          false,
         DNSServers:           []string{"10.200.0.1", "1.1.1.1", "8.8.8.8"},
         AuthRefreshThreshold: 300, // 5 minutes before expiry
+        SquawkEnabled:        false,
+        SquawkServerURL:      "https://dns.penguintech.io/dns-query",
+        DNSListenAddr:        "127.0.0.1:53",
+        PerfEnabled:          false,
+        PerfInterval:         300,
+        OverlayType:          "wireguard",
     }
 }
 
@@ -105,7 +126,13 @@ func LoadFromDefaults(cfg *Config) error {
     viper.SetDefault("service_mode", false)
     viper.SetDefault("dns_servers", []string{"10.200.0.1", "1.1.1.1", "8.8.8.8"})
     viper.SetDefault("auth_refresh_threshold", 300)
-    
+    viper.SetDefault("squawk_enabled", false)
+    viper.SetDefault("squawk_server_url", "https://dns.penguintech.io/dns-query")
+    viper.SetDefault("dns_listen_addr", "127.0.0.1:53")
+    viper.SetDefault("perf_enabled", false)
+    viper.SetDefault("perf_interval", 300)
+    viper.SetDefault("overlay_type", "wireguard")
+
     // Try to read config file (it's ok if it doesn't exist)
     if err := viper.ReadInConfig(); err != nil {
         if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -137,7 +164,13 @@ func (c *Config) Save(configFile string) error {
     viper.Set("wireguard_interface", c.WireGuardInterface)
     viper.Set("dns_servers", c.DNSServers)
     viper.Set("auth_refresh_threshold", c.AuthRefreshThreshold)
-    
+    viper.Set("squawk_enabled", c.SquawkEnabled)
+    viper.Set("squawk_server_url", c.SquawkServerURL)
+    viper.Set("dns_listen_addr", c.DNSListenAddr)
+    viper.Set("perf_enabled", c.PerfEnabled)
+    viper.Set("perf_interval", c.PerfInterval)
+    viper.Set("overlay_type", c.OverlayType)
+
     // Create directory if it doesn't exist
     configDir := filepath.Dir(configFile)
     if err := os.MkdirAll(configDir, 0700); err != nil {
@@ -183,7 +216,15 @@ func (c *Config) Validate() error {
     if c.AuthRefreshThreshold < 60 {
         return fmt.Errorf("auth_refresh_threshold must be at least 60 seconds")
     }
-    
+
+    validOverlayTypes := map[string]bool{
+        "wireguard": true,
+        "openziti":  true,
+    }
+    if c.OverlayType != "" && !validOverlayTypes[c.OverlayType] {
+        return fmt.Errorf("invalid overlay_type %q (valid: wireguard, openziti)", c.OverlayType)
+    }
+
     return nil
 }
 

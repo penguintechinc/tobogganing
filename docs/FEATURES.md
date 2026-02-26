@@ -1,7 +1,7 @@
 # 🚀 Tobogganing Features Documentation
 
-> **Last Updated**: 2025-08-21  
-> **Version**: 1.1.0
+> **Last Updated**: 2026-02-26
+> **Version**: 0.3.0
 
 ## 📋 Table of Contents
 
@@ -12,10 +12,55 @@
 - [📊 Analytics & Monitoring](#-analytics--monitoring)
 - [🚀 Deployment Features](#-deployment-features)
 - [🔧 Configuration](#-configuration)
+- [🔌 Platform Integrations](#-platform-integrations)
 
 ---
 
 ## 🔒 Security Features
+
+### ✅ Input Validation (v0.3.0+)
+
+**Comprehensive input validation** on all API endpoints using Pydantic 2.x schemas:
+
+#### Backend Validation
+- **Pydantic BaseModel schemas** for all POST/PUT/PATCH endpoints
+- **Structured error responses** (HTTP 422) with field-level validation details
+- **Custom validators**: IsCIDR, IsPortRange, IsProtocol, IsEmail
+- **PyDAL integration**: Runtime validators on database layer
+- **Automatic OpenAPI docs** with schema validation
+
+#### Frontend Validation
+- **Zod schemas** mirroring backend validation
+- **Real-time field validation** with user feedback
+- **Type-safe form handling** with TypeScript
+- **Client-side pre-validation** before API submission
+
+#### Example: Create Policy Rule
+```python
+# Backend (Pydantic schema)
+class CreatePolicyRule(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    protocol: Literal["tcp", "udp", "icmp", "dns"]
+    src_cidrs: List[str] = Field(..., min_items=1)
+    dst_port_ranges: Optional[List[str]] = None  # Validated as port ranges
+    action: Literal["allow", "block", "log"]
+
+    @field_validator('src_cidrs')
+    @classmethod
+    def validate_cidrs(cls, v):
+        for cidr in v:
+            if not IsCIDR(cidr):
+                raise ValueError(f"Invalid CIDR: {cidr}")
+        return v
+
+# Frontend (Zod schema)
+const CreatePolicyRuleSchema = z.object({
+    name: z.string().min(1).max(255),
+    protocol: z.enum(["tcp", "udp", "icmp", "dns"]),
+    src_cidrs: z.array(z.string()).min(1),
+    action: z.enum(["allow", "block", "log"])
+});
+```
 
 ### 🛡️ Advanced Firewall System
 
@@ -128,6 +173,68 @@ Administrators can configure proxy listening ports through the web interface:
 - **UDP Port Ranges**: Configure multiple UDP port ranges
 - **Real-time Updates**: Changes applied without restart
 - **Web UI Management**: Beautiful interface for port configuration
+
+### 🔐 Default-Deny Network Policies (v0.3.0+)
+
+**Zero-trust network policies** for Kubernetes deployments:
+
+#### Helm Deployment
+```yaml
+# deploy/kubernetes/networkpolicy-default-deny.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: tobogganing
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Explicit allowlist
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tobogganing-services
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow hub-api to hub-router communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app: hub-router
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Allow Squawk DNS (if enabled)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: squawk
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow WaddlePerf probes (if enabled)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: waddleperf
+      ports:
+        - protocol: TCP
+          port: 443
+```
+
+#### Kustomize Configuration
+```bash
+# deploy/kubernetes/base/
+# kustomization.yaml references:
+#   - networkpolicy-default-deny.yaml
+#   - networkpolicy-allow.yaml (explicit allowlist)
+```
 
 ---
 
@@ -464,6 +571,189 @@ SYSTEM_TRAY_ENABLED=true
 
 ---
 
+## 🔌 Platform Integrations
+
+### DNS-Over-HTTPS with Squawk (v0.3.0+)
+
+**PenguinTech's Squawk DNS proxy integration** for secure, policy-driven DNS:
+
+#### Features
+- ✅ **DNS-over-HTTPS (DoH)**: RFC 8484 encrypted DNS queries
+- ✅ **Policy-based filtering**: Block/allow domains per tenant/team
+- ✅ **Local DNS listener**: 127.0.0.1:53 on clients and hub-router
+- ✅ **Fallback upstream**: Graceful degradation if Squawk unavailable
+- ✅ **Query caching**: Configurable TTL-aware caching
+- ✅ **Prometheus metrics**: Query count, duration, blocked queries
+
+#### Configuration
+```bash
+# Hub-router
+HUB_ROUTER_DNS_ENABLED=true
+HUB_ROUTER_DNS_SQUAWK_SERVER=https://dns.penguintech.io/dns-query
+
+# Docker client
+docker run -e SQUAWK_ENABLED=true ghcr.io/penguintechinc/tobogganing-client
+
+# Native client
+squawk_enabled: true
+squawk_server_url: "https://dns.penguintech.io/dns-query"
+```
+
+#### Metrics
+```prometheus
+tobogganing_dns_queries_total{type="A", result="success"}
+tobogganing_dns_query_duration_seconds{operation="resolve"}
+tobogganing_dns_blocked_total{reason="blocklist"}
+tobogganing_dns_cache_hits_total
+```
+
+See [Squawk Integration Guide](./SQUAWK_INTEGRATION.md) for comprehensive documentation.
+
+---
+
+### Network Fabric Monitoring with WaddlePerf (v0.3.0+)
+
+**PenguinTech's WaddlePerf** for cluster-to-cluster latency and performance monitoring:
+
+#### Features
+- ✅ **Multi-protocol probes**: HTTP, TCP, UDP, ICMP
+- ✅ **Fabric metrics**: Latency, jitter, packet loss, throughput
+- ✅ **Inter-cluster monitoring**: Hub-to-hub performance tracking
+- ✅ **WebUI dashboard**: /metrics/fabric with latency matrices
+- ✅ **Prometheus metrics**: Real-time performance telemetry
+- ✅ **Alert thresholds**: Configurable latency/jitter/packet-loss alerts
+
+#### Configuration
+```yaml
+# Hub-router
+perf:
+  enabled: true
+  interval: "30s"
+  targets:
+    - name: "headend-us-east"
+      address: "headend-us-east.example.com:443"
+      protocols: ["http", "tcp", "udp"]
+  alert_latency_ms: 100
+  alert_packet_loss_pct: 1.0
+```
+
+#### Metrics
+```prometheus
+tobogganing_fabric_latency_ms{source="hub-router", target="headend", protocol="http"}
+tobogganing_fabric_jitter_ms{source="hub-router", target="headend"}
+tobogganing_fabric_packet_loss_pct{source="hub-router", target="headend"}
+tobogganing_fabric_throughput_mbps{protocol="tcp"}
+tobogganing_fabric_probe_success_ratio
+```
+
+See [WaddlePerf Integration Guide](./WADDLEPERF_INTEGRATION.md) for comprehensive documentation.
+
+---
+
+### Zero-Trust Overlay with OpenZiti (v0.3.0+)
+
+**Config-driven OpenZiti overlay** for L7 dark-service zero-trust networking alongside WireGuard:
+
+#### Features
+- ✅ **L7 Dark Services**: OpenZiti operates at L7 via `edge.Listener.Accept()`, not L3 packets
+- ✅ **Config-Driven Selection**: Same binary, runtime switch via `overlay.type` — no build tags
+- ✅ **Dual-Mode Default**: Client runs WireGuard (L3 kernel) + OpenZiti (L7 userspace) simultaneously
+- ✅ **JWT+HOST Handshake**: Client sends `JWT:<token>\nHOST:<target>\n` on OpenZiti connections
+- ✅ **OverlayScope Policy**: 7th policy dimension — rules target `wireguard`, `openziti`, or `both`
+- ✅ **Identity-File Auth**: OpenZiti identity JSON contains controller URL + credentials
+
+#### Configuration
+```yaml
+# Hub-router config
+overlay:
+  type: openziti           # "wireguard" (default) or "openziti"
+  openziti:
+    identity_file: /etc/tobogganing/ziti-identity.json
+    service_name: tobogganing-headend
+
+# Client config (default: "dual")
+overlay_type: dual         # "wireguard", "openziti", or "dual"
+openziti:
+  identity_file: ~/.tobogganing/ziti-identity.json
+  service_name: tobogganing-headend
+```
+
+#### Overlay Architecture
+```
+Hub-Router OverlayManager
+├── WireGuardProvider (always active)
+│   ├── Listener() → nil (kernel handles L3)
+│   └── existing HTTP/TCP/UDP proxies serve WG traffic
+└── OpenZitiProvider (when overlay.type = "openziti")
+    ├── Listener() → edge.Listener (L7 dark service)
+    └── serveZitiConnections() → JWT handshake → policy → proxy
+
+Client OverlayProvider
+├── WireGuardProvider: Dial() → nil (kernel tunnel routes traffic)
+├── OpenZitiProvider: Dial() → zitiCtx.Dial() + JWT+HOST handshake
+└── DualProvider (default): both active, Ziti preferred for Dial()
+```
+
+See [OpenZiti Integration Guide](./OPENZITI_INTEGRATION.md) for comprehensive documentation.
+
+---
+
+### XDP/eBPF Edge Protection (v0.3.0+)
+
+**Kernel-level packet filtering** for bare-metal and VM hub-router deployments:
+
+#### Features
+- ✅ **Per-Source-IP Rate Limiting**: Token bucket in BPF hash map, configurable from Go
+- ✅ **SYN Flood Protection**: Track SYN packets per source IP, drop above threshold
+- ✅ **UDP Flood Protection**: Rate limit UDP per source IP (protects WireGuard port)
+- ✅ **IP Blocklist**: Policy-engine deny rules pushed to BPF map for kernel-level drops
+- ✅ **AF_XDP Zero-Copy**: NIC → userspace bypassing kernel network stack
+- ✅ **NUMA-Aware Pools**: Buffer allocation pinned to NIC-local NUMA node
+- ✅ **Build-Tag Gated**: `go build -tags xdp` enables BPF; default build uses no-op stubs
+
+#### When to Use XDP
+
+| Deployment Model | XDP Needed? | Why |
+|---|---|---|
+| In-cluster (Cilium CNI) | No | Cilium provides equivalent eBPF protection |
+| Bare Metal / VMs | **Yes** | No CNI for kernel-level filtering |
+| Spoke K8s (basic CNI) | Depends | Yes if CNI lacks eBPF support |
+
+#### Configuration
+```yaml
+xdp:
+  enabled: true
+  interface: eth0
+  rate_limit_pps: 10000
+  syn_rate_limit_pps: 1000
+  udp_rate_limit_pps: 5000
+```
+
+#### Metrics
+```prometheus
+tobogganing_xdp_packets_total{action="pass|drop|ratelimit"}
+tobogganing_xdp_syn_flood_drops_total
+tobogganing_xdp_udp_flood_drops_total
+tobogganing_xdp_blocklist_size
+```
+
+See [XDP Guide](./XDP_GUIDE.md) | [Hub-Router Deployment](./HUB_ROUTER_DEPLOYMENT.md) for comprehensive documentation.
+
+---
+
+### Resource Sizing Guide (v0.3.0+)
+
+**Comprehensive capacity planning** for Tobogganing deployments:
+
+See [Resource Sizing Guide](./RESOURCE_SIZING.md) for:
+- CPU and memory requirements by component
+- Bandwidth calculations
+- Scaling guidance (10, 100, 1000 client deployments)
+- Kubernetes resource requests and limits
+- Database sizing recommendations
+
+---
+
 ## 📚 Additional Resources
 
 - [Architecture Guide](./ARCHITECTURE.md)
@@ -471,6 +761,12 @@ SYSTEM_TRAY_ENABLED=true
 - [API Documentation](./API.md)
 - [Troubleshooting Guide](./TROUBLESHOOTING.md)
 - [Security Best Practices](./SECURITY.md)
+- [Squawk Integration Guide](./SQUAWK_INTEGRATION.md)
+- [WaddlePerf Integration Guide](./WADDLEPERF_INTEGRATION.md)
+- [OpenZiti Integration Guide](./OPENZITI_INTEGRATION.md)
+- [Resource Sizing Guide](./RESOURCE_SIZING.md)
+- [XDP Guide](./XDP_GUIDE.md)
+- [Hub-Router Deployment Models](./HUB_ROUTER_DEPLOYMENT.md)
 
 ---
 

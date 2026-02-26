@@ -31,8 +31,10 @@ import (
     "golang.zx2c4.com/wireguard/wgctrl"
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
-    "github.com/tobogganing/clients/native/internal/config"
     "github.com/tobogganing/clients/native/internal/auth"
+    "github.com/tobogganing/clients/native/internal/config"
+    "github.com/tobogganing/clients/native/internal/dns"
+    "github.com/tobogganing/clients/native/internal/perf"
 )
 
 const (
@@ -48,14 +50,16 @@ type Client struct {
     auth         *auth.Manager
     wg           *wgctrl.Client
     httpClient   *http.Client
-    
+    dnsModule    *dns.Module
+    perfMonitor  *perf.Monitor
+
     // Current connection state
-    clientID       string
-    accessToken    string
-    refreshToken   string
-    headendURL     string
-    wgPrivateKey   wgtypes.Key
-    wgPublicKey    wgtypes.Key
+    clientID         string
+    accessToken      string
+    refreshToken     string
+    headendURL       string
+    wgPrivateKey     wgtypes.Key
+    wgPublicKey      wgtypes.Key
     headendPublicKey wgtypes.Key
 }
 
@@ -121,6 +125,33 @@ func (c *Client) Connect(ctx context.Context) error {
         return fmt.Errorf("WireGuard start failed: %w", err)
     }
 
+    // Step 4.5: Start DNS module if Squawk is enabled
+    if c.config.SquawkEnabled {
+        dnsCfg := dns.Config{
+            Enabled:      true,
+            ListenAddr:   c.config.DNSListenAddr,
+            UpstreamAddr: "10.200.0.1:5353",
+        }
+        c.dnsModule = dns.NewModule(dnsCfg)
+        if err := c.dnsModule.Start(ctx); err != nil {
+            fmt.Printf("Warning: DNS module failed to start: %v\n", err)
+        }
+    }
+
+    // Step 4.6: Start WaddlePerf performance monitor if enabled.
+    if c.config.PerfEnabled {
+        perfCfg := perf.Config{
+            Enabled:   true,
+            Interval:  c.config.PerfInterval,
+            HubAPIURL: c.config.ManagerURL,
+            ClientID:  c.clientID,
+        }
+        c.perfMonitor = perf.NewMonitor(perfCfg)
+        if err := c.perfMonitor.Start(ctx); err != nil {
+            fmt.Printf("Warning: Performance monitor failed to start: %v\n", err)
+        }
+    }
+
     // Step 5: Start monitoring and keep-alive
     return c.runMonitoring(ctx)
 }
@@ -128,6 +159,21 @@ func (c *Client) Connect(ctx context.Context) error {
 // Disconnect safely disconnects from the SASEWaddle network
 func (c *Client) Disconnect() error {
     fmt.Println("Disconnecting from SASEWaddle network...")
+
+    // Stop performance monitor before tearing down the tunnel.
+    if c.perfMonitor != nil {
+        c.perfMonitor.Stop()
+        c.perfMonitor = nil
+    }
+
+    // Stop DNS module before tearing down the tunnel so any in-flight
+    // DNS queries can complete before the upstream disappears.
+    if c.dnsModule != nil {
+        if err := c.dnsModule.Stop(); err != nil {
+            fmt.Printf("Warning: DNS module stop failed: %v\n", err)
+        }
+        c.dnsModule = nil
+    }
 
     // Stop WireGuard interface
     if err := c.stopWireGuard(); err != nil {

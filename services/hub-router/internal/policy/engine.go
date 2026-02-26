@@ -39,6 +39,20 @@ type Packet struct {
 	// SpiffeID is the SPIFFE Verifiable Identity Document URI presented by
 	// the workload TLS certificate (e.g. "spiffe://domain/path/...").
 	SpiffeID string
+	// OverlayScope identifies the network overlay path that delivered this
+	// packet.  Valid values mirror policy Scope: "wireguard", "openziti",
+	// "k8s", "both".  An empty string skips overlay-scope filtering.
+	OverlayScope string
+}
+
+// validOverlayScopes enumerates the accepted values for the Scope field on
+// RawPolicy.  An empty string is treated as a wildcard (matches any overlay).
+var validOverlayScopes = map[string]struct{}{
+	"":          {},
+	"wireguard": {},
+	"openziti":  {},
+	"k8s":       {},
+	"both":      {},
 }
 
 // RawPolicy is the un-compiled policy representation received from the API layer.
@@ -58,6 +72,11 @@ type RawPolicy struct {
 	Users    []string
 	Groups   []string
 	Enabled  bool
+	// Scope restricts rule enforcement to a specific overlay path.
+	// Valid values: "" (any), "wireguard", "openziti", "k8s", "both".
+	// Rules are evaluated by every overlay; the engine filters out rules
+	// whose Scope does not match the packet's overlay context.
+	Scope string
 	// TenantID restricts the rule to connections originating within the named
 	// tenant.  Empty string means the rule applies to all tenants.
 	TenantID string
@@ -89,6 +108,10 @@ type PolicyRule struct {
 	Groups      map[string]struct{}
 	// Specificity is used to sort rules: more-specific rules are evaluated first.
 	Specificity int
+	// Scope restricts rule evaluation to a specific overlay path.
+	// Valid values: "" (wildcard), "wireguard", "openziti", "k8s", "both".
+	// An empty Scope matches every overlay context.
+	Scope string
 	// TenantID restricts matching to a single tenant.  Empty = wildcard.
 	TenantID string
 	// Scopes is the compiled set of required OAuth2/OIDC scopes for O(1)
@@ -174,6 +197,20 @@ func (pe *Engine) ruleMatches(rule *PolicyRule, pkt *Packet) bool {
 	// Check tenant: if the rule is tenant-scoped, the packet must originate
 	// from that same tenant.
 	if rule.TenantID != "" && pkt.Tenant != rule.TenantID {
+		return false
+	}
+
+	// Check overlay scope: a non-empty rule.Scope restricts the rule to
+	// packets that arrived via a specific overlay path.
+	//
+	// Matching semantics:
+	//   - rule.Scope == ""       → wildcard, matches any overlay.
+	//   - rule.Scope == "both"   → matches any overlay (explicit wildcard).
+	//   - rule.Scope == "wireguard" | "openziti" | "k8s"
+	//                            → matches only when pkt.OverlayScope equals
+	//                              the rule scope OR pkt.OverlayScope is empty
+	//                              (caller did not set overlay context).
+	if !overlayScoreMatches(rule.Scope, pkt.OverlayScope) {
 		return false
 	}
 
@@ -348,6 +385,17 @@ func compileRule(p RawPolicy) (*PolicyRule, error) {
 		rule.Specificity++
 	}
 
+	// Overlay scope — validate and copy verbatim.  Unknown scope values are
+	// rejected at compile time so that operators are alerted to misconfigured
+	// policy rows rather than silently getting wildcard-matched rules.
+	if p.Scope != "" {
+		if _, ok := validOverlayScopes[p.Scope]; !ok {
+			return nil, fmt.Errorf("policy %q has invalid overlay scope %q (valid: wireguard, openziti, k8s, both)", p.Name, p.Scope)
+		}
+		rule.Scope = p.Scope
+		rule.Specificity++
+	}
+
 	// Identity dimensions — evaluated before network dimensions in ruleMatches
 	// because string comparisons are cheaper than CIDR containment checks.
 	if p.TenantID != "" {
@@ -388,6 +436,33 @@ func portToString(port int) string {
 	}
 	// Simple int-to-string without fmt to avoid unnecessary allocations.
 	return fmt.Sprintf("%d", port)
+}
+
+// overlayScoreMatches reports whether pktOverlay satisfies ruleScope.
+//
+// Matching table:
+//
+//	ruleScope   pktOverlay   result
+//	----------  ----------   ------
+//	""          any          true  (rule is a wildcard)
+//	"both"      any          true  (explicit wildcard)
+//	"wireguard" ""           true  (packet has no overlay context set)
+//	"wireguard" "wireguard"  true
+//	"wireguard" "openziti"   false
+//	"openziti"  "openziti"   true
+//	"openziti"  "wireguard"  false
+//	"k8s"       "k8s"        true
+//	"k8s"       "wireguard"  false
+func overlayScoreMatches(ruleScope, pktOverlay string) bool {
+	if ruleScope == "" || ruleScope == "both" {
+		return true
+	}
+	// If the packet carries no overlay context the rule still applies — the
+	// call site simply did not set OverlayScope (e.g. unit tests, legacy paths).
+	if pktOverlay == "" {
+		return true
+	}
+	return ruleScope == pktOverlay
 }
 
 // scopeMatches returns true when available satisfies the required scope.

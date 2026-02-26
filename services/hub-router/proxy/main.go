@@ -33,6 +33,8 @@ import (
     "github.com/spf13/viper"
 
     "github.com/tobogganing/headend/internal/api"
+    "github.com/tobogganing/headend/internal/dns"
+    "github.com/tobogganing/headend/internal/perf"
     "github.com/tobogganing/headend/internal/policy"
     "github.com/tobogganing/headend/proxy/auth"
     "github.com/tobogganing/headend/proxy/firewall"
@@ -57,6 +59,8 @@ type ProxyServer struct {
     mu              sync.RWMutex
     policyEngine    *policy.Engine
     apiClient       *api.HubAPIClient
+    dnsForwarder    *dns.Forwarder
+    perfMonitor     *perf.FabricMonitor
 }
 
 // TCPProxy handles raw TCP traffic with JWT authentication
@@ -134,6 +138,15 @@ func initConfig() {
     viper.SetDefault("ports.headend_id", "")
     viper.SetDefault("ports.cluster_id", "default")
     viper.SetDefault("ports.refresh_interval", "60s")
+    viper.SetDefault("dns.enabled", false)
+    viper.SetDefault("dns.listen_addr", ":5353")
+    viper.SetDefault("dns.squawk_server", "https://dns.penguintech.io/dns-query")
+    viper.SetDefault("dns.cache_ttl", 300)
+    viper.SetDefault("perf.enabled", false)
+    viper.SetDefault("perf.interval", 300)
+    viper.SetDefault("perf.hub_api_url", "http://hub-api:8080")
+    viper.SetDefault("perf.source_id", "")
+    viper.SetDefault("perf.targets", []string{})
 
     if err := viper.ReadInConfig(); err != nil {
         log.Warnf("No config file found, using environment variables: %v", err)
@@ -331,9 +344,42 @@ func (s *ProxyServer) Initialize() error {
     if err := s.initializeTCPProxy(); err != nil {
         return fmt.Errorf("failed to initialize TCP proxy: %w", err)
     }
-    
+
     if err := s.initializeUDPProxy(); err != nil {
-        return fmt.Errorf("failed to initialize UDP proxy: %w", err)  
+        return fmt.Errorf("failed to initialize UDP proxy: %w", err)
+    }
+
+    // Initialize Squawk DNS forwarder (conditional on dns.enabled)
+    dnsCfg := dns.DefaultConfig()
+    dnsCfg.Enabled = viper.GetBool("dns.enabled")
+    if dnsCfg.Enabled {
+        dnsCfg.ListenAddr = viper.GetString("dns.listen_addr")
+        dnsCfg.SquawkServer = viper.GetString("dns.squawk_server")
+        dnsCfg.CacheTTL = viper.GetInt("dns.cache_ttl")
+        dnsCfg.BlockedDomains = viper.GetStringSlice("dns.blocked_domains")
+        s.dnsForwarder = dns.NewForwarder(dnsCfg)
+        log.Info("Squawk DNS forwarder configured")
+    } else {
+        log.Info("Squawk DNS forwarder disabled")
+    }
+
+    // Initialize WaddlePerf fabric performance monitor (conditional on perf.enabled).
+    perfCfg := perf.DefaultConfig()
+    perfCfg.Enabled = viper.GetBool("perf.enabled")
+    if perfCfg.Enabled {
+        perfCfg.Interval = viper.GetInt("perf.interval")
+        perfCfg.HubAPIURL = viper.GetString("perf.hub_api_url")
+        perfCfg.SourceID = viper.GetString("perf.source_id")
+        perfCfg.Targets = viper.GetStringSlice("perf.targets")
+        if perfCfg.SourceID == "" {
+            if hostname, err := os.Hostname(); err == nil {
+                perfCfg.SourceID = hostname
+            }
+        }
+        s.perfMonitor = perf.NewFabricMonitor(perfCfg)
+        log.Info("WaddlePerf fabric performance monitor configured")
+    } else {
+        log.Info("WaddlePerf fabric performance monitor disabled")
     }
 
     // Setup HTTP routes
@@ -431,6 +477,8 @@ func (s *ProxyServer) healthHandler(c *gin.Context) {
         "auth_provider": s.authProvider != nil,
         "tcp_proxy": s.tcpProxy != nil,
         "udp_proxy": s.udpProxy != nil,
+        "dns_forwarder_enabled":  s.dnsForwarder != nil && s.dnsForwarder.IsRunning(),
+        "perf_monitor_enabled":   s.perfMonitor != nil && s.perfMonitor.IsRunning(),
     })
 }
 
@@ -668,6 +716,24 @@ func (s *ProxyServer) Run() error {
     certFile := viper.GetString("server.cert_file")
     keyFile := viper.GetString("server.key_file")
 
+    // Start DNS forwarder before the HTTP server so DNS is available immediately.
+    if s.dnsForwarder != nil {
+        runCtx, runCancel := context.WithCancel(context.Background())
+        _ = runCancel // cancel is called via dnsForwarder.Stop() in the shutdown goroutine below
+        if err := s.dnsForwarder.Start(runCtx); err != nil {
+            log.WithError(err).Error("Failed to start DNS forwarder")
+        }
+    }
+
+    // Start WaddlePerf fabric monitor (no-op when disabled).
+    if s.perfMonitor != nil {
+        perfCtx, perfCancel := context.WithCancel(context.Background())
+        _ = perfCancel // cancel is invoked via perfMonitor.Stop() in shutdown goroutine below
+        if err := s.perfMonitor.Start(perfCtx); err != nil {
+            log.WithError(err).Error("Failed to start perf monitor")
+        }
+    }
+
     s.httpServer = &http.Server{
         Addr:         ":" + httpPort,
         Handler:      s.router,
@@ -702,7 +768,15 @@ func (s *ProxyServer) Run() error {
         if s.portManager != nil {
             s.portManager.Stop()
         }
-        
+
+        if s.dnsForwarder != nil {
+            s.dnsForwarder.Stop()
+        }
+
+        if s.perfMonitor != nil {
+            s.perfMonitor.Stop()
+        }
+
         // Close TCP and UDP proxies
         if s.tcpProxy != nil && s.tcpProxy.listener != nil {
             if err := s.tcpProxy.listener.Close(); err != nil {

@@ -42,6 +42,22 @@ make test-unit
 ./scripts/test-controller.sh unit hub-webui    # jest services/hub-webui/
 ```
 
+#### Overlay and XDP Unit Tests (v0.3.0+)
+
+```bash
+# Hub-router overlay provider tests
+go test ./internal/overlay/ -v           # services/hub-router/
+
+# Policy engine OverlayScope tests
+go test ./internal/policy/ -v -run TestOverlay  # services/hub-router/
+
+# XDP stub tests (default build, no BPF)
+go test ./internal/xdp/ -v              # services/hub-router/
+
+# Client overlay tests (WG, OpenZiti, dual-mode)
+go test ./internal/overlay/ -v           # clients/native/
+```
+
 ### Integration Tests
 
 Tests requiring a running database, Redis, or gRPC server. Spun up via Docker Compose test profile.
@@ -108,6 +124,41 @@ Smoke tests include:
 - Login flow returns a valid JWT
 - Policy rules list endpoint returns envelope `{"status":"success"}`
 - Hub-webui loads the root page without JS errors
+
+#### Overlay and XDP Smoke Tests (v0.3.0+)
+
+```bash
+# Hub-router builds without XDP tag
+./tests/smoke/test_hub_router_build.sh
+
+# Client builds with overlay support
+./tests/smoke/test_client_build.sh
+
+# Hub-router overlay config (wireguard/openziti startup)
+./tests/smoke/test_overlay_config.sh
+
+# XDP stub is safe no-op in default build
+./tests/smoke/test_xdp_stub.sh
+```
+
+#### Overlay and XDP E2E Tests (v0.3.0+)
+
+```bash
+# WireGuard full path with OverlayScope
+./tests/e2e/test_wireguard_overlay_e2e.sh
+
+# OpenZiti dark service path (requires Ziti controller)
+./tests/e2e/test_openziti_overlay_e2e.sh
+
+# Dual-mode client: WG + Ziti simultaneously
+./tests/e2e/test_dual_mode_e2e.sh
+
+# Policy scope filtering (openziti vs wireguard rules)
+./tests/e2e/test_overlay_scope_policy.sh
+
+# XDP rate limiting (requires -tags xdp and root/CAP_BPF)
+./tests/e2e/test_xdp_rate_limiting.sh
+```
 
 ---
 
