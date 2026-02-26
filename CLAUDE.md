@@ -46,6 +46,8 @@ This repository may contain `.local.md` variant files that provide project-speci
 - **NEVER commit** unless explicitly requested
 - **NEVER push** to remote repositories - only push when explicitly asked
 - **NEVER ask about pushing** - do not suggest or prompt for git push operations
+- **NEVER edit code directly on `main`** — always work on a feature branch
+- **CHECK current branch before any code change**: if on `main`, create and switch to a feature branch first (`git checkout -b feature/<name>`)
 - Run security scans before commit
 
 **Code Quality:**
