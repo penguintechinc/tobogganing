@@ -240,66 +240,35 @@ spec:
 
 ## 🖥️ Client Applications
 
-Tobogganing provides two distinct client types optimized for different deployment scenarios and user experiences:
+> **End-user desktop and mobile clients** have been migrated to [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — a unified modular client with Flutter (iOS/Android) and Go (desktop). See that repo for end-user installation instructions.
 
-### 🖼️ **Desktop GUI Clients**
-**Perfect for end users who want the best experience**
+The native Go client in this repo (`clients/native/`) is scoped to **server and infrastructure use** — connecting hardware, VMs, bare metal servers, containers, and embedded/IoT devices to the Tobogganing cluster.
 
-#### Supported Platforms
-| Platform | Binary Name | Features |
-|----------|-------------|----------|
-| **macOS Universal** | `tobogganing-client-darwin-universal` | Intel + Apple Silicon support |
-| **macOS Intel** | `tobogganing-client-darwin-amd64` | Optimized for Intel Macs |
-| **macOS Apple Silicon** | `tobogganing-client-darwin-arm64` | M1/M2/M3 native performance |
-| **Linux AMD64** | `tobogganing-client-linux-amd64` | Desktop Linux distributions |
-| **Linux ARM64** | `tobogganing-client-linux-arm64` | ARM64 Linux systems |
-| **Windows** | `tobogganing-client-windows-amd64.exe` | Windows 10/11 support |
-
-#### System Tray Integration Features
-- ✅ **Native System Tray Icon** - Platform-specific tray integration
-- ✅ **One-Click Connect/Disconnect** - Toggle VPN with single click
-- ✅ **Real-Time Connection Status** - Visual indicators for connection state
-- ✅ **Statistics Viewer** - Connection performance metrics in browser
-- ✅ **Configuration Management** - Auto-update with random scheduling (45-60 min)
-- ✅ **Settings Access** - Easy access to configuration and preferences
-- ✅ **Graceful Shutdown** - Automatic disconnection on application exit
-
-#### Installation & Usage
-```bash
-# Quick GUI installation
-curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-gui.sh | bash
-
-# Manual installation
-curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal -o tobogganing-client
-chmod +x tobogganing-client
-
-# Start with system tray
-./tobogganing-client gui --auto-connect
-```
-
-### 🖥️ **Headless Clients**
-**Optimized for servers, containers, and automation**
+### 🖥️ **Server/Infrastructure Client**
+**Headless Go client for connecting servers, VMs, and embedded devices to the cluster**
 
 #### Supported Platforms
 | Platform | Binary Name | Use Case |
 |----------|-------------|----------|
-| **Desktop Platforms** | `*-headless` variants | Server deployments |
-| **Linux ARM v7** | `tobogganing-client-linux-armv7-headless` | Raspberry Pi 4/5 |
-| **Linux ARM v6** | `tobogganing-client-linux-armv6-headless` | Raspberry Pi Zero/1 |
-| **Linux MIPS** | `tobogganing-client-linux-mips-headless` | Router firmware |
-| **Linux MIPSLE** | `tobogganing-client-linux-mipsle-headless` | Little-endian MIPS |
+| **Linux AMD64** | `tobogganing-client-linux-amd64` | Servers, VMs, cloud instances |
+| **Linux ARM64** | `tobogganing-client-linux-arm64` | ARM servers, Raspberry Pi 4/5 |
+| **Linux ARMv7** | `tobogganing-client-linux-armv7` | Raspberry Pi, embedded gateways |
+| **Linux ARMv6** | `tobogganing-client-linux-armv6` | Raspberry Pi Zero/1, constrained devices |
+| **Linux MIPS** | `tobogganing-client-linux-mips` | Router firmware, network appliances |
+| **Linux MIPSLE** | `tobogganing-client-linux-mipsle` | Little-endian MIPS devices |
 
-#### Command-Line Features
-- ✅ **CLI Interface Only** - No GUI dependencies required
-- ✅ **Daemon Mode** - Background operation for servers
-- ✅ **Docker Ready** - Perfect for containerized environments
-- ✅ **Automation Friendly** - Script and systemd integration
-- ✅ **Small Footprint** - Minimal resource usage
-- ✅ **Cross-Platform** - Wide embedded platform support
+#### Features
+- **Daemon Mode** — Background operation for unattended servers
+- **Dual-Mode Overlay** — WireGuard (L3 kernel) + OpenZiti (L7 dark services) simultaneously
+- **Systemd Integration** — Native service management
+- **Docker/Container Ready** — No GUI dependencies, minimal footprint
+- **Automation Friendly** — CLI-driven, scriptable, CI/CD compatible
+- **Embedded Platform Support** — ARM, MIPS, IoT devices
+- **Auto-Configuration** — Certificate rotation and config updates from hub-api
 
 #### Installation & Usage
 ```bash
-# Quick headless installation
+# Quick install
 curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-headless.sh | bash
 
 # Connect as daemon
@@ -333,24 +302,7 @@ docker run -d \
 
 ### 📱 **Mobile Applications**
 
-**React Native apps for iOS and Android**
-
-#### Mobile Features
-- ✅ **Native Mobile Experience** - Platform-specific UI/UX
-- ✅ **WireGuard Integration** - Native VPN protocols
-- ✅ **Biometric Authentication** - Fingerprint/Face ID support
-- ✅ **Background Connectivity** - Persistent VPN connections
-- ✅ **Data Usage Monitoring** - Real-time bandwidth tracking
-- ✅ **Server Selection** - Choose optimal headend location
-
-#### Installation
-```bash
-# Build from source
-./scripts/deploy-mobile.sh
-
-# Install to device
-adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-```
+> Mobile clients (iOS and Android) have been migrated to the unified modular client at [penguintechinc/penguin](https://github.com/penguintechinc/penguin) using Flutter, replacing the previous React Native implementation. See that repo for mobile build and installation instructions.
 
 ### 🔧 **Client Configuration**
 
