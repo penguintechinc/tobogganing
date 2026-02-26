@@ -144,9 +144,9 @@ Tobogganing implements a comprehensive SASE architecture with three main compone
 - **XDP/eBPF Protection**: Kernel-level packet filtering, rate limiting, and blocklist enforcement
 
 ### Client Applications
-- **Unified Modular Client**: Desktop client migrated to [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — unified cross-platform client with modular overlay support
+- **Unified Modular Client**: Desktop and mobile clients migrated to [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — unified cross-platform client with modular overlay support
+- **Flutter Mobile App**: New Flutter-based iOS/Android app (replaces React Native) — part of the unified penguin client
 - **Docker Container**: Containerized client for Kubernetes and Docker deployments
-- **Mobile Apps**: React Native applications for iOS and Android
 - **Embedded Support**: Lightweight clients for ARM, MIPS, and IoT devices
 - **Auto-Configuration**: Automatic certificate rotation and configuration updates
 - **Dual-Mode Overlay**: WireGuard + OpenZiti simultaneously — WG for general traffic, Ziti for sensitive dark services

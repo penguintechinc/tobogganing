@@ -75,7 +75,8 @@ All notable changes to Tobogganing will be documented in this file. New releases
 - Policy rule `scope` field now accepts `openziti` in addition to `wireguard`, `k8s`, `both`
 - OpenZiti overlay is now config-driven (removed `//go:build openziti` tag) — rebuild without `-tags openziti` flag
 - Client default overlay type changed from `"wireguard"` to `"dual"` (WireGuard + OpenZiti)
-- Desktop client migrated to unified modular client at [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — overlay library remains in `clients/native/internal/overlay/`
+- Desktop and mobile clients migrated to unified modular client at [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — overlay library remains in `clients/native/internal/overlay/`
+- Mobile app rewritten in Flutter (replaces React Native) as part of the unified penguin client
 
 ## Dependencies Added
 - Python: pydantic>=2.5 (already in requirements, now used)
