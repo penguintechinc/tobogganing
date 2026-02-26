@@ -13,6 +13,7 @@ import TeamManagement from "./pages/TeamManagement";
 import WorkloadIdentity from "./pages/WorkloadIdentity";
 import Settings from "./pages/Settings";
 import AuditLogs from "./pages/AuditLogs";
+import FabricMetrics from "./pages/FabricMetrics";
 
 function App() {
   const { user } = useAuth();
@@ -40,6 +41,7 @@ function App() {
         <Route path="/workload-identity" element={<ProtectedRoute><WorkloadIdentity /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
+        <Route path="/metrics/fabric" element={<ProtectedRoute><FabricMetrics /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

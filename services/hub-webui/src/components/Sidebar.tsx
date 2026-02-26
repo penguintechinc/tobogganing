@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Building2,
   KeySquare,
+  Activity,
 } from "lucide-react";
 import clsx from "clsx";
 import { ScopeGate } from "../lib/auth";
@@ -29,6 +30,7 @@ const mainNavItems = [
   { to: "/hubs", icon: Server, label: "Hubs" },
   { to: "/users", icon: Users, label: "Users" },
   { to: "/identity", icon: Fingerprint, label: "Identity" },
+  { to: "/metrics/fabric", icon: Activity, label: "Fabric Metrics" },
 ];
 
 const identityNavItems = [

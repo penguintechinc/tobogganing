@@ -293,7 +293,7 @@ def define_schema() -> None:
               requires=IS_IN_SET(['allow', 'deny'])),
         Field('priority', 'integer', default=100),
         Field('scope', 'string', length=20, default='both',
-              requires=IS_IN_SET(['wireguard', 'k8s', 'both'])),
+              requires=IS_IN_SET(['wireguard', 'k8s', 'openziti', 'both'])),
         Field('direction', 'string', length=20, default='both',
               requires=IS_IN_SET(['inbound', 'outbound', 'both'])),
         Field('domains', 'json'),
@@ -491,6 +491,26 @@ def define_schema() -> None:
         Field('scopes', 'json'),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # perf_metrics (v0.3.0) — fabric performance measurements
+    # ------------------------------------------------------------------
+    db.define_table('perf_metrics',
+        Field('id', 'id'),
+        Field('source_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('source_type', 'string', length=50,
+              requires=IS_IN_SET(['hub-router', 'client'])),
+        Field('target_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('protocol', 'string', length=20,
+              requires=IS_IN_SET(['http', 'tcp', 'udp', 'icmp'])),
+        Field('latency_ms', 'double'),
+        Field('jitter_ms', 'double'),
+        Field('packet_loss_pct', 'double'),
+        Field('throughput_mbps', 'double'),
+        Field('timestamp', 'datetime', default=datetime.now),
+        Field('created_at', 'datetime', default=datetime.now),
         migrate=False,
     )
 

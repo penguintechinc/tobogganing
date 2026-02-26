@@ -6,40 +6,48 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
+from pydantic import ValidationError as PydanticValidationError
+
 from auth.middleware import require_scope, tenant_required, scope_required
 from auth.scopes import parse_scope_string
+from api.schemas import (
+    ClusterRegisterRequest, ClusterUpdateRequest,
+    ClientRegisterRequest, ClientUpdateRequest,
+    PolicyRuleCreateRequest, PolicyRuleUpdateRequest,
+    TokenRequest, VRFCreateRequest, PortConfigRequest,
+)
 
 logger = structlog.get_logger()
 
 def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manager):
-    
+
     @action("api/v1/clusters/register", method=["POST"])
     @action.uses("json")
     @require_scope("clusters:write")
     async def register_cluster():
         try:
             data = await request.json()
-            
-            # Validate required fields
-            required = ['name', 'region', 'datacenter', 'headend_url']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
+
+            try:
+                validated = ClusterRegisterRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
             # Generate cluster ID
-            data['id'] = str(uuid.uuid4())
-            
+            cluster_data = validated.model_dump()
+            cluster_data['id'] = str(uuid.uuid4())
+
             # Register cluster
-            cluster = await cluster_manager.register_cluster(data)
-            
+            cluster = await cluster_manager.register_cluster(cluster_data)
+
             # Generate headend certificate
             key, cert, ca = await cert_manager.generate_headend_certificate(
                 cluster.id,
                 cluster.name,
                 [cluster.headend_url.split("://")[1].split(":")[0]]
             )
-            
+
             return {
                 "cluster_id": cluster.id,
                 "status": "registered",
@@ -53,7 +61,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Failed to register cluster: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clusters/<cluster_id>/heartbeat", method=["POST"])
     @action.uses("json")
     @require_scope("hubs:write")
@@ -61,19 +69,19 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
         try:
             data = await request.json()
             client_count = data.get('client_count', 0)
-            
+
             success = await cluster_manager.update_heartbeat(cluster_id, client_count)
-            
+
             if not success:
                 response.status = 404
                 return {"error": "Cluster not found"}
-            
+
             return {"status": "ok"}
         except Exception as e:
             logger.error(f"Heartbeat error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clusters", method=["GET"])
     @action.uses("json")
     @require_scope("clusters:read")
@@ -104,49 +112,44 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"List clusters error: {e}")
             response.status = 500
             return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
-    
+
     @action("api/v1/clients/register", method=["POST"])
     @action.uses("json")
     @require_scope("clients:write")
     async def register_client():
         try:
             data = await request.json()
-            
-            # Validate required fields
-            required = ['name', 'type', 'public_key']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
-            # Validate client type
-            if data['type'] not in ['docker', 'native']:
-                response.status = 400
-                return {"error": "Invalid client type"}
-            
+
+            try:
+                validated = ClientRegisterRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
             # Generate client ID
-            data['id'] = str(uuid.uuid4())
-            
+            client_data = validated.model_dump()
+            client_data['id'] = str(uuid.uuid4())
+
             # Get optimal cluster
-            location = data.get('location', {})
+            location = client_data.get('location') or {}
             cluster = await cluster_manager.get_optimal_cluster(location)
-            
+
             if not cluster:
                 response.status = 503
                 return {"error": "No available clusters"}
-            
-            data['cluster_id'] = cluster.id
-            
+
+            client_data['cluster_id'] = cluster.id
+
             # Register client
-            client, api_key = await client_registry.register_client(data)
-            
+            client, api_key = await client_registry.register_client(client_data)
+
             # Generate client certificate
             key, cert, ca = await cert_manager.generate_client_certificate(
                 client.id,
                 client.name,
                 client.type
             )
-            
+
             return {
                 "client_id": client.id,
                 "api_key": api_key,
@@ -164,7 +167,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Failed to register client: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/config", method=["GET"])
     @action.uses("json")
     @require_scope("clients:read")
@@ -175,21 +178,21 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             # Get cluster info
             cluster = await cluster_manager.get_cluster(client.cluster_id)
-            
+
             if not cluster:
                 response.status = 503
                 return {"error": "Cluster not available"}
-            
+
             return {
                 "client_id": client.id,
                 "cluster": {
@@ -206,7 +209,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Get config error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/tunnel-config", method=["PUT"])
     @action.uses("json")
     @require_scope("clients:write")
@@ -217,10 +220,10 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             # Check if this is an admin JWT or client API key
             token = auth_header[7:]
-            
+
             # Try JWT first (for admin access)
             user_info = jwt_manager.validate_token(token)
             if user_info and user_info.get('role') == 'admin':
@@ -232,34 +235,31 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 if not client or client.id != client_id:
                     response.status = 401
                     return {"error": "Unauthorized"}
-            
+
             data = await request.json()
-            
-            # Validate tunnel mode
-            tunnel_mode = data.get('tunnel_mode', 'full')
-            if tunnel_mode not in ['full', 'split']:
-                response.status = 400
-                return {"error": "Invalid tunnel_mode. Must be 'full' or 'split'"}
-            
+
+            try:
+                validated = ClientUpdateRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            tunnel_mode = validated.tunnel_mode or 'full'
+
             # Validate split tunnel routes if in split mode
             split_tunnel_routes = []
             if tunnel_mode == 'split':
-                routes = data.get('split_tunnel_routes', [])
-                if not isinstance(routes, list):
-                    response.status = 400
-                    return {"error": "split_tunnel_routes must be a list"}
-                
-                # Validate each route (domain, IPv4, IPv6, or CIDR)
+                routes = validated.split_tunnel_routes or []
                 import ipaddress
                 import re
-                
+
                 domain_pattern = re.compile(r'^(\*\.)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-                
+
                 for route in routes:
                     if not isinstance(route, str):
                         response.status = 400
                         return {"error": f"Invalid route format: {route}"}
-                    
+
                     # Try to parse as IP address or network
                     try:
                         ipaddress.ip_network(route, strict=False)
@@ -271,34 +271,34 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         else:
                             response.status = 400
                             return {"error": f"Invalid route: {route}. Must be a domain, IP address, or CIDR"}
-            
+
             # Update client configuration in database
             from ..database import get_db
             db = get_db()
-            
+
             client_record = db(db.clients.client_id == client_id).select().first()
             if not client_record:
                 response.status = 404
                 return {"error": "Client not found"}
-            
+
             client_record.update_record(
                 tunnel_mode=tunnel_mode,
                 split_tunnel_routes=split_tunnel_routes if tunnel_mode == 'split' else []
             )
             db.commit()
-            
+
             return {
                 "client_id": client_id,
                 "tunnel_mode": tunnel_mode,
                 "split_tunnel_routes": split_tunnel_routes if tunnel_mode == 'split' else [],
                 "status": "updated"
             }
-            
+
         except Exception as e:
             logger.error(f"Update tunnel config error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/rotate-key", method=["POST"])
     @action.uses("json")
     @require_scope("clients:write")
@@ -309,21 +309,21 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             # Rotate API key
             new_api_key = await client_registry.rotate_api_key(client_id)
-            
+
             if not new_api_key:
                 response.status = 500
                 return {"error": "Failed to rotate key"}
-            
+
             return {
                 "client_id": client_id,
                 "new_api_key": new_api_key
@@ -332,7 +332,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Key rotation error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/metrics", method=["POST"])
     @action.uses("json")
     @require_scope("clients:write")
@@ -346,26 +346,26 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "error": "Feature not licensed",
                     "message": "Client metrics collection requires a Professional or Enterprise license"
                 }
-            
+
             # Authenticate using API key
             auth_header = request.headers.get('Authorization', '')
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             data = await request.json()
-            
+
             # Import metrics module
             from ..metrics.prometheus import get_metrics_instance
             metrics = get_metrics_instance()
-            
+
             # Update client metrics
             metrics.update_client_metrics(
                 client_id=client.id,
@@ -374,7 +374,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 headless=data.get('headless', False),
                 metrics=data.get('metrics', {})
             )
-            
+
             # Update last seen in database
             from ..database import get_db
             db = get_db()
@@ -383,14 +383,14 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 from datetime import datetime
                 client_record.update_record(last_seen=datetime.now())
                 db.commit()
-            
+
             return {"status": "metrics_received"}
-            
+
         except Exception as e:
             logger.error(f"Submit client metrics error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/headends/<headend_id>/metrics", method=["POST"])
     @action.uses("json")
     @require_scope("hubs:write")
@@ -401,28 +401,28 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             token = auth_header[7:]
-            
+
             # Validate headend authentication
             # For now, we'll use JWT validation
             user_info = jwt_manager.validate_token(token)
             if not user_info:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             data = await request.json()
-            
+
             # Import metrics module
             from ..metrics.prometheus import get_metrics_instance
             metrics = get_metrics_instance()
-            
+
             # Get headend info from cluster
             cluster = await cluster_manager.get_cluster_by_headend(headend_id)
             if not cluster:
                 response.status = 404
                 return {"error": "Headend not found"}
-            
+
             # Update headend metrics
             metrics.update_headend_metrics(
                 headend_id=headend_id,
@@ -431,14 +431,14 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 datacenter=cluster.datacenter,
                 metrics=data.get('metrics', {})
             )
-            
+
             return {"status": "metrics_received"}
-            
+
         except Exception as e:
             logger.error(f"Submit headend metrics error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients", method=["GET"])
     @action.uses("json")
     @require_scope("clients:read")
@@ -469,16 +469,16 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"List clients error: {e}")
             response.status = 500
             return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
-    
+
     @action("api/v1/certs/generate", method=["POST"])
     @action.uses("json")
     @require_scope("certificates:write")
     async def generate_certificate():
         try:
             data = await request.json()
-            
+
             cert_type = data.get('type', 'client')
-            
+
             if cert_type == 'client':
                 key, cert, ca = await cert_manager.generate_client_certificate(
                     data.get('id', str(uuid.uuid4())),
@@ -494,7 +494,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             else:
                 response.status = 400
                 return {"error": "Invalid certificate type"}
-            
+
             return {
                 "type": cert_type,
                 "certificates": {
@@ -507,7 +507,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Certificate generation error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # JWT Authentication Endpoints
     @action("api/v1/auth/token", method=["POST"])
     @action.uses("json")
@@ -515,23 +515,22 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
         """Generate JWT token for authenticated node/client"""
         try:
             data = await request.json()
-            
-            # Validate required fields for JWT generation
-            required = ['node_id', 'node_type', 'api_key']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
-            node_id = data['node_id']
-            node_type = data['node_type']
-            api_key = data['api_key']
-            
+
+            try:
+                validated = TokenRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            node_id = validated.node_id
+            node_type = validated.node_type
+            api_key = validated.api_key
+
             # Authenticate based on node type
             authenticated = False
             permissions = []
             metadata = {}
-            
+
             if node_type in ['kubernetes_node', 'raw_compute']:
                 # Authenticate cluster/headend nodes
                 cluster = await cluster_manager.authenticate_cluster(api_key)
@@ -554,11 +553,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         'client_type': client.type,
                         'cluster_id': client.cluster_id
                     }
-            
+
             if not authenticated:
                 response.status = 401
                 return {"error": "Authentication failed"}
-            
+
             # Generate JWT tokens
             tokens = await jwt_manager.generate_token(
                 node_id=node_id,
@@ -566,42 +565,42 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 permissions=permissions,
                 metadata=metadata
             )
-            
+
             logger.info("JWT tokens generated", node_id=node_id, node_type=node_type)
-            
+
             return tokens
-            
+
         except Exception as e:
             logger.error("JWT token generation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/refresh", method=["POST"])
     @action.uses("json")
     async def refresh_jwt_token():
         """Refresh JWT access token using refresh token"""
         try:
             data = await request.json()
-            
+
             refresh_token = data.get('refresh_token')
             if not refresh_token:
                 response.status = 400
                 return {"error": "Missing refresh_token"}
-            
+
             # Refresh the token
             new_tokens = await jwt_manager.refresh_token(refresh_token)
-            
+
             if not new_tokens:
                 response.status = 401
                 return {"error": "Invalid or expired refresh token"}
-            
+
             return new_tokens
-            
+
         except Exception as e:
             logger.error("JWT token refresh failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/validate", method=["POST"])
     @action.uses("json")
     async def validate_jwt_token():
@@ -612,16 +611,16 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             token = auth_header[7:]  # Remove 'Bearer ' prefix
-            
+
             # Validate the token
             payload = await jwt_manager.validate_token(token)
-            
+
             if not payload:
                 response.status = 401
                 return {"error": "Invalid or expired token"}
-            
+
             return {
                 "valid": True,
                 "node_id": payload.get("sub"),
@@ -630,19 +629,19 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 "metadata": payload.get("metadata", {}),
                 "expires_at": payload.get("exp")
             }
-            
+
         except Exception as e:
             logger.error("JWT token validation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/revoke", method=["POST"])
     @action.uses("json")
     async def revoke_jwt_token():
         """Revoke specific JWT token or all tokens for a node"""
         try:
             data = await request.json()
-            
+
             if 'node_id' in data:
                 # Revoke all tokens for a node
                 count = await jwt_manager.revoke_all_tokens(data['node_id'])
@@ -654,12 +653,12 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             else:
                 response.status = 400
                 return {"error": "Missing node_id or jti"}
-                
+
         except Exception as e:
             logger.error("JWT token revocation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/public-key", method=["GET"])
     @action.uses("json")
     async def get_jwt_public_key():
@@ -675,7 +674,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error("Failed to get public key", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # WireGuard Certificate Management Endpoints
     @action("api/v1/wireguard/keys", method=["POST"])
     @action.uses("json")
@@ -684,36 +683,36 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
         """Generate WireGuard keys and certificates for authenticated nodes"""
         try:
             data = await request.json()
-            
-            required = ['node_id', 'node_type', 'api_key']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
-            node_id = data['node_id']
-            node_type = data['node_type']
-            api_key = data['api_key']
-            
+
+            try:
+                validated = TokenRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            node_id = validated.node_id
+            node_type = validated.node_type
+            api_key = validated.api_key
+
             # Authenticate based on node type
             authenticated = False
-            
-            if node_type in ['kubernetes_node', 'raw_compute', 'headend']:
+
+            if node_type in ['kubernetes_node', 'raw_compute']:
                 cluster = await cluster_manager.authenticate_cluster(api_key)
                 authenticated = cluster is not None
             elif node_type in ['client_docker', 'client_native']:
                 client = await client_registry.authenticate_client(api_key)
                 authenticated = client is not None and client.id == node_id
-            
+
             if not authenticated:
                 response.status = 401
                 return {"error": "Authentication failed"}
-            
+
             # Generate WireGuard keys and assign IP
             wg_config = await cert_manager.generate_wireguard_keys(node_id, node_type)
-            
+
             # Generate X.509 certificate for WireGuard authentication
-            if node_type in ['headend', 'kubernetes_node', 'raw_compute']:
+            if node_type in ['kubernetes_node', 'raw_compute']:
                 cert_key, cert_pem, ca_cert = await cert_manager.generate_headend_certificate(
                     node_id,
                     f"{node_type}-{node_id}",
@@ -725,11 +724,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     f"{node_type}-{node_id}",
                     node_type
                 )
-            
-            logger.info("Generated WireGuard keys and certificate", 
-                       node_id=node_id, 
+
+            logger.info("Generated WireGuard keys and certificate",
+                       node_id=node_id,
                        node_type=node_type)
-            
+
             return {
                 "node_id": node_id,
                 "wireguard": {
@@ -745,12 +744,12 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 },
                 "authentication_note": "WireGuard requires both certificate AND JWT/SSO authentication"
             }
-            
+
         except Exception as e:
             logger.error("WireGuard key generation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/wireguard/peers", method=["GET"])
     @action.uses("json")
     @require_scope("hubs:read")
@@ -762,10 +761,10 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             # This could be either JWT or API key - validate both
             token = auth_header[7:]
-            
+
             # Try JWT validation first
             jwt_payload = await jwt_manager.validate_token(token)
             if jwt_payload and 'headend' in jwt_payload.get('permissions', []):
@@ -777,20 +776,20 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 if not cluster:
                     response.status = 401
                     return {"error": "Authentication failed"}
-            
+
             # Get all WireGuard peers
             peers = await cert_manager.get_all_wireguard_peers()
-            
+
             return {
                 "peers": peers,
                 "total": len(peers)
             }
-            
+
         except Exception as e:
             logger.error("Failed to get WireGuard peers", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/wireguard/<node_id>/revoke", method=["POST"])
     @action.uses("json")
     @require_scope("hubs:write")
@@ -802,20 +801,20 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header:
                 response.status = 401
                 return {"error": "Authentication required"}
-            
+
             success = await cert_manager.revoke_wireguard_keys(node_id)
-            
+
             if success:
                 return {"revoked": True, "node_id": node_id}
             else:
                 response.status = 404
                 return {"error": "Node not found"}
-                
+
         except Exception as e:
             logger.error("WireGuard key revocation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # Headend Configuration Endpoint
     @action("api/v1/clusters/<cluster_id>/headend-config", method=["GET"])
     @action.uses("json")
@@ -828,39 +827,39 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             cluster = await cluster_manager.authenticate_cluster(api_key)
-            
+
             if not cluster or cluster.id != cluster_id:
                 response.status = 401
                 return {"error": "Authentication failed"}
-            
+
             # Get WireGuard configuration for this cluster
             wg_config = await cert_manager.get_wireguard_config(cluster_id)
             if not wg_config:
                 # Generate WireGuard config for headend if not exists
                 wg_config = await cert_manager.generate_wireguard_keys(cluster_id, "headend")
-            
+
             # Get all peers for this cluster's WireGuard network
             peers = await cert_manager.get_all_wireguard_peers()
-            
+
             # Build headend configuration
             config = {
                 # Server ports
                 "http_port": "8443",
-                "tcp_port": "8444", 
+                "tcp_port": "8444",
                 "udp_port": "8445",
                 "metrics_port": "9090",
                 "cert_file": "/certs/headend.crt",
                 "key_file": "/certs/headend.key",
-                
+
                 # Authentication configuration
                 "auth": {
                     "type": "jwt",  # Default to JWT, can be overridden by env vars
                     "manager_url": request.url_root.rstrip('/'),
                     "jwt_public_key": await jwt_manager.get_public_key(),
-                    
+
                     # OAuth2 config (if needed)
                     "oauth2": {
                         "issuer": "",
@@ -868,8 +867,8 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         "client_secret": "",
                         "redirect_url": ""
                     },
-                    
-                    # SAML2 config (if needed)  
+
+                    # SAML2 config (if needed)
                     "saml2": {
                         "idp_metadata_url": "",
                         "sp_entity_id": f"headend-{cluster_id}",
@@ -877,7 +876,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         "slo_url": ""
                     }
                 },
-                
+
                 # WireGuard configuration
                 "wireguard": {
                     "interface": "wg0",
@@ -896,7 +895,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         } for peer in peers
                     ]
                 },
-                
+
                 # Traffic mirroring configuration
                 "mirror": {
                     "enabled": False,  # Default disabled
@@ -906,7 +905,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "sample_rate": 100,
                     "filter": ""
                 },
-                
+
                 # Proxy configuration
                 "proxy": {
                     "skip_tls_verify": False,
@@ -914,45 +913,18 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "max_idle_conns": 100
                 }
             }
-            
+
             logger.info("Provided headend configuration", cluster_id=cluster_id)
             return config
-            
+
         except Exception as e:
             logger.error("Failed to get headend config", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # ------------------------------------------------------------------
     # Policy CRUD routes — unified policy model
     # ------------------------------------------------------------------
-
-    def _validate_cidrs(cidrs):
-        """Validate a list of CIDR strings. Returns error string or None."""
-        import ipaddress
-        if not isinstance(cidrs, list):
-            return "must be a JSON array"
-        for cidr in cidrs:
-            try:
-                ipaddress.ip_network(cidr, strict=False)
-            except (ValueError, TypeError) as exc:
-                return f"invalid CIDR '{cidr}': {exc}"
-        return None
-
-    def _validate_ports(ports):
-        """Validate a list of port/range strings. Returns error string or None."""
-        if not isinstance(ports, list):
-            return "must be a JSON array"
-        for p in ports:
-            parts = str(p).split("-")
-            for part in parts:
-                try:
-                    n = int(part)
-                    if n < 1 or n > 65535:
-                        return f"port out of range: {part}"
-                except (ValueError, TypeError):
-                    return f"invalid port: {part}"
-        return None
 
     def _policy_to_dict(row):
         return {
@@ -1008,73 +980,39 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
         """Create a new policy rule."""
         try:
             data = await request.json()
-            required = ["name", "action"]
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
 
-            if data["action"] not in ("allow", "deny"):
-                response.status = 400
-                return {"error": "action must be 'allow' or 'deny'"}
-
-            scope = data.get("scope", "both")
-            if scope not in ("wireguard", "k8s", "both"):
-                response.status = 400
-                return {"error": "scope must be one of: wireguard, k8s, both"}
-
-            direction = data.get("direction", "both")
-            if direction not in ("inbound", "outbound", "both"):
-                response.status = 400
-                return {"error": "direction must be one of: inbound, outbound, both"}
-
-            protocol = data.get("protocol", "any")
-            if protocol not in ("tcp", "udp", "icmp", "any"):
-                response.status = 400
-                return {"error": "protocol must be one of: tcp, udp, icmp, any"}
-
-            idp = data.get("identity_provider", "local")
-            if idp not in ("local", "oidc", "saml", "scim"):
-                response.status = 400
-                return {"error": "identity_provider must be one of: local, oidc, saml, scim"}
-
-            # Validate arrays
-            if "src_cidrs" in data:
-                err = _validate_cidrs(data["src_cidrs"])
-                if err:
-                    response.status = 400
-                    return {"error": f"src_cidrs {err}"}
-            if "dst_cidrs" in data:
-                err = _validate_cidrs(data["dst_cidrs"])
-                if err:
-                    response.status = 400
-                    return {"error": f"dst_cidrs {err}"}
-            if "ports" in data:
-                err = _validate_ports(data["ports"])
-                if err:
-                    response.status = 400
-                    return {"error": f"ports {err}"}
+            try:
+                validated = PolicyRuleCreateRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
 
             from database import get_db
             db = get_db()
             tenant_ctx = getattr(request, "tenant", None)
+
+            # Prefer token tenant context over body tenant_id
+            effective_tenant_id = (
+                tenant_ctx.tenant_id if tenant_ctx else validated.tenant_id
+            )
+
             row_id = db.policy_rules.insert(
-                name=data["name"],
-                description=data.get("description", ""),
-                action=data["action"],
-                priority=data.get("priority", 100),
-                scope=scope,
-                direction=direction,
-                domains=data.get("domains", []),
-                ports=data.get("ports", []),
-                protocol=protocol,
-                src_cidrs=data.get("src_cidrs", []),
-                dst_cidrs=data.get("dst_cidrs", []),
-                users=data.get("users", []),
-                groups=data.get("groups", []),
-                identity_provider=idp,
-                enabled=data.get("enabled", True),
-                tenant_id=tenant_ctx.tenant_id if tenant_ctx else None,
+                name=validated.name,
+                description=validated.description or "",
+                action=validated.action,
+                priority=validated.priority,
+                scope=validated.scope,
+                direction=validated.direction,
+                domains=validated.domains or [],
+                ports=validated.ports or [],
+                protocol=validated.protocol,
+                src_cidrs=validated.src_cidrs or [],
+                dst_cidrs=validated.dst_cidrs or [],
+                users=validated.users or [],
+                groups=validated.groups or [],
+                identity_provider=validated.identity_provider,
+                enabled=validated.enabled,
+                tenant_id=effective_tenant_id,
             )
             db.commit()
 
@@ -1143,40 +1081,22 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
 
             data = await request.json()
 
-            if "action" in data and data["action"] not in ("allow", "deny"):
-                response.status = 400
-                return {"error": "action must be 'allow' or 'deny'"}
-            if "scope" in data and data["scope"] not in ("wireguard", "k8s", "both"):
-                response.status = 400
-                return {"error": "scope must be one of: wireguard, k8s, both"}
-            if "direction" in data and data["direction"] not in ("inbound", "outbound", "both"):
-                response.status = 400
-                return {"error": "direction must be one of: inbound, outbound, both"}
-            if "protocol" in data and data["protocol"] not in ("tcp", "udp", "icmp", "any"):
-                response.status = 400
-                return {"error": "protocol must be one of: tcp, udp, icmp, any"}
-            if "src_cidrs" in data:
-                err = _validate_cidrs(data["src_cidrs"])
-                if err:
-                    response.status = 400
-                    return {"error": f"src_cidrs {err}"}
-            if "dst_cidrs" in data:
-                err = _validate_cidrs(data["dst_cidrs"])
-                if err:
-                    response.status = 400
-                    return {"error": f"dst_cidrs {err}"}
-            if "ports" in data:
-                err = _validate_ports(data["ports"])
-                if err:
-                    response.status = 400
-                    return {"error": f"ports {err}"}
+            try:
+                validated = PolicyRuleUpdateRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
 
             updatable = [
                 "name", "description", "action", "priority", "scope",
                 "direction", "domains", "ports", "protocol", "src_cidrs",
                 "dst_cidrs", "users", "groups", "identity_provider", "enabled",
             ]
-            update_fields = {k: v for k, v in data.items() if k in updatable}
+            # Only include fields that were explicitly provided in the request body
+            update_fields = {
+                k: v for k, v in validated.model_dump(exclude_unset=True).items()
+                if k in updatable
+            }
 
             if update_fields:
                 row.update_record(**update_fields)
