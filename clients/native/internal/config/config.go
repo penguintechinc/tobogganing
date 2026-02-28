@@ -66,6 +66,11 @@ type Config struct {
     // Valid values: "wireguard" (default) or "openziti" (requires binary
     // compiled with the "openziti" build tag).
     OverlayType string `mapstructure:"overlay_type" json:"overlay_type"`
+
+    // Attestation settings
+    AttestationEnabled bool   `mapstructure:"attestation_enabled" json:"attestation_enabled"`
+    AttestationTPM     bool   `mapstructure:"attestation_tpm" json:"attestation_tpm"`
+    FleetDMHostUUID    string `mapstructure:"fleetdm_host_uuid" json:"fleetdm_host_uuid"`
 }
 
 // DefaultConfig returns a configuration with default values
@@ -85,6 +90,8 @@ func DefaultConfig() *Config {
         PerfEnabled:          false,
         PerfInterval:         300,
         OverlayType:          "wireguard",
+        AttestationEnabled: true,
+        AttestationTPM:     true,
     }
 }
 
@@ -132,6 +139,9 @@ func LoadFromDefaults(cfg *Config) error {
     viper.SetDefault("perf_enabled", false)
     viper.SetDefault("perf_interval", 300)
     viper.SetDefault("overlay_type", "wireguard")
+    viper.SetDefault("attestation_enabled", true)
+    viper.SetDefault("attestation_tpm", true)
+    viper.SetDefault("fleetdm_host_uuid", "")
 
     // Try to read config file (it's ok if it doesn't exist)
     if err := viper.ReadInConfig(); err != nil {
@@ -170,6 +180,9 @@ func (c *Config) Save(configFile string) error {
     viper.Set("perf_enabled", c.PerfEnabled)
     viper.Set("perf_interval", c.PerfInterval)
     viper.Set("overlay_type", c.OverlayType)
+    viper.Set("attestation_enabled", c.AttestationEnabled)
+    viper.Set("attestation_tpm", c.AttestationTPM)
+    viper.Set("fleetdm_host_uuid", c.FleetDMHostUUID)
 
     // Create directory if it doesn't exist
     configDir := filepath.Dir(configFile)

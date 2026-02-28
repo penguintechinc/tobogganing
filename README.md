@@ -52,6 +52,7 @@
 - **Cross-Cloud Cluster Mesh**: Cilium Cluster Mesh over hub-router WireGuard tunnels for identity-aware east-west networking
 - **Dual Overlay Architecture**: Runtime-selectable WireGuard (L3) + OpenZiti (L7) dark services — same binary, config-driven
 - **XDP/eBPF Edge Protection**: Kernel-level rate limiting, SYN/UDP flood protection, and IP blocklist at NIC speed (build-tag gated)
+- **System Attestation**: Hardware fingerprinting (TPM, cloud IID, DMI) with weighted confidence scoring and drift detection for infrastructure clients
 
 ### High Performance
 - **WireGuard VPN**: Modern, fast, and secure VPN protocol
@@ -391,6 +392,7 @@ This release reworks the overlay abstraction (replacing the broken L3/HandlePack
 | IP Blocklist at XDP | Policy-engine deny rules pushed to BPF map for kernel-level enforcement |
 | AF_XDP Zero-Copy | NIC → userspace bypassing kernel stack for WireGuard proxy fast path |
 | NUMA-Aware Pools | `mmap` + `mbind(MPOL_BIND)` for NIC-local buffer allocation |
+| System Attestation | TPM 2.0 quote, cloud IID, FleetDM cross-ref, composite hash, drift detection |
 
 **Key files shipped:**
 - `services/hub-router/internal/overlay/` — revised provider interface, WG + OpenZiti providers, manager

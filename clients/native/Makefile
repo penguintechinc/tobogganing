@@ -73,6 +73,12 @@ dev:
 	@echo "Building development version..."
 	go build -race $(LDFLAGS) -o $(BUILD_DIR)/$(APP_NAME)-dev ./cmd
 
+# Build with TPM support (requires github.com/google/go-tpm)
+.PHONY: build-with-tpm
+build-with-tpm:
+	@echo "Building with TPM attestation support..."
+	go build -tags tpm $(LDFLAGS) -o $(BUILD_DIR)/$(APP_NAME)-tpm ./cmd
+
 # Run tests
 .PHONY: test
 test:

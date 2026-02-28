@@ -13,6 +13,7 @@ class ClientRegisterRequest(BaseModel):
     type: Literal["native", "docker", "mobile", "client_native", "client_docker"]
     public_key: str
     location: Optional[dict] = None
+    attestation: Optional[dict] = None
 
 
 class ClientUpdateRequest(BaseModel):

@@ -265,6 +265,7 @@ The native Go client in this repo (`clients/native/`) is scoped to **server and 
 - **Automation Friendly** — CLI-driven, scriptable, CI/CD compatible
 - **Embedded Platform Support** — ARM, MIPS, IoT devices
 - **Auto-Configuration** — Certificate rotation and config updates from hub-api
+- **System Attestation** — Hardware fingerprinting with TPM 2.0, cloud instance identity, and drift detection for infrastructure trust verification
 
 #### Installation & Usage
 ```bash
@@ -703,6 +704,38 @@ See [Resource Sizing Guide](./RESOURCE_SIZING.md) for:
 - Scaling guidance (10, 100, 1000 client deployments)
 - Kubernetes resource requests and limits
 - Database sizing recommendations
+
+---
+
+### System Attestation (v0.3.0+)
+
+**Hardware-rooted trust verification** for infrastructure clients (servers, VMs, bare metal):
+
+#### Confidence Scoring
+
+| Signal | Weight | Source |
+|--------|--------|--------|
+| TPM 2.0 PCR Quote | 40 | /dev/tpmrm0 |
+| Cloud Instance Identity | 35 | IMDS (AWS/GCP/Azure) |
+| DMI product_uuid | 10 | /sys/class/dmi/id/ |
+| DMI board_serial | 8 | /sys/class/dmi/id/ |
+| FleetDM Cross-Reference | 7 | FleetDM API (optional) |
+| Network MAC Addresses | 5 | net.Interfaces() |
+| Disk Serials | 4 | /sys/block/*/device/serial |
+| DMI vendor + product | 3 | /sys/class/dmi/id/ |
+| CPU model + count | 3 | /proc/cpuinfo |
+
+**Confidence levels**: high (>=90), medium (>=60), low (>=30), minimal (<30)
+
+#### Features
+- **Composite Hash**: SHA-256 of stable hardware fields for identity binding
+- **TPM Support**: Optional PCR quote with challenge-response nonce (build-tag gated: `-tags tpm`)
+- **Cloud Auto-Detection**: AWS/GCP/Azure instance identity via IMDS
+- **FleetDM Integration**: Optional server-side cross-reference with FleetDM/osquery data
+- **Drift Detection**: Token refresh compares fingerprints; rejects on critical field changes (product_uuid)
+- **JWT Claims**: Attestation confidence embedded in access tokens (`attest_conf`, `attest_method`)
+
+See [Attestation Guide](./ATTESTATION.md) for comprehensive documentation.
 
 ---
 

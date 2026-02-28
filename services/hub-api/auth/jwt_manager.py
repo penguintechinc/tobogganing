@@ -90,6 +90,8 @@ class JWTManager:
         roles: list[str],
         scopes: list[str],
         token_type: str = "access",
+        attestation_confidence: int | None = None,
+        attestation_method: str | None = None,
     ) -> dict[str, str]:
         """
         Generate OIDC-compliant access and refresh token pair (RFC 9068).
@@ -126,6 +128,12 @@ class JWTManager:
             "jti": access_jti,
             "type": "access",
         }
+
+        # Optional attestation claims (from system fingerprint validation)
+        if attestation_confidence is not None:
+            access_payload["attest_conf"] = attestation_confidence
+        if attestation_method is not None:
+            access_payload["attest_method"] = attestation_method
 
         # Refresh token payload — minimal for security
         refresh_payload = {

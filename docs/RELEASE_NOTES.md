@@ -18,6 +18,7 @@ All notable changes to Tobogganing will be documented in this file. New releases
 - **XDP/eBPF Edge Protection**: Kernel-level rate limiting, SYN/UDP flood protection, IP blocklist, AF_XDP zero-copy (build-tag gated: `-tags xdp`)
 - **Default-Deny NetworkPolicy**: Namespace-wide default-deny with explicit allowlists for Helm and Kustomize deployments
 - **Resource Sizing Guide**: Comprehensive CPU/RAM/bandwidth planning documentation
+- **System Attestation**: Hardware fingerprinting with TPM 2.0 quote, cloud instance identity, FleetDM cross-reference, composite hash, and drift detection for infrastructure client trust
 
 ## New Features
 
@@ -59,6 +60,17 @@ All notable changes to Tobogganing will be documented in this file. New releases
 - Prometheus metrics: `tobogganing_xdp_packets_total`, SYN/UDP flood drops, blocklist size
 - Hub-router Makefile: `make build-xdp` target for BPF-enabled builds
 
+### System Attestation (Phase 7)
+- Go attestation collector (`clients/native/internal/attestation/`) with hardware, cloud, and TPM sub-collectors
+- Composite hash (SHA-256 of stable hardware fields) for identity binding
+- Hub-api attestation validator with weighted confidence scoring (max 115 points)
+- TPM 2.0 PCR quote support with challenge-response nonce (build-tag gated)
+- Cloud instance identity auto-detection (AWS, GCP, Azure via IMDS)
+- FleetDM integration for server-side hardware cross-reference
+- Drift detection on token refresh with per-field weighted comparison
+- JWT claims: `attest_conf` (confidence score), `attest_method` (method used)
+- Challenge endpoint: `POST /api/v1/attestation/challenge`
+
 ### Default-Deny NetworkPolicy (Phase 6)
 - Helm template: `networkpolicy-default-deny.yaml`
 - Restructured allowlist with Squawk/WaddlePerf namespace rules
@@ -84,6 +96,7 @@ All notable changes to Tobogganing will be documented in this file. New releases
 - Helm: squawk sub-chart (optional), waddleperf sub-chart (optional)
 - Go (hub-router, client): github.com/openziti/sdk-golang v0.23.44
 - Go (hub-router, XDP build only): github.com/cilium/ebpf, github.com/asavie/xdp
+- Go (client, TPM build only): github.com/google/go-tpm v0.9.3
 
 ---
 

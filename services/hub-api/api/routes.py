@@ -113,6 +113,38 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             response.status = 500
             return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
 
+    # ---- Attestation Challenge ----
+    @action("api/v1/attestation/challenge", method=["POST"])
+    @action.uses("json")
+    async def attestation_challenge():
+        """Issue a nonce for TPM PCR quote freshness verification."""
+        try:
+            import secrets
+            nonce = secrets.token_hex(32)  # 32 bytes = 64 hex chars
+
+            # Store nonce in Redis with 5-minute TTL, keyed by auth header
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer "):
+                response.status = 401
+                return {"error": "Missing authorization"}
+
+            api_key = auth_header[7:]
+            redis_client = jwt_manager.redis_client
+            nonce_key = f"attestation_nonce:{api_key[:16]}"
+            await redis_client.setex(nonce_key, 300, nonce)
+
+            from datetime import datetime, timezone, timedelta
+            expires_at = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+
+            return {
+                "status": "success",
+                "data": {"nonce": nonce, "expires_at": expires_at},
+            }
+        except Exception as e:
+            logger.error("attestation_challenge_failed", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
     @action("api/v1/clients/register", method=["POST"])
     @action.uses("json")
     @require_scope("clients:write")
@@ -150,7 +182,38 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 client.type
             )
 
-            return {
+            # Validate attestation if provided
+            attestation_result = None
+            attestation_data = client_data.get("attestation")
+            if attestation_data:
+                from auth.attestation import AttestationValidator
+                from auth.fleetdm import FleetDMClient
+
+                fleetdm = FleetDMClient()
+                validator = AttestationValidator(
+                    fleetdm_client=fleetdm if fleetdm.enabled else None
+                )
+
+                # Verify TPM nonce if TPM quote present
+                if attestation_data.get("tpm_quote"):
+                    auth_header = request.headers.get("Authorization", "")
+                    if auth_header.startswith("Bearer "):
+                        nonce_key = f"attestation_nonce:{auth_header[7:][:16]}"
+                        redis_client = jwt_manager.redis_client
+                        stored_nonce = await redis_client.get(nonce_key)
+                        if stored_nonce:
+                            await redis_client.delete(nonce_key)
+
+                attestation_result = await validator.validate(attestation_data)
+
+                logger.info(
+                    "client_attestation_validated",
+                    client_id=client.id,
+                    confidence=attestation_result.confidence_score,
+                    level=attestation_result.confidence_level,
+                )
+
+            resp = {
                 "client_id": client.id,
                 "api_key": api_key,
                 "cluster": {
@@ -161,8 +224,18 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "key": key,
                     "cert": cert,
                     "ca": ca
-                }
+                },
             }
+
+            if attestation_result:
+                resp["attestation_confidence"] = {
+                    "score": attestation_result.confidence_score,
+                    "percent": attestation_result.confidence_percent,
+                    "level": attestation_result.confidence_level,
+                    "method": attestation_result.method,
+                }
+
+            return resp
         except Exception as e:
             logger.error(f"Failed to register client: {e}")
             response.status = 500
@@ -578,7 +651,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     @action("api/v1/auth/refresh", method=["POST"])
     @action.uses("json")
     async def refresh_jwt_token():
-        """Refresh JWT access token using refresh token"""
+        """Refresh JWT access token using refresh token."""
         try:
             data = await request.json()
 
@@ -593,6 +666,41 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not new_tokens:
                 response.status = 401
                 return {"error": "Invalid or expired refresh token"}
+
+            # Optional: attestation drift detection on refresh
+            attestation_data = data.get("attestation")
+            if attestation_data:
+                from auth.attestation import AttestationValidator
+
+                validator = AttestationValidator()
+                # TODO: load stored fingerprint from client record
+                result = await validator.validate(attestation_data)
+
+                # Critical field change → reject
+                if result.drift_detected and "product_uuid" in result.drift_fields:
+                    logger.warning(
+                        "attestation_critical_drift",
+                        drift_fields=result.drift_fields,
+                    )
+                    response.status = 403
+                    return {"error": "Attestation drift: critical field changed"}
+
+                # High drift → reject
+                if result.drift_score > 0.6:
+                    logger.warning(
+                        "attestation_high_drift",
+                        drift_score=result.drift_score,
+                    )
+                    response.status = 403
+                    return {"error": "Attestation drift too high, re-registration required"}
+
+                # Moderate drift → allow with warning
+                if result.drift_score > 0.3:
+                    logger.warning(
+                        "attestation_moderate_drift",
+                        drift_score=result.drift_score,
+                        drift_fields=result.drift_fields,
+                    )
 
             return new_tokens
 
