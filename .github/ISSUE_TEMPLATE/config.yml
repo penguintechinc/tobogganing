@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support
+    url: mailto:support@penguintech.io
+    about: Contact Penguin Tech support for help
+  - name: Documentation
+    url: https://www.penguintech.io
+    about: Check the documentation for answers

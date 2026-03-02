@@ -1,0 +1,61 @@
+name: Documentation
+description: Documentation improvement or addition
+labels: ["type:docs", "priority:low"]
+assignees:
+  - self
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Documentation Request
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What Needs Documenting
+      description: What topic or feature needs documentation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current State
+      description: What documentation exists today (if any)?
+
+  - type: textarea
+    id: proposed-changes
+    attributes:
+      label: Proposed Changes
+      description: What should the new or updated documentation include?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component does this relate to?
+      options:
+        - backend
+        - frontend
+        - database
+        - infra
+        - auth
+        - api
+        - ci
+        - docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - low
+        - medium
+        - high
+        - critical
+    validations:
+      required: true

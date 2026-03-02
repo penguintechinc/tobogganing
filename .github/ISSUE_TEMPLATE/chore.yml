@@ -1,0 +1,66 @@
+name: Chore
+description: Maintenance task, dependency update, or refactoring
+labels: ["type:chore", "priority:low"]
+assignees:
+  - self
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Chore / Maintenance Task
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be done?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Rationale
+      description: Why is this task needed?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component is affected?
+      options:
+        - backend
+        - frontend
+        - database
+        - infra
+        - auth
+        - api
+        - ci
+        - docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - low
+        - medium
+        - high
+        - critical
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      value: |
+        - [ ] Task completed
+        - [ ] Tests pass
+        - [ ] Linting passes
+    validations:
+      required: true

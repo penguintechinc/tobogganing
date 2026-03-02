@@ -1,0 +1,82 @@
+name: Security Issue
+description: Report a security vulnerability or concern
+labels: ["type:security", "priority:high"]
+assignees:
+  - self
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Security Issue Report
+
+        **For active vulnerabilities that could be exploited**, please use
+        [private vulnerability reporting](../../security/advisories/new) instead
+        of this public template. Email security@penguintech.io for urgent issues.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Vulnerability Description
+      description: Describe the security issue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical - Active exploit or data exposure
+        - High - Exploitable with significant impact
+        - Medium - Requires specific conditions to exploit
+        - Low - Minor concern or hardening improvement
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      options:
+        - backend
+        - frontend
+        - database
+        - infra
+        - auth
+        - api
+        - ci
+        - docs
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can this vulnerability be demonstrated?
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact Assessment
+      description: What is the potential impact if exploited?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - low
+        - medium
+        - high
+        - critical
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Affected Version
+      placeholder: v0.0.0

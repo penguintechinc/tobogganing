@@ -1,0 +1,97 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+labels: ["type:feature", "priority:medium"]
+assignees:
+  - self
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+        Use the user story format below to describe the feature.
+
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story
+      description: Describe the feature in user story format
+      value: |
+        As a [role],
+        I want [capability],
+        so that [benefit].
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How should this feature work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches did you consider?
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true for this feature to be complete?
+      value: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Tests pass (unit + integration)
+        - [ ] Linting passes
+        - [ ] Security scan passes
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component is affected?
+      options:
+        - backend
+        - frontend
+        - database
+        - infra
+        - auth
+        - api
+        - ci
+        - docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this?
+      options:
+        - low
+        - medium
+        - high
+        - critical
+    validations:
+      required: true
+
+  - type: textarea
+    id: business-value
+    attributes:
+      label: Business Value
+      description: Why is this important for the product?
+
+  - type: checkboxes
+    id: license-tier
+    attributes:
+      label: License Tier
+      description: Which license tiers should have this feature?
+      options:
+        - label: Community (free)
+        - label: Professional
+        - label: Enterprise
