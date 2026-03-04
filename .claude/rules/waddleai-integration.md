@@ -1,0 +1,1 @@
+/home/penguin/code/.claude/rules/waddleai-integration.md
