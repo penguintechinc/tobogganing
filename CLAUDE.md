@@ -54,6 +54,7 @@ This repository may contain `.local.md` variant files that provide project-speci
 - ALL code must pass linting before commit
 - No hardcoded secrets or credentials
 - Input validation mandatory
+- **NEVER ignore pre-existing issues** — if you encounter existing bugs, failing tests, lint errors, TODOs marked as broken, or code that violates standards while working on an unrelated task, **fix them or explicitly flag them to the user**. Do not silently work around them or pretend they are not there. Leaving known issues in place is not acceptable
 
 **Tool Usage:**
 - **NEVER use `sed`, `awk`, `cat`, `head`, `tail`, `echo`, `grep`, `find`, or `rg` via Bash** when a dedicated tool exists — use the dedicated tools instead:
