@@ -137,12 +137,23 @@ project-name/
 - **Patch**: Minor updates, bug fixes, security patches
 - **Build**: Epoch64 timestamp of build time
 
+### ⚠️ Version Increment Rule
+
+**Only increment Major/Minor/Patch when the current version already has a published git tag and/or GitHub release.** If no tag/release exists for the current version yet, update only the build epoch.
+
+**Rationale:** Incrementing a version before the current one ships creates gaps in the published sequence (e.g., `v1.2.1` → `v1.2.4` with no `v1.2.2` or `v1.2.3` ever released). Consumers, changelogs, and package managers see these gaps as missing releases, which is confusing and looks like a mistake.
+
+**Decision flow:**
+1. Check if the current `.version` is already tagged: `git tag --list "$(cat .version | cut -d. -f1-3)*"`
+2. If **no tag exists** → only update the build epoch: `./scripts/version/update-version.sh`
+3. If **a tag already exists** → safe to increment: `./scripts/version/update-version.sh patch|minor|major`
+
 **Update Commands**:
 ```bash
-./scripts/version/update-version.sh          # Increment build timestamp
-./scripts/version/update-version.sh patch    # Increment patch version
-./scripts/version/update-version.sh minor    # Increment minor version
-./scripts/version/update-version.sh major    # Increment major version
+./scripts/version/update-version.sh          # Update build epoch ONLY (use when no tag yet)
+./scripts/version/update-version.sh patch    # Increment patch (only after current version is tagged)
+./scripts/version/update-version.sh minor    # Increment minor (only after current version is tagged)
+./scripts/version/update-version.sh major    # Increment major (only after current version is tagged)
 ```
 
 ## Development Workflow
