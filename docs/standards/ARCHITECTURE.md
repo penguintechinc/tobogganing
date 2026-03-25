@@ -187,7 +187,7 @@ kubectl port-forward --context local-alpha svc/flask-backend 5000:5000 &
 # Login and get a token
 curl -X POST http://localhost:5000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"admin"}'
+  -d '{"email":"admin@localhost.local","password":"admin123"}'
 
 # Use token to get users
 curl -X GET http://localhost:5000/api/v1/users \
@@ -375,13 +375,29 @@ All database drivers are built in via PyDAL. It "just works."
 
 ## 📈 Scaling: Simple Edition
 
-### Vertical Scaling (Make One Container Bigger)
+### Vertical Scaling (Increase a Container's Resources)
+
+Edit the resource limits in your Kustomize overlay or Helm values:
+
 ```bash
-# Give Flask more resources
-docker update --cpus="2" --memory="2g" flask-backend
+# Patch resource limits on a running deployment
+kubectl --context local-alpha patch deployment flask-backend -n myapp \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"flask-backend","resources":{"requests":{"cpu":"500m","memory":"512Mi"},"limits":{"cpu":"2","memory":"2Gi"}}}]}}}}'
 ```
 
-Works for small growth, then you hit a wall.
+Or update your Helm values and redeploy:
+```yaml
+# values-prod.yaml
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+```
+
+Works for small growth — when you need more, add replicas instead.
 
 ### Horizontal Scaling (Add More Pods)
 

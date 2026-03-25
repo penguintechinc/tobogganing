@@ -307,13 +307,13 @@ const handleSubmit = (e) => {
 
 ## 📚 Essentials
 
-**Required dependencies**:
-- `react` 18.2+, `react-dom` - Core framework
-- `react-router-dom` 6.20+ - Page routing
-- `axios` 1.6+ - HTTP requests
-- `@tanstack/react-query` 5.0+ - Server state management
-- `vite` 5.0+ - Build tool (faster than Create React App)
-- `eslint`, `prettier` - Code quality
+**Required dependencies** (pin to exact versions — no `^` or `~`):
+- `react` 18.2.0, `react-dom` 18.2.0 - Core framework
+- `react-router-dom` 6.20.0 - Page routing
+- `axios` 1.6.0 - HTTP requests
+- `@tanstack/react-query` 5.0.0 - Server state management
+- `vite` 5.0.0 - Build tool (faster than Create React App)
+- `eslint` 8.55.0, `prettier` 3.1.0 - Code quality
 
 **Scripts in package.json**:
 ```json

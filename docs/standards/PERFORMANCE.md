@@ -225,6 +225,31 @@ defer cancel()
 result := db.QueryContext(ctx, "SELECT ...")
 ```
 
+## 📊 Test Coverage - Mandatory 90%+
+
+Code coverage is a safeguard against regressions. **All code must maintain 90%+ coverage.** This is enforced in CI/CD — builds fail below this threshold.
+
+```bash
+# Python: enforce 90%+ coverage
+pytest --cov=app --cov-report=html --cov-fail-under=90
+
+# Go: check coverage, fail if below 90%
+go test -cover ./...
+
+# JavaScript: jest with coverage threshold
+# In jest.config.js:
+coverageThreshold: {
+  global: {
+    lines: 90,
+    branches: 90,
+    functions: 90,
+    statements: 90
+  }
+}
+```
+
+**Coverage is not perfection** — 90% coverage does not mean your code is bug-free. It means you've tested the common paths. Some branches (error edge cases, rare conditions) may not be covered. That's fine. But core functionality must be tested.
+
 ## 📊 Monitoring in Production
 
 You can't optimize what you don't measure. Monitor these metrics:

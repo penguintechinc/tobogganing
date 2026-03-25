@@ -137,7 +137,8 @@ def get_db_connection():
     db = DAL(
         db_uri,
         pool_size=pool_size,     # Reuse connections
-        migrate=True,             # Auto-create tables if missing
+        migrate=False,            # Alembic manages schema; PyDAL only queries
+        fake_migrate=False,       # No fake migrations
         check_reserved=['all'],
         lazy_tables=True
     )
@@ -148,8 +149,7 @@ def get_db_connection():
         Field('password', 'password'),
         Field('active', 'boolean', default=True),
         Field('fs_uniquifier', 'string', unique=True),
-        Field('confirmed_at', 'datetime'),
-        migrate=True
+        Field('confirmed_at', 'datetime')
     )
 
     return db
@@ -221,7 +221,7 @@ thread_local = threading.local()
 
 def get_thread_db():
     if not hasattr(thread_local, 'db'):
-        thread_local.db = DAL(db_uri)  # Each thread gets its own
+        thread_local.db = DAL(db_uri, migrate=False, fake_migrate=False)  # Each thread gets its own
     return thread_local.db
 
 def worker():
@@ -314,11 +314,9 @@ print(f"Connecting to: {db_uri}")  # What does it look like?
 
 ### Problem: "Table already exists" error
 
-**Solution:** This is usually harmless. It means the table was created on a previous run.
-```python
-# This is safe - PyDAL won't recreate if it already exists
-db = DAL(db_uri, migrate=True)
-```
+**Solution:** With `migrate=False` (which is required), PyDAL never touches schema—it only queries existing tables. Tables are managed exclusively by Alembic/SQLAlchemy. "Table already exists" errors don't occur from PyDAL because it never issues DDL statements.
+
+If you see this error, it's coming from your schema initialization code (SQLAlchemy), not from PyDAL at runtime.
 
 ### Problem: "Too many connections"
 
@@ -374,7 +372,8 @@ def get_galera_db():
     db = DAL(
         db_uri,
         pool_size=int(os.getenv('DB_POOL_SIZE', '10')),
-        migrate=True,
+        migrate=False,            # Alembic manages schema; PyDAL only queries
+        fake_migrate=False,       # No fake migrations
         check_reserved=['all'],
         lazy_tables=True,
         driver_args={'charset': 'utf8mb4'}  # Galera requirement
@@ -483,6 +482,38 @@ def get_users():
 
 ---
 
+## Alembic Migrations: Never Run Automatically
+
+**`alembic upgrade head` must be run manually — never inside application startup code.**
+
+SQLAlchemy's `Base.metadata.create_all()` is fine at startup (it's idempotent and only creates missing tables). But calling `alembic upgrade head` from within `create_app()` or any startup function is forbidden.
+
+**Why:**
+- Multiple pods starting simultaneously will race to run migrations → deadlocks and partial schema states
+- A failed migration crashes the app and requires manual database recovery
+- Migrations should be observable, reversible operator actions
+
+**Instead, run migrations as a Kubernetes init container or Job before pods start:**
+
+```bash
+# Run migrations before deploying new code
+./scripts/migrate.sh              # upgrade head (default)
+./scripts/migrate.sh current      # check current revision
+./scripts/migrate.sh downgrade -1 # roll back one step
+```
+
+**In your startup code:**
+```python
+# ✅ OK at startup — idempotent, only creates missing tables
+init_sqlalchemy_tables(app)  # calls Base.metadata.create_all()
+init_pydal(app)              # PyDAL connection only, migrate=False
+
+# ❌ NEVER in startup — causes race conditions and hard-to-recover failures
+run_alembic_migrations(app)  # DO NOT DO THIS
+```
+
+---
+
 ## Per-Service Database Accounts (Mandatory)
 
 Every microservice and container **must have its own database account** with fine-grained permissions. You're not creating separate databases—all services share one database, but each gets separate credentials scoped to only the tables and operations it needs.
@@ -550,7 +581,7 @@ GRANT ALL ON app_db.* TO 'migrate-admin';
 
 ### Each Container Gets Its Own Credentials
 
-In your `docker-compose.yml` or Kubernetes manifests, pass different credentials to each service:
+In your Kubernetes manifests (Secrets or ConfigMaps), pass different credentials to each service:
 
 ```bash
 # Backend API container
@@ -611,15 +642,29 @@ CACHE_PASS=<secret-analytics>
 
 ---
 
+## Future: penguin-dal (Next Major Version)
+
+At a service's **next major version bump**, migrate from the PyDAL + SQLAlchemy dual-library pattern to `penguin-dal`:
+
+```bash
+pip install penguin-dal
+```
+
+`penguin-dal` is a PyDAL-style API built on top of SQLAlchemy that eliminates the need to define schema twice. It supports both runtime queries and Alembic migrations from a single table definition, plus native async support.
+
+**When to migrate:** Only at the next major version bump (e.g., `1.x → 2.0`). Do not force a mid-release migration.
+
+---
+
 ## Summary: Database Recipe
 
 1. **Setup Once:** Use SQLAlchemy to define your schema
-2. **Query Always:** Use PyDAL for all runtime operations
+2. **Query Always:** Use PyDAL for all runtime operations (with `migrate=False`)
 3. **Use Environment Variables:** Never hardcode database settings
 4. **Wait for Database:** Implement retry logic on startup
 5. **Thread Safety:** Each thread gets its own connection
 6. **Pool Your Connections:** Formula is (2 × CPU cores) + spindles
-7. **Migrations First:** Always apply migrations before deploying new code
+7. **Migrations First:** Always apply migrations before deploying new code (manually, not in startup)
 8. **Per-Service Accounts:** Each microservice gets its own database credentials with minimal required permissions
 
 **Your data is safe, fast, and ready to scale!** 🚀

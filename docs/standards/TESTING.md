@@ -45,7 +45,7 @@ Each layer validates different aspects—unit tests catch code bugs, integration
 
 **Requirements**:
 - MUST pass before committing
-- Uses local Docker containers
+- Uses local Kubernetes (Kustomize on MicroK8s)
 - Fast feedback loop (<2 min)
 
 ### Phase 2: CI/CD Pipeline (GitHub Actions)
@@ -138,6 +138,25 @@ kubectl exec -n myapp deploy/flask-backend -- pytest tests/live/
 | Phase 3: Deployment | Post-deploy | K8s cluster | 5-30 min | Live integration, E2E |
 
 ## Testing Requirements
+
+## ⚠️ Clean the Cluster Before Smoke/E2E Tests
+
+**Always delete the existing deployment before running smoke tests or E2E tests** — unless you explicitly need to test against existing state.
+
+**Why:** Stale deployments hide bugs. Old database state, lingering pods from previous runs, and leftover resources can mask real failures. A fresh deployment validates that your changes actually work in isolation.
+
+```bash
+# Delete existing alpha deployment (always do this before smoke tests)
+kubectl delete --context local-alpha -k k8s/kustomize/overlays/alpha
+
+# Wait for pods to terminate
+kubectl get pods --context local-alpha -n {product} --watch
+
+# Then deploy fresh
+kubectl apply --context local-alpha -k k8s/kustomize/overlays/alpha
+```
+
+**Exception:** Skip the cleanup only when you explicitly need to test upgrade behavior or persistence across deployments.
 
 ### Smoke Tests (MANDATORY): Your Safety Net
 
@@ -435,6 +454,7 @@ fi
 - Make scripts executable: `chmod +x tests/smoketests/*.sh`
 - Don't require network—use test databases in Docker
 - Tests should be deterministic (pass every time, not randomly flaky)
+- Never ignore pre-existing failures — if a test was already failing before your changes, fix it. "It was already broken" is never an acceptable reason to ship broken code.
 
 ## Unit Tests: The Foundation
 
@@ -450,7 +470,7 @@ Unit tests are the cheapest insurance you can buy. They run instantly and catch 
 3. No external dependencies
 4. Each test is independent
 5. Tests run in milliseconds
-6. >80% code coverage minimum
+6. 90%+ code coverage mandatory
 
 **Quick Start**:
 
@@ -786,17 +806,25 @@ make test-performance
 | "Random failures" | Test is flaky—make it more deterministic |
 | "Works locally, fails in CI" | Different environment? Check env vars |
 
-## Coverage Goals: What's "Good Enough"?
+## Coverage Goals: 90% Is the Minimum
 
-**Target**: 80% code coverage minimum
+**Target**: 90%+ code coverage mandatory and enforced by CI.
 
-Why 80% and not 100%?
-- 100% coverage takes forever and has diminishing returns
-- 80% gets most bugs, especially in business logic
-- Some code is hard to test (error recovery, rare edge cases)
-- Focus on testing what matters: user workflows and business rules
+Code coverage of 90%+ is mandatory and enforced by CI. Focus on testing business logic, user workflows, and error handling.
 
-**Check coverage**:
+**Enforce coverage** (fail if below 90%):
+```bash
+# Python — CI fails if coverage drops below 90%
+pytest tests/unit/ --cov=app --cov-fail-under=90
+
+# JavaScript — configure in jest.config.js
+# "coverageThreshold": { "global": { "lines": 90, "branches": 90, "functions": 90 } }
+
+# Go — check output manually; CI rejects <90%
+go test ./... -cover  # look for "coverage: XX.X% of statements"
+```
+
+**View coverage details**:
 ```bash
 # Python
 pytest tests/unit/ --cov=app --cov-report=html

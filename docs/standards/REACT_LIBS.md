@@ -23,6 +23,60 @@ yarn add @penguintechinc/react-libs
 
 ---
 
+## TailwindCSS v4 Integration Issues
+
+When using `@penguintechinc/react-libs` components with TailwindCSS v4, three critical gotchas commonly appear together as a single "blank page" or broken UI. Address them separately:
+
+### 1. Tailwind v4 Does Not Scan node_modules by Default
+
+The shared component library's Tailwind classes may be purged from your build if not explicitly included in your Tailwind configuration.
+
+**Fix**: Add a `@source` directive in your main CSS file to include the react-libs package:
+
+```css
+/* src/index.css or src/globals.css */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* REQUIRED: Tell Tailwind to scan node_modules/@penguintechinc/react-libs for classes */
+@source '../node_modules/@penguintechinc/react-libs';
+```
+
+Without this directive, all Tailwind classes used only inside the react-libs components will be purged from the build, causing the login page and other shared components to render unstyled.
+
+### 2. Opacity Syntax Changed in v4
+
+Tailwind v4 removed the `bg-opacity-*`, `text-opacity-*`, and similar opacity utilities. Use the slash syntax instead.
+
+**❌ Tailwind v3 (broken in v4):**
+```html
+<div class="bg-gray-900 bg-opacity-75 text-white">Content</div>
+```
+
+**✅ Tailwind v4:**
+```html
+<div class="bg-gray-900/75 text-white">Content</div>
+```
+
+This applies to all color utilities: `bg-`, `text-`, `border-`, `ring-`, etc.
+
+### 3. Modal/Overlay Stacking Context
+
+Fixed-position overlays (`fixed inset-0`) can paint above sibling modal panels that lack a stacking context. Add `relative z-10` (or appropriate z-index) to the modal content panel so it stacks above the backdrop.
+
+**Example fix for FormModalBuilder overlays:**
+
+```tsx
+<div className="fixed inset-0 bg-black/50">  {/* Backdrop */}
+  <div className="relative z-10">             {/* Modal content — required z-index */}
+    <FormModalBuilder {...props} />
+  </div>
+</div>
+```
+
+---
+
 ## LoginPageBuilder
 
 A comprehensive login page component with built-in security features.

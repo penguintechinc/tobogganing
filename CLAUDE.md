@@ -46,6 +46,37 @@ This repository may contain `.local.md` variant files that provide project-speci
 
 ---
 
+## Setup Script
+
+This repo includes `setup.sh` which configures the local Claude Code environment:
+
+```bash
+.claude/setup.sh              # Full setup (statusline + mem0 + settings)
+.claude/setup.sh statusline   # Statusline only
+.claude/setup.sh mem0         # mem0 + Qdrant only
+.claude/setup.sh settings     # Settings update only
+```
+
+At session start, verify the environment is configured. If `~/.claude/statusline-command.sh` or `~/.claude/mcp/mem0/mcp-server.py` does not exist, run `setup.sh` from this repo.
+
+### Status Line
+
+The setup script symlinks `statusline-command.sh` to `~/.claude/` and configures `settings.json`. The statusline displays model, effort, repo, branch, context usage, cost, and duration.
+
+### mem0 (Local Persistent Memory)
+
+The setup script deploys a local Qdrant container for vector storage and configures a mem0 MCP server using Ollama for embeddings (`nomic-embed-text`) and LLM (`llama3.2:3b`). All memory operations are fully local — no external API calls.
+
+**Manage Qdrant:**
+```bash
+docker compose -f ~/.claude/mcp/mem0/docker-compose.yml up -d    # start
+docker compose -f ~/.claude/mcp/mem0/docker-compose.yml down      # stop
+```
+
+**Qdrant dashboard:** http://localhost:6333/dashboard
+
+---
+
 ## ⚠️ CRITICAL RULES - READ FIRST
 
 **Git Rules:**
@@ -294,7 +325,7 @@ Comprehensive development standards are organized by category in `docs/standards
 
 ## CI/CD & Workflows
 
-**Build Tags**: `beta-<epoch64>` (main) | `alpha-<epoch64>` (other) | `vX.X.X-beta` (version release) | `vX.X.X` (tagged release)
+**Build Tags**: `gamma-<epoch64>` (main, pre-release) | `beta-<epoch64>` (release branches) | `alpha-<epoch64>` (other) | `vX.X.X-gamma` (main version) | `vX.X.X-beta` (release version) | `vX.X.X` (tagged release)
 
 **Version**: `.version` file in root, semver format, monitored by all workflows
 

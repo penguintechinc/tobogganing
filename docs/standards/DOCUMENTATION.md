@@ -133,13 +133,6 @@ Create `docs/RELEASE_NOTES.md` and add new releases to the top:
 | One giant wall of text | Short sections with headings |
 | Typos and bad grammar | Proofread (spell-check helps!) |
 
-## 📚 CLAUDE.md Management
-
-- **Max 35,000 characters**
-- **Stays high-level:** Point to detailed docs, don't repeat them
-- **Focus:** Context, workflow rules, architecture decisions
-- **Everything else:** Lives in docs/ with proper structure
-
 ---
 
 **Golden Rule:** If you wouldn't want to read it, your team won't either. Make docs so clear they're almost impossible to misunderstand.

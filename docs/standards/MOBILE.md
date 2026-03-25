@@ -34,7 +34,7 @@ Start: "Does this project need a mobile app?"
 
 | Component | Choice |
 |-----------|--------|
-| Framework | Flutter (latest stable) |
+| Framework | Flutter (pin to specific stable release, e.g., 3.27.x; never use floating "latest stable") |
 | Language | Dart |
 | State management | `provider` or `riverpod` (pick one per project) |
 | HTTP client | `dio` |
@@ -42,6 +42,30 @@ Start: "Does this project need a mobile app?"
 | Local auth | `local_auth` (biometrics) |
 | Navigation | `go_router` or Navigator 2.0 |
 | Linting | `flutter_lints` + `flutter analyze` |
+
+**Dependency Version Pinning:**
+All dependencies in `pubspec.yaml` must use **exact versions** — no `^` (caret) or `~` (tilde) constraints:
+
+```yaml
+# ✅ CORRECT — exact versions pinned
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: 5.3.0
+  provider: 6.0.0
+  flutter_secure_storage: 9.0.0
+
+dev_dependencies:
+  flutter_lints: 4.0.0
+  flutter_test:
+    sdk: flutter
+
+# ❌ WRONG — floating version constraints
+# dio: ^5.3.0
+# provider: ~6.0.0
+```
+
+**Exception:** In alpha/beta environments only, `penguintechinc` packages may use flexible version constraints when actively testing unreleased builds. Pin to specific versions for production.
 
 ## 📐 Platform & Device Support
 
@@ -226,6 +250,16 @@ class NativeBridge {
 | Widget tests | UI components render correctly | `flutter test` |
 | Integration tests | Critical user flows end-to-end | `flutter test integration_test/` |
 | Platform tests | Native modules (if any) | XCTest (iOS), JUnit (Android) |
+
+**Code coverage is mandatory: 90%+ required.** All code must meet or exceed 90% line, branch, function, and statement coverage. Enforce via CI/CD pipeline — builds must fail below this threshold.
+
+```bash
+# Generate coverage report
+flutter test --coverage
+
+# Verify coverage meets 90% threshold
+lcov --summary coverage/lcov.info
+```
 
 ### Running Tests
 
