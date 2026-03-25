@@ -11,8 +11,8 @@ on:
       - '.version'
 
 env:
-  GO_VERSION: '1.23'
-  PYTHON_VERSION: '3.12'
+  GO_VERSION: '1.24'
+  PYTHON_VERSION: '3.13'
   NODE_VERSION: '18'
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       with:
         fetch-depth: 2
 
@@ -70,32 +70,32 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-    - name: Verify Manager Service (Python 3.12)
+    - name: Verify Manager Service (Python 3.13)
       run: |
         echo "Manager Service Version Check"
         [ -f "manager/app.py" ] && echo "  ✓ Manager app.py found"
         [ -f "manager/requirements.txt" ] && echo "  ✓ Manager requirements.txt found"
 
-    - name: Verify Headend Server (Go 1.23)
+    - name: Verify Headend Server (Go 1.24)
       run: |
         echo "Headend Server Version Check"
         [ -f "headend/go.mod" ] && echo "  ✓ Headend go.mod found"
         [ -d "headend/proxy" ] && echo "  ✓ Headend proxy package found"
 
-    - name: Verify Docker Client (Go 1.23)
+    - name: Verify Docker Client (Go 1.24)
       run: |
         echo "Docker Client Version Check"
         [ -f "clients/docker/Dockerfile" ] && echo "  ✓ Docker Client Dockerfile found"
 
-    - name: Verify Native Clients (Go 1.23)
+    - name: Verify Native Clients (Go 1.24)
       run: |
         echo "Native Clients Version Check"
         [ -f "clients/native/go.mod" ] && echo "  ✓ Native Client go.mod found"
         [ -d "clients/native/cmd" ] && echo "  ✓ Native Client cmd directory found"
 
-    - name: Verify K8s CNI Plugin (Go 1.23)
+    - name: Verify K8s CNI Plugin (Go 1.24)
       run: |
         echo "K8s CNI Plugin Version Check"
         [ -f "k8s-cni/go.mod" ] && echo "  ✓ K8s CNI go.mod found"
@@ -113,28 +113,28 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
     - name: Set up Python for bandit
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
     - name: Set up Go for gosec
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
       with:
         go-version: ${{ env.GO_VERSION }}
 
     - name: Run bandit (Python)
       run: |
         pip install bandit[toml]
-        bandit -r manager --format json --output bandit-results.json || true
+        bandit -r services/hub-api --format json --output bandit-results.json || true
       continue-on-error: true
 
     - name: Run gosec (Go)
       uses: securego/gosec@master
       with:
-        args: '-no-fail -fmt json -out gosec-results.json ./headend ./clients/native ./k8s-cni'
+        args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router ./clients/native ./k8s-cni'
       continue-on-error: true
 
     - name: Report security scan summary

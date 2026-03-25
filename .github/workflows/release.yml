@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_MANAGER: ${{ github.repository }}/manager
-  IMAGE_NAME_HEADEND: ${{ github.repository }}/headend
+  IMAGE_NAME_HUB_API: ${{ github.repository }}/hub-api
+  IMAGE_NAME_HUB_ROUTER: ${{ github.repository }}/hub-router
   IMAGE_NAME_CLIENT: ${{ github.repository }}/client
 
 jobs:
@@ -18,36 +18,36 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python 3.12
+    - name: Set up Python 3.13
       uses: actions/setup-python@v4
       with:
-        python-version: 3.12
+        python-version: 3.13
     
-    - name: Set up Go 1.23
+    - name: Set up Go 1.24
       uses: actions/setup-go@v4
       with:
-        go-version: 1.23
+        go-version: 1.24
     
     - name: Install Python dependencies
       run: |
-        cd manager
+        cd services/hub-api
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-asyncio
     
     - name: Install Go dependencies
       run: |
-        cd headend && go mod download
+        cd services/hub-router && go mod download
         cd ../clients/native && go mod download
     
     - name: Run Python tests
       run: |
-        cd manager
+        cd services/hub-api
         python -m pytest tests/ -v || exit 0
     
     - name: Run Go tests (headend)
       run: |
-        cd headend
+        cd services/hub-router
         go test -v ./... || exit 0
     
     - name: Run Go tests (client)
@@ -69,16 +69,16 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
     
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
     
     - name: Log in to Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -108,7 +108,7 @@ jobs:
       if: matrix.component == 'manager'
       uses: docker/build-push-action@v5
       with:
-        context: ./manager
+        context: ./services/hub-api
         platforms: linux/amd64,linux/arm64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
@@ -123,7 +123,7 @@ jobs:
       if: matrix.component == 'headend'
       uses: docker/build-push-action@v5
       with:
-        context: ./headend
+        context: ./services/hub-router
         platforms: linux/amd64,linux/arm64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
@@ -186,8 +186,8 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: 1.23
-    
+        go-version: 1.24
+
     - name: Read version from .version file
       id: version
       shell: bash
@@ -387,7 +387,7 @@ version: '3.8'
 services:
   # Redis for caching and session management
   redis:
-    image: redis:7-alpine
+    image: redis:7-bookworm
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -646,7 +646,9 @@ EOF
         component: [manager, headend, client]
     steps:
     - name: Run Trivy vulnerability scanner on release images
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
+        with:
+          trivy-version: 'v0.69.3'
       with:
         image-ref: ${{ env.REGISTRY }}/${{ env[format('IMAGE_NAME_{0}', upper(matrix.component))] }}:${{ github.ref_name }}
         format: 'sarif'

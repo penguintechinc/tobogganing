@@ -53,7 +53,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -89,7 +89,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -195,7 +195,7 @@ jobs:
     
     - name: Upload Android APK artifact (Debug)
       if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: android-apk-debug
         path: clients/mobile/android/app/build/outputs/apk/debug/*.apk
@@ -203,7 +203,7 @@ jobs:
     
     - name: Upload Android AAB artifact (Release)
       if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: android-aab-release
         path: clients/mobile/android/app/build/outputs/bundle/release/*.aab
@@ -228,7 +228,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -365,7 +365,7 @@ jobs:
     
     - name: Upload iOS Debug artifact
       if: ${{ github.event.inputs.build_type != 'production' && github.event_name != 'release' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: ios-ipa-debug
         path: clients/mobile/ios/build/*.ipa
@@ -373,7 +373,7 @@ jobs:
     
     - name: Upload iOS Release artifact
       if: ${{ github.event.inputs.build_type == 'production' || github.event_name == 'release' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: ios-ipa-release
         path: clients/mobile/ios/build/*.ipa
@@ -406,13 +406,13 @@ jobs:
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
     
     - name: Download Android artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: android-aab-release
         path: ./mobile-artifacts/android/
     
     - name: Download iOS artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: ios-ipa-release
         path: ./mobile-artifacts/ios/
