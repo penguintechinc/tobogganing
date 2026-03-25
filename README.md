@@ -44,8 +44,15 @@
 - **Never Trust, Always Verify**: Every connection authenticated and authorized
 - **Certificate Management**: Automated certificate lifecycle management
 - **Multi-Factor Authentication**: Support for various authentication methods
-- **Advanced Firewall System**: Domain, IP, protocol, and port-based access control
+- **Unified Policy Engine**: Single policy schema enforced across WireGuard clients AND Kubernetes services via Cilium CRDs
+- **gRPC Policy Streaming**: Sub-second policy push via Redis pub/sub fanout to all connected hub-routers
 - **Real-time Access Testing**: Test access rules before deployment
+- **OIDC-Compliant Authorization**: Scope-based access control per RFC 9068 — `resource:action` model with wildcard support
+- **SPIFFE/SPIRE Workload Identity**: Hardware-rooted service authentication via TPM DevID or cloud hypervisor attestation
+- **Cross-Cloud Cluster Mesh**: Cilium Cluster Mesh over hub-router WireGuard tunnels for identity-aware east-west networking
+- **Dual Overlay Architecture**: Runtime-selectable WireGuard (L3) + OpenZiti (L7) dark services — same binary, config-driven
+- **XDP/eBPF Edge Protection**: Kernel-level rate limiting, SYN/UDP flood protection, and IP blocklist at NIC speed (build-tag gated)
+- **System Attestation**: Hardware fingerprinting (TPM, cloud IID, DMI) with weighted confidence scoring and drift detection for infrastructure clients
 
 ### High Performance
 - **WireGuard VPN**: Modern, fast, and secure VPN protocol
@@ -54,6 +61,8 @@
 - **Optimized Protocols**: Support for HTTP/HTTPS, TCP, and UDP traffic
 - **Dynamic Port Configuration**: Admin-configurable proxy listening ports
 - **PyDAL Database**: MySQL/PostgreSQL/SQLite with read replica support
+- **AF_XDP Zero-Copy Sockets**: NIC-to-userspace packet delivery bypassing the kernel network stack
+- **NUMA-Aware Memory Pools**: Buffer allocation pinned to NIC-local NUMA nodes for optimal latency
 
 ### Enterprise Ready
 - **Multi-Platform**: Native clients for Mac, Windows, and Linux with system tray integration
@@ -62,7 +71,9 @@
 - **Traffic Mirroring**: Suricata IDS/IPS integration (VXLAN/GRE/ERSPAN)
 - **Compliance**: Syslog audit logging and compliance reporting
 - **High Availability**: Multi-datacenter orchestration with failover
-- **VRF & OSPF Support**: Enterprise network segmentation with FRR integration
+- **VRF + iBGP/OSPF Underlay**: Enterprise network segmentation with FRR, iBGP AS 65001 inter-site routing
+- **Cilium WireGuard Encryption**: Node-to-node WireGuard encryption managed by Cilium CNI with L7 policy enforcement
+- **Zeek Network Analysis**: Deep packet inspection alongside Suricata IDS/IPS via VXLAN mirror tap
 - **Database Backup System**: Local and S3-compatible storage with encryption
 
 ### Advanced Management
@@ -82,11 +93,13 @@
 
 ## 🏗️ Architecture
 
-SASEWaddle implements a comprehensive SASE architecture with three main components:
+![Tobogganing Concept Diagram](concept-diagram.png)
+
+Tobogganing implements a comprehensive SASE architecture with three main components:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           SASEWADDLE ARCHITECTURE                        │
+│                        TOBOGGANING SASE ARCHITECTURE                     │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │   ┌──────────────┐        ┌──────────────┐        ┌──────────────┐    │
@@ -94,7 +107,7 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 │   │              │        │   SERVER     │        │   SERVICE    │    │
 │   │ • Native GUI │◄──────►│ • WireGuard  │◄──────►│ • Web Portal │    │
 │   │ • Docker     │        │ • Go Proxy   │        │ • REST API   │    │
-│   │ • Mobile     │        │ • Firewall   │        │ • PyDAL DB   │    │
+│   │ • Mobile     │        │ • PolicyEng. │        │ • PyDAL DB   │    │
 │   │ • Embedded   │        │ • IDS/IPS    │        │ • Metrics    │    │
 │   └──────────────┘        └──────────────┘        └──────────────┘    │
 │         ▲                        ▲                        ▲            │
@@ -102,32 +115,40 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 │   ┌─────▼──────────────────────▼────────────────────────▼─────┐      │
 │   │               SUPPORTING INFRASTRUCTURE                     │      │
 │   │  • Redis Cache  • MySQL/PostgreSQL  • Prometheus/Grafana   │      │
-│   │  • Suricata IDS • FRR (VRF/OSPF)   • Syslog Server        │      │
+│   │  • Suricata IDS • Zeek Analysis    • Syslog Server        │      │
 │   └─────────────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Manager Service (Python 3.12)
+### Manager Service / Hub-API (Python 3.13)
 - **Web Management Portal**: py4web-based interface with role-based access control
 - **Certificate Authority**: Automated X.509 certificate generation and lifecycle management
 - **Database Backend**: PyDAL with MySQL/PostgreSQL/SQLite and read replica support
 - **API Gateway**: RESTful API for client registration and configuration distribution
 - **Analytics Engine**: Real-time metrics collection and aggregation
 - **Backup System**: Local and S3-compatible storage with encryption
+- **Built-in OIDC Provider**: Discovery, JWKS, token exchange, and userinfo endpoints — hub-api acts as IdP
+- **Identity Bridge**: SPIFFE ↔ OIDC bidirectional mapping with convention-based fallback
+- **Workload Identity**: Priority-based provider chain (EKS Pod Identity / GCP WI / Azure WI → SPIRE → K8s SA)
+- **Multi-Tenant Isolation**: Hard tenant boundary in DB, JWT, and API; Global → Tenant → Team → Resource scope narrowing
 
-### Headend Server (Go 1.23)
+### Headend Server / Hub-Router (Go 1.24)
 - **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
 - **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
-- **Traffic Security**: Firewall rules with domain/IP/protocol/port filtering
+- **Traffic Security**: Unified policy engine — 7-dimension rule matching (domains, ports, CIDRs, users, groups, protocols, overlay scope)
 - **IDS/IPS Integration**: Traffic mirroring to Suricata via VXLAN/GRE/ERSPAN
-- **Authentication**: JWT validation and external IdP integration (SAML2/OAuth2)
+- **Authentication**: JWT validation with scope-based authorization (RFC 9068)
 - **Network Routing**: VRF and OSPF support through FRR integration
+- **Identity-Aware Middleware**: Tenant and scope validation on every inbound request
+- **Cross-Cloud Mesh Bridge**: WireGuard site-to-site tunnels carrying Cilium Cluster Mesh API traffic
+- **Dual Overlay**: L3 WireGuard kernel tunnel + L7 OpenZiti dark service listener, config-driven selection
+- **XDP/eBPF Protection**: Kernel-level packet filtering, rate limiting, and blocklist enforcement
 
 ### Client Applications
-- **Native Desktop**: Go-based clients for Windows, macOS, and Linux with system tray
+- **End-User Clients** (desktop, mobile): Migrated to [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — Flutter (iOS/Android) + Go (desktop), unified modular codebase
+- **Server/Infrastructure Client** (this repo): Native Go client for connecting hardware, VMs, bare metal servers, and embedded devices to the cluster
 - **Docker Container**: Containerized client for Kubernetes and Docker deployments
-- **Mobile Apps**: React Native applications for iOS and Android
-- **Embedded Support**: Lightweight clients for ARM, MIPS, and IoT devices
+- **Dual-Mode Overlay**: WireGuard + OpenZiti simultaneously — WG for general traffic, Ziti for sensitive dark services
 - **Auto-Configuration**: Automatic certificate rotation and configuration updates
 
 ## 🚀 Quick Start
@@ -136,8 +157,8 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-org/sasewaddle.git
-   cd sasewaddle/deploy/docker-compose
+   git clone https://github.com/penguintechinc/tobogganing.git
+   cd tobogganing/deploy/docker-compose
    ```
 
 2. **Configure environment**:
@@ -155,84 +176,62 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
    - Manager Web UI: http://localhost:8000
    - API Documentation: http://localhost:8000/api/docs
 
-### Native Client Installation
+### Server/Infrastructure Client
 
-SASEWaddle provides two types of client applications optimized for different use cases:
-
-#### 🖼️ **Desktop GUI Clients** (Recommended for End Users)
-**Full system tray integration with one-click connect/disconnect**
+The native Go client in this repo (`clients/native/`) connects **hardware, VMs, bare metal servers, and embedded/IoT devices** to the Tobogganing cluster. For end-user desktop and mobile clients, see [penguintechinc/penguin](https://github.com/penguintechinc/penguin).
 
 ```bash
-# Quick install with GUI support
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+# Quick install (headless — servers, VMs, embedded)
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-headless.sh | bash
 
-# Manual download
-# macOS (Universal - Intel + Apple Silicon)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
+# Manual download by platform
+# Linux AMD64 (servers, VMs)
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o tobogganing-client
 
-# Linux (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
+# Linux ARM64 (ARM servers, Raspberry Pi 4/5)
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-arm64 -o tobogganing-client
 
-# Windows (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64.exe -o sasewaddle-client.exe
+# Linux ARMv7 (Raspberry Pi, embedded)
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-armv7 -o tobogganing-client
+
+# Linux MIPS/MIPSLE (routers, IoT)
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-mips -o tobogganing-client
 ```
 
-**GUI Features:**
-- ✅ System tray icon with real-time status
-- ✅ Connect/disconnect with single click  
-- ✅ Connection statistics and monitoring
-- ✅ Automatic configuration updates
-- ✅ Settings and about dialogs
-- ✅ Cross-platform native experience
-
-#### 🖥️ **Headless Clients** (For Servers & Automation)
-**CLI-only for Docker containers, servers, and embedded systems**
-
-```bash
-# Quick install headless version
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
-
-# Manual download - add "-headless" to any platform name
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
-```
-
-**Headless Features:**
-- ✅ Command-line interface only
-- ✅ Perfect for automation and scripts
-- ✅ Docker container friendly
-- ✅ Embedded system support (ARM, MIPS)
-- ✅ Smaller binary size
-- ✅ No GUI dependencies
+**Features:**
+- Daemon mode for unattended server operation
+- Dual-mode overlay (WireGuard L3 + OpenZiti L7)
+- Systemd service integration
+- Docker/container-friendly (no GUI dependencies)
+- ARM, MIPS, and embedded platform support
+- Automatic certificate rotation and config updates
 
 #### Configuration & Usage
 
 ```bash
-# Initialize client (both GUI and headless)
-./sasewaddle-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
+# Initialize client
+./tobogganing-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
 
-# GUI Mode - Start with system tray
-./sasewaddle-client gui
-
-# Headless Mode - Connect as daemon
-./sasewaddle-client connect --daemon
+# Connect as daemon (servers, VMs)
+./tobogganing-client connect --daemon
 
 # Check connection status
-./sasewaddle-client status
+./tobogganing-client status
 ```
 
 ## 📖 Documentation
 
-- **[Installation Guide](https://docs.sasewaddle.com/installation)** - Get up and running quickly
-- **[Architecture Guide](https://docs.sasewaddle.com/architecture)** - Understand the system design
-- **[Deployment Guide](https://docs.sasewaddle.com/deployment)** - Production deployment instructions
-- **[API Reference](https://docs.sasewaddle.com/api)** - Complete API documentation
-- **[Use Cases](https://docs.sasewaddle.com/use-cases)** - Real-world examples and configurations
+- **[Installation Guide](https://docs.tobogganing.io/installation)** - Get up and running quickly
+- **[Architecture Guide](https://docs.tobogganing.io/architecture)** - Understand the system design
+- **[Deployment Guide](https://docs.tobogganing.io/deployment)** - Production deployment instructions
+- **[API Reference](https://docs.tobogganing.io/api)** - Complete API documentation
+- **[Use Cases](https://docs.tobogganing.io/use-cases)** - Real-world examples and configurations
 
 ## 🛠️ Development
 
 ### Prerequisites
-- Go 1.23+ (for headend and client)
-- Python 3.12+ (for manager)
+- Go 1.24+ (for headend and client)
+- Python 3.13+ (for manager)
 - Node.js 18+ (for website)
 - Docker (for containerized development)
 
@@ -240,8 +239,8 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/sasewaddle.git
-cd sasewaddle
+git clone https://github.com/penguintechinc/tobogganing.git
+cd tobogganing
 
 # Quick build all React applications + screenshots
 ./scripts/build-apps.sh
@@ -343,7 +342,7 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 
 Security is our top priority. We follow responsible disclosure practices:
 
-- Report security issues to: security@sasewaddle.com
+- Report security issues to: security@penguintech.io
 - See our [Security Policy](SECURITY.md) for details
 - Regular security audits and updates
 
@@ -377,6 +376,90 @@ See [LICENSE.md](docs/LICENSE.md) for complete licensing details.
 
 ---
 
+## 🆕 What's New in v0.3.0 — Overlay Rework + XDP Edge Protection
+
+This release reworks the overlay abstraction (replacing the broken L3/HandlePacket model with correct L7 semantics), adds dual-mode WireGuard+OpenZiti for clients, and introduces XDP/eBPF kernel-level edge protection.
+
+| Feature | Description |
+|---------|-------------|
+| Revised Overlay Interface | `OverlayProvider` with `Listener() net.Listener` for L7 overlays, `nil` for L3 (WireGuard) |
+| Config-Driven Selection | Same binary, runtime switch via `overlay.type` — no build tags for overlay |
+| OpenZiti Dark Services | Hub-router accepts OpenZiti connections via `edge.Listener`, JWT+HOST handshake |
+| Dual-Mode Client | WireGuard (L3 kernel) + OpenZiti (L7 userspace) simultaneously, default `"dual"` |
+| OverlayScope Policy Dim. | 7th policy dimension — rules can target `wireguard`, `openziti`, or `both` |
+| XDP Rate Limiting | Per-source-IP token bucket at NIC level (build-tag gated: `-tags xdp`) |
+| SYN/UDP Flood Protection | Protocol-aware rate limiting in eBPF — drops floods before they reach Go |
+| IP Blocklist at XDP | Policy-engine deny rules pushed to BPF map for kernel-level enforcement |
+| AF_XDP Zero-Copy | NIC → userspace bypassing kernel stack for WireGuard proxy fast path |
+| NUMA-Aware Pools | `mmap` + `mbind(MPOL_BIND)` for NIC-local buffer allocation |
+| System Attestation | TPM 2.0 quote, cloud IID, FleetDM cross-ref, composite hash, drift detection |
+
+**Key files shipped:**
+- `services/hub-router/internal/overlay/` — revised provider interface, WG + OpenZiti providers, manager
+- `services/hub-router/internal/xdp/` — XDP loader, AF_XDP sockets, NUMA pools, blocklist sync
+- `services/hub-router/bpf/xdp_ratelimit.c` — eBPF program with 3-stage pipeline
+- `clients/native/internal/overlay/` — client WG, OpenZiti, and dual-mode providers
+- `services/hub-router/internal/policy/engine.go` — OverlayScope dimension added
+
+See [OpenZiti Integration](docs/OPENZITI_INTEGRATION.md) | [XDP Guide](docs/XDP_GUIDE.md) | [Hub-Router Deployment](docs/HUB_ROUTER_DEPLOYMENT.md)
+
+---
+
+## 🆕 What's New in v0.2.0 — Identity-Aware Networking
+
+This release adds a full identity mesh to the Tobogganing platform: a built-in OIDC provider,
+SPIFFE/SPIRE workload identity, multi-tenant isolation, and cross-cloud Cilium Cluster Mesh.
+
+| Feature | Description |
+|---------|-------------|
+| OIDC Provider | hub-api acts as a standards-compliant IdP (RFC 9068 access tokens, JWKS rotation) |
+| Scope-Based AuthZ | `resource:action` scopes replace role-string checks at every API endpoint |
+| Multi-Tenant Isolation | Hard DB + JWT tenant boundary; Global → Tenant → Team scope narrowing |
+| Team Hierarchy | Tenant-scoped teams with per-user role assignments |
+| SPIFFE/SPIRE | Hardware-rooted workload identity via TPM DevID or cloud attestors |
+| Cloud-Native WI | EKS Pod Identity, GCP Workload Identity Federation, Azure WI — priority over SPIRE |
+| Identity Bridge | SPIFFE ↔ OIDC mapping; convention-based fallback when no explicit mapping exists |
+| Cross-Cloud Mesh | Cilium Cluster Mesh over hub-router WireGuard tunnels |
+| Identity-Aware Peering | Each side of a hub-router peering presents its workload identity; hub-api validates before tunnel |
+| External IdP Federation | OIDC token exchange with claim mapping; SAML + SCIM reserved for premium tier |
+
+**New pages in hub-webui:** Tenant Management, Team Management, Workload Identity
+
+**New `ScopeGate` component:** wraps any UI element; renders fallback or nothing when required scope is absent
+
+See [docs/IDENTITY.md](docs/IDENTITY.md) for the full identity architecture deep-dive.
+
+---
+
+## 🆕 What's New in v0.1.0 — Unified Networking Layer
+
+This release unifies three previously disconnected policy systems into a single, coherent control plane:
+
+| Before | After |
+|--------|-------|
+| `policy_rules`, `firewall_rules`, `access_control_manager` — 3 separate systems | One canonical `policy_rules` schema with `scope`, `direction`, and JSON array fields |
+| Go PolicyEngine dead code | PolicyEngine wired into all 5 proxy check sites |
+| Standard K8s NetworkPolicy | Cilium `CiliumNetworkPolicy` CRDs with L7 FQDN matching |
+| Suricata-only IDS | Zeek + Suricata dual IDS via VXLAN mirror tap |
+| REST polling (with envelope bug) | gRPC streaming + Redis pub/sub fanout |
+| OSPF-only routing | FRR iBGP AS 65001 + OSPF underlay for inter-site VRF exchange |
+
+**Key components shipped:**
+- `services/hub-api/database/__init__.py` — unified `policy_rules` table
+- `services/hub-api/api/routes.py` — CRUD + Redis pub/sub triggers
+- `services/hub-api/grpc/server.py` — gRPC policy streaming server (port 50051)
+- `services/hub-api/network/cilium_translator.py` — `policy_rules` → `CiliumNetworkPolicy` CRD translator
+- `services/hub-api/network/k8s_client.py` — Kubernetes CRD apply/delete client
+- `services/hub-router/internal/policy/engine.go` — enhanced 6-dimension policy engine
+- `services/hub-router/proxy/policy_adapter.go` — API → engine policy conversion
+- `services/hub-router/proxy/main.go` — PolicyEngine wired at all 5 firewall check sites
+- `services/hub-router/proxy/mirror/manager.go` — Zeek VXLAN mirror support
+- `deploy/frr/` — FRR iBGP + OSPF config for us-east and eu-west
+- `deploy/zeek/` — Zeek site scripts for WireGuard + TLS analysis
+- `k8s/helm/tobogganing/values-cilium.yaml` — Cilium WireGuard encryption overlay
+
+---
+
 **Made with ❤️ by the open source community**
 
-*SASEWaddle - Secure Access, Simplified*
+*Tobogganing - Secure Access, Simplified*

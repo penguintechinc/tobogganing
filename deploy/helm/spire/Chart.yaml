@@ -1,0 +1,17 @@
+apiVersion: v2
+name: tobogganing-spire
+description: SPIRE server and agents for Tobogganing workload identity (fallback)
+type: application
+version: 0.1.0
+appVersion: "1.10.0"
+keywords:
+  - spire
+  - workload-identity
+  - spiffe
+  - tobogganing
+home: https://github.com/penguintechinc/tobogganing
+sources:
+  - https://github.com/penguintechinc/tobogganing
+maintainers:
+  - name: Penguin Tech Inc
+    email: support@penguintech.io

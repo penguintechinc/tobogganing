@@ -1,0 +1,31 @@
+# Cilium CNI configuration for Tobogganing SASE platform
+# Deploy alongside main values: helm install -f values.yaml -f values-cilium.yaml
+
+cilium:
+  enabled: true
+  encryption:
+    enabled: true
+    type: wireguard
+    nodeEncryption: true
+    strictMode:
+      enabled: true
+  hubble:
+    enabled: true
+    relay:
+      enabled: true
+    ui:
+      enabled: true
+  kubeProxyReplacement: true
+  tunnel: disabled
+  ipam:
+    mode: cluster-pool
+    operator:
+      clusterPoolCIDRv4: 10.100.0.0/14
+  bpf:
+    masquerade: true
+  loadBalancer:
+    mode: dsr
+  bandwidthManager:
+    enabled: true
+  monitor:
+    enabled: true

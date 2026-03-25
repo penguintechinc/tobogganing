@@ -1,0 +1,134 @@
+{{- if .Values.spire.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tobogganing-spire.fullname" . }}-server
+  namespace: {{ include "tobogganing-spire.namespace" . }}
+  labels:
+    {{- include "tobogganing-spire.labels" . | nindent 4 }}
+    component: server
+spec:
+  serviceName: {{ include "tobogganing-spire.fullname" . }}-server
+  replicas: {{ .Values.server.replicas }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing-spire.serverSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing-spire.serverSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/server-configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "tobogganing-spire.serviceAccountName" . }}
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+      - name: spire-server
+        image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+        imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+        ports:
+        - name: grpc
+          containerPort: {{ .Values.server.port }}
+          protocol: TCP
+        env:
+        - name: SPIRE_LOG_LEVEL
+          value: {{ .Values.logging.level | quote }}
+        - name: SPIRE_LOG_FORMAT
+          value: {{ .Values.logging.format | quote }}
+        {{- if .Values.debug }}
+        - name: DEBUG
+          value: "1"
+        {{- end }}
+
+        volumeMounts:
+        - name: spire-server-socket
+          mountPath: /tmp/spire-server
+        - name: spire-config
+          mountPath: /etc/spire/server
+          readOnly: true
+        - name: spire-data
+          mountPath: /run/spire/data
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+
+        resources:
+          {{- toYaml .Values.server.resources | nindent 10 }}
+
+        {{- if .Values.server.healthProbe.enabled }}
+        livenessProbe:
+          exec:
+            command:
+            - /opt/spire/bin/spire-server
+            - healthcheck
+            - -socketPath
+            - /tmp/spire-server/private/api.sock
+          initialDelaySeconds: {{ .Values.server.healthProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.server.healthProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.server.healthProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.server.healthProbe.failureThreshold }}
+
+        readinessProbe:
+          exec:
+            command:
+            - /opt/spire/bin/spire-server
+            - healthcheck
+            - -socketPath
+            - /tmp/spire-server/private/api.sock
+          initialDelaySeconds: {{ .Values.server.healthProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.server.healthProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.server.healthProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.server.healthProbe.failureThreshold }}
+        {{- end }}
+
+      volumes:
+      - name: spire-server-socket
+        emptyDir: {}
+      - name: spire-config
+        configMap:
+          name: {{ include "tobogganing-spire.fullname" . }}-server-config
+      - name: spire-data
+        persistentVolumeClaim:
+          claimName: {{ include "tobogganing-spire.fullname" . }}-server-data
+
+  volumeClaimTemplates:
+  - metadata:
+      name: spire-data
+    spec:
+      accessModes: {{ toJson .Values.server.persistence.accessModes }}
+      {{- if .Values.server.persistence.storageClassName }}
+      storageClassName: {{ .Values.server.persistence.storageClassName }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.server.persistence.size }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tobogganing-spire.fullname" . }}-server
+  namespace: {{ include "tobogganing-spire.namespace" . }}
+  labels:
+    {{- include "tobogganing-spire.labels" . | nindent 4 }}
+    component: server
+spec:
+  clusterIP: None
+  selector:
+    {{- include "tobogganing-spire.serverSelectorLabels" . | nindent 4 }}
+  ports:
+  - name: grpc
+    port: {{ .Values.server.port }}
+    targetPort: grpc
+    protocol: TCP
+{{- end }}

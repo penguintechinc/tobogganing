@@ -1,3 +1,4 @@
+{{- if not .Values.cilium.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -13,12 +14,12 @@ spec:
     - Ingress
     - Egress
   ingress:
-    ## Allow traffic between all tobogganing services
+    ## Internal service-to-service (hub-api, hub-router, hub-webui, redis)
     - from:
         - podSelector:
             matchLabels:
               {{- include "tobogganing.selectorLabels" . | nindent 14 }}
-    ## Allow ingress controller traffic to hub-api and hub-webui
+    ## Ingress controller to hub-api and hub-webui
     - from:
         - namespaceSelector:
             matchLabels:
@@ -28,18 +29,40 @@ spec:
           protocol: TCP
         - port: {{ .Values.hubWebui.port }}
           protocol: TCP
-    ## Allow external WireGuard traffic to hub-router
+    ## External WireGuard traffic to hub-router
     - from: []
       ports:
         - port: {{ .Values.hubRouter.ports.wireguard }}
           protocol: UDP
+    ## gRPC from hub-router to hub-api
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: hub-router
+      ports:
+        - port: {{ .Values.hubApi.grpcPort }}
+          protocol: TCP
+    {{- if .Values.squawk.enabled }}
+    ## Squawk DNS namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.squawkNamespace }}
+    {{- end }}
+    {{- if .Values.waddleperf.enabled }}
+    ## WaddlePerf namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.waddleperfNamespace }}
+    {{- end }}
   egress:
-    ## Allow traffic between all tobogganing services
+    ## Internal service-to-service
     - to:
         - podSelector:
             matchLabels:
               {{- include "tobogganing.selectorLabels" . | nindent 14 }}
-    ## Allow DNS resolution
+    ## DNS resolution (kube-dns / CoreDNS)
     - to:
         - namespaceSelector: {}
       ports:
@@ -47,7 +70,7 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    ## Allow external HTTPS (for license server, updates)
+    ## External HTTPS (license server, updates, APIs)
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -58,3 +81,60 @@ spec:
       ports:
         - port: 443
           protocol: TCP
+    {{- if .Values.squawk.enabled }}
+    ## Squawk DNS namespace egress
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.squawkNamespace }}
+    {{- end }}
+    {{- if .Values.waddleperf.enabled }}
+    ## WaddlePerf namespace egress
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.waddleperfNamespace }}
+    {{- end }}
+{{- end }}
+---
+{{- if .Values.cilium.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-base
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubRouter.ports.wireguard }}"
+              protocol: UDP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+{{- end }}

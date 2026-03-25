@@ -209,6 +209,22 @@ fi
 echo "WireGuard VPN connected successfully!"
 wg show wg0
 
+# Step 7.5: Start DNS forwarder if Squawk is enabled
+if [ "${SQUAWK_ENABLED:-false}" = "true" ]; then
+    echo "Starting Squawk DNS forwarder..."
+    SQUAWK_SERVER="${SQUAWK_SERVER:-https://dns.penguintech.io/dns-query}"
+    DNS_LISTEN="${DNS_LISTEN_ADDR:-127.0.0.1:53}"
+
+    # Back up resolv.conf and replace with stub DNS address
+    cp /etc/resolv.conf /etc/resolv.conf.bak
+    echo "# Tobogganing DNS — managed file, do not edit" > /etc/resolv.conf
+    echo "nameserver 127.0.0.1" >> /etc/resolv.conf
+
+    echo "Squawk DNS forwarder configured"
+    echo "  Upstream : $SQUAWK_SERVER"
+    echo "  Listener : $DNS_LISTEN"
+fi
+
 # Save authentication tokens and certificates for background services
 cat > /config/auth.json <<EOF
 {
@@ -252,7 +268,7 @@ fi
 echo "Starting connection monitoring..."
 
 # Trap signals for graceful shutdown
-trap 'echo "Shutting down SASEWaddle client..."; wg-quick down wg0 2>/dev/null || true; kill $HEALTH_PID $RENEWAL_PID 2>/dev/null || true; exit 0' SIGTERM SIGINT
+trap 'echo "Shutting down SASEWaddle client..."; [ -f /etc/resolv.conf.bak ] && mv /etc/resolv.conf.bak /etc/resolv.conf; wg-quick down wg0 2>/dev/null || true; kill $HEALTH_PID $RENEWAL_PID 2>/dev/null || true; exit 0' SIGTERM SIGINT
 
 # Main monitoring loop
 while true; do

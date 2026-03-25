@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package tobogganing.policy.v1;
+
+option go_package = "github.com/tobogganing/hub-router/internal/api/proto";
+
+// PolicyRule as distributed to hub-routers.
+// All dimension fields are repeated to support multi-value matching.
+message PolicyRule {
+  string id = 1;
+  string name = 2;
+  string action = 3;               // allow or deny
+  int32 priority = 4;
+  repeated string domains = 5;     // ["*.example.com", "app.internal"]
+  repeated string ports = 6;       // ["443", "8000-9000"]
+  string protocol = 7;             // tcp, udp, icmp, any
+  repeated string src_cidrs = 8;   // ["10.0.0.0/8"]
+  repeated string dst_cidrs = 9;   // ["192.168.1.0/24"]
+  repeated string users = 10;      // user IDs
+  repeated string groups = 11;     // group IDs
+  string identity_provider = 12;
+  bool enabled = 13;
+  string scope = 14;               // wireguard, k8s, both
+  string direction = 15;           // inbound, outbound, both
+  string tenant_id = 16;
+  repeated string required_scopes = 17;
+  repeated string spiffe_ids = 18;
+}
+
+message PolicySet {
+  repeated PolicyRule rules = 1;
+  int64 version = 2;
+  string timestamp = 3;
+}
+
+message FetchPoliciesRequest {
+  string hub_id = 1;
+  int64 last_version = 2;
+}
+
+message FetchPoliciesResponse {
+  PolicySet policies = 1;
+  bool has_changes = 2;
+}
+
+message PolicyUpdateEvent {
+  string event_type = 1;  // created, updated, deleted
+  PolicyRule rule = 2;
+  int64 version = 3;
+  string timestamp = 4;
+}
+
+message SubscribeRequest {
+  string hub_id = 1;
+}
+
+message RegisterHubRequest {
+  string hub_id = 1;
+  string cluster_id = 2;
+  string region = 3;
+  int32 capacity = 4;
+}
+
+message RegisterHubResponse {
+  bool success = 1;
+  string message = 2;
+  PolicySet initial_policies = 3;
+}
+
+message StatusRequest {
+  string hub_id = 1;
+}
+
+message StatusResponse {
+  string status = 1;
+  string version = 2;
+}
+
+service PolicyService {
+  rpc FetchPolicies(FetchPoliciesRequest) returns (FetchPoliciesResponse);
+  rpc SubscribePolicyUpdates(SubscribeRequest) returns (stream PolicyUpdateEvent);
+  rpc RegisterHub(RegisterHubRequest) returns (RegisterHubResponse);
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+}

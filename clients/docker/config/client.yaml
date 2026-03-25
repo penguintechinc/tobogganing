@@ -141,6 +141,17 @@ advanced:
     # Pool size
     pool_size: 10
 
+# Squawk DNS configuration
+dns:
+  # Enable Squawk DNS-over-HTTPS forwarding through the hub-router
+  enabled: false
+
+  # Local DNS stub listener address
+  listen_addr: "127.0.0.1:53"
+
+  # Squawk DoH upstream server URL
+  squawk_server: "https://dns.penguintech.io/dns-query"
+
 # Features configuration
 features:
   # Enable traffic monitoring

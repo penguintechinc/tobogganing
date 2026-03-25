@@ -4,3 +4,13 @@ description: Tobogganing - Zero Trust SASE Platform
 type: application
 version: 2.0.0
 appVersion: "2.0.0"
+
+dependencies:
+  - name: squawk
+    version: "1.x.x"
+    repository: "file://../../../squawk/k8s/helm/squawk"
+    condition: squawk.enabled
+  - name: waddleperf
+    version: "1.x.x"
+    repository: "file://../../../waddleperf/k8s/helm/waddleperf"
+    condition: waddleperf.enabled

@@ -31,8 +31,11 @@ import (
     "golang.zx2c4.com/wireguard/wgctrl"
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
-    "github.com/tobogganing/clients/native/internal/config"
+    "github.com/tobogganing/clients/native/internal/attestation"
     "github.com/tobogganing/clients/native/internal/auth"
+    "github.com/tobogganing/clients/native/internal/config"
+    "github.com/tobogganing/clients/native/internal/dns"
+    "github.com/tobogganing/clients/native/internal/perf"
 )
 
 const (
@@ -48,14 +51,17 @@ type Client struct {
     auth         *auth.Manager
     wg           *wgctrl.Client
     httpClient   *http.Client
-    
+    dnsModule    *dns.Module
+    perfMonitor  *perf.Monitor
+    fingerprint  *attestation.SystemFingerprint
+
     // Current connection state
-    clientID       string
-    accessToken    string
-    refreshToken   string
-    headendURL     string
-    wgPrivateKey   wgtypes.Key
-    wgPublicKey    wgtypes.Key
+    clientID         string
+    accessToken      string
+    refreshToken     string
+    headendURL       string
+    wgPrivateKey     wgtypes.Key
+    wgPublicKey      wgtypes.Key
     headendPublicKey wgtypes.Key
 }
 
@@ -121,6 +127,33 @@ func (c *Client) Connect(ctx context.Context) error {
         return fmt.Errorf("WireGuard start failed: %w", err)
     }
 
+    // Step 4.5: Start DNS module if Squawk is enabled
+    if c.config.SquawkEnabled {
+        dnsCfg := dns.Config{
+            Enabled:      true,
+            ListenAddr:   c.config.DNSListenAddr,
+            UpstreamAddr: "10.200.0.1:5353",
+        }
+        c.dnsModule = dns.NewModule(dnsCfg)
+        if err := c.dnsModule.Start(ctx); err != nil {
+            fmt.Printf("Warning: DNS module failed to start: %v\n", err)
+        }
+    }
+
+    // Step 4.6: Start WaddlePerf performance monitor if enabled.
+    if c.config.PerfEnabled {
+        perfCfg := perf.Config{
+            Enabled:   true,
+            Interval:  c.config.PerfInterval,
+            HubAPIURL: c.config.ManagerURL,
+            ClientID:  c.clientID,
+        }
+        c.perfMonitor = perf.NewMonitor(perfCfg)
+        if err := c.perfMonitor.Start(ctx); err != nil {
+            fmt.Printf("Warning: Performance monitor failed to start: %v\n", err)
+        }
+    }
+
     // Step 5: Start monitoring and keep-alive
     return c.runMonitoring(ctx)
 }
@@ -128,6 +161,21 @@ func (c *Client) Connect(ctx context.Context) error {
 // Disconnect safely disconnects from the SASEWaddle network
 func (c *Client) Disconnect() error {
     fmt.Println("Disconnecting from SASEWaddle network...")
+
+    // Stop performance monitor before tearing down the tunnel.
+    if c.perfMonitor != nil {
+        c.perfMonitor.Stop()
+        c.perfMonitor = nil
+    }
+
+    // Stop DNS module before tearing down the tunnel so any in-flight
+    // DNS queries can complete before the upstream disappears.
+    if c.dnsModule != nil {
+        if err := c.dnsModule.Stop(); err != nil {
+            fmt.Printf("Warning: DNS module stop failed: %v\n", err)
+        }
+        c.dnsModule = nil
+    }
 
     // Stop WireGuard interface
     if err := c.stopWireGuard(); err != nil {
@@ -183,8 +231,15 @@ func (c *Client) register() error {
         return err
     }
 
+    // Collect system attestation if enabled
+    if c.config.AttestationEnabled {
+        if err := c.collectAttestation(); err != nil {
+            fmt.Printf("Warning: attestation collection failed: %v\n", err)
+        }
+    }
+
     regReq := c.buildRegistrationRequest()
-    
+
     regResp, err := c.sendRegistrationRequest(regReq)
     if err != nil {
         return err
@@ -211,7 +266,7 @@ func (c *Client) buildRegistrationRequest() map[string]interface{} {
         clientName = fmt.Sprintf("native-client-%s-%s", runtime.GOOS, hostname)
     }
 
-    return map[string]interface{}{
+    req := map[string]interface{}{
         "name":       clientName,
         "type":       "client_native",
         "public_key": c.wgPublicKey.String(),
@@ -220,6 +275,12 @@ func (c *Client) buildRegistrationRequest() map[string]interface{} {
             "architecture": runtime.GOARCH,
         },
     }
+
+    if c.fingerprint != nil {
+        req["attestation"] = c.fingerprint
+    }
+
+    return req
 }
 
 func (c *Client) sendRegistrationRequest(regReq map[string]interface{}) (*registrationResponse, error) {
@@ -282,6 +343,108 @@ type registrationResponse struct {
         Key  string `json:"key"`
         CA   string `json:"ca"`
     } `json:"certificates"`
+}
+
+// collectAttestation gathers system fingerprint data for attestation.
+// If TPM is enabled, it first fetches a challenge nonce from the hub-api
+// to bind the TPM PCR quote to a server-generated value (anti-replay).
+func (c *Client) collectAttestation() error {
+    cfg := attestation.CollectorConfig{
+        FleetDMHostUUID: c.config.FleetDMHostUUID,
+        EnableTPM:       c.config.AttestationTPM,
+    }
+
+    // If TPM is enabled, fetch a nonce from the challenge endpoint
+    if c.config.AttestationTPM {
+        nonce, err := c.fetchAttestationNonce()
+        if err != nil {
+            fmt.Printf("Warning: could not fetch TPM nonce: %v\n", err)
+        } else {
+            cfg.TPMNonce = nonce
+        }
+    }
+
+    collector := attestation.NewCollector(cfg)
+    fp, err := collector.Collect(context.Background())
+    if err != nil {
+        return fmt.Errorf("attestation collection failed: %w", err)
+    }
+
+    c.fingerprint = fp
+    fmt.Printf("Attestation collected: hash=%s\n", fp.CompositeHash[:16])
+    return nil
+}
+
+// fetchAttestationNonce requests a challenge nonce from the hub-api for
+// TPM PCR quote freshness verification.
+func (c *Client) fetchAttestationNonce() ([]byte, error) {
+    challengeURL := c.config.ManagerURL + "/api/v1/attestation/challenge"
+    req, err := http.NewRequest("POST", challengeURL, nil)
+    if err != nil {
+        return nil, err
+    }
+
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("challenge request failed: %w", err)
+    }
+    defer func() {
+        _ = resp.Body.Close()
+    }()
+
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("challenge endpoint returned status %d", resp.StatusCode)
+    }
+
+    var challengeResp struct {
+        Data struct {
+            Nonce string `json:"nonce"`
+        } `json:"data"`
+    }
+    if err := json.NewDecoder(resp.Body).Decode(&challengeResp); err != nil {
+        return nil, fmt.Errorf("failed to parse challenge response: %w", err)
+    }
+
+    // Decode hex nonce to bytes
+    nonce, err := hexDecodeString(challengeResp.Data.Nonce)
+    if err != nil {
+        return nil, fmt.Errorf("failed to decode nonce: %w", err)
+    }
+
+    return nonce, nil
+}
+
+// hexDecodeString decodes a hex-encoded string to bytes.
+func hexDecodeString(s string) ([]byte, error) {
+    if len(s)%2 != 0 {
+        return nil, fmt.Errorf("odd-length hex string")
+    }
+    b := make([]byte, len(s)/2)
+    for i := range b {
+        high := unhex(s[i*2])
+        low := unhex(s[i*2+1])
+        if high == 0xFF || low == 0xFF {
+            return nil, fmt.Errorf("invalid hex char at position %d", i*2)
+        }
+        b[i] = high<<4 | low
+    }
+    return b, nil
+}
+
+func unhex(c byte) byte {
+    switch {
+    case '0' <= c && c <= '9':
+        return c - '0'
+    case 'a' <= c && c <= 'f':
+        return c - 'a' + 10
+    case 'A' <= c && c <= 'F':
+        return c - 'A' + 10
+    default:
+        return 0xFF
+    }
 }
 
 func (c *Client) authenticate() error {
@@ -498,8 +661,19 @@ func (c *Client) healthCheck() error {
 }
 
 func (c *Client) checkAuthentication() error {
-    // Check JWT token expiry and refresh if needed
-    // For now, this is a placeholder for proper authentication checks
+    // Re-collect fingerprint for drift detection on token refresh.
+    // No challenge nonce needed — the refresh token proves session continuity.
+    if c.config.AttestationEnabled && c.fingerprint != nil {
+        cfg := attestation.CollectorConfig{
+            FleetDMHostUUID: c.config.FleetDMHostUUID,
+            EnableTPM:       false, // No TPM on refresh — no nonce available
+        }
+        collector := attestation.NewCollector(cfg)
+        fp, err := collector.Collect(context.Background())
+        if err == nil {
+            c.fingerprint = fp
+        }
+    }
     return nil
 }
 

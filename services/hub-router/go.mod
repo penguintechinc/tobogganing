@@ -6,6 +6,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.9.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/miekg/dns v1.1.62
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.18.2

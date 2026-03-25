@@ -144,7 +144,7 @@ def initialize_database() -> None:
         db = DAL(
             primary_uri,
             pool_size=int(os.getenv('DB_POOL_SIZE', '10')),
-            migrate=True,
+            migrate=False,
             fake_migrate=False,
             check_reserved=['mysql', 'postgresql'],
             lazy_tables=True
@@ -182,25 +182,55 @@ def initialize_database() -> None:
         raise
 
 def define_schema() -> None:
-    """Define the database schema using PyDAL."""
-    
-    # Users table
+    """Define the database schema using PyDAL (runtime query-only; migrate=False everywhere).
+
+    Alembic + SQLAlchemy owns DDL. PyDAL definitions must stay in sync with
+    services/hub-api/database/models.py manually.
+
+    Definition order matters for PyDAL's reference resolution:
+      tenants → users, teams, policy_rules, spiffe_entries, identity_mappings
+      teams   → user_team_memberships, identity_mappings
+      users   → clients, sessions, jwt_tokens, user_team_memberships
+    """
+
+    # ------------------------------------------------------------------
+    # tenants (v0.2.0) — must precede users, teams, policy_rules
+    # ------------------------------------------------------------------
+    db.define_table('tenants',
+        Field('id', 'id'),
+        Field('tenant_id', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
+        Field('name', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('domain', 'string', length=255),
+        Field('spiffe_trust_domain', 'string', length=255),
+        Field('is_active', 'boolean', default=True),
+        Field('config', 'json'),
+        Field('created_at', 'datetime', default=datetime.now),
+        Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # users — tenant_id nullable (NULL = platform-level)
+    # ------------------------------------------------------------------
     db.define_table('users',
         Field('id', 'id'),
         Field('username', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
         Field('email', 'string', length=255, unique=True, requires=IS_EMAIL()),
         Field('password_hash', 'string', length=255, requires=IS_NOT_EMPTY()),
         Field('full_name', 'string', length=255),
-        Field('role', 'string', length=50, default='user', 
+        Field('role', 'string', length=50, default='user',
               requires=IS_IN_SET(['admin', 'reporter', 'user'])),
         Field('is_active', 'boolean', default=True),
         Field('last_login', 'datetime'),
+        Field('tenant_id', 'string', length=255),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='users.table'
+        migrate=False,
     )
-    
-    # Clusters table
+
+    # ------------------------------------------------------------------
+    # clusters
+    # ------------------------------------------------------------------
     db.define_table('clusters',
         Field('id', 'id'),
         Field('name', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
@@ -211,15 +241,31 @@ def define_schema() -> None:
         Field('config', 'json'),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='clusters.table'
+        migrate=False,
     )
-    
-    # Clients table
+
+    # ------------------------------------------------------------------
+    # teams (v0.2.0) — must precede user_team_memberships, identity_mappings
+    # ------------------------------------------------------------------
+    db.define_table('teams',
+        Field('id', 'id'),
+        Field('team_id', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
+        Field('tenant_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('name', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('description', 'text'),
+        Field('created_at', 'datetime', default=datetime.now),
+        Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # clients
+    # ------------------------------------------------------------------
     db.define_table('clients',
         Field('id', 'id'),
         Field('client_id', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
         Field('name', 'string', length=255, requires=IS_NOT_EMPTY()),
-        Field('type', 'string', length=50, 
+        Field('type', 'string', length=50,
               requires=IS_IN_SET(['native', 'docker', 'mobile'])),
         Field('user_id', 'reference users', ondelete='CASCADE'),
         Field('cluster_id', 'reference clusters', ondelete='CASCADE'),
@@ -229,64 +275,73 @@ def define_schema() -> None:
         Field('config', 'json'),
         Field('tunnel_mode', 'string', length=20, default='full',
               requires=IS_IN_SET(['full', 'split'])),
-        Field('split_tunnel_routes', 'json'),  # List of routes for split tunnel mode (domains, IPv4/IPv6 addresses and CIDRs)
+        Field('split_tunnel_routes', 'json'),
         Field('last_seen', 'datetime'),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='clients.table'
+        migrate=False,
     )
-    
-    # Firewall rules table
-    db.define_table('firewall_rules',
+
+    # ------------------------------------------------------------------
+    # policy_rules — tenant_id nullable (NULL = global policy)
+    # ------------------------------------------------------------------
+    db.define_table('policy_rules',
         Field('id', 'id'),
-        Field('user_id', 'reference users', ondelete='CASCADE'),
-        Field('rule_type', 'string', length=50,
-              requires=IS_IN_SET(['domain', 'ip', 'ip_range', 'url_pattern', 'protocol_rule'])),
         Field('name', 'string', length=255, requires=IS_NOT_EMPTY()),
         Field('description', 'text'),
         Field('action', 'string', length=20, default='allow',
               requires=IS_IN_SET(['allow', 'deny'])),
+        Field('priority', 'integer', default=100),
+        Field('scope', 'string', length=20, default='both',
+              requires=IS_IN_SET(['wireguard', 'k8s', 'openziti', 'both'])),
         Field('direction', 'string', length=20, default='both',
               requires=IS_IN_SET(['inbound', 'outbound', 'both'])),
-        Field('priority', 'integer', default=100),
-        Field('src_ip', 'string', length=100),
-        Field('dst_ip', 'string', length=100),
-        Field('protocol', 'string', length=20),
-        Field('src_port', 'string', length=100),
-        Field('dst_port', 'string', length=100),
-        Field('domain', 'string', length=255),
-        Field('url_pattern', 'text'),
+        Field('domains', 'json'),
+        Field('ports', 'json'),
+        Field('protocol', 'string', length=20, default='any',
+              requires=IS_IN_SET(['tcp', 'udp', 'icmp', 'any'])),
+        Field('src_cidrs', 'json'),
+        Field('dst_cidrs', 'json'),
+        Field('users', 'json'),
+        Field('groups', 'json'),
+        Field('identity_provider', 'string', length=50, default='local',
+              requires=IS_IN_SET(['local', 'oidc', 'saml', 'scim'])),
         Field('enabled', 'boolean', default=True),
+        Field('tenant_id', 'string', length=255),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='firewall_rules.table'
+        migrate=False,
     )
-    
-    # VRF (Virtual Routing and Forwarding) table
+
+    # ------------------------------------------------------------------
+    # vrfs
+    # ------------------------------------------------------------------
     db.define_table('vrfs',
         Field('id', 'id'),
         Field('name', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
         Field('description', 'text'),
-        Field('rd', 'string', length=100, unique=True, requires=IS_NOT_EMPTY()),  # Route Distinguisher
-        Field('ip_ranges', 'json'),  # List of IP ranges
+        Field('rd', 'string', length=100, unique=True, requires=IS_NOT_EMPTY()),
+        Field('ip_ranges', 'json'),
         Field('area_type', 'string', length=50, default='normal',
               requires=IS_IN_SET(['normal', 'stub', 'nssa', 'backbone'])),
         Field('area_id', 'string', length=50),
         Field('enabled', 'boolean', default=True),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='vrfs.table'
+        migrate=False,
     )
-    
-    # OSPF configuration table
+
+    # ------------------------------------------------------------------
+    # ospf_config
+    # ------------------------------------------------------------------
     db.define_table('ospf_config',
         Field('id', 'id'),
         Field('vrf_id', 'reference vrfs', ondelete='CASCADE'),
         Field('area_id', 'string', length=50, requires=IS_NOT_EMPTY()),
         Field('area_type', 'string', length=50, default='normal',
               requires=IS_IN_SET(['normal', 'stub', 'nssa', 'backbone'])),
-        Field('networks', 'json'),  # List of networks to advertise
-        Field('interfaces', 'json'),  # List of interfaces in this area
+        Field('networks', 'json'),
+        Field('interfaces', 'json'),
         Field('auth_type', 'string', length=50, default='none',
               requires=IS_IN_SET(['none', 'simple', 'md5'])),
         Field('auth_key', 'string', length=255),
@@ -295,10 +350,12 @@ def define_schema() -> None:
         Field('enabled', 'boolean', default=True),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='ospf_config.table'
+        migrate=False,
     )
-    
-    # Port configurations table
+
+    # ------------------------------------------------------------------
+    # port_configs
+    # ------------------------------------------------------------------
     db.define_table('port_configs',
         Field('id', 'id'),
         Field('headend_id', 'string', length=255, requires=IS_NOT_EMPTY()),
@@ -308,10 +365,12 @@ def define_schema() -> None:
         Field('enabled', 'boolean', default=True),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='port_configs.table'
+        migrate=False,
     )
-    
-    # Port ranges table
+
+    # ------------------------------------------------------------------
+    # port_ranges
+    # ------------------------------------------------------------------
     db.define_table('port_ranges',
         Field('id', 'id'),
         Field('port_config_id', 'reference port_configs', ondelete='CASCADE'),
@@ -322,10 +381,12 @@ def define_schema() -> None:
         Field('enabled', 'boolean', default=True),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='port_ranges.table'
+        migrate=False,
     )
-    
-    # Certificates table
+
+    # ------------------------------------------------------------------
+    # certificates
+    # ------------------------------------------------------------------
     db.define_table('certificates',
         Field('id', 'id'),
         Field('cert_type', 'string', length=50,
@@ -342,10 +403,12 @@ def define_schema() -> None:
         Field('revoked_at', 'datetime'),
         Field('created_at', 'datetime', default=datetime.now),
         Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
-        migrate='certificates.table'
+        migrate=False,
     )
-    
-    # Sessions table for web authentication
+
+    # ------------------------------------------------------------------
+    # sessions
+    # ------------------------------------------------------------------
     db.define_table('sessions',
         Field('id', 'id'),
         Field('session_id', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
@@ -354,21 +417,101 @@ def define_schema() -> None:
         Field('user_agent', 'text'),
         Field('expires_at', 'datetime'),
         Field('created_at', 'datetime', default=datetime.now),
-        migrate='sessions.table'
+        migrate=False,
     )
-    
-    # JWT tokens table
+
+    # ------------------------------------------------------------------
+    # jwt_tokens
+    # ------------------------------------------------------------------
     db.define_table('jwt_tokens',
         Field('id', 'id'),
         Field('token_id', 'string', length=255, unique=True, requires=IS_NOT_EMPTY()),
         Field('user_id', 'reference users', ondelete='CASCADE'),
-        Field('token_type', 'string', length=50, 
+        Field('token_type', 'string', length=50,
               requires=IS_IN_SET(['access', 'refresh'])),
         Field('expires_at', 'datetime'),
         Field('revoked', 'boolean', default=False),
         Field('revoked_at', 'datetime'),
         Field('created_at', 'datetime', default=datetime.now),
-        migrate='jwt_tokens.table'
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # user_team_memberships (v0.2.0)
+    # ------------------------------------------------------------------
+    db.define_table('user_team_memberships',
+        Field('id', 'id'),
+        Field('user_id', 'reference users', ondelete='CASCADE'),
+        Field('team_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('role_in_team', 'string', length=50, default='viewer',
+              requires=IS_IN_SET(['admin', 'maintainer', 'viewer'])),
+        Field('created_at', 'datetime', default=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # role_scope_bundles (v0.2.0)
+    # ------------------------------------------------------------------
+    db.define_table('role_scope_bundles',
+        Field('id', 'id'),
+        Field('role_name', 'string', length=100, requires=IS_NOT_EMPTY()),
+        Field('layer', 'string', length=50,
+              requires=IS_IN_SET(['global', 'tenant', 'team', 'resource'])),
+        Field('scopes', 'json'),
+        Field('created_at', 'datetime', default=datetime.now),
+        Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # spiffe_entries (v0.2.0)
+    # ------------------------------------------------------------------
+    db.define_table('spiffe_entries',
+        Field('id', 'id'),
+        Field('spiffe_id', 'string', length=512, unique=True, requires=IS_NOT_EMPTY()),
+        Field('tenant_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('parent_id', 'string', length=512),
+        Field('selectors', 'json'),
+        Field('ttl', 'integer', default=0),
+        Field('dns_names', 'json'),
+        Field('created_at', 'datetime', default=datetime.now),
+        Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # identity_mappings (v0.2.0)
+    # ------------------------------------------------------------------
+    db.define_table('identity_mappings',
+        Field('id', 'id'),
+        Field('provider_type', 'string', length=100, requires=IS_NOT_EMPTY()),
+        Field('external_id', 'string', length=512, requires=IS_NOT_EMPTY()),
+        Field('tenant_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('team_id', 'string', length=255),
+        Field('scopes', 'json'),
+        Field('created_at', 'datetime', default=datetime.now),
+        Field('updated_at', 'datetime', default=datetime.now, update=datetime.now),
+        migrate=False,
+    )
+
+    # ------------------------------------------------------------------
+    # perf_metrics (v0.3.0) — fabric performance measurements
+    # ------------------------------------------------------------------
+    db.define_table('perf_metrics',
+        Field('id', 'id'),
+        Field('source_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('source_type', 'string', length=50,
+              requires=IS_IN_SET(['hub-router', 'client'])),
+        Field('target_id', 'string', length=255, requires=IS_NOT_EMPTY()),
+        Field('protocol', 'string', length=20,
+              requires=IS_IN_SET(['http', 'tcp', 'udp', 'icmp'])),
+        Field('latency_ms', 'double'),
+        Field('jitter_ms', 'double'),
+        Field('packet_loss_pct', 'double'),
+        Field('throughput_mbps', 'double'),
+        Field('timestamp', 'datetime', default=datetime.now),
+        Field('created_at', 'datetime', default=datetime.now),
+        migrate=False,
     )
 
 def get_db() -> DAL:

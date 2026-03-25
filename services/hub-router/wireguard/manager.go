@@ -49,23 +49,35 @@ type PeerConfig = wgtypes.PeerConfig
 
 // Manager handles WireGuard interface configuration and peer management
 type Manager struct {
-    interfaceName string
-    managerURL    string
-    client        *wgctrl.Client
-    httpClient    *http.Client
-    privateKey    wgtypes.Key
-    publicKey     wgtypes.Key
-    listenPort    int
-    network       string
+    interfaceName    string
+    managerURL       string
+    client           *wgctrl.Client
+    httpClient       *http.Client
+    privateKey       wgtypes.Key
+    publicKey        wgtypes.Key
+    listenPort       int
+    network          string
+    clientPeersOnly  bool              // When true, skip node-type peers (Cilium handles node-to-node encryption)
+    identityValidator IdentityValidator
+}
+
+// IdentityValidator abstracts workload identity verification for WireGuard peers.
+type IdentityValidator interface {
+    ValidatePeerIdentity(ctx context.Context, peerPublicKey string, token string) (workloadID string, tenant string, err error)
 }
 
 // Peer represents a WireGuard peer configuration
 type Peer struct {
-    NodeID      string `json:"node_id"`
-    NodeType    string `json:"node_type"`
-    PublicKey   string `json:"public_key"`
-    AllowedIPs  string `json:"allowed_ips"`
-    Endpoint    string `json:"endpoint,omitempty"`
+    NodeID           string `json:"node_id"`
+    NodeType         string `json:"node_type"`
+    PublicKey        string `json:"public_key"`
+    AllowedIPs       string `json:"allowed_ips"`
+    Endpoint         string `json:"endpoint,omitempty"`
+    WorkloadID       string `json:"workload_id,omitempty"`
+    IdentityProvider string `json:"identity_provider,omitempty"`
+    Tenant           string `json:"tenant,omitempty"`
+    SpiffeID         string `json:"spiffe_id,omitempty"`
+    Verified         bool   `json:"verified"`
 }
 
 // NewManager creates a new WireGuard manager from a Config
@@ -97,6 +109,13 @@ func NewManagerWithParams(interfaceName, managerURL string, listenPort int, netw
     }
     
     return manager, nil
+}
+
+// SetClientPeersOnly configures whether node-type peers are skipped during sync.
+// Set to true when Cilium WireGuard node encryption is active so that hub-router
+// only manages client (end-user device) peers and Cilium handles node-to-node tunnels.
+func (m *Manager) SetClientPeersOnly(enabled bool) {
+    m.clientPeersOnly = enabled
 }
 
 func (m *Manager) initializeKeys() error {
@@ -218,6 +237,13 @@ func (m *Manager) syncPeers() error {
     var wgPeers []wgtypes.PeerConfig
     
     for _, peer := range peers {
+        // When Cilium handles node-to-node encryption, skip node-type peers to
+        // avoid double-encrypting traffic between cluster nodes.
+        if m.clientPeersOnly && peer.NodeType == "node" {
+            log.Debugf("Skipping node peer %s (clientPeersOnly=true, Cilium handles node encryption)", peer.NodeID)
+            continue
+        }
+
         publicKey, err := wgtypes.ParseKey(peer.PublicKey)
         if err != nil {
             log.Errorf("Invalid public key for peer %s: %v", peer.NodeID, err)
@@ -373,6 +399,73 @@ func (m *Manager) Close() error {
     if m.client != nil {
         return m.client.Close()
     }
+    return nil
+}
+
+// SetIdentityValidator configures the identity validator for peer authentication.
+func (m *Manager) SetIdentityValidator(v IdentityValidator) {
+    m.identityValidator = v
+}
+
+// ValidateAndAddPeer validates a peer's workload identity before adding it.
+// Returns error if identity validation fails when a validator is configured.
+func (m *Manager) ValidateAndAddPeer(ctx context.Context, peer *Peer, identityToken string) error {
+    if m.identityValidator != nil {
+        workloadID, tenant, err := m.identityValidator.ValidatePeerIdentity(ctx, peer.PublicKey, identityToken)
+        if err != nil {
+            log.WithFields(log.Fields{
+                "peer_public_key": peer.PublicKey,
+                "node_id":         peer.NodeID,
+            }).Errorf("Identity validation failed for peer: %v", err)
+            return fmt.Errorf("identity validation failed for peer %s: %w", peer.NodeID, err)
+        }
+
+        peer.WorkloadID = workloadID
+        peer.Tenant = tenant
+        peer.Verified = true
+
+        log.WithFields(log.Fields{
+            "node_id":     peer.NodeID,
+            "workload_id": workloadID,
+            "tenant":      tenant,
+        }).Infof("Peer identity validated successfully")
+    } else {
+        log.WithFields(log.Fields{
+            "node_id": peer.NodeID,
+        }).Debugf("No identity validator configured; skipping identity check for peer")
+    }
+
+    publicKey, err := wgtypes.ParseKey(peer.PublicKey)
+    if err != nil {
+        return fmt.Errorf("invalid public key for peer %s: %w", peer.NodeID, err)
+    }
+
+    allowedIPs, err := m.parseAllowedIPs(peer.AllowedIPs)
+    if err != nil {
+        return fmt.Errorf("invalid allowed IPs for peer %s: %w", peer.NodeID, err)
+    }
+
+    peerConfig := wgtypes.PeerConfig{
+        PublicKey:         publicKey,
+        AllowedIPs:        allowedIPs,
+        ReplaceAllowedIPs: true,
+    }
+
+    config := wgtypes.Config{
+        Peers: []wgtypes.PeerConfig{peerConfig},
+    }
+
+    if err := m.client.ConfigureDevice(m.interfaceName, config); err != nil {
+        return fmt.Errorf("failed to add peer %s to WireGuard interface: %w", peer.NodeID, err)
+    }
+
+    log.WithFields(log.Fields{
+        "node_id":    peer.NodeID,
+        "verified":   peer.Verified,
+        "workload_id": peer.WorkloadID,
+        "tenant":     peer.Tenant,
+    }).Infof("Peer added to WireGuard interface")
+
     return nil
 }
 

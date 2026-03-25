@@ -1,0 +1,107 @@
+# SPIRE Values for Bare-Metal Kubernetes Clusters
+# Use with: helm install spire ./deploy/helm/spire -f values-baremetal.yaml
+
+spire:
+  enabled: true
+  trustDomain: "baremetal.tobogganing.io"
+  namespace: spire-system
+
+server:
+  replicas: 1
+
+  image:
+    repository: ghcr.io/spiffe/spire-server
+    tag: "1.10.0"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  healthProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  dataStore:
+    type: sqlite3
+    connectionString: "/run/spire/data/datastore.sqlite3"
+
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: "standard"
+    accessModes:
+      - ReadWriteOnce
+
+  # Bare-metal specific attestors
+  nodeAttestors:
+    - k8s_psat
+    - tpm_devid      # TPM 2.0 for hardware root of trust
+    - x509pop        # X.509 for VM-based bare metal
+
+  port: 8081
+  bindAddress: "0.0.0.0"
+
+agent:
+  image:
+    repository: ghcr.io/spiffe/spire-agent
+    tag: "1.10.0"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  healthProbe:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  workloadAttestors:
+    - k8s
+    - unix
+
+  port: 8082
+  bindAddress: "127.0.0.1"
+
+federation:
+  enabled: false
+  bundleEndpoints: []
+
+rbac:
+  create: true
+
+podSecurityPolicy:
+  enabled: false
+
+serviceAccount:
+  create: true
+  name: null
+
+# Bare-metal: deploy to all nodes
+nodeSelector: {}
+
+# Bare-metal: tolerate all taints
+tolerations:
+  - operator: Exists
+
+affinity: {}
+
+logging:
+  level: info
+  format: json
+
+debug: false

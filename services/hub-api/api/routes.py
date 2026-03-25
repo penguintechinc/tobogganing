@@ -1,39 +1,53 @@
 from py4web import action, request, response, abort
 import json
+import os
 import structlog
+from datetime import datetime
 from typing import Optional
 import uuid
+
+from pydantic import ValidationError as PydanticValidationError
+
+from auth.middleware import require_scope, tenant_required, scope_required
+from auth.scopes import parse_scope_string
+from api.schemas import (
+    ClusterRegisterRequest, ClusterUpdateRequest,
+    ClientRegisterRequest, ClientUpdateRequest,
+    PolicyRuleCreateRequest, PolicyRuleUpdateRequest,
+    TokenRequest, VRFCreateRequest, PortConfigRequest,
+)
 
 logger = structlog.get_logger()
 
 def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manager):
-    
+
     @action("api/v1/clusters/register", method=["POST"])
     @action.uses("json")
+    @require_scope("clusters:write")
     async def register_cluster():
         try:
             data = await request.json()
-            
-            # Validate required fields
-            required = ['name', 'region', 'datacenter', 'headend_url']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
+
+            try:
+                validated = ClusterRegisterRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
             # Generate cluster ID
-            data['id'] = str(uuid.uuid4())
-            
+            cluster_data = validated.model_dump()
+            cluster_data['id'] = str(uuid.uuid4())
+
             # Register cluster
-            cluster = await cluster_manager.register_cluster(data)
-            
+            cluster = await cluster_manager.register_cluster(cluster_data)
+
             # Generate headend certificate
             key, cert, ca = await cert_manager.generate_headend_certificate(
                 cluster.id,
                 cluster.name,
                 [cluster.headend_url.split("://")[1].split(":")[0]]
             )
-            
+
             return {
                 "cluster_id": cluster.id,
                 "status": "registered",
@@ -47,91 +61,159 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Failed to register cluster: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clusters/<cluster_id>/heartbeat", method=["POST"])
     @action.uses("json")
+    @require_scope("hubs:write")
     async def cluster_heartbeat(cluster_id):
         try:
             data = await request.json()
             client_count = data.get('client_count', 0)
-            
+
             success = await cluster_manager.update_heartbeat(cluster_id, client_count)
-            
+
             if not success:
                 response.status = 404
                 return {"error": "Cluster not found"}
-            
+
             return {"status": "ok"}
         except Exception as e:
             logger.error(f"Heartbeat error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clusters", method=["GET"])
     @action.uses("json")
+    @require_scope("clusters:read")
     async def list_clusters():
         try:
-            clusters = await cluster_manager.get_all_clusters()
+            tenant_id = getattr(request, "tenant", None)
+            clusters = await cluster_manager.get_all_clusters(
+                tenant_id=tenant_id.tenant_id if tenant_id else None
+            )
             return {
-                "clusters": [
-                    {
-                        "id": c.id,
-                        "name": c.name,
-                        "region": c.region,
-                        "datacenter": c.datacenter,
-                        "status": c.status,
-                        "client_count": c.client_count
-                    }
-                    for c in clusters
-                ]
+                "status": "success",
+                "data": {
+                    "clusters": [
+                        {
+                            "id": c.id,
+                            "name": c.name,
+                            "region": c.region,
+                            "datacenter": c.datacenter,
+                            "status": c.status,
+                            "client_count": c.client_count,
+                        }
+                        for c in clusters
+                    ]
+                },
+                "meta": {"total": len(clusters)},
             }
         except Exception as e:
             logger.error(f"List clusters error: {e}")
             response.status = 500
+            return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
+
+    # ---- Attestation Challenge ----
+    @action("api/v1/attestation/challenge", method=["POST"])
+    @action.uses("json")
+    async def attestation_challenge():
+        """Issue a nonce for TPM PCR quote freshness verification."""
+        try:
+            import secrets
+            nonce = secrets.token_hex(32)  # 32 bytes = 64 hex chars
+
+            # Store nonce in Redis with 5-minute TTL, keyed by auth header
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer "):
+                response.status = 401
+                return {"error": "Missing authorization"}
+
+            api_key = auth_header[7:]
+            redis_client = jwt_manager.redis_client
+            nonce_key = f"attestation_nonce:{api_key[:16]}"
+            await redis_client.setex(nonce_key, 300, nonce)
+
+            from datetime import datetime, timezone, timedelta
+            expires_at = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+
+            return {
+                "status": "success",
+                "data": {"nonce": nonce, "expires_at": expires_at},
+            }
+        except Exception as e:
+            logger.error("attestation_challenge_failed", error=str(e))
+            response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/register", method=["POST"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def register_client():
         try:
             data = await request.json()
-            
-            # Validate required fields
-            required = ['name', 'type', 'public_key']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
-            # Validate client type
-            if data['type'] not in ['docker', 'native']:
-                response.status = 400
-                return {"error": "Invalid client type"}
-            
+
+            try:
+                validated = ClientRegisterRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
             # Generate client ID
-            data['id'] = str(uuid.uuid4())
-            
+            client_data = validated.model_dump()
+            client_data['id'] = str(uuid.uuid4())
+
             # Get optimal cluster
-            location = data.get('location', {})
+            location = client_data.get('location') or {}
             cluster = await cluster_manager.get_optimal_cluster(location)
-            
+
             if not cluster:
                 response.status = 503
                 return {"error": "No available clusters"}
-            
-            data['cluster_id'] = cluster.id
-            
+
+            client_data['cluster_id'] = cluster.id
+
             # Register client
-            client, api_key = await client_registry.register_client(data)
-            
+            client, api_key = await client_registry.register_client(client_data)
+
             # Generate client certificate
             key, cert, ca = await cert_manager.generate_client_certificate(
                 client.id,
                 client.name,
                 client.type
             )
-            
-            return {
+
+            # Validate attestation if provided
+            attestation_result = None
+            attestation_data = client_data.get("attestation")
+            if attestation_data:
+                from auth.attestation import AttestationValidator
+                from auth.fleetdm import FleetDMClient
+
+                fleetdm = FleetDMClient()
+                validator = AttestationValidator(
+                    fleetdm_client=fleetdm if fleetdm.enabled else None
+                )
+
+                # Verify TPM nonce if TPM quote present
+                if attestation_data.get("tpm_quote"):
+                    auth_header = request.headers.get("Authorization", "")
+                    if auth_header.startswith("Bearer "):
+                        nonce_key = f"attestation_nonce:{auth_header[7:][:16]}"
+                        redis_client = jwt_manager.redis_client
+                        stored_nonce = await redis_client.get(nonce_key)
+                        if stored_nonce:
+                            await redis_client.delete(nonce_key)
+
+                attestation_result = await validator.validate(attestation_data)
+
+                logger.info(
+                    "client_attestation_validated",
+                    client_id=client.id,
+                    confidence=attestation_result.confidence_score,
+                    level=attestation_result.confidence_level,
+                )
+
+            resp = {
                 "client_id": client.id,
                 "api_key": api_key,
                 "cluster": {
@@ -142,15 +224,26 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "key": key,
                     "cert": cert,
                     "ca": ca
-                }
+                },
             }
+
+            if attestation_result:
+                resp["attestation_confidence"] = {
+                    "score": attestation_result.confidence_score,
+                    "percent": attestation_result.confidence_percent,
+                    "level": attestation_result.confidence_level,
+                    "method": attestation_result.method,
+                }
+
+            return resp
         except Exception as e:
             logger.error(f"Failed to register client: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/config", method=["GET"])
     @action.uses("json")
+    @require_scope("clients:read")
     async def get_client_config(client_id):
         try:
             # Authenticate using API key
@@ -158,21 +251,21 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             # Get cluster info
             cluster = await cluster_manager.get_cluster(client.cluster_id)
-            
+
             if not cluster:
                 response.status = 503
                 return {"error": "Cluster not available"}
-            
+
             return {
                 "client_id": client.id,
                 "cluster": {
@@ -189,9 +282,10 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Get config error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/tunnel-config", method=["PUT"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def update_tunnel_config(client_id):
         try:
             # Authenticate using API key or admin token
@@ -199,10 +293,10 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             # Check if this is an admin JWT or client API key
             token = auth_header[7:]
-            
+
             # Try JWT first (for admin access)
             user_info = jwt_manager.validate_token(token)
             if user_info and user_info.get('role') == 'admin':
@@ -214,34 +308,31 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 if not client or client.id != client_id:
                     response.status = 401
                     return {"error": "Unauthorized"}
-            
+
             data = await request.json()
-            
-            # Validate tunnel mode
-            tunnel_mode = data.get('tunnel_mode', 'full')
-            if tunnel_mode not in ['full', 'split']:
-                response.status = 400
-                return {"error": "Invalid tunnel_mode. Must be 'full' or 'split'"}
-            
+
+            try:
+                validated = ClientUpdateRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            tunnel_mode = validated.tunnel_mode or 'full'
+
             # Validate split tunnel routes if in split mode
             split_tunnel_routes = []
             if tunnel_mode == 'split':
-                routes = data.get('split_tunnel_routes', [])
-                if not isinstance(routes, list):
-                    response.status = 400
-                    return {"error": "split_tunnel_routes must be a list"}
-                
-                # Validate each route (domain, IPv4, IPv6, or CIDR)
+                routes = validated.split_tunnel_routes or []
                 import ipaddress
                 import re
-                
+
                 domain_pattern = re.compile(r'^(\*\.)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-                
+
                 for route in routes:
                     if not isinstance(route, str):
                         response.status = 400
                         return {"error": f"Invalid route format: {route}"}
-                    
+
                     # Try to parse as IP address or network
                     try:
                         ipaddress.ip_network(route, strict=False)
@@ -253,36 +344,37 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         else:
                             response.status = 400
                             return {"error": f"Invalid route: {route}. Must be a domain, IP address, or CIDR"}
-            
+
             # Update client configuration in database
             from ..database import get_db
             db = get_db()
-            
+
             client_record = db(db.clients.client_id == client_id).select().first()
             if not client_record:
                 response.status = 404
                 return {"error": "Client not found"}
-            
+
             client_record.update_record(
                 tunnel_mode=tunnel_mode,
                 split_tunnel_routes=split_tunnel_routes if tunnel_mode == 'split' else []
             )
             db.commit()
-            
+
             return {
                 "client_id": client_id,
                 "tunnel_mode": tunnel_mode,
                 "split_tunnel_routes": split_tunnel_routes if tunnel_mode == 'split' else [],
                 "status": "updated"
             }
-            
+
         except Exception as e:
             logger.error(f"Update tunnel config error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/rotate-key", method=["POST"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def rotate_client_key(client_id):
         try:
             # Authenticate using current API key
@@ -290,21 +382,21 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             # Rotate API key
             new_api_key = await client_registry.rotate_api_key(client_id)
-            
+
             if not new_api_key:
                 response.status = 500
                 return {"error": "Failed to rotate key"}
-            
+
             return {
                 "client_id": client_id,
                 "new_api_key": new_api_key
@@ -313,9 +405,10 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Key rotation error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients/<client_id>/metrics", method=["POST"])
     @action.uses("json")
+    @require_scope("clients:write")
     async def submit_client_metrics(client_id):
         try:
             # Check if metrics feature is licensed
@@ -326,26 +419,26 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "error": "Feature not licensed",
                     "message": "Client metrics collection requires a Professional or Enterprise license"
                 }
-            
+
             # Authenticate using API key
             auth_header = request.headers.get('Authorization', '')
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             data = await request.json()
-            
+
             # Import metrics module
             from ..metrics.prometheus import get_metrics_instance
             metrics = get_metrics_instance()
-            
+
             # Update client metrics
             metrics.update_client_metrics(
                 client_id=client.id,
@@ -354,7 +447,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 headless=data.get('headless', False),
                 metrics=data.get('metrics', {})
             )
-            
+
             # Update last seen in database
             from ..database import get_db
             db = get_db()
@@ -363,16 +456,17 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 from datetime import datetime
                 client_record.update_record(last_seen=datetime.now())
                 db.commit()
-            
+
             return {"status": "metrics_received"}
-            
+
         except Exception as e:
             logger.error(f"Submit client metrics error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/headends/<headend_id>/metrics", method=["POST"])
     @action.uses("json")
+    @require_scope("hubs:write")
     async def submit_headend_metrics(headend_id):
         try:
             # Authenticate using JWT or headend token
@@ -380,28 +474,28 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             token = auth_header[7:]
-            
+
             # Validate headend authentication
             # For now, we'll use JWT validation
             user_info = jwt_manager.validate_token(token)
             if not user_info:
                 response.status = 401
                 return {"error": "Unauthorized"}
-            
+
             data = await request.json()
-            
+
             # Import metrics module
             from ..metrics.prometheus import get_metrics_instance
             metrics = get_metrics_instance()
-            
+
             # Get headend info from cluster
             cluster = await cluster_manager.get_cluster_by_headend(headend_id)
             if not cluster:
                 response.status = 404
                 return {"error": "Headend not found"}
-            
+
             # Update headend metrics
             metrics.update_headend_metrics(
                 headend_id=headend_id,
@@ -410,48 +504,54 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 datacenter=cluster.datacenter,
                 metrics=data.get('metrics', {})
             )
-            
+
             return {"status": "metrics_received"}
-            
+
         except Exception as e:
             logger.error(f"Submit headend metrics error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/clients", method=["GET"])
     @action.uses("json")
+    @require_scope("clients:read")
     async def list_clients():
         try:
-            # This endpoint should require admin authentication
-            # For now, we'll allow it for testing
-            
-            clients = await client_registry.get_all_clients()
+            tenant_id = getattr(request, "tenant", None)
+            clients = await client_registry.get_all_clients(
+                tenant_id=tenant_id.tenant_id if tenant_id else None
+            )
             return {
-                "clients": [
-                    {
-                        "id": c.id,
-                        "name": c.name,
-                        "type": c.type,
-                        "cluster_id": c.cluster_id,
-                        "status": c.status,
-                        "last_seen": c.last_seen.isoformat()
-                    }
-                    for c in clients
-                ]
+                "status": "success",
+                "data": {
+                    "clients": [
+                        {
+                            "id": c.id,
+                            "name": c.name,
+                            "type": c.type,
+                            "cluster_id": c.cluster_id,
+                            "status": c.status,
+                            "last_seen": c.last_seen.isoformat(),
+                        }
+                        for c in clients
+                    ]
+                },
+                "meta": {"total": len(clients)},
             }
         except Exception as e:
             logger.error(f"List clients error: {e}")
             response.status = 500
-            return {"error": "Internal server error"}
-    
+            return {"status": "error", "data": None, "meta": {"error": "Internal server error"}}
+
     @action("api/v1/certs/generate", method=["POST"])
     @action.uses("json")
+    @require_scope("certificates:write")
     async def generate_certificate():
         try:
             data = await request.json()
-            
+
             cert_type = data.get('type', 'client')
-            
+
             if cert_type == 'client':
                 key, cert, ca = await cert_manager.generate_client_certificate(
                     data.get('id', str(uuid.uuid4())),
@@ -467,7 +567,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             else:
                 response.status = 400
                 return {"error": "Invalid certificate type"}
-            
+
             return {
                 "type": cert_type,
                 "certificates": {
@@ -480,7 +580,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error(f"Certificate generation error: {e}")
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # JWT Authentication Endpoints
     @action("api/v1/auth/token", method=["POST"])
     @action.uses("json")
@@ -488,23 +588,22 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
         """Generate JWT token for authenticated node/client"""
         try:
             data = await request.json()
-            
-            # Validate required fields for JWT generation
-            required = ['node_id', 'node_type', 'api_key']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
-            node_id = data['node_id']
-            node_type = data['node_type']
-            api_key = data['api_key']
-            
+
+            try:
+                validated = TokenRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            node_id = validated.node_id
+            node_type = validated.node_type
+            api_key = validated.api_key
+
             # Authenticate based on node type
             authenticated = False
             permissions = []
             metadata = {}
-            
+
             if node_type in ['kubernetes_node', 'raw_compute']:
                 # Authenticate cluster/headend nodes
                 cluster = await cluster_manager.authenticate_cluster(api_key)
@@ -527,11 +626,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         'client_type': client.type,
                         'cluster_id': client.cluster_id
                     }
-            
+
             if not authenticated:
                 response.status = 401
                 return {"error": "Authentication failed"}
-            
+
             # Generate JWT tokens
             tokens = await jwt_manager.generate_token(
                 node_id=node_id,
@@ -539,42 +638,77 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 permissions=permissions,
                 metadata=metadata
             )
-            
+
             logger.info("JWT tokens generated", node_id=node_id, node_type=node_type)
-            
+
             return tokens
-            
+
         except Exception as e:
             logger.error("JWT token generation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/refresh", method=["POST"])
     @action.uses("json")
     async def refresh_jwt_token():
-        """Refresh JWT access token using refresh token"""
+        """Refresh JWT access token using refresh token."""
         try:
             data = await request.json()
-            
+
             refresh_token = data.get('refresh_token')
             if not refresh_token:
                 response.status = 400
                 return {"error": "Missing refresh_token"}
-            
+
             # Refresh the token
             new_tokens = await jwt_manager.refresh_token(refresh_token)
-            
+
             if not new_tokens:
                 response.status = 401
                 return {"error": "Invalid or expired refresh token"}
-            
+
+            # Optional: attestation drift detection on refresh
+            attestation_data = data.get("attestation")
+            if attestation_data:
+                from auth.attestation import AttestationValidator
+
+                validator = AttestationValidator()
+                # TODO: load stored fingerprint from client record
+                result = await validator.validate(attestation_data)
+
+                # Critical field change → reject
+                if result.drift_detected and "product_uuid" in result.drift_fields:
+                    logger.warning(
+                        "attestation_critical_drift",
+                        drift_fields=result.drift_fields,
+                    )
+                    response.status = 403
+                    return {"error": "Attestation drift: critical field changed"}
+
+                # High drift → reject
+                if result.drift_score > 0.6:
+                    logger.warning(
+                        "attestation_high_drift",
+                        drift_score=result.drift_score,
+                    )
+                    response.status = 403
+                    return {"error": "Attestation drift too high, re-registration required"}
+
+                # Moderate drift → allow with warning
+                if result.drift_score > 0.3:
+                    logger.warning(
+                        "attestation_moderate_drift",
+                        drift_score=result.drift_score,
+                        drift_fields=result.drift_fields,
+                    )
+
             return new_tokens
-            
+
         except Exception as e:
             logger.error("JWT token refresh failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/validate", method=["POST"])
     @action.uses("json")
     async def validate_jwt_token():
@@ -585,16 +719,16 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             token = auth_header[7:]  # Remove 'Bearer ' prefix
-            
+
             # Validate the token
             payload = await jwt_manager.validate_token(token)
-            
+
             if not payload:
                 response.status = 401
                 return {"error": "Invalid or expired token"}
-            
+
             return {
                 "valid": True,
                 "node_id": payload.get("sub"),
@@ -603,19 +737,19 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 "metadata": payload.get("metadata", {}),
                 "expires_at": payload.get("exp")
             }
-            
+
         except Exception as e:
             logger.error("JWT token validation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/revoke", method=["POST"])
     @action.uses("json")
     async def revoke_jwt_token():
         """Revoke specific JWT token or all tokens for a node"""
         try:
             data = await request.json()
-            
+
             if 'node_id' in data:
                 # Revoke all tokens for a node
                 count = await jwt_manager.revoke_all_tokens(data['node_id'])
@@ -627,12 +761,12 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             else:
                 response.status = 400
                 return {"error": "Missing node_id or jti"}
-                
+
         except Exception as e:
             logger.error("JWT token revocation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/auth/public-key", method=["GET"])
     @action.uses("json")
     async def get_jwt_public_key():
@@ -648,44 +782,45 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             logger.error("Failed to get public key", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # WireGuard Certificate Management Endpoints
     @action("api/v1/wireguard/keys", method=["POST"])
     @action.uses("json")
+    @require_scope("hubs:write")
     async def generate_wireguard_keys():
         """Generate WireGuard keys and certificates for authenticated nodes"""
         try:
             data = await request.json()
-            
-            required = ['node_id', 'node_type', 'api_key']
-            for field in required:
-                if field not in data:
-                    response.status = 400
-                    return {"error": f"Missing required field: {field}"}
-            
-            node_id = data['node_id']
-            node_type = data['node_type']
-            api_key = data['api_key']
-            
+
+            try:
+                validated = TokenRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            node_id = validated.node_id
+            node_type = validated.node_type
+            api_key = validated.api_key
+
             # Authenticate based on node type
             authenticated = False
-            
-            if node_type in ['kubernetes_node', 'raw_compute', 'headend']:
+
+            if node_type in ['kubernetes_node', 'raw_compute']:
                 cluster = await cluster_manager.authenticate_cluster(api_key)
                 authenticated = cluster is not None
             elif node_type in ['client_docker', 'client_native']:
                 client = await client_registry.authenticate_client(api_key)
                 authenticated = client is not None and client.id == node_id
-            
+
             if not authenticated:
                 response.status = 401
                 return {"error": "Authentication failed"}
-            
+
             # Generate WireGuard keys and assign IP
             wg_config = await cert_manager.generate_wireguard_keys(node_id, node_type)
-            
+
             # Generate X.509 certificate for WireGuard authentication
-            if node_type in ['headend', 'kubernetes_node', 'raw_compute']:
+            if node_type in ['kubernetes_node', 'raw_compute']:
                 cert_key, cert_pem, ca_cert = await cert_manager.generate_headend_certificate(
                     node_id,
                     f"{node_type}-{node_id}",
@@ -697,11 +832,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     f"{node_type}-{node_id}",
                     node_type
                 )
-            
-            logger.info("Generated WireGuard keys and certificate", 
-                       node_id=node_id, 
+
+            logger.info("Generated WireGuard keys and certificate",
+                       node_id=node_id,
                        node_type=node_type)
-            
+
             return {
                 "node_id": node_id,
                 "wireguard": {
@@ -717,14 +852,15 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 },
                 "authentication_note": "WireGuard requires both certificate AND JWT/SSO authentication"
             }
-            
+
         except Exception as e:
             logger.error("WireGuard key generation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/wireguard/peers", method=["GET"])
     @action.uses("json")
+    @require_scope("hubs:read")
     async def get_wireguard_peers():
         """Get all WireGuard peer configurations (for headend servers)"""
         try:
@@ -733,10 +869,10 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             # This could be either JWT or API key - validate both
             token = auth_header[7:]
-            
+
             # Try JWT validation first
             jwt_payload = await jwt_manager.validate_token(token)
             if jwt_payload and 'headend' in jwt_payload.get('permissions', []):
@@ -748,22 +884,23 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 if not cluster:
                     response.status = 401
                     return {"error": "Authentication failed"}
-            
+
             # Get all WireGuard peers
             peers = await cert_manager.get_all_wireguard_peers()
-            
+
             return {
                 "peers": peers,
                 "total": len(peers)
             }
-            
+
         except Exception as e:
             logger.error("Failed to get WireGuard peers", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     @action("api/v1/wireguard/<node_id>/revoke", method=["POST"])
-    @action.uses("json") 
+    @action.uses("json")
+    @require_scope("hubs:write")
     async def revoke_wireguard_keys(node_id):
         """Revoke WireGuard keys for a specific node"""
         try:
@@ -772,23 +909,24 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header:
                 response.status = 401
                 return {"error": "Authentication required"}
-            
+
             success = await cert_manager.revoke_wireguard_keys(node_id)
-            
+
             if success:
                 return {"revoked": True, "node_id": node_id}
             else:
                 response.status = 404
                 return {"error": "Node not found"}
-                
+
         except Exception as e:
             logger.error("WireGuard key revocation failed", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
     # Headend Configuration Endpoint
     @action("api/v1/clusters/<cluster_id>/headend-config", method=["GET"])
     @action.uses("json")
+    @require_scope("hubs:read")
     async def get_headend_config(cluster_id):
         """Get complete headend configuration for a cluster"""
         try:
@@ -797,39 +935,39 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             if not auth_header.startswith('Bearer '):
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
+
             api_key = auth_header[7:]
             cluster = await cluster_manager.authenticate_cluster(api_key)
-            
+
             if not cluster or cluster.id != cluster_id:
                 response.status = 401
                 return {"error": "Authentication failed"}
-            
+
             # Get WireGuard configuration for this cluster
             wg_config = await cert_manager.get_wireguard_config(cluster_id)
             if not wg_config:
                 # Generate WireGuard config for headend if not exists
                 wg_config = await cert_manager.generate_wireguard_keys(cluster_id, "headend")
-            
+
             # Get all peers for this cluster's WireGuard network
             peers = await cert_manager.get_all_wireguard_peers()
-            
+
             # Build headend configuration
             config = {
                 # Server ports
                 "http_port": "8443",
-                "tcp_port": "8444", 
+                "tcp_port": "8444",
                 "udp_port": "8445",
                 "metrics_port": "9090",
                 "cert_file": "/certs/headend.crt",
                 "key_file": "/certs/headend.key",
-                
+
                 # Authentication configuration
                 "auth": {
                     "type": "jwt",  # Default to JWT, can be overridden by env vars
                     "manager_url": request.url_root.rstrip('/'),
                     "jwt_public_key": await jwt_manager.get_public_key(),
-                    
+
                     # OAuth2 config (if needed)
                     "oauth2": {
                         "issuer": "",
@@ -837,8 +975,8 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         "client_secret": "",
                         "redirect_url": ""
                     },
-                    
-                    # SAML2 config (if needed)  
+
+                    # SAML2 config (if needed)
                     "saml2": {
                         "idp_metadata_url": "",
                         "sp_entity_id": f"headend-{cluster_id}",
@@ -846,7 +984,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         "slo_url": ""
                     }
                 },
-                
+
                 # WireGuard configuration
                 "wireguard": {
                     "interface": "wg0",
@@ -865,7 +1003,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                         } for peer in peers
                     ]
                 },
-                
+
                 # Traffic mirroring configuration
                 "mirror": {
                     "enabled": False,  # Default disabled
@@ -875,7 +1013,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "sample_rate": 100,
                     "filter": ""
                 },
-                
+
                 # Proxy configuration
                 "proxy": {
                     "skip_tls_verify": False,
@@ -883,15 +1021,297 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                     "max_idle_conns": 100
                 }
             }
-            
+
             logger.info("Provided headend configuration", cluster_id=cluster_id)
             return config
-            
+
         except Exception as e:
             logger.error("Failed to get headend config", error=str(e))
             response.status = 500
             return {"error": "Internal server error"}
-    
+
+    # ------------------------------------------------------------------
+    # Policy CRUD routes — unified policy model
+    # ------------------------------------------------------------------
+
+    def _policy_to_dict(row):
+        return {
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "action": row.action,
+            "priority": row.priority,
+            "scope": row.scope,
+            "direction": row.direction,
+            "domains": row.domains or [],
+            "ports": row.ports or [],
+            "protocol": row.protocol,
+            "src_cidrs": row.src_cidrs or [],
+            "dst_cidrs": row.dst_cidrs or [],
+            "users": row.users or [],
+            "groups": row.groups or [],
+            "identity_provider": row.identity_provider,
+            "enabled": row.enabled,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    @action("api/v1/policies", method=["GET"])
+    @action.uses("json")
+    @require_scope("policies:read")
+    async def list_policies():
+        """List all policy rules, scoped to the authenticated tenant."""
+        try:
+            from database import get_read_db
+            db = get_read_db()
+            query = db.policy_rules
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx:
+                query = db(
+                    (db.policy_rules.id > 0)
+                    & (db.policy_rules.tenant_id == tenant_ctx.tenant_id)
+                )
+            else:
+                query = db(db.policy_rules)
+            rows = query.select(orderby=db.policy_rules.priority)
+            policies = [_policy_to_dict(row) for row in rows]
+            return {"status": "success", "data": {"policies": policies, "total": len(policies)}, "meta": {}}
+        except Exception as e:
+            logger.error("List policies error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies", method=["POST"])
+    @action.uses("json")
+    @require_scope("policies:write")
+    async def create_policy():
+        """Create a new policy rule."""
+        try:
+            data = await request.json()
+
+            try:
+                validated = PolicyRuleCreateRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            from database import get_db
+            db = get_db()
+            tenant_ctx = getattr(request, "tenant", None)
+
+            # Prefer token tenant context over body tenant_id
+            effective_tenant_id = (
+                tenant_ctx.tenant_id if tenant_ctx else validated.tenant_id
+            )
+
+            row_id = db.policy_rules.insert(
+                name=validated.name,
+                description=validated.description or "",
+                action=validated.action,
+                priority=validated.priority,
+                scope=validated.scope,
+                direction=validated.direction,
+                domains=validated.domains or [],
+                ports=validated.ports or [],
+                protocol=validated.protocol,
+                src_cidrs=validated.src_cidrs or [],
+                dst_cidrs=validated.dst_cidrs or [],
+                users=validated.users or [],
+                groups=validated.groups or [],
+                identity_provider=validated.identity_provider,
+                enabled=validated.enabled,
+                tenant_id=effective_tenant_id,
+            )
+            db.commit()
+
+            row = db.policy_rules[row_id]
+            policy_dict = _policy_to_dict(row)
+
+            # Publish policy creation to Redis for gRPC streaming
+            try:
+                import redis as _redis
+                _r = _redis.Redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost:6379")
+                )
+                _r.publish("policy:updates", json.dumps({
+                    "action": "created",
+                    "policy": policy_dict,
+                    "timestamp": datetime.now().isoformat(),
+                }))
+            except Exception:
+                pass  # Redis unavailable is non-fatal
+
+            response.status = 201
+            return {"status": "success", "data": policy_dict}
+        except Exception as e:
+            logger.error("Create policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies/<policy_id:int>", method=["GET"])
+    @action.uses("json")
+    @require_scope("policies:read")
+    async def get_policy(policy_id):
+        """Get a single policy rule by ID."""
+        try:
+            from database import get_read_db
+            db = get_read_db()
+            row = db.policy_rules[policy_id]
+            if not row:
+                response.status = 404
+                return {"status": "error", "data": None, "meta": {"error": "Policy not found"}}
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx and row.tenant_id != tenant_ctx.tenant_id:
+                response.status = 403
+                return {"status": "error", "data": None, "meta": {"error": "Access denied"}}
+            return {"status": "success", "data": _policy_to_dict(row), "meta": {}}
+        except Exception as e:
+            logger.error("Get policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies/<policy_id:int>", method=["PUT"])
+    @action.uses("json")
+    @require_scope("policies:write")
+    async def update_policy(policy_id):
+        """Update an existing policy rule."""
+        try:
+            from database import get_db
+            db = get_db()
+            row = db.policy_rules[policy_id]
+            if not row:
+                response.status = 404
+                return {"status": "error", "data": None, "meta": {"error": "Policy not found"}}
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx and row.tenant_id != tenant_ctx.tenant_id:
+                response.status = 403
+                return {"status": "error", "data": None, "meta": {"error": "Access denied"}}
+
+            data = await request.json()
+
+            try:
+                validated = PolicyRuleUpdateRequest.model_validate(data)
+            except PydanticValidationError as e:
+                response.status = 422
+                return {"error": "Validation failed", "details": e.errors()}
+
+            updatable = [
+                "name", "description", "action", "priority", "scope",
+                "direction", "domains", "ports", "protocol", "src_cidrs",
+                "dst_cidrs", "users", "groups", "identity_provider", "enabled",
+            ]
+            # Only include fields that were explicitly provided in the request body
+            update_fields = {
+                k: v for k, v in validated.model_dump(exclude_unset=True).items()
+                if k in updatable
+            }
+
+            if update_fields:
+                row.update_record(**update_fields)
+                db.commit()
+
+            updated_row = db.policy_rules[policy_id]
+            updated_dict = _policy_to_dict(updated_row)
+
+            # Publish policy update to Redis for gRPC streaming
+            try:
+                import redis as _redis
+                _r = _redis.Redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost:6379")
+                )
+                _r.publish("policy:updates", json.dumps({
+                    "action": "updated",
+                    "policy": updated_dict,
+                    "timestamp": datetime.now().isoformat(),
+                }))
+            except Exception:
+                pass  # Redis unavailable is non-fatal
+
+            return {"status": "success", "data": updated_dict}
+        except Exception as e:
+            logger.error("Update policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/policies/<policy_id:int>", method=["DELETE"])
+    @action.uses("json")
+    @require_scope("policies:delete")
+    async def delete_policy(policy_id):
+        """Delete a policy rule."""
+        try:
+            from database import get_db
+            db = get_db()
+            row = db.policy_rules[policy_id]
+            if not row:
+                response.status = 404
+                return {"status": "error", "data": None, "meta": {"error": "Policy not found"}}
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx and row.tenant_id != tenant_ctx.tenant_id:
+                response.status = 403
+                return {"status": "error", "data": None, "meta": {"error": "Access denied"}}
+            deleted_dict = _policy_to_dict(row)
+            db(db.policy_rules.id == policy_id).delete()
+            db.commit()
+
+            # Publish policy deletion to Redis for gRPC streaming
+            try:
+                import redis as _redis
+                _r = _redis.Redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost:6379")
+                )
+                _r.publish("policy:updates", json.dumps({
+                    "action": "deleted",
+                    "policy": deleted_dict,
+                    "timestamp": datetime.now().isoformat(),
+                }))
+            except Exception:
+                pass  # Redis unavailable is non-fatal
+
+            return {"status": "success", "data": {"id": policy_id, "status": "deleted"}}
+        except Exception as e:
+            logger.error("Delete policy error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
+    @action("api/v1/firewall/rules", method=["GET"])
+    @action.uses("json")
+    @require_scope("policies:read")
+    async def get_firewall_rules_compat():
+        """Compatibility shim: serves policy_rules in legacy firewall format."""
+        try:
+            from database import get_read_db
+            db = get_read_db()
+            tenant_ctx = getattr(request, "tenant", None)
+            if tenant_ctx:
+                query = db(
+                    (db.policy_rules.id > 0)
+                    & (db.policy_rules.tenant_id == tenant_ctx.tenant_id)
+                )
+            else:
+                query = db(db.policy_rules)
+            rows = query.select(orderby=db.policy_rules.priority)
+            rules = []
+            for row in rows:
+                rules.append({
+                    "id": row.id,
+                    "name": row.name,
+                    "action": row.action,
+                    "priority": row.priority,
+                    "domain": (row.domains or [None])[0],
+                    "src_ip": (row.src_cidrs or [None])[0],
+                    "dst_ip": (row.dst_cidrs or [None])[0],
+                    "protocol": row.protocol,
+                    "src_port": (row.ports or [None])[0],
+                    "dst_port": (row.ports or [None])[0],
+                    "direction": row.direction,
+                    "enabled": row.enabled,
+                })
+            return {"status": "success", "data": {"rules": rules}}
+        except Exception as e:
+            logger.error("Compat firewall rules error", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
     @action("api/v1/status", method=["GET"])
     @action.uses("json")
     async def get_status():

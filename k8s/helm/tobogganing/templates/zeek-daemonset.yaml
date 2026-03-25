@@ -1,0 +1,89 @@
+{{- if .Values.zeek.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-zeek
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zeek
+spec:
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: zeek
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: zeek
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- if .Values.zeek.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.zeek.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.zeek.tolerations }}
+      tolerations:
+        {{- toYaml .Values.zeek.tolerations | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: zeek
+          image: "zeek/zeek:{{ .Values.zeek.image.tag | default "latest" }}"
+          imagePullPolicy: {{ .Values.zeek.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: ZEEK_INTERFACE
+              value: {{ .Values.zeek.interface | default "eth0" | quote }}
+            - name: ZEEK_CLUSTER_ID
+              value: {{ include "tobogganing.fullname" . | quote }}
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+          volumeMounts:
+            - name: zeek-config
+              mountPath: /usr/local/zeek/share/zeek/site/local.zeek
+              subPath: local.zeek
+              readOnly: true
+            - name: zeek-config
+              mountPath: /usr/local/zeek/share/zeek/site/tobogganing.zeek
+              subPath: tobogganing.zeek
+              readOnly: true
+            - name: zeek-logs
+              mountPath: /var/log/zeek
+          {{- if .Values.zeek.resources }}
+          resources:
+            {{- toYaml .Values.zeek.resources | nindent 12 }}
+          {{- else }}
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - zeekctl
+                - status
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: zeek-config
+          configMap:
+            name: {{ include "tobogganing.fullname" . }}-zeek-config
+        - name: zeek-logs
+          {{- if .Values.zeek.logs.hostPath }}
+          hostPath:
+            path: {{ .Values.zeek.logs.hostPath }}
+            type: DirectoryOrCreate
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

@@ -41,6 +41,10 @@ type Manager struct {
     suricataHost    string
     suricataPort    string
     suricataConn    net.Conn
+    zeekEnabled     bool
+    zeekHost        string
+    zeekPort        string
+    zeekConn        net.Conn
 }
 
 type MirrorPacket struct {
@@ -80,7 +84,7 @@ func NewManagerWithSuricata(destinations []string, protocol string, bufferSize i
     if protocol == "" {
         protocol = "VXLAN"
     }
-    
+
     return &Manager{
         destinations:    destinations,
         protocol:        protocol,
@@ -92,6 +96,29 @@ func NewManagerWithSuricata(destinations []string, protocol string, bufferSize i
         suricataEnabled: suricataHost != "" && suricataPort != "",
         suricataHost:    suricataHost,
         suricataPort:    suricataPort,
+    }
+}
+
+// NewManagerWithIDS creates a mirror manager with both Suricata and Zeek IDS integration.
+func NewManagerWithIDS(destinations []string, protocol string, bufferSize int, suricataHost, suricataPort, zeekHost, zeekPort string) *Manager {
+    if protocol == "" {
+        protocol = "VXLAN"
+    }
+
+    return &Manager{
+        destinations:    destinations,
+        protocol:        protocol,
+        bufferSize:      bufferSize,
+        queue:           make(chan *MirrorPacket, bufferSize),
+        stopCh:          make(chan struct{}),
+        connections:     make(map[string]net.Conn),
+        stats:           &Stats{},
+        suricataEnabled: suricataHost != "" && suricataPort != "",
+        suricataHost:    suricataHost,
+        suricataPort:    suricataPort,
+        zeekEnabled:     zeekHost != "" && zeekPort != "",
+        zeekHost:        zeekHost,
+        zeekPort:        zeekPort,
     }
 }
 
@@ -120,7 +147,19 @@ func (m *Manager) Start() error {
         }
     }
     
-    if len(m.connections) == 0 && !m.suricataEnabled {
+    // Initialize Zeek connection if enabled (VXLAN tap)
+    if m.zeekEnabled {
+        zeekAddr := fmt.Sprintf("%s:%s", m.zeekHost, m.zeekPort)
+        conn, err := net.Dial("udp", zeekAddr)
+        if err != nil {
+            log.Errorf("Failed to connect to Zeek at %s: %v", zeekAddr, err)
+        } else {
+            m.zeekConn = conn
+            log.Infof("Connected to Zeek network monitor at %s (VXLAN)", zeekAddr)
+        }
+    }
+
+    if len(m.connections) == 0 && !m.suricataEnabled && !m.zeekEnabled {
         return fmt.Errorf("no mirror destinations available")
     }
     
@@ -160,7 +199,15 @@ func (m *Manager) Stop() {
         }
         m.suricataConn = nil
     }
-    
+
+    // Close Zeek connection
+    if m.zeekConn != nil {
+        if err := m.zeekConn.Close(); err != nil {
+            log.Debugf("Error closing Zeek connection: %v", err)
+        }
+        m.zeekConn = nil
+    }
+
     m.mu.Unlock()
 }
 
@@ -326,11 +373,23 @@ func (m *Manager) sendPacket(packet *MirrorPacket) {
         if _, err := m.suricataConn.Write(suricataData); err != nil {
             log.Errorf("Failed to send to Suricata: %v", err)
             m.stats.incrementErrors()
-            
+
             // Try to reconnect to Suricata
             go m.reconnectSuricata()
         } else {
             m.stats.incrementSent(uint64(len(suricataData)))
+        }
+    }
+
+    // Send to Zeek via VXLAN if enabled
+    if m.zeekEnabled && m.zeekConn != nil {
+        if _, err := m.zeekConn.Write(encapsulated); err != nil {
+            log.Errorf("Failed to send to Zeek: %v", err)
+            m.stats.incrementErrors()
+
+            go m.reconnectZeek()
+        } else {
+            m.stats.incrementSent(uint64(len(encapsulated)))
         }
     }
 }
@@ -497,6 +556,29 @@ func (m *Manager) prepareSuricataData(packet *MirrorPacket) []byte {
     
     // Append newline for EVE JSON format
     return append(jsonData, '\n')
+}
+
+// reconnectZeek attempts to reconnect to Zeek via VXLAN
+func (m *Manager) reconnectZeek() {
+    m.mu.Lock()
+    defer m.mu.Unlock()
+
+    if m.zeekConn != nil {
+        if err := m.zeekConn.Close(); err != nil {
+            log.Debugf("Error closing Zeek connection: %v", err)
+        }
+        m.zeekConn = nil
+    }
+
+    zeekAddr := fmt.Sprintf("%s:%s", m.zeekHost, m.zeekPort)
+    conn, err := net.Dial("udp", zeekAddr)
+    if err != nil {
+        log.Errorf("Failed to reconnect to Zeek at %s: %v", zeekAddr, err)
+        return
+    }
+
+    m.zeekConn = conn
+    log.Infof("Reconnected to Zeek network monitor at %s", zeekAddr)
 }
 
 // reconnectSuricata attempts to reconnect to Suricata

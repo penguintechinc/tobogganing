@@ -12,6 +12,8 @@
 package auth
 
 import (
+    "strings"
+
     "github.com/gin-gonic/gin"
 )
 
@@ -21,6 +23,46 @@ type User struct {
     Name     string                 `json:"name"`
     Groups   []string               `json:"groups"`
     Metadata map[string]interface{} `json:"metadata"`
+    Tenant   string                 `json:"tenant"`
+    Scopes   []string               `json:"scopes"`
+    Teams    []string               `json:"teams"`
+    Roles    []string               `json:"roles"`
+}
+
+// HasScope returns true when the user holds a scope that satisfies the requirement.
+// Supports wildcards: "*:read" satisfies "policies:read", "*:*" satisfies everything.
+func (u *User) HasScope(required string) bool {
+    reqParts := strings.SplitN(required, ":", 2)
+    reqResource := reqParts[0]
+    reqAction := ""
+    if len(reqParts) == 2 {
+        reqAction = reqParts[1]
+    }
+
+    for _, s := range u.Scopes {
+        if s == required {
+            return true
+        }
+        parts := strings.SplitN(s, ":", 2)
+        if len(parts) != 2 {
+            continue
+        }
+        resource, action := parts[0], parts[1]
+
+        // "*:*" matches everything
+        if resource == "*" && action == "*" {
+            return true
+        }
+        // "*:action" matches any resource with the same action
+        if resource == "*" && action == reqAction {
+            return true
+        }
+        // "resource:*" matches any action on the same resource
+        if resource == reqResource && action == "*" {
+            return true
+        }
+    }
+    return false
 }
 
 type Provider interface {

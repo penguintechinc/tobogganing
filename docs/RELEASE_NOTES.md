@@ -4,6 +4,156 @@ All notable changes to Tobogganing will be documented in this file. New releases
 
 ---
 
+# v0.3.0 — Platform Integrations & Input Security
+
+**Release Date:** 2026-02-26
+**Branch:** v0.3.x
+
+## Highlights
+
+- **Input Validation**: Pydantic 2.x schemas on all API endpoints (422 responses for invalid input), Zod frontend schemas, PyDAL validators
+- **Squawk DNS Integration**: DNS-over-HTTPS via PenguinTech's Squawk proxy, policy-based DNS filtering, client/hub-router/Docker support
+- **WaddlePerf Fabric Metrics**: Cluster-to-cluster and client-to-cluster latency/jitter/packet-loss monitoring, WebUI metrics dashboard
+- **OpenZiti Overlay Rework**: L7 dark-service model replacing broken L3/HandlePacket abstraction — config-driven, same binary, dual-mode default
+- **XDP/eBPF Edge Protection**: Kernel-level rate limiting, SYN/UDP flood protection, IP blocklist, AF_XDP zero-copy (build-tag gated: `-tags xdp`)
+- **Default-Deny NetworkPolicy**: Namespace-wide default-deny with explicit allowlists for Helm and Kustomize deployments
+- **Resource Sizing Guide**: Comprehensive CPU/RAM/bandwidth planning documentation
+- **System Attestation**: Hardware fingerprinting with TPM 2.0 quote, cloud instance identity, FleetDM cross-reference, composite hash, and drift detection for infrastructure client trust
+
+## New Features
+
+### Input Security (Phase 1)
+- Pydantic `BaseModel` schemas for all POST/PUT API endpoints with `model_validate()`
+- New py_libs validators: `IsCIDR`, `IsPortRange`, `IsProtocol`
+- Frontend Zod schemas mirroring backend validation
+- PyDAL `requires` validators updated with `openziti` scope
+
+### Squawk DNS Integration (Phase 2)
+- Hub-router DNS forwarder module (`internal/dns/`) with miekg/dns
+- Native client DNS module with platform-specific resolv.conf management
+- Docker client DNS support via `SQUAWK_ENABLED` env var
+- Squawk Helm sub-chart (optional dependency)
+- Prometheus metrics: queries, duration, blocked count
+
+### WaddlePerf Fabric Metrics (Phase 3)
+- Hub-router FabricMonitor with HTTP/TCP/UDP/ICMP protocol probes
+- Performance API routes: POST/GET /api/v1/perf/metrics, GET /api/v1/perf/summary
+- Native client performance monitor
+- WebUI Fabric Metrics page (/metrics/fabric) with latency matrix
+- Prometheus gauges for latency, jitter, packet loss, throughput
+
+### OpenZiti Overlay Rework (Phase 4)
+- Revised `OverlayProvider` interface: `Listener() net.Listener` (L7) / `nil` (L3 WireGuard)
+- Config-driven overlay selection — removed build-tag gating, same binary
+- Hub-router OpenZiti listener accepts `edge.Listener` connections with JWT+HOST handshake
+- Client dual-mode provider: WireGuard (L3 kernel) + OpenZiti (L7 userspace) simultaneously
+- Client default overlay type changed to `"dual"` (both active)
+- OverlayScope added as 7th policy engine dimension (`wireguard`, `openziti`, `both`)
+- All 5 existing policy evaluation sites now set `OverlayScope: "wireguard"` (bug fix)
+
+### XDP/eBPF Edge Protection (Phase 5)
+- BPF C program (`bpf/xdp_ratelimit.c`): 3-stage XDP pipeline (blocklist → flood protection → rate limit)
+- Go XDP loader with build-tag gating (`//go:build xdp`), no-op stubs for default builds
+- AF_XDP zero-copy sockets for NIC → userspace packet delivery
+- NUMA-aware memory pools (`mmap` + `mbind`) for NIC-local buffer allocation
+- Blocklist sync: policy engine deny-by-IP rules pushed to BPF map
+- Prometheus metrics: `tobogganing_xdp_packets_total`, SYN/UDP flood drops, blocklist size
+- Hub-router Makefile: `make build-xdp` target for BPF-enabled builds
+
+### System Attestation (Phase 7)
+- Go attestation collector (`clients/native/internal/attestation/`) with hardware, cloud, and TPM sub-collectors
+- Composite hash (SHA-256 of stable hardware fields) for identity binding
+- Hub-api attestation validator with weighted confidence scoring (max 115 points)
+- TPM 2.0 PCR quote support with challenge-response nonce (build-tag gated)
+- Cloud instance identity auto-detection (AWS, GCP, Azure via IMDS)
+- FleetDM integration for server-side hardware cross-reference
+- Drift detection on token refresh with per-field weighted comparison
+- JWT claims: `attest_conf` (confidence score), `attest_method` (method used)
+- Challenge endpoint: `POST /api/v1/attestation/challenge`
+
+### Default-Deny NetworkPolicy (Phase 6)
+- Helm template: `networkpolicy-default-deny.yaml`
+- Restructured allowlist with Squawk/WaddlePerf namespace rules
+- Kustomize base: `networkpolicy-default-deny.yaml` + `networkpolicy-allow.yaml`
+
+### Documentation (Phase 6)
+- Resource Sizing Guide (`docs/RESOURCE_SIZING.md`)
+- Squawk Integration Guide (`docs/SQUAWK_INTEGRATION.md`)
+- WaddlePerf Integration Guide (`docs/WADDLEPERF_INTEGRATION.md`)
+- OpenZiti Integration Guide (`docs/OPENZITI_INTEGRATION.md`)
+
+## Breaking Changes
+- API validation errors now return HTTP 422 (was 400) with structured Pydantic error details
+- Policy rule `scope` field now accepts `openziti` in addition to `wireguard`, `k8s`, `both`
+- OpenZiti overlay is now config-driven (removed `//go:build openziti` tag) — rebuild without `-tags openziti` flag
+- Client default overlay type changed from `"wireguard"` to `"dual"` (WireGuard + OpenZiti)
+- End-user clients (desktop, mobile) migrated to unified modular client at [penguintechinc/penguin](https://github.com/penguintechinc/penguin) — Flutter for iOS/Android, Go for desktop, replaces React Native. The native Go client in this repo is now scoped to server/infrastructure use (hardware, VMs, bare metal, embedded/IoT). Overlay library remains in `clients/native/internal/overlay/`
+
+## Dependencies Added
+- Python: pydantic>=2.5 (already in requirements, now used)
+- Go (hub-router): github.com/miekg/dns v1.1.62
+- Frontend: zod ^3.23.0
+- Helm: squawk sub-chart (optional), waddleperf sub-chart (optional)
+- Go (hub-router, client): github.com/openziti/sdk-golang v0.23.44
+- Go (hub-router, XDP build only): github.com/cilium/ebpf, github.com/asavie/xdp
+- Go (client, TPM build only): github.com/google/go-tpm v0.9.3
+
+---
+
+# v0.2.0 — Identity-Aware Networking
+
+**Release Date**: TBD (development branch)
+
+## Highlights
+- OIDC-compliant JWT tokens with scope-based authorization (RFC 9068)
+- Multi-tenant isolation with Global → Tenant → Team → Resource hierarchy
+- SPIFFE/SPIRE workload identity with hardware-rooted attestation
+- Cloud-native identity integration (EKS Pod Identity, GCP WI, Azure WI)
+- Cross-cloud Cilium Cluster Mesh via hub-router WireGuard tunnels
+- Built-in OIDC provider (hub-api as IdP)
+- External IdP federation (OIDC, SAML placeholder, SCIM placeholder)
+
+## New Components
+
+| Component | Description |
+|-----------|-------------|
+| Scope Vocabulary | `resource:action` permission model with wildcard support |
+| Tenant System | Hard tenant isolation in DB, JWT, and API |
+| Team Hierarchy | Tenant-scoped teams with role-based membership |
+| OIDC Provider | Discovery, JWKS, token, authorize, userinfo endpoints |
+| Identity Bridge | SPIFFE ↔ OIDC bidirectional mapping |
+| Workload Identity | Cloud-native + SPIRE with priority-based provider chain |
+| Mesh Bridge | Hub-to-hub WireGuard for cross-cloud Cilium ClusterMesh |
+| SPIRE Helm Chart | Full deployment with cloud + bare-metal attestors |
+
+## Breaking Changes
+- JWT token format changed: new mandatory claims (`scope`, `tenant`, `teams`, `roles`)
+- `permissions` and `node_type` claims removed from JWTs
+- `require_role()` / `has_permission()` replaced by `require_scope()`
+- All API endpoints now require `tenant` claim + scope authorization
+
+## Database Changes
+
+New tables: `tenants`, `teams`, `user_team_memberships`, `role_scope_bundles`, `spiffe_entries`, `identity_mappings`
+
+Modified: `users` (added `tenant_id`), `policy_rules` (added `tenant_id`)
+
+## API Changes
+
+New endpoints: `/api/v1/tenants`, `/api/v1/teams`, `/api/v1/spiffe`, `/api/v1/identity/mappings`, `/api/v1/identity/exchange`
+
+OIDC endpoints: `/.well-known/openid-configuration`, `/oauth2/jwks`, `/oauth2/token`, `/oauth2/authorize`, `/oauth2/userinfo`
+
+## WebUI Changes
+
+New pages: Tenant Management, Team Management, Workload Identity
+
+Scope-gated UI controls via `ScopeGate` component
+
+Identity section added to sidebar navigation
+
+---
+
 ## 🔧 v1.1.4 - "Build System Enhancement" (2025-08-22)
 
 ### 🎯 Major Improvements

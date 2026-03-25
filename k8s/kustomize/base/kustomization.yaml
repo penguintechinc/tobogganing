@@ -13,6 +13,8 @@ resources:
   - hub-webui.yaml
   - redis.yaml
   - monitoring.yaml
+  - networkpolicy-default-deny.yaml
+  - networkpolicy-allow.yaml
 
 configMapGenerator:
   - name: tobogganing-config

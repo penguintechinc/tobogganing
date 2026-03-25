@@ -32,6 +32,10 @@ import (
     log "github.com/sirupsen/logrus"
     "github.com/spf13/viper"
 
+    "github.com/tobogganing/headend/internal/api"
+    "github.com/tobogganing/headend/internal/dns"
+    "github.com/tobogganing/headend/internal/perf"
+    "github.com/tobogganing/headend/internal/policy"
     "github.com/tobogganing/headend/proxy/auth"
     "github.com/tobogganing/headend/proxy/firewall"
     "github.com/tobogganing/headend/proxy/mirror"
@@ -53,6 +57,10 @@ type ProxyServer struct {
     wgRouter        *WireGuardRouter
     proxies         map[string]*httputil.ReverseProxy
     mu              sync.RWMutex
+    policyEngine    *policy.Engine
+    apiClient       *api.HubAPIClient
+    dnsForwarder    *dns.Forwarder
+    perfMonitor     *perf.FabricMonitor
 }
 
 // TCPProxy handles raw TCP traffic with JWT authentication
@@ -63,9 +71,10 @@ type TCPProxy struct {
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
     wgRouter        *WireGuardRouter
+    policyEngine    *policy.Engine
 }
 
-// UDPProxy handles raw UDP traffic with JWT authentication  
+// UDPProxy handles raw UDP traffic with JWT authentication
 type UDPProxy struct {
     conn            *net.UDPConn
     authProvider    auth.Provider
@@ -73,6 +82,7 @@ type UDPProxy struct {
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
     wgRouter        *WireGuardRouter
+    policyEngine    *policy.Engine
 }
 
 func main() {
@@ -128,6 +138,15 @@ func initConfig() {
     viper.SetDefault("ports.headend_id", "")
     viper.SetDefault("ports.cluster_id", "default")
     viper.SetDefault("ports.refresh_interval", "60s")
+    viper.SetDefault("dns.enabled", false)
+    viper.SetDefault("dns.listen_addr", ":5353")
+    viper.SetDefault("dns.squawk_server", "https://dns.penguintech.io/dns-query")
+    viper.SetDefault("dns.cache_ttl", 300)
+    viper.SetDefault("perf.enabled", false)
+    viper.SetDefault("perf.interval", 300)
+    viper.SetDefault("perf.hub_api_url", "http://hub-api:8080")
+    viper.SetDefault("perf.source_id", "")
+    viper.SetDefault("perf.targets", []string{})
 
     if err := viper.ReadInConfig(); err != nil {
         log.Warnf("No config file found, using environment variables: %v", err)
@@ -230,6 +249,30 @@ func (s *ProxyServer) Initialize() error {
         log.Info("Firewall manager disabled")
     }
 
+    // Initialize unified policy engine
+    if viper.GetBool("policy.enabled") {
+        apiURL := viper.GetString("policy.api_url")
+        apiToken := viper.GetString("policy.api_token")
+
+        s.apiClient = api.NewHubAPIClient(apiURL, apiToken)
+        s.policyEngine = policy.NewEngine()
+
+        // Initial policy fetch
+        policies, err := s.apiClient.FetchPolicies()
+        if err != nil {
+            log.Warnf("Failed to fetch initial policies: %v (will retry)", err)
+        } else {
+            raw := convertPolicies(policies)
+            s.policyEngine.LoadPolicies(raw)
+            log.Infof("Policy engine loaded %d policies", len(raw))
+        }
+
+        // Start background policy sync
+        go s.policyRefreshLoop()
+
+        log.Info("Unified policy engine enabled")
+    }
+
     // Initialize syslog logger if enabled
     if viper.GetBool("syslog.enabled") {
         syslogHost := viper.GetString("syslog.host")
@@ -301,15 +344,69 @@ func (s *ProxyServer) Initialize() error {
     if err := s.initializeTCPProxy(); err != nil {
         return fmt.Errorf("failed to initialize TCP proxy: %w", err)
     }
-    
+
     if err := s.initializeUDPProxy(); err != nil {
-        return fmt.Errorf("failed to initialize UDP proxy: %w", err)  
+        return fmt.Errorf("failed to initialize UDP proxy: %w", err)
+    }
+
+    // Initialize Squawk DNS forwarder (conditional on dns.enabled)
+    dnsCfg := dns.DefaultConfig()
+    dnsCfg.Enabled = viper.GetBool("dns.enabled")
+    if dnsCfg.Enabled {
+        dnsCfg.ListenAddr = viper.GetString("dns.listen_addr")
+        dnsCfg.SquawkServer = viper.GetString("dns.squawk_server")
+        dnsCfg.CacheTTL = viper.GetInt("dns.cache_ttl")
+        dnsCfg.BlockedDomains = viper.GetStringSlice("dns.blocked_domains")
+        s.dnsForwarder = dns.NewForwarder(dnsCfg)
+        log.Info("Squawk DNS forwarder configured")
+    } else {
+        log.Info("Squawk DNS forwarder disabled")
+    }
+
+    // Initialize WaddlePerf fabric performance monitor (conditional on perf.enabled).
+    perfCfg := perf.DefaultConfig()
+    perfCfg.Enabled = viper.GetBool("perf.enabled")
+    if perfCfg.Enabled {
+        perfCfg.Interval = viper.GetInt("perf.interval")
+        perfCfg.HubAPIURL = viper.GetString("perf.hub_api_url")
+        perfCfg.SourceID = viper.GetString("perf.source_id")
+        perfCfg.Targets = viper.GetStringSlice("perf.targets")
+        if perfCfg.SourceID == "" {
+            if hostname, err := os.Hostname(); err == nil {
+                perfCfg.SourceID = hostname
+            }
+        }
+        s.perfMonitor = perf.NewFabricMonitor(perfCfg)
+        log.Info("WaddlePerf fabric performance monitor configured")
+    } else {
+        log.Info("WaddlePerf fabric performance monitor disabled")
     }
 
     // Setup HTTP routes
     s.setupRoutes()
 
     return nil
+}
+
+// policyRefreshLoop periodically fetches updated policies from hub-api.
+func (s *ProxyServer) policyRefreshLoop() {
+    interval := viper.GetDuration("policy.refresh_interval")
+    if interval == 0 {
+        interval = 30 * time.Second
+    }
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+
+    for range ticker.C {
+        policies, err := s.apiClient.FetchPolicies()
+        if err != nil {
+            log.Warnf("Policy refresh failed: %v", err)
+            continue
+        }
+        raw := convertPolicies(policies)
+        s.policyEngine.LoadPolicies(raw)
+        log.Debugf("Policy engine refreshed with %d policies", len(raw))
+    }
 }
 
 func (s *ProxyServer) setupRoutes() {
@@ -380,6 +477,8 @@ func (s *ProxyServer) healthHandler(c *gin.Context) {
         "auth_provider": s.authProvider != nil,
         "tcp_proxy": s.tcpProxy != nil,
         "udp_proxy": s.udpProxy != nil,
+        "dns_forwarder_enabled":  s.dnsForwarder != nil && s.dnsForwarder.IsRunning(),
+        "perf_monitor_enabled":   s.perfMonitor != nil && s.perfMonitor.IsRunning(),
     })
 }
 
@@ -458,14 +557,20 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
     userAgent := c.GetHeader("User-Agent")
     requestID := c.GetHeader("X-Request-ID")
     
-    // Check firewall rules if firewall manager is enabled
+    // Check unified policy engine, fall back to legacy firewall
     var allowed bool
-    if s.firewallManager != nil {
+    if s.policyEngine != nil {
+        action := s.policyEngine.Evaluate(&policy.Packet{
+            Domain: targetHost,
+            UserID: user.ID,
+        })
+        allowed = action == policy.ActionAllow
+    } else if s.firewallManager != nil {
         allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
     } else {
         allowed = true
     }
-        
+
     if !allowed {
             log.Warnf("Firewall blocked access for user %s to %s", user.ID, targetHost)
             
@@ -566,6 +671,7 @@ func (s *ProxyServer) initializeTCPProxy() error {
         firewallManager: s.firewallManager,
         syslogLogger:    s.syslogLogger,
         wgRouter:        s.wgRouter,
+        policyEngine:    s.policyEngine,
     }
     
     // Start TCP proxy in goroutine
@@ -595,6 +701,7 @@ func (s *ProxyServer) initializeUDPProxy() error {
         firewallManager: s.firewallManager,
         syslogLogger:    s.syslogLogger,
         wgRouter:        s.wgRouter,
+        policyEngine:    s.policyEngine,
     }
     
     // Start UDP proxy in goroutine
@@ -608,6 +715,24 @@ func (s *ProxyServer) Run() error {
     httpPort := viper.GetString("server.http_port")
     certFile := viper.GetString("server.cert_file")
     keyFile := viper.GetString("server.key_file")
+
+    // Start DNS forwarder before the HTTP server so DNS is available immediately.
+    if s.dnsForwarder != nil {
+        runCtx, runCancel := context.WithCancel(context.Background())
+        _ = runCancel // cancel is called via dnsForwarder.Stop() in the shutdown goroutine below
+        if err := s.dnsForwarder.Start(runCtx); err != nil {
+            log.WithError(err).Error("Failed to start DNS forwarder")
+        }
+    }
+
+    // Start WaddlePerf fabric monitor (no-op when disabled).
+    if s.perfMonitor != nil {
+        perfCtx, perfCancel := context.WithCancel(context.Background())
+        _ = perfCancel // cancel is invoked via perfMonitor.Stop() in shutdown goroutine below
+        if err := s.perfMonitor.Start(perfCtx); err != nil {
+            log.WithError(err).Error("Failed to start perf monitor")
+        }
+    }
 
     s.httpServer = &http.Server{
         Addr:         ":" + httpPort,
@@ -643,7 +768,15 @@ func (s *ProxyServer) Run() error {
         if s.portManager != nil {
             s.portManager.Stop()
         }
-        
+
+        if s.dnsForwarder != nil {
+            s.dnsForwarder.Stop()
+        }
+
+        if s.perfMonitor != nil {
+            s.perfMonitor.Stop()
+        }
+
         // Close TCP and UDP proxies
         if s.tcpProxy != nil && s.tcpProxy.listener != nil {
             if err := s.tcpProxy.listener.Close(); err != nil {
@@ -786,14 +919,20 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
         return
     }
     
-    // Check firewall rules if firewall manager is enabled
+    // Check unified policy engine, fall back to legacy firewall
     var allowed bool
-    if t.firewallManager != nil {
+    if t.policyEngine != nil {
+        action := t.policyEngine.Evaluate(&policy.Packet{
+            Domain: targetHost,
+            UserID: user.ID,
+        })
+        allowed = action == policy.ActionAllow
+    } else if t.firewallManager != nil {
         allowed = t.firewallManager.CheckAccess(user.ID, targetHost)
     } else {
         allowed = true
     }
-        
+
     if !allowed {
             log.Warnf("Firewall blocked TCP connection for user %s to %s", user.ID, targetHost)
             
@@ -934,14 +1073,20 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
         return
     }
     
-    // Check firewall rules if firewall manager is enabled
+    // Check unified policy engine, fall back to legacy firewall
     var allowed bool
-    if u.firewallManager != nil {
+    if u.policyEngine != nil {
+        action := u.policyEngine.Evaluate(&policy.Packet{
+            Domain: targetHost,
+            UserID: user.ID,
+        })
+        allowed = action == policy.ActionAllow
+    } else if u.firewallManager != nil {
         allowed = u.firewallManager.CheckAccess(user.ID, targetHost)
     } else {
         allowed = true
     }
-        
+
     if !allowed {
             log.Warnf("Firewall blocked UDP packet for user %s to %s", user.ID, targetHost)
             
@@ -1131,18 +1276,29 @@ func (s *ProxyServer) handleDynamicTCPConnection(conn net.Conn, port int, protoc
 	
 	log.Infof("Authenticated TCP connection on port %d for user: %s to %s", port, user.ID, targetHost)
 	
-	// Check firewall rules
-	if s.firewallManager != nil {
-		allowed := s.firewallManager.CheckAccess(user.ID, targetHost)
-		if !allowed {
-			log.Warnf("Firewall blocked TCP connection on port %d for user %s to %s", port, user.ID, targetHost)
-			
-			// Log denied access to syslog
-			if s.syslogLogger != nil {
-				s.syslogLogger.LogTCPAccess(user.ID, user.Name, conn.RemoteAddr().String(), targetHost, false)
-			}
-			return
+	// Check unified policy engine, fall back to legacy firewall
+	var policyAllowed bool
+	if s.policyEngine != nil {
+		action := s.policyEngine.Evaluate(&policy.Packet{
+			Domain:   targetHost,
+			DstPort:  port,
+			Protocol: "tcp",
+			UserID:   user.ID,
+		})
+		policyAllowed = action == policy.ActionAllow
+	} else if s.firewallManager != nil {
+		policyAllowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+	} else {
+		policyAllowed = true
+	}
+	if !policyAllowed {
+		log.Warnf("Firewall blocked TCP connection on port %d for user %s to %s", port, user.ID, targetHost)
+
+		// Log denied access to syslog
+		if s.syslogLogger != nil {
+			s.syslogLogger.LogTCPAccess(user.ID, user.Name, conn.RemoteAddr().String(), targetHost, false)
 		}
+		return
 	}
 	
 	// Log allowed access to syslog
@@ -1209,18 +1365,29 @@ func (s *ProxyServer) handleDynamicUDPPacket(data []byte, addr *net.UDPAddr, por
 	
 	log.Infof("Authenticated UDP packet on port %d for user: %s to %s", port, user.ID, targetHost)
 	
-	// Check firewall rules
-	if s.firewallManager != nil {
-		allowed := s.firewallManager.CheckAccess(user.ID, targetHost)
-		if !allowed {
-			log.Warnf("Firewall blocked UDP packet on port %d for user %s to %s", port, user.ID, targetHost)
-			
-			// Log denied access to syslog
-			if s.syslogLogger != nil {
-				s.syslogLogger.LogUDPAccess(user.ID, user.Name, addr.String(), targetHost, false)
-			}
-			return
+	// Check unified policy engine, fall back to legacy firewall
+	var policyAllowed bool
+	if s.policyEngine != nil {
+		action := s.policyEngine.Evaluate(&policy.Packet{
+			Domain:   targetHost,
+			DstPort:  port,
+			Protocol: "udp",
+			UserID:   user.ID,
+		})
+		policyAllowed = action == policy.ActionAllow
+	} else if s.firewallManager != nil {
+		policyAllowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+	} else {
+		policyAllowed = true
+	}
+	if !policyAllowed {
+		log.Warnf("Firewall blocked UDP packet on port %d for user %s to %s", port, user.ID, targetHost)
+
+		// Log denied access to syslog
+		if s.syslogLogger != nil {
+			s.syslogLogger.LogUDPAccess(user.ID, user.Name, addr.String(), targetHost, false)
 		}
+		return
 	}
 	
 	// Log allowed access to syslog

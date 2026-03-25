@@ -4,7 +4,8 @@ Validation module - PyDAL-style input validators.
 Provides validators compatible with PyDAL's IS_* pattern:
 - String validators: IsNotEmpty, IsLength, IsMatch, IsAlphanumeric, IsSlug, IsIn
 - Numeric validators: IsInt, IsFloat, IsIntInRange, IsFloatInRange
-- Network validators: IsEmail, IsURL, IsIPAddress
+- Network validators: IsEmail, IsURL, IsIPAddress, IsHostname
+- Network (CIDR) validators: IsCIDR, IsPortRange, IsProtocol
 - DateTime validators: IsDate, IsDateTime, IsTime
 - Password validators: IsStrongPassword
 
@@ -49,6 +50,11 @@ from py_libs.validation.network import (
     IsIPAddress,
     IsURL,
 )
+from py_libs.validation.cidr import (
+    IsCIDR,
+    IsPortRange,
+    IsProtocol,
+)
 from py_libs.validation.datetime import (
     IsDate,
     IsDateInRange,
@@ -86,6 +92,10 @@ __all__ = [
     "IsURL",
     "IsIPAddress",
     "IsHostname",
+    # Network (CIDR)
+    "IsCIDR",
+    "IsPortRange",
+    "IsProtocol",
     # DateTime
     "IsDate",
     "IsDateTime",

@@ -126,6 +126,94 @@ func PermissionRequired(requiredPermissions ...string) gin.HandlerFunc {
     }
 }
 
+// TenantRequired extracts the tenant from the authenticated user and sets it
+// in the gin context. Returns 403 if no tenant is present.
+// AuthRequired must run before this middleware.
+func TenantRequired() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        userVal, exists := c.Get("user")
+        if !exists {
+            log.Warn("TenantRequired: no user in context — AuthRequired must precede this middleware")
+            c.JSON(http.StatusForbidden, gin.H{
+                "error":   "Forbidden",
+                "message": "Authenticated user not found in context",
+            })
+            c.Abort()
+            return
+        }
+
+        user, ok := userVal.(*auth.User)
+        if !ok {
+            log.Error("TenantRequired: user value in context has unexpected type")
+            c.JSON(http.StatusForbidden, gin.H{
+                "error":   "Forbidden",
+                "message": "Invalid user context",
+            })
+            c.Abort()
+            return
+        }
+
+        if user.Tenant == "" {
+            log.Warnf("TenantRequired: user %s has no tenant", user.ID)
+            c.JSON(http.StatusForbidden, gin.H{
+                "error":   "Forbidden",
+                "message": "No tenant associated with this identity",
+            })
+            c.Abort()
+            return
+        }
+
+        c.Set("tenant", user.Tenant)
+        log.Infof("Tenant resolved for user %s: %s", user.ID, user.Tenant)
+        c.Next()
+    }
+}
+
+// ScopeRequired checks that the authenticated user holds all specified scopes.
+// Uses User.HasScope() which supports wildcards (* resource/action matching).
+// AuthRequired must run before this middleware.
+func ScopeRequired(scopes ...string) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        userVal, exists := c.Get("user")
+        if !exists {
+            log.Warn("ScopeRequired: no user in context — AuthRequired must precede this middleware")
+            c.JSON(http.StatusForbidden, gin.H{
+                "error":   "Forbidden",
+                "message": "Authenticated user not found in context",
+            })
+            c.Abort()
+            return
+        }
+
+        user, ok := userVal.(*auth.User)
+        if !ok {
+            log.Error("ScopeRequired: user value in context has unexpected type")
+            c.JSON(http.StatusForbidden, gin.H{
+                "error":   "Forbidden",
+                "message": "Invalid user context",
+            })
+            c.Abort()
+            return
+        }
+
+        for _, required := range scopes {
+            if !user.HasScope(required) {
+                log.Warnf("ScopeRequired: user %s missing required scope %q", user.ID, required)
+                c.JSON(http.StatusForbidden, gin.H{
+                    "error":          "Insufficient scope",
+                    "message":        "Missing required scope: " + required,
+                    "required_scope": required,
+                })
+                c.Abort()
+                return
+            }
+        }
+
+        log.Infof("Scope check passed for user %s (required: %v)", user.ID, scopes)
+        c.Next()
+    }
+}
+
 // CertificateInfo extracts certificate information from TLS connection
 func CertificateInfo() gin.HandlerFunc {
     return func(c *gin.Context) {

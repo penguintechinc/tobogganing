@@ -659,6 +659,34 @@ services:
     labels:
       - "traefik.enable=false"
 
+  # Zeek Network Security Monitor
+  zeek:
+    image: zeek/zeek:latest
+    container_name: tobogganing-zeek
+    restart: unless-stopped
+    depends_on:
+      - headend-us-east
+    environment:
+      ZEEK_INTERFACE: "mirror0"
+      ZEEK_CLUSTER_ID: "tobogganing"
+    volumes:
+      - zeek_logs:/var/log/zeek
+      - ./deploy/zeek/site/local.zeek:/usr/local/zeek/share/zeek/site/local.zeek:ro
+      - ./deploy/zeek/site/tobogganing.zeek:/usr/local/zeek/share/zeek/site/tobogganing.zeek:ro
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      sasewaddle:
+        ipv4_address: 172.20.0.101
+    healthcheck:
+      test: ["CMD", "zeekctl", "status"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=false"
+
 volumes:
   # Data persistence
   redis_data:
@@ -724,6 +752,10 @@ volumes:
   frr_eu_west_config:
     driver: local
   frr_eu_west_data:
+    driver: local
+
+  # Zeek volumes
+  zeek_logs:
     driver: local
 
 networks:

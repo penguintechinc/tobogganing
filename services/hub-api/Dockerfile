@@ -33,5 +33,6 @@ RUN useradd -m -u 1000 manager && \
 USER manager
 
 EXPOSE 8000
+EXPOSE 50051
 
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]

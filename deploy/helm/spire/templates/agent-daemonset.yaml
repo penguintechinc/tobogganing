@@ -1,0 +1,190 @@
+{{- if .Values.spire.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "tobogganing-spire.fullname" . }}-agent
+  namespace: {{ include "tobogganing-spire.namespace" . }}
+  labels:
+    {{- include "tobogganing-spire.labels" . | nindent 4 }}
+    component: agent
+spec:
+  selector:
+    matchLabels:
+      {{- include "tobogganing-spire.agentSelectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "tobogganing-spire.agentSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/agent-configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "tobogganing-spire.serviceAccountName" . }}
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirst
+      priorityClassName: system-node-critical
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+      - name: spire-agent
+        image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}"
+        imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+        ports:
+        - name: api
+          containerPort: {{ .Values.agent.port }}
+          protocol: TCP
+        env:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: SPIRE_LOG_LEVEL
+          value: {{ .Values.logging.level | quote }}
+        - name: SPIRE_LOG_FORMAT
+          value: {{ .Values.logging.format | quote }}
+        {{- if .Values.debug }}
+        - name: DEBUG
+          value: "1"
+        {{- end }}
+
+        volumeMounts:
+        - name: spire-agent-socket
+          mountPath: /run/spire/sockets
+        - name: spire-agent-config
+          mountPath: /etc/spire/agent
+          readOnly: true
+        - name: spire-bundle
+          mountPath: /run/spire/bundle
+          readOnly: true
+        - name: pod-metadata
+          mountPath: /var/run/secrets/workload.spiffe.io
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: var-lib-kubelet-pod-resources
+          mountPath: /var/lib/kubelet/pod-resources
+          readOnly: true
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+
+        resources:
+          {{- toYaml .Values.agent.resources | nindent 10 }}
+
+        {{- if .Values.agent.healthProbe.enabled }}
+        livenessProbe:
+          exec:
+            command:
+            - /opt/spire/bin/spire-agent
+            - healthcheck
+            - -socketPath
+            - /run/spire/sockets/agent.sock
+          initialDelaySeconds: {{ .Values.agent.healthProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.agent.healthProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.agent.healthProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.agent.healthProbe.failureThreshold }}
+
+        readinessProbe:
+          exec:
+            command:
+            - /opt/spire/bin/spire-agent
+            - healthcheck
+            - -socketPath
+            - /run/spire/sockets/agent.sock
+          initialDelaySeconds: {{ .Values.agent.healthProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.agent.healthProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.agent.healthProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.agent.healthProbe.failureThreshold }}
+        {{- end }}
+
+      volumes:
+      - name: spire-agent-socket
+        hostPath:
+          path: /run/spire/sockets
+          type: DirectoryOrCreate
+      - name: spire-agent-config
+        configMap:
+          name: {{ include "tobogganing-spire.fullname" . }}-agent-config
+          defaultMode: 0400
+      - name: spire-bundle
+        configMap:
+          name: spire-bundle
+          optional: true
+      - name: pod-metadata
+        projected:
+          sources:
+          - downwardAPI:
+              items:
+              - path: "namespace"
+                fieldRef:
+                  fieldPath: metadata.namespace
+              - path: "name"
+                fieldRef:
+                  fieldPath: metadata.name
+              - path: "uid"
+                fieldRef:
+                  fieldPath: metadata.uid
+              - path: "labels"
+                fieldRef:
+                  fieldPath: metadata.labels
+              - path: "annotations"
+                fieldRef:
+                  fieldPath: metadata.annotations
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: var-lib-kubelet-pod-resources
+        hostPath:
+          path: /var/lib/kubelet/pod-resources
+          type: DirectoryOrCreate
+
+      initContainers:
+      - name: init-spire-config
+        image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}"
+        imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+        command:
+        - sh
+        - -c
+        - |
+          mkdir -p /run/spire/sockets
+          chmod 0770 /run/spire/sockets
+        volumeMounts:
+        - name: spire-agent-socket
+          mountPath: /run/spire/sockets
+        securityContext:
+          runAsUser: 0
+          capabilities:
+            add:
+            - DAC_OVERRIDE
+{{- end }}

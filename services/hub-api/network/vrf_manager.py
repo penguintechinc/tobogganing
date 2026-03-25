@@ -5,6 +5,7 @@ Handles IP space segmentation and routing table isolation using FRR
 
 import asyncio
 import ipaddress
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -570,22 +571,79 @@ class VRFManager:
                     " log-adjacency-changes",
                     " passive-interface default"
                 ])
-                
+
                 # Add OSPF networks
                 for network in vrf.ospf_networks:
                     area_id = network.get('area', '0.0.0.0')
                     net = network.get('network')
                     if net:
                         config_lines.append(f" network {net} area {area_id}")
-                
+
                 config_lines.append(" exit")
                 config_lines.append("!")
-            
+
+            # iBGP configuration for inter-site VRF route exchange
+            bgp_asn = getattr(vrf, 'bgp_asn', None) or os.environ.get('FRR_BGP_ASN', '65001')
+            if vrf.ospf_router_id:
+                config_lines.extend([
+                    f"router bgp {bgp_asn} vrf {vrf.name}",
+                    f" bgp router-id {vrf.ospf_router_id}",
+                    " address-family ipv4 unicast",
+                    "  redistribute connected",
+                    "  redistribute ospf",
+                    " exit-address-family",
+                    " address-family l2vpn evpn",
+                    "  advertise ipv4 unicast",
+                    " exit-address-family",
+                    " exit",
+                    "!",
+                ])
+
             return '\n'.join(config_lines)
-            
+
         except Exception as e:
             logger.error("Failed to generate FRR config", vrf_id=vrf_id, error=str(e))
             return ""
+
+    async def push_frr_config(self, vrf_id: str, frr_host: str = "") -> bool:
+        """Push VRF configuration to FRR via RESTCONF or ConfigMap.
+
+        Args:
+            vrf_id: The VRF to push configuration for.
+            frr_host: FRR management endpoint. Falls back to FRR_MANAGER_URL env.
+
+        Returns:
+            True on success, False on failure.
+        """
+        try:
+            config = await self.generate_frr_config(vrf_id)
+            if not config:
+                logger.warning("No config generated for VRF", vrf_id=vrf_id)
+                return False
+
+            target = frr_host or os.environ.get('FRR_MANAGER_URL', '')
+            if not target:
+                logger.info("No FRR target configured, config generated but not pushed",
+                           vrf_id=vrf_id)
+                return True
+
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{target}/api/frr/config",
+                    json={"config": config, "vrf_id": vrf_id},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    if resp.status in (200, 201):
+                        logger.info("Pushed FRR config", vrf_id=vrf_id, target=target)
+                        return True
+                    body = await resp.text()
+                    logger.error("FRR config push failed",
+                                vrf_id=vrf_id, status=resp.status, body=body)
+                    return False
+        except Exception as e:
+            logger.error("Failed to push FRR config", vrf_id=vrf_id, error=str(e))
+            return False
 
 # Global VRF manager instance
 vrf_manager = VRFManager()
