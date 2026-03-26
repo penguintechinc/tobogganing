@@ -1,6 +1,16 @@
 """
 SASEWaddle License Management
 Handles license validation and feature gating
+
+TODO: Migrate to penguin_licensing.LicenseClient and penguin_licensing.license_required
+      when the interface is aligned. The penguin-licensing package (penguin_licensing.LicenseClient)
+      provides the standard PenguinTech licensing API; this local module wraps it with
+      app-specific logic (community mode, feature lists, client/headend limits).
+      Migration plan:
+        1. Instantiate LicenseClient(product="tobogganing") from penguin_licensing
+        2. Replace check_feature() calls with client.has_feature()
+        3. Replace require_feature() decorator with @license_required from penguin_licensing
+        4. Remove this local module once all callers are updated
 """
 
 import os
