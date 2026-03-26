@@ -165,7 +165,7 @@ func (c *Client) Disconnect() error {
 
     // Disconnect overlay provider
     if c.overlayProvider != nil {
-        if err := c.overlayProvider.Disconnect(); err != nil {
+        if err := c.overlayProvider.Disconnect(context.Background()); err != nil {
             return fmt.Errorf("overlay disconnect failed: %w", err)
         }
     }

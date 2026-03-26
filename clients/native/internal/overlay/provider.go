@@ -3,8 +3,8 @@ package overlay
 
 import "context"
 
-// Provider is the interface all overlay implementations satisfy.
-type Provider interface {
+// OverlayProvider is the interface all overlay implementations satisfy.
+type OverlayProvider interface {
 	Connect(ctx context.Context) error
 	Disconnect(ctx context.Context) error
 	Status(ctx context.Context) (ProviderStatus, error)
@@ -18,40 +18,23 @@ type ProviderStatus struct {
 	BytesOut  uint64
 }
 
-// WireGuardConfig holds configuration for the WireGuard provider.
-type WireGuardConfig struct {
-	Interface  string
-	PrivateKey string
-	Address    string
-	DNS        []string
-	Peers      []PeerConfig
-}
-
-// PeerConfig holds a single WireGuard peer's configuration.
-type PeerConfig struct {
-	PublicKey           string
-	Endpoint            string
-	AllowedIPs          []string
-	PersistentKeepalive int
-}
-
 // OpenZitiConfig holds configuration for the OpenZiti provider.
 type OpenZitiConfig struct {
+	// IdentityFile is the path to the OpenZiti identity JSON file.
 	IdentityFile string
-	ServiceName  string
+	// ServiceName is the OpenZiti service to connect to.
+	ServiceName string
 }
 
-// NewWireGuardProvider creates a Provider backed by WireGuard.
-func NewWireGuardProvider(cfg WireGuardConfig) Provider {
-	return &wireguardProvider{cfg: cfg}
+// NewWireGuardProvider creates an OverlayProvider that delegates connect and disconnect
+// to the provided callbacks. This allows the caller to use its own WireGuard management
+// logic (key exchange, interface setup, etc.) while participating in the overlay abstraction.
+func NewWireGuardProvider(connectFn, disconnectFn func() error) OverlayProvider {
+	return &wireguardProvider{connectFn: connectFn, disconnectFn: disconnectFn}
 }
 
-// NewOpenZitiProvider creates a Provider backed by OpenZiti (stub).
-func NewOpenZitiProvider(cfg OpenZitiConfig) Provider {
-	return &openZitiProvider{cfg: cfg}
-}
-
-// NewDualProvider creates a Provider that uses primary, falling back to secondary on failure.
-func NewDualProvider(primary, secondary Provider) Provider {
+// NewDualProvider creates an OverlayProvider that tries primary first, falling back to
+// secondary on Connect failure.
+func NewDualProvider(primary, secondary OverlayProvider) OverlayProvider {
 	return &dualProvider{primary: primary, secondary: secondary}
 }

@@ -6,8 +6,8 @@ import (
 )
 
 type dualProvider struct {
-	primary   Provider
-	secondary Provider
+	primary   OverlayProvider
+	secondary OverlayProvider
 }
 
 func (d *dualProvider) Connect(ctx context.Context) error {
