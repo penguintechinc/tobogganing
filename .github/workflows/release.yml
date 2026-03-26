@@ -344,9 +344,11 @@ jobs:
         cd ..
     
     - name: Create example configuration files
+      env:
+        VERSION_TAG: ${{ steps.version.outputs.version }}
       run: |
         mkdir -p release-packages/examples
-        python3 -c "import os; os.makedirs('release-packages/examples', exist_ok=True); open('release-packages/examples/client-config.yaml', 'w').write('# Tobogganing Native Client Configuration\nmanager_url: https://your-manager.example.com:8000\napi_key: your-api-key-here\nclient_name: my-workstation\nclient_type: client_native\nauto_connect: true\nreconnect_interval: 30\nlog_level: info\nheadless: false\nservice_mode: false\ndns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\nauth_refresh_threshold: 300\n'); open('release-packages/examples/docker-compose.yml', 'w').write('# Tobogganing Self-Hosted Deployment\nversion: 3.8\nservices:\n  redis:\n    image: redis:7-bookworm\n  manager:\n    image: ghcr.io/your-org/tobogganing/manager:latest\n  headend:\n    image: ghcr.io/your-org/tobogganing/headend:latest\n'); open('release-packages/examples/install.sh', 'w').write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')"
+        python3 -c "import os; v=os.environ['VERSION_TAG']; os.makedirs('release-packages/examples', exist_ok=True); open('release-packages/examples/client-config.yaml', 'w').write('# Tobogganing Native Client Configuration\nmanager_url: https://your-manager.example.com:8000\napi_key: your-api-key-here\nclient_name: my-workstation\nclient_type: client_native\nauto_connect: true\nreconnect_interval: 30\nlog_level: info\nheadless: false\nservice_mode: false\ndns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\nauth_refresh_threshold: 300\n'); open('release-packages/examples/docker-compose.yml', 'w').write(f'# Tobogganing Self-Hosted Deployment\nversion: 3.8\nservices:\n  redis:\n    image: redis:7-bookworm\n  manager:\n    image: ghcr.io/your-org/tobogganing/manager:{v}\n  headend:\n    image: ghcr.io/your-org/tobogganing/headend:{v}\n'); open('release-packages/examples/install.sh', 'w').write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')"
         chmod +x release-packages/examples/install.sh
 
     - name: Generate release notes

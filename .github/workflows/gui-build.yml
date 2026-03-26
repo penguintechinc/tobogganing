@@ -58,10 +58,16 @@ jobs:
       - name: Run golangci-lint
         working-directory: ./clients/native
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
           golangci-lint --version
           golangci-lint run --timeout=10m
-      
+
+      - name: Run gosec
+        uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
+        with:
+          args: '-no-fail ./...'
+          working-directory: clients/native
+
       - name: Test GUI package compilation
         working-directory: ./clients/native
         env:
@@ -70,7 +76,7 @@ jobs:
           # Verify the Fyne GUI package compiles correctly
           go build -v ./internal/gui
           echo "GUI package compiled successfully"
-      
+
       - name: Build GUI binary
         working-directory: ./clients/native
         env:
@@ -175,10 +181,16 @@ jobs:
       - name: Run golangci-lint
         working-directory: ./clients/native
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
           golangci-lint --version
           golangci-lint run --timeout=10m
-      
+
+      - name: Run gosec
+        uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
+        with:
+          args: '-no-fail ./...'
+          working-directory: clients/native
+
       - name: Test GUI package compilation
         working-directory: ./clients/native
         env:
@@ -187,7 +199,7 @@ jobs:
           # Verify the Fyne GUI package compiles correctly
           go build -v ./internal/gui
           echo "GUI package compiled successfully"
-      
+
       - name: Build GUI binary
         working-directory: ./clients/native
         env:

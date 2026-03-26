@@ -63,7 +63,13 @@ jobs:
       run: |
         cd clients/mobile
         npm ci
-    
+
+    - name: npm audit
+      run: |
+        cd clients/mobile
+        npm audit --audit-level=high
+      continue-on-error: true
+
     - name: Run TypeScript check
       run: |
         cd clients/mobile
