@@ -1,14 +1,18 @@
 module github.com/tobogganing/clients/native
 
-go 1.23.1
+go 1.24
+
+toolchain go1.24.4
 
 require (
 	fyne.io/fyne/v2 v2.4.3
 	github.com/getlantern/systray v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/penguintechinc/penguin-libs/packages/go-common v0.0.0-local
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
+	go.uber.org/zap v1.27.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230429144221-925a1e7659e6
 )
@@ -59,8 +63,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/yuin/goldmark v1.5.5 // indirect
-	go.uber.org/atomic v1.9.0 // indirect
-	go.uber.org/multierr v1.9.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/image v0.18.0 // indirect
@@ -74,3 +77,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/js/dom v0.0.0-20210725211120-f030747120f2 // indirect
 )
+
+replace github.com/penguintechinc/penguin-libs/packages/go-common => /home/penguin/code/penguin-libs/packages/go-common

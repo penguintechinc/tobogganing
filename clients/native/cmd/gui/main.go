@@ -22,10 +22,12 @@ import (
     "runtime"
     "syscall"
 
+    pglog "github.com/penguintechinc/penguin-libs/packages/go-common/logging"
     "github.com/spf13/cobra"
     "github.com/tobogganing/clients/native/internal/client"
     "github.com/tobogganing/clients/native/internal/config"
     "github.com/tobogganing/clients/native/internal/tray"
+    "go.uber.org/zap"
 )
 
 const (
@@ -39,6 +41,23 @@ var (
     buildTime = "unknown"
     gitCommit = "unknown"
 )
+
+// serviceLogger is used by platform-specific service stub functions.
+// It is initialized lazily on first use via initServiceLogger.
+var serviceLogger *pglog.SanitizedLogger
+
+func initServiceLogger() *pglog.SanitizedLogger {
+    if serviceLogger != nil {
+        return serviceLogger
+    }
+    l, err := pglog.NewSanitizedLogger("sasewaddle-client-service")
+    if err != nil {
+        // Fallback: return a no-op that won't panic (best-effort)
+        l, _ = pglog.NewSanitizedLogger("sasewaddle-client-service")
+    }
+    serviceLogger = l
+    return serviceLogger
+}
 
 func main() {
     var rootCmd = &cobra.Command{
@@ -140,6 +159,12 @@ Supports:
 }
 
 func runConnect(cmd *cobra.Command, args []string) error {
+    logger, err := pglog.NewSanitizedLogger("sasewaddle-client")
+    if err != nil {
+        return fmt.Errorf("failed to initialize logger: %w", err)
+    }
+    defer logger.Sync() //nolint:errcheck
+
     cfg, err := loadConfig(cmd)
     if err != nil {
         return fmt.Errorf("failed to load config: %w", err)
@@ -156,10 +181,10 @@ func runConnect(cmd *cobra.Command, args []string) error {
     // Handle interrupt signals
     sigChan := make(chan os.Signal, 1)
     signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-    
+
     go func() {
         <-sigChan
-        fmt.Println("\nReceived interrupt signal, disconnecting...")
+        logger.Info("Received interrupt signal, disconnecting...")
         cancel()
     }()
 
@@ -181,6 +206,12 @@ func runDisconnect(cmd *cobra.Command, args []string) error {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
+    logger, err := pglog.NewSanitizedLogger("sasewaddle-client")
+    if err != nil {
+        return fmt.Errorf("failed to initialize logger: %w", err)
+    }
+    defer logger.Sync() //nolint:errcheck
+
     cfg, err := loadConfig(cmd)
     if err != nil {
         return fmt.Errorf("failed to load config: %w", err)
@@ -196,17 +227,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
         return fmt.Errorf("failed to get status: %w", err)
     }
 
-    // Pretty print status
-    fmt.Printf("SASEWaddle Client Status\n")
-    fmt.Printf("========================\n")
-    fmt.Printf("State: %s\n", status.State)
-    fmt.Printf("Client ID: %s\n", status.ClientID)
-    fmt.Printf("WireGuard IP: %s\n", status.WireGuardIP)
-    fmt.Printf("Headend URL: %s\n", status.HeadendURL)
-    fmt.Printf("Connected Since: %s\n", status.ConnectedSince.Format("2006-01-02 15:04:05"))
-    fmt.Printf("Bytes Sent: %d\n", status.BytesSent)
-    fmt.Printf("Bytes Received: %d\n", status.BytesReceived)
-    fmt.Printf("Last Handshake: %s\n", status.LastHandshake.Format("2006-01-02 15:04:05"))
+    logger.Info("SASEWaddle Client Status",
+        zap.String("state", status.State),
+        zap.String("client_id", status.ClientID),
+        zap.String("wireguard_ip", status.WireGuardIP),
+        zap.String("headend_url", status.HeadendURL),
+        zap.String("connected_since", status.ConnectedSince.Format("2006-01-02 15:04:05")),
+        zap.Int64("bytes_sent", status.BytesSent),
+        zap.Int64("bytes_received", status.BytesReceived),
+        zap.String("last_handshake", status.LastHandshake.Format("2006-01-02 15:04:05")),
+    )
 
     return nil
 }
@@ -298,61 +328,61 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 // For brevity, these are placeholder functions
 
 func installWindowsService() error {
-    fmt.Println("Installing Windows service...")
+    initServiceLogger().Info("Installing Windows service...")
     return fmt.Errorf("Windows service installation not implemented yet")
 }
 
 func uninstallWindowsService() error {
-    fmt.Println("Uninstalling Windows service...")  
+    initServiceLogger().Info("Uninstalling Windows service...")
     return fmt.Errorf("Windows service uninstallation not implemented yet")
 }
 
 func startWindowsService() error {
-    fmt.Println("Starting Windows service...")
+    initServiceLogger().Info("Starting Windows service...")
     return fmt.Errorf("Windows service control not implemented yet")
 }
 
 func stopWindowsService() error {
-    fmt.Println("Stopping Windows service...")
+    initServiceLogger().Info("Stopping Windows service...")
     return fmt.Errorf("Windows service control not implemented yet")
 }
 
 func installMacOSService() error {
-    fmt.Println("Installing macOS service...")
+    initServiceLogger().Info("Installing macOS service...")
     return fmt.Errorf("macOS service installation not implemented yet")
 }
 
 func uninstallMacOSService() error {
-    fmt.Println("Uninstalling macOS service...")
+    initServiceLogger().Info("Uninstalling macOS service...")
     return fmt.Errorf("macOS service uninstallation not implemented yet")
 }
 
 func startMacOSService() error {
-    fmt.Println("Starting macOS service...")
+    initServiceLogger().Info("Starting macOS service...")
     return fmt.Errorf("macOS service control not implemented yet")
 }
 
 func stopMacOSService() error {
-    fmt.Println("Stopping macOS service...")
+    initServiceLogger().Info("Stopping macOS service...")
     return fmt.Errorf("macOS service control not implemented yet")
 }
 
 func installLinuxService() error {
-    fmt.Println("Installing Linux systemd service...")
+    initServiceLogger().Info("Installing Linux systemd service...")
     return fmt.Errorf("Linux service installation not implemented yet")
 }
 
 func uninstallLinuxService() error {
-    fmt.Println("Uninstalling Linux systemd service...")
+    initServiceLogger().Info("Uninstalling Linux systemd service...")
     return fmt.Errorf("Linux service uninstallation not implemented yet")
 }
 
 func startLinuxService() error {
-    fmt.Println("Starting Linux systemd service...")
+    initServiceLogger().Info("Starting Linux systemd service...")
     return fmt.Errorf("Linux service control not implemented yet")
 }
 
 func stopLinuxService() error {
-    fmt.Println("Stopping Linux systemd service...")
+    initServiceLogger().Info("Stopping Linux systemd service...")
     return fmt.Errorf("Linux service control not implemented yet")
 }
