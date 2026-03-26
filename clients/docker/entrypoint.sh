@@ -160,17 +160,27 @@ HEADEND_WG_PORT="51820"  # Standard WireGuard port
 echo "$WG_PRIVATE_KEY" > /etc/wireguard/wg0.key
 chmod 600 /etc/wireguard/wg0.key
 
-# Get headend public key (would typically be provided in the response)
-# For now, we'll need to connect and retrieve it
-echo "Retrieving headend WireGuard public key..."
-HEADEND_PUBLIC_KEY=$(curl -sf -H "Authorization: Bearer $ACCESS_TOKEN" \
-    "$MANAGER_URL/api/v1/clusters/$(echo $HEADEND_URL | cut -d'/' -f3 | cut -d'.' -f1)/wireguard-pubkey" 2>/dev/null || echo "")
+# Fetch headend WireGuard public key from Manager API
+# Allow override via env var for testing only
+HEADEND_WG_PUBLIC_KEY="${HEADEND_WG_PUBLIC_KEY:-}"
+if [ -z "$HEADEND_WG_PUBLIC_KEY" ]; then
+    echo "Fetching headend WireGuard public key from Manager..."
+    HEADEND_WG_PUBLIC_KEY=$(curl -sf \
+        --retry 5 \
+        --retry-delay 3 \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        "${MANAGER_URL}/api/v1/headend/wireguard-pubkey" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['public_key'])" 2>/dev/null || echo "")
 
-# If we can't get the public key from API, we'll discover it during connection
-if [ "$HEADEND_PUBLIC_KEY" = "null" ] || [ -z "$HEADEND_PUBLIC_KEY" ]; then
-    echo "Warning: Could not retrieve headend public key from API, will discover during connection"
-    HEADEND_PUBLIC_KEY="PLACEHOLDER"
+    if [ -z "$HEADEND_WG_PUBLIC_KEY" ]; then
+        echo "ERROR: Failed to fetch headend WireGuard public key from Manager" >&2
+        exit 1
+    fi
+    echo "Headend public key fetched successfully"
+else
+    echo "Using provided HEADEND_WG_PUBLIC_KEY override"
 fi
+HEADEND_PUBLIC_KEY="$HEADEND_WG_PUBLIC_KEY"
 
 # Step 6: Create WireGuard configuration with dual authentication
 cat > /etc/wireguard/wg0.conf <<EOF
