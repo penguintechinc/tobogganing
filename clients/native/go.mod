@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.4.3
 	github.com/getlantern/systray v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/kardianos/service v1.2.2
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
