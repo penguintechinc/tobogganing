@@ -16,38 +16,38 @@ jobs:
   pre-release-tests:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up Python 3.12
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
-        python-version: 3.12
+        python-version: 3.13
     
     - name: Set up Go 1.23
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
       with:
-        go-version: 1.23
+        go-version: 1.24
     
     - name: Install Python dependencies
       run: |
-        cd manager
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-asyncio
+        cd services/hub-api
+        python3 -m pip install --upgrade pip
+        pip3 install -r requirements.txt
+        pip3 install pytest pytest-asyncio
     
     - name: Install Go dependencies
       run: |
-        cd headend && go mod download
-        cd ../clients/native && go mod download
+        cd services/hub-router && go mod download
+        cd clients/native && go mod download
     
     - name: Run Python tests
       run: |
-        cd manager
-        python -m pytest tests/ -v || exit 0
+        cd services/hub-api
+        python3 -m pytest tests/ -v || exit 0
     
     - name: Run Go tests (headend)
       run: |
-        cd headend
+        cd services/hub-router
         go test -v ./... || exit 0
     
     - name: Run Go tests (client)
@@ -69,16 +69,16 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
     
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
     
     - name: Log in to Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -90,28 +90,36 @@ jobs:
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
     
-    - name: Generate Docker tags
-      id: meta
+    - name: Compute image tags
+      id: tags
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        MAJOR=$(echo $VERSION | cut -d. -f1)
-        MINOR=$(echo $VERSION | cut -d. -f1-2)
-        
-        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${MINOR}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${MAJOR}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
+        EPOCH=$(date +%s)
+        VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+        REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
+        IMAGE="${REGISTRY}/tobogganing-${{ matrix.component }}"
+        REF="${{ github.ref_name }}"
+
+        if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          TAGS="${IMAGE}:${REF}"
+        elif [[ "${REF}" == "main" ]]; then
+          TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
+        elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
+          TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+        else
+          TAGS="${IMAGE}:alpha-${EPOCH}"
+        fi
+        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
         
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
     
     - name: Build and push Docker image - Manager
       if: matrix.component == 'manager'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./manager
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.tags.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -121,12 +129,12 @@ jobs:
     
     - name: Build and push Docker image - Headend
       if: matrix.component == 'headend'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./headend
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.tags.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -136,12 +144,12 @@ jobs:
     
     - name: Build and push Docker image - Client
       if: matrix.component == 'client'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./clients/docker
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.tags.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -181,12 +189,12 @@ jobs:
             binary: tobogganing-client-darwin-arm64
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
       with:
-        go-version: 1.23
+        go-version: 1.24
     
     - name: Read version from .version file
       id: version
@@ -225,7 +233,7 @@ jobs:
       shell: bash
     
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
@@ -237,13 +245,13 @@ jobs:
     runs-on: macos-latest
     steps:
     - name: Download macOS binaries
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: tobogganing-client-darwin-amd64
         path: ./amd64
     
     - name: Download macOS ARM64 binary
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: tobogganing-client-darwin-arm64
         path: ./arm64
@@ -275,7 +283,7 @@ jobs:
         fi
     
     - name: Upload universal binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: tobogganing-client-darwin-universal
         path: build/*
@@ -289,7 +297,7 @@ jobs:
       contents: write
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Read version from .version file
       id: version
@@ -298,7 +306,7 @@ jobs:
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
     
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         path: ./artifacts
     
@@ -338,295 +346,24 @@ jobs:
     - name: Create example configuration files
       run: |
         mkdir -p release-packages/examples
-        
-        # Create example client configuration
-        cat > release-packages/examples/client-config.yaml << 'EOF'
-# Tobogganing Native Client Configuration
-# Copy this file to ~/.tobogganing/config.yaml and modify as needed
-
-# Manager Service URL (required)
-manager_url: "https://your-manager.example.com:8000"
-
-# API Key for initial registration (required)
-api_key: "your-api-key-here"
-
-# Client identification
-client_name: "my-workstation"
-client_type: "client_native"
-
-# Connection settings
-auto_connect: true
-reconnect_interval: 30
-
-# Logging
-log_level: "info"
-
-# UI settings
-headless: false
-service_mode: false
-
-# Network settings
-dns_servers:
-  - "10.200.0.1"
-  - "1.1.1.1"
-  - "8.8.8.8"
-
-# Authentication
-auth_refresh_threshold: 300
-EOF
-        
-        # Create example docker-compose.yml for self-hosted deployment
-        cat > release-packages/examples/docker-compose.yml << 'EOF'
-# Tobogganing Self-Hosted Deployment Example
-# 
-# This example shows how to deploy Tobogganing components using Docker Compose
-# Modify the environment variables and volumes as needed for your deployment
-
-version: '3.8'
-
-services:
-  # Redis for caching and session management
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # Manager Service - Central orchestration
-  manager:
-    image: ghcr.io/your-org/tobogganing/manager:latest
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - LOG_LEVEL=info
-      - JWT_SECRET=your-jwt-secret-here
-      - ADMIN_EMAIL=admin@example.com
-      - ADMIN_PASSWORD=change-this-password
-    volumes:
-      - manager_data:/app/data
-      - manager_certs:/app/certs
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Headend Server - WireGuard termination and proxy
-  headend:
-    image: ghcr.io/your-org/tobogganing/headend:latest
-    restart: unless-stopped
-    depends_on:
-      manager:
-        condition: service_healthy
-    ports:
-      - "51820:51820/udp"  # WireGuard
-      - "8080:8080"        # Proxy
-    environment:
-      - MANAGER_API_URL=http://manager:8000
-      - LOG_LEVEL=info
-      - CLUSTER_ID=default
-      # Traffic mirroring (optional)
-      - TRAFFIC_MIRROR_ENABLED=false
-      # - TRAFFIC_MIRROR_DESTINATIONS=10.0.0.100:4789
-      # - TRAFFIC_MIRROR_PROTOCOL=VXLAN
-    volumes:
-      - headend_data:/app/data
-      - headend_wg:/etc/wireguard
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
-    healthcheck:
-      test: ["CMD", "/app/healthcheck.sh"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-volumes:
-  redis_data:
-  manager_data:
-  manager_certs:
-  headend_data:
-  headend_wg:
-
-networks:
-  default:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-EOF
-        
-        # Create installation script
-        cat > release-packages/examples/install.sh << 'EOF'
-#!/bin/bash
-# Tobogganing Native Client Installation Script
-
-set -e
-
-# Detect OS and architecture
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-
-case $ARCH in
-    x86_64) ARCH="amd64" ;;
-    aarch64|arm64) ARCH="arm64" ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-case $OS in
-    darwin) 
-        PLATFORM="darwin-universal"
-        EXT=".tar.gz"
-        ;;
-    linux) 
-        PLATFORM="linux-${ARCH}"
-        EXT=".tar.gz"
-        ;;
-    *) echo "Unsupported OS: $OS"; exit 1 ;;
-esac
-
-# Download and install
-VERSION=${1:-"latest"}
-DOWNLOAD_URL="https://github.com/your-org/tobogganing/releases/download/v${VERSION}/tobogganing-client-${VERSION}-${PLATFORM}${EXT}"
-
-echo "Installing Tobogganing Native Client..."
-echo "Platform: $PLATFORM"
-echo "Version: $VERSION"
-
-# Create temporary directory
-TMP_DIR=$(mktemp -d)
-cd "$TMP_DIR"
-
-# Download
-echo "Downloading from: $DOWNLOAD_URL"
-curl -L -o "tobogganing-client${EXT}" "$DOWNLOAD_URL"
-
-# Extract and install
-case $EXT in
-    .tar.gz) tar -xzf "tobogganing-client${EXT}" ;;
-    .zip) unzip "tobogganing-client${EXT}" ;;
-esac
-
-# Install binary
-sudo mv tobogganing-client /usr/local/bin/
-sudo chmod +x /usr/local/bin/tobogganing-client
-
-# Create config directory
-mkdir -p "$HOME/.tobogganing"
-
-echo "Installation complete!"
-echo ""
-echo "Next steps:"
-echo "1. Get an API key from your Tobogganing manager"
-echo "2. Run: tobogganing-client init --manager-url https://your-manager.example.com:8000 --api-key YOUR_API_KEY"
-echo "3. Run: tobogganing-client connect"
-echo ""
-echo "For more information, visit: https://github.com/your-org/tobogganing"
-
-# Cleanup
-cd /
-rm -rf "$TMP_DIR"
-EOF
-        
+        python3 -c "import os; os.makedirs('release-packages/examples', exist_ok=True); open('release-packages/examples/client-config.yaml', 'w').write('# Tobogganing Native Client Configuration\nmanager_url: https://your-manager.example.com:8000\napi_key: your-api-key-here\nclient_name: my-workstation\nclient_type: client_native\nauto_connect: true\nreconnect_interval: 30\nlog_level: info\nheadless: false\nservice_mode: false\ndns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\nauth_refresh_threshold: 300\n'); open('release-packages/examples/docker-compose.yml', 'w').write('# Tobogganing Self-Hosted Deployment\nversion: 3.8\nservices:\n  redis:\n    image: redis:7-bookworm\n  manager:\n    image: ghcr.io/your-org/tobogganing/manager:latest\n  headend:\n    image: ghcr.io/your-org/tobogganing/headend:latest\n'); open('release-packages/examples/install.sh', 'w').write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')"
         chmod +x release-packages/examples/install.sh
-    
+
     - name: Generate release notes
       id: release_notes
       run: |
         VERSION="${{ steps.version.outputs.version }}"
-        
-        cat > release-notes.md << EOF
-        # Tobogganing Release v${VERSION}
-        
-        ## 🚀 Features
-        
-        ### Manager Service
-        - Centralized orchestration with multi-datacenter support
-        - X.509 certificate management with automatic rotation
-        - JWT token management with Redis caching
-        - py4web-based REST API and web interface
-        - Support for SAML2/OAuth2 SSO integration
-        
-        ### Headend Server
-        - WireGuard VPN termination with dual authentication
-        - Multi-protocol proxy (HTTP/HTTPS, TCP, UDP)
-        - Traffic mirroring for IDS/IPS integration (VXLAN/GRE/ERSPAN)
-        - External IdP integration
-        - High-performance concurrent connection handling
-        
-        ### Client Applications
-        - **Docker Client**: Containerized deployment with auto-configuration
-        - **Native Client**: Cross-platform binaries for Mac, Windows, and Linux
-        - Automatic certificate and key management
-        - Background health monitoring and auth renewal
-        - CLI and configuration file support
-        
-        ## 📦 Downloads
-        
-        ### Native Client Binaries
-        - **macOS Universal**: \`tobogganing-client-darwin-universal-${VERSION}.tar.gz\`
-        - **Windows x64**: \`tobogganing-client-windows-amd64-${VERSION}.zip\`
-        - **Linux x64**: \`tobogganing-client-linux-amd64-${VERSION}.tar.gz\`
-        - **Linux ARM64**: \`tobogganing-client-linux-arm64-${VERSION}.tar.gz\`
-        
-        ### Docker Images
-        - **Manager**: \`ghcr.io/${{ github.repository }}/tobogganing-manager:${VERSION}\`
-        - **Headend**: \`ghcr.io/${{ github.repository }}/tobogganing-headend:${VERSION}\`
-        - **Client**: \`ghcr.io/${{ github.repository }}/tobogganing-client:${VERSION}\`
-        
-        ## 🛠️ Installation
-        
-        ### Quick Install (Linux/macOS)
-        \`\`\`bash
-        curl -sSL https://github.com/${{ github.repository }}/releases/download/v${VERSION}/install.sh | bash -s ${VERSION}
-        \`\`\`
-        
-        ### Manual Installation
-        1. Download the appropriate binary for your platform
-        2. Extract and move to your PATH
-        3. Run \`tobogganing-client init\` to configure
-        
-        ### Docker Deployment
-        See \`examples/docker-compose.yml\` for a complete deployment example.
-        
-        ## 📚 Documentation
-        
-        - Configuration examples included in \`examples/\` directory
-        - See [CLAUDE.md](https://github.com/${{ github.repository }}/blob/main/CLAUDE.md) for detailed architecture documentation
-        - API documentation available at \`/api/docs\` endpoint
-        
-        ## 🔒 Security
-        
-        - Zero Trust Network Architecture (ZTNA) implementation
-        - Dual authentication: X.509 certificates + JWT/SSO
-        - All communications secured with mutual TLS
-        - Certificate rotation and revocation support
-        - Audit logging for all operations
-        
-        ## ✅ Verification
-        
-        All release assets are signed and checksums are provided in \`checksums.txt\`.
-        
-        ## 🐛 Bug Reports & Feature Requests
-        
-        Please report issues at: https://github.com/${{ github.repository }}/issues
-        EOF
+        REPO="${{ github.repository }}"
+        python3 -c "
+        import os
+        v = os.environ.get('VERSION', 'unknown')
+        r = os.environ.get('REPO', 'penguintechinc/tobogganing')
+        n = f'# Tobogganing Release v{v}\n\n## Features\n- WireGuard VPN termination\n- Multi-protocol proxy\n- Cross-platform clients\n\n## Docker Images\n- Manager: ghcr.io/{r}/tobogganing-manager:{v}\n- Headend: ghcr.io/{r}/tobogganing-headend:{v}\n- Client: ghcr.io/{r}/tobogganing-client:{v}\n\n## Security\n- Zero Trust Network Architecture (ZTNA)\n- Dual authentication: X.509 + JWT\n- All communications secured with mutual TLS\n'
+        open('release-notes.md', 'w').write(n)
+        "
     
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
       with:
         tag_name: ${{ github.ref_name }}
         name: "Tobogganing v${{ steps.version.outputs.version }}"
@@ -646,13 +383,14 @@ EOF
         component: [manager, headend, client]
     steps:
     - name: Run Trivy vulnerability scanner on release images
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
       with:
         image-ref: ${{ env.REGISTRY }}/${{ env[format('IMAGE_NAME_{0}', upper(matrix.component))] }}:${{ github.ref_name }}
         format: 'sarif'
         output: 'trivy-${{ matrix.component }}-results.sarif'
+        version: 'v0.69.3'
     
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3  # v3
       with:
         sarif_file: 'trivy-${{ matrix.component }}-results.sarif'
