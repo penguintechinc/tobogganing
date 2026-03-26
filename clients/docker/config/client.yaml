@@ -42,7 +42,10 @@ wireguard:
   
   # Private key (auto-generated if empty)
   private_key: ""
-  
+
+  # headend_public_key: fetched dynamically from Manager API at startup.
+  # Set HEADEND_WG_PUBLIC_KEY env var to override (for testing only).
+
   # Network configuration
   network:
     # DNS servers

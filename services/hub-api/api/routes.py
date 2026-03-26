@@ -892,6 +892,55 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             response.status = 500
             return {"error": "Internal server error"}
     
+    @action("api/v1/headend/wireguard-pubkey", method=["GET"])
+    @action.uses("json")
+    async def headend_wireguard_pubkey():
+        """Return the headend WireGuard public key for client configuration."""
+        try:
+            # Authenticate using JWT token
+            auth_header = request.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                response.status = 401
+                return {"error": "Invalid authorization header"}
+
+            token = auth_header[7:]
+            payload = await jwt_manager.validate_token(token)
+            if not payload:
+                response.status = 401
+                return {"error": "Invalid or expired token"}
+
+            # Retrieve the headend WireGuard public key from the cluster manager
+            # The headend public key is stored on the active/primary cluster
+            clusters = await cluster_manager.get_all_clusters()
+            active_clusters = [c for c in clusters if c.status == 'active']
+
+            if not active_clusters:
+                response.status = 503
+                return {"error": "No active headend clusters available"}
+
+            # Get the WireGuard config for the primary (first active) cluster
+            primary_cluster = active_clusters[0]
+            wg_config = await cert_manager.get_wireguard_config(primary_cluster.id)
+
+            if not wg_config or not wg_config.get('public_key'):
+                response.status = 503
+                return {"error": "Headend WireGuard key not configured"}
+
+            return {
+                "status": "success",
+                "data": {
+                    "public_key": wg_config['public_key'],
+                    "cluster_id": primary_cluster.id,
+                    "endpoint": primary_cluster.headend_url
+                },
+                "meta": {"version": 1}
+            }
+
+        except Exception as e:
+            logger.error("Failed to retrieve headend WireGuard public key", error=str(e))
+            response.status = 500
+            return {"error": "Internal server error"}
+
     @action("api/v1/status", method=["GET"])
     @action.uses("json")
     async def get_status():
