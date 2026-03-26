@@ -7,43 +7,43 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_HUB_API: ${{ github.repository }}/hub-api
-  IMAGE_NAME_HUB_ROUTER: ${{ github.repository }}/hub-router
-  IMAGE_NAME_CLIENT: ${{ github.repository }}/client
+  IMAGE_NAME_MANAGER: ${{ github.repository }}/tobogganing-manager
+  IMAGE_NAME_HEADEND: ${{ github.repository }}/tobogganing-headend
+  IMAGE_NAME_CLIENT: ${{ github.repository }}/tobogganing-client
 
 jobs:
   # Build and test before release
   pre-release-tests:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up Python 3.13
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
         python-version: 3.13
     
     - name: Set up Go 1.24
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
       with:
         go-version: 1.24
     
     - name: Install Python dependencies
       run: |
         cd services/hub-api
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-asyncio
+        python3 -m pip install --upgrade pip
+        pip3 install -r requirements.txt
+        pip3 install pytest pytest-asyncio
     
     - name: Install Go dependencies
       run: |
         cd services/hub-router && go mod download
-        cd ../clients/native && go mod download
+        cd clients/native && go mod download
     
     - name: Run Python tests
       run: |
         cd services/hub-api
-        python -m pytest tests/ -v || exit 0
+        python3 -m pytest tests/ -v || exit 0
     
     - name: Run Go tests (headend)
       run: |
@@ -72,7 +72,7 @@ jobs:
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
@@ -90,28 +90,34 @@ jobs:
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
     
-    - name: Generate Docker tags
-      id: meta
+    - name: Compute image tags
+      id: tags
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        MAJOR=$(echo $VERSION | cut -d. -f1)
-        MINOR=$(echo $VERSION | cut -d. -f1-2)
-        
-        TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${MINOR}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${MAJOR}"
-        TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
-        
+        EPOCH=$(date +%s)
+        VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+        REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
+        IMAGE="${REGISTRY}/tobogganing-${{ matrix.component }}"
+        REF="${{ github.ref_name }}"
+
+        if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          TAGS="${IMAGE}:${REF}"
+        elif [[ "${REF}" == "main" ]]; then
+          TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
+        elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
+          TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+        else
+          TAGS="${IMAGE}:alpha-${EPOCH}"
+        fi
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
     
     - name: Build and push Docker image - Manager
       if: matrix.component == 'manager'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./services/hub-api
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.tags.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -121,12 +127,12 @@ jobs:
     
     - name: Build and push Docker image - Headend
       if: matrix.component == 'headend'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./services/hub-router
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.tags.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -136,12 +142,12 @@ jobs:
     
     - name: Build and push Docker image - Client
       if: matrix.component == 'client'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./clients/docker
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.tags.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -181,13 +187,13 @@ jobs:
             binary: tobogganing-client-darwin-arm64
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
       with:
         go-version: 1.24
-
+    
     - name: Read version from .version file
       id: version
       shell: bash
@@ -225,7 +231,7 @@ jobs:
       shell: bash
     
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
@@ -237,13 +243,13 @@ jobs:
     runs-on: macos-latest
     steps:
     - name: Download macOS binaries
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: tobogganing-client-darwin-amd64
         path: ./amd64
     
     - name: Download macOS ARM64 binary
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: tobogganing-client-darwin-arm64
         path: ./arm64
@@ -275,7 +281,7 @@ jobs:
         fi
     
     - name: Upload universal binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: tobogganing-client-darwin-universal
         path: build/*
@@ -289,7 +295,7 @@ jobs:
       contents: write
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Read version from .version file
       id: version
@@ -298,7 +304,7 @@ jobs:
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
     
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         path: ./artifacts
     
@@ -336,32 +342,12 @@ jobs:
         cd ..
     
     - name: Create example configuration files
+      env:
+        VERSION_TAG: ${{ steps.version.outputs.version }}
       run: |
         mkdir -p release-packages/examples
-        python3 -c "
-        import os, stat
-        os.makedirs('release-packages/examples', exist_ok=True)
-        with open('release-packages/examples/client-config.yaml', 'w') as f:
-          f.write('# Tobogganing Native Client Configuration\n')
-          f.write('manager_url: https://your-manager.example.com:8000\n')
-          f.write('api_key: your-api-key-here\n')
-          f.write('client_name: my-workstation\n')
-          f.write('client_type: client_native\n')
-          f.write('auto_connect: true\n')
-          f.write('reconnect_interval: 30\n')
-          f.write('log_level: info\n')
-          f.write('headless: false\n')
-          f.write('service_mode: false\n')
-          f.write('dns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\n')
-          f.write('auth_refresh_threshold: 300\n')
-        with open('release-packages/examples/docker-compose.yml', 'w') as f:
-          f.write('# Tobogganing Self-Hosted Deployment Example\n')
-          f.write("version: '3.8'\nservices:\n  redis:\n    image: redis:7-bookworm\n")
-        with open('release-packages/examples/install.sh', 'w') as f:
-          f.write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')
-        os.chmod('release-packages/examples/install.sh', 0o755)
-        print('Example files created')
-        "
+        python3 -c "import os; v=os.environ['VERSION_TAG']; os.makedirs('release-packages/examples', exist_ok=True); open('release-packages/examples/client-config.yaml', 'w').write('# Tobogganing Native Client Configuration\nmanager_url: https://your-manager.example.com:8000\napi_key: your-api-key-here\nclient_name: my-workstation\nclient_type: client_native\nauto_connect: true\nreconnect_interval: 30\nlog_level: info\nheadless: false\nservice_mode: false\ndns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\nauth_refresh_threshold: 300\n'); open('release-packages/examples/docker-compose.yml', 'w').write(f'# Tobogganing Self-Hosted Deployment\nversion: 3.8\nservices:\n  redis:\n    image: redis:7-bookworm\n  manager:\n    image: ghcr.io/your-org/tobogganing/manager:{v}\n  headend:\n    image: ghcr.io/your-org/tobogganing/headend:{v}\n'); open('release-packages/examples/install.sh', 'w').write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')"
+        chmod +x release-packages/examples/install.sh
 
     - name: Generate release notes
       id: release_notes
@@ -370,40 +356,14 @@ jobs:
         REPO="${{ github.repository }}"
         python3 -c "
         import os
-        version = os.environ.get('VERSION', 'unknown')
-        repo = os.environ.get('REPO', 'penguintechinc/tobogganing')
-        notes = (
-          f'# Tobogganing Release v{version}\n\n'
-          '## Features\n\n'
-          '### Manager Service\n'
-          '- Centralized orchestration with multi-datacenter support\n'
-          '- X.509 certificate management with automatic rotation\n'
-          '- JWT token management with Redis caching\n\n'
-          '### Headend Server\n'
-          '- WireGuard VPN termination with dual authentication\n'
-          '- Multi-protocol proxy (HTTP/HTTPS, TCP, UDP)\n\n'
-          '### Client Applications\n'
-          '- Docker Client: Containerized deployment with auto-configuration\n'
-          '- Native Client: Cross-platform binaries for Mac, Windows, Linux\n\n'
-          f'## Docker Images\n'
-          f'- Manager: ghcr.io/{repo}/tobogganing-manager:{version}\n'
-          f'- Headend: ghcr.io/{repo}/tobogganing-headend:{version}\n'
-          f'- Client:  ghcr.io/{repo}/tobogganing-client:{version}\n\n'
-          '## Security\n'
-          '- Zero Trust Network Architecture (ZTNA)\n'
-          '- Dual authentication: X.509 certificates + JWT/SSO\n'
-          '- All communications secured with mutual TLS\n\n'
-          'All release assets are signed and checksums are in checksums.txt.\n'
-        )
-        open('release-notes.md', 'w').write(notes)
-        print(f'Release notes written for v{version}')
-        " || {
-          echo "# Tobogganing Release ${VERSION}" > release-notes.md
-          echo "See changelog for details." >> release-notes.md
-        }
-
+        v = os.environ.get('VERSION', 'unknown')
+        r = os.environ.get('REPO', 'penguintechinc/tobogganing')
+        n = f'# Tobogganing Release v{v}\n\n## Features\n- WireGuard VPN termination\n- Multi-protocol proxy\n- Cross-platform clients\n\n## Docker Images\n- Manager: ghcr.io/{r}/tobogganing-manager:{v}\n- Headend: ghcr.io/{r}/tobogganing-headend:{v}\n- Client: ghcr.io/{r}/tobogganing-client:{v}\n\n## Security\n- Zero Trust Network Architecture (ZTNA)\n- Dual authentication: X.509 + JWT\n- All communications secured with mutual TLS\n'
+        open('release-notes.md', 'w').write(n)
+        "
+    
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
       with:
         tag_name: ${{ github.ref_name }}
         name: "Tobogganing v${{ steps.version.outputs.version }}"
@@ -428,8 +388,9 @@ jobs:
         image-ref: ${{ env.REGISTRY }}/${{ env[format('IMAGE_NAME_{0}', upper(matrix.component))] }}:${{ github.ref_name }}
         format: 'sarif'
         output: 'trivy-${{ matrix.component }}-results.sarif'
+        version: 'v0.69.3'
     
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3  # v3
       with:
         sarif_file: 'trivy-${{ matrix.component }}-results.sarif'

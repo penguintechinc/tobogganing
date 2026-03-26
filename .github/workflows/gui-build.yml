@@ -62,6 +62,12 @@ jobs:
           working-directory: clients/native
           args: --build-tags=nogui --timeout=5m
 
+      - name: Run gosec
+        uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
+        with:
+          args: '-no-fail ./...'
+          working-directory: clients/native
+
       - name: Test GUI package compilation
         working-directory: ./clients/native
         env:
@@ -110,7 +116,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       
       - name: Set up QEMU for cross-platform builds
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
         with:
           platforms: linux/amd64,linux/arm64
       
@@ -178,6 +184,12 @@ jobs:
           version: v1.64.8
           working-directory: clients/native
           args: --build-tags=nogui --timeout=5m
+
+      - name: Run gosec
+        uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
+        with:
+          args: '-no-fail ./...'
+          working-directory: clients/native
 
       - name: Test GUI package compilation
         working-directory: ./clients/native
@@ -267,7 +279,7 @@ jobs:
           done
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
         with:
           draft: false
           prerelease: false

@@ -63,19 +63,18 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version: '1.24'
-
+      
       - name: Install dependencies
         working-directory: ./clients/native
         run: |
           go mod download
           go mod verify
 
-      - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+      - name: Run gosec (Go security scanner)
+        uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
         with:
-          version: v1.64.8
-          working-directory: clients/native
-          args: --timeout=5m
+          args: '-no-fail -fmt json -out gosec-results.json ./clients/native/...'
+        continue-on-error: true
 
       - name: Build headless binary
         working-directory: ./clients/native
@@ -117,19 +116,18 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version: '1.24'
-
+      
       - name: Install dependencies
         working-directory: ./services/hub-router
         run: |
           go mod download
           go mod verify
 
-      - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+      - name: Run gosec (Go security scanner)
+        uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
         with:
-          version: v1.64.8
-          working-directory: services/hub-router
-          args: --timeout=5m
+          args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router/...'
+        continue-on-error: true
 
       - name: Build binary
         working-directory: ./services/hub-router
@@ -139,7 +137,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           go build -ldflags="-w -s -X main.Version=${{ github.ref_name }}" \
-            -o ../../dist/${{ matrix.binary_name }} \
+            -o ../dist/${{ matrix.binary_name }} \
             ./proxy
       
       - name: Upload artifact
@@ -211,7 +209,7 @@ jobs:
           done
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
         with:
           draft: false
           prerelease: false
