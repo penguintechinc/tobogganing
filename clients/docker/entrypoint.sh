@@ -2,7 +2,7 @@
 set -e
 
 echo "==========================================="
-echo "  SASEWaddle Docker Client Starting"
+echo "  Tobogganing Docker Client Starting"
 echo "==========================================="
 
 # Validate required environment variables
@@ -40,7 +40,7 @@ PUBLIC_KEY=$(cat /etc/wireguard/publickey)
 echo "Public Key: $PUBLIC_KEY"
 
 # Step 1: Register client with Manager Service
-echo "Registering with SASEWaddle Manager Service..."
+echo "Registering with Tobogganing Hub API..."
 REGISTRATION_RESPONSE=$(curl -sf -X POST "$MANAGER_URL/api/v1/clients/register" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $CLIENT_API_KEY" \
@@ -233,7 +233,7 @@ EOF
 chmod 600 /config/auth.json
 
 echo "==========================================="
-echo "  SASEWaddle Client Initialization Complete"
+echo "  Tobogganing Client Initialization Complete"
 echo "==========================================="
 echo "Client ID: $CLIENT_ID"
 echo "WireGuard IP: $WG_IP_ADDRESS"
@@ -262,7 +262,7 @@ fi
 echo "Starting connection monitoring..."
 
 # Trap signals for graceful shutdown
-trap 'echo "Shutting down SASEWaddle client..."; wg-quick down wg0 2>/dev/null || true; kill $HEALTH_PID $RENEWAL_PID 2>/dev/null || true; exit 0' SIGTERM SIGINT
+trap 'echo "Shutting down Tobogganing client..."; wg-quick down wg0 2>/dev/null || true; kill $HEALTH_PID $RENEWAL_PID 2>/dev/null || true; exit 0' SIGTERM SIGINT
 
 # Main monitoring loop
 while true; do

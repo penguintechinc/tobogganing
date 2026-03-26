@@ -1,5 +1,5 @@
-# SASEWaddle Terraform Configuration
-# This configuration deploys SASEWaddle to cloud providers
+# Tobogganing Terraform Configuration
+# This configuration deploys Tobogganing to cloud providers
 
 terraform {
   required_version = ">= 1.0"
@@ -23,7 +23,7 @@ terraform {
   backend "s3" {
     # Configure these values or use terraform init with -backend-config
     # bucket = "your-terraform-state-bucket"
-    # key    = "sasewaddle/terraform.tfstate"
+    # key    = "tobogganing/terraform.tfstate"
     # region = "us-west-2"
   }
 }
@@ -34,7 +34,7 @@ locals {
   
   tags = {
     Environment = var.environment
-    Project     = "SASEWaddle"
+    Project     = "Tobogganing"
     ManagedBy   = "Terraform"
   }
 }
@@ -91,7 +91,7 @@ module "rds" {
   instance_class = var.rds_instance_class
   allocated_storage = var.rds_allocated_storage
   
-  database_name = "sasewaddle"
+  database_name = "tobogganing"
   username      = var.rds_username
   password      = var.rds_password
   
@@ -195,10 +195,10 @@ module "iam" {
   name         = local.name
   cluster_name = module.eks.cluster_name
   
-  # Additional policies for SASEWaddle services
+  # Additional policies for Tobogganing services
   additional_policies = [
     {
-      name = "SASEWaddleManagerPolicy"
+      name = "TobogganingHubApiPolicy"
       policy = jsonencode({
         Version = "2012-10-17"
         Statement = [
@@ -219,15 +219,15 @@ module "iam" {
 }
 
 # Secrets Manager for sensitive configuration
-resource "aws_secretsmanager_secret" "sasewaddle_secrets" {
+resource "aws_secretsmanager_secret" "tobogganing_secrets" {
   name        = "${local.name}-secrets"
-  description = "SASEWaddle sensitive configuration"
-  
+  description = "Tobogganing sensitive configuration"
+
   tags = local.tags
 }
 
-resource "aws_secretsmanager_secret_version" "sasewaddle_secrets" {
-  secret_id = aws_secretsmanager_secret.sasewaddle_secrets.id
+resource "aws_secretsmanager_secret_version" "tobogganing_secrets" {
+  secret_id = aws_secretsmanager_secret.tobogganing_secrets.id
   secret_string = jsonencode({
     redis_password    = var.redis_auth_token
     jwt_secret       = var.jwt_secret

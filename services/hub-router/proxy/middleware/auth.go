@@ -1,6 +1,6 @@
-// Package middleware implements HTTP middleware components for the SASEWaddle headend proxy.
+// Package middleware implements HTTP middleware components for the Tobogganing hub-router proxy.
 //
-// This file provides authentication middleware that implements SASEWaddle's
+// This file provides authentication middleware that implements Tobogganing's
 // dual authentication architecture:
 // 1. X.509 client certificate validation (handled at TLS layer)
 // 2. JWT/SSO token validation (handled by middleware)
@@ -17,7 +17,7 @@ import (
     "github.com/gin-gonic/gin"
     log "github.com/sirupsen/logrus"
 
-    "github.com/tobogganing/headend/proxy/auth"
+    "github.com/tobogganing/hub-router/proxy/auth"
 )
 
 // AuthRequired middleware validates both certificate and JWT/SSO authentication

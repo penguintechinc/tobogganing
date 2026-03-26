@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SASEWaddle Screenshot Update Script
+# Tobogganing Screenshot Update Script
 # Generates and updates application screenshots for the website
 
 set -e
@@ -21,7 +21,7 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 
 echo "==========================================="
-echo "  SASEWaddle Screenshot Updater"
+echo "  Tobogganing Screenshot Updater"
 echo "==========================================="
 
 # Check if website exists
@@ -69,7 +69,7 @@ if [ -n "$DESKTOP_SCREENSHOTS" ]; then
         {
             name: '$name',
             src: '/images/screenshots/$screenshot',
-            alt: 'SASEWaddle $name on desktop',
+            alt: 'Tobogganing $name on desktop',
             category: 'desktop'
         },
 EOF
@@ -86,7 +86,7 @@ if [ -n "$MOBILE_SCREENSHOTS" ]; then
         {
             name: 'Mobile - $name',
             src: '/images/screenshots/$screenshot',
-            alt: 'SASEWaddle mobile app $name',
+            alt: 'Tobogganing mobile app $name',
             category: 'mobile'
         },
 EOF
@@ -103,7 +103,7 @@ if [ -n "$TABLET_SCREENSHOTS" ]; then
         {
             name: 'Tablet - $name',
             src: '/images/screenshots/$screenshot',
-            alt: 'SASEWaddle $name on tablet',
+            alt: 'Tobogganing $name on tablet',
             category: 'tablet'
         },
 EOF
@@ -134,7 +134,7 @@ cat >> "$WEBSITE_DIR/components/AppShowcase.tsx" << 'EOF'
                         Application Gallery
                     </h2>
                     <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                        Experience SASEWaddle across all platforms with intuitive interfaces
+                        Experience Tobogganing across all platforms with intuitive interfaces
                         and comprehensive security management tools.
                     </p>
                 </div>

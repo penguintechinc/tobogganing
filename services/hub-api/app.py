@@ -1,4 +1,4 @@
-"""Main py4web application entry point for SASEWaddle Manager."""
+"""Main py4web application entry point for Tobogganing Manager."""
 
 import os
 import sys
@@ -20,7 +20,7 @@ from . import web
 from .api import analytics_routes, security_routes, backup_routes
 from .security.middleware import security_fixture
 
-logger.info("SASEWaddle Manager application initialized")
+logger.info("Tobogganing Manager application initialized")
 
 
 @action('/')
@@ -35,7 +35,7 @@ def health_check():
     """Health check endpoint for load balancers."""
     return {
         'status': 'healthy',
-        'service': 'sasewaddle-manager',
+        'service': 'tobogganing-manager',
         'version': '1.0.0'
     }
 

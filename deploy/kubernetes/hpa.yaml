@@ -1,16 +1,16 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: manager-hpa
-  namespace: sasewaddle
+  name: hub-api-hpa
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/name: tobogganing
     app.kubernetes.io/component: hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: manager
+    name: hub-api
   minReplicas: 2
   maxReplicas: 10
   metrics:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Analytics data aggregation script for SASEWaddle Manager.
+Analytics data aggregation script for Tobogganing Manager.
 This script should be run periodically (e.g., via cron) to aggregate analytics data.
 """
 

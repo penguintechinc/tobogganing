@@ -1,5 +1,300 @@
----
-version: "2.4"
+# ==========================================================================
+# DEPRECATED: Docker Compose support has been deprecated.
+# Kubernetes (microk8s) with Helm v3 is now the standard deployment method.
+#
+# Use instead:
+#   Alpha:  make k8s-alpha-deploy
+#   Beta:   make k8s-beta-deploy
+#   Prod:   make k8s-prod-deploy
+#
+# See k8s/helm/tobogganing/ for Helm charts and values files.
+# This file is retained for reference only and will be removed in a future release.
+# ==========================================================================
+
+version: '3.8'
+
+# Tobogganing - Zero Trust SASE Platform
+# Production Docker Compose configuration
+#
+# Usage:
+#   docker compose up -d
+#   docker compose --profile monitoring up -d
+#   docker compose --profile tools up -d
+
 services:
-  app:
-    image: penguintech/core-ansible
+  # Redis - Session, JWT token, and policy caching
+  redis:
+    image: redis:7-bookworm@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0
+    container_name: tobogganing-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tobogganing
+
+  # MySQL - Primary database
+  mysql:
+    image: mysql:8.0@sha256:5a0c8f5b3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f
+    container_name: tobogganing-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-tobogganing-root-password}
+      MYSQL_DATABASE: ${DB_NAME:-tobogganing}
+      MYSQL_USER: ${DB_USER:-tobogganing}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-tobogganing-dev-password}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/tobogganing.cnf:ro
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tobogganing
+
+  # Hub API - Policy management, auth, configuration (Quart/Python 3.13)
+  hub-api:
+    build:
+      context: ./services/hub-api
+      dockerfile: Dockerfile
+    container_name: tobogganing-hub-api
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      DB_TYPE: ${DB_TYPE:-mysql}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-tobogganing}
+      DB_PASSWORD: ${DB_PASSWORD:-tobogganing-dev-password}
+      DB_NAME: ${DB_NAME:-tobogganing}
+      DB_POOL_SIZE: 10
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      SESSION_TIMEOUT_HOURS: 8
+      METRICS_TOKEN: ${METRICS_TOKEN:-prometheus-scraper-dev-token}
+      PORT: 8080
+      GRPC_PORT: 50051
+      WORKERS: 4
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    volumes:
+      - hub_api_data:/app/data
+      - hub_api_certs:/app/certs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tobogganing
+
+  # Hub Router - Inline policy enforcement, WireGuard VPN, traffic routing (Go 1.24)
+  hub-router:
+    build:
+      context: ./services/hub-router
+      dockerfile: Dockerfile
+    container_name: tobogganing-hub-router
+    restart: unless-stopped
+    depends_on:
+      hub-api:
+        condition: service_healthy
+    ports:
+      - "8443:8443"
+      - "8444:8444"
+      - "8445:8445/udp"
+      - "9090:9090"
+      - "51820:51820/udp"
+    environment:
+      HEADEND_SERVER_HTTP_PORT: 8443
+      HEADEND_SERVER_TCP_PORT: 8444
+      HEADEND_SERVER_UDP_PORT: 8445
+      HEADEND_SERVER_METRICS_PORT: 9090
+      HEADEND_SERVER_CERT_FILE: /certs/headend.crt
+      HEADEND_SERVER_KEY_FILE: /certs/headend.key
+      HEADEND_AUTH_TYPE: jwt
+      HEADEND_AUTH_MANAGER_URL: http://hub-api:8080
+      HEADEND_WIREGUARD_INTERFACE: wg0
+      HEADEND_WIREGUARD_NETWORK: 10.200.0.0/16
+      HEADEND_WIREGUARD_LISTEN_PORT: 51820
+      HEADEND_MIRROR_ENABLED: "false"
+      HEADEND_METRICS_AUTH_TOKEN: ${METRICS_TOKEN:-prometheus-scraper-dev-token}
+      MANAGER_URL: http://hub-api:8080
+      GRPC_HUB_API_ADDR: hub-api:50051
+      CLUSTER_ID: ${CLUSTER_ID:-default}
+      CLUSTER_NAME: ${CLUSTER_NAME:-Default Hub}
+      CLUSTER_REGION: ${CLUSTER_REGION:-local}
+      HEADEND_LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - hub_router_data:/app/data
+      - hub_router_certs:/certs
+      - hub_router_wg:/etc/wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tobogganing
+
+  # Hub WebUI - Admin portal (React/Vite)
+  hub-webui:
+    build:
+      context: ./services/hub-webui
+      dockerfile: Dockerfile
+    container_name: tobogganing-hub-webui
+    restart: unless-stopped
+    depends_on:
+      hub-api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tobogganing
+
+  # Nginx - Reverse proxy and TLS termination
+  nginx:
+    image: nginx:stable-bookworm@sha256:552e7481ca93ffccd046aa658dbbed22caefbc09c66fa7cd247cbb90b8a5c609
+    container_name: tobogganing-nginx
+    restart: unless-stopped
+    depends_on:
+      - hub-api
+      - hub-webui
+    ports:
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    profiles:
+      - proxy
+    networks:
+      - tobogganing
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:v3.2.1@sha256:6927e0919a144aa7616fd0137d4816816d42f6b816de3af269ab065250859a62
+    container_name: tobogganing-prometheus
+    restart: unless-stopped
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    profiles:
+      - monitoring
+    networks:
+      - tobogganing
+
+  # Grafana - Dashboards
+  grafana:
+    image: grafana/grafana:12.4.2@sha256:83749231c3835e390a3144e5e940203e42b9589761f20ef3169c716e734ad505
+    container_name: tobogganing-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-tobogganing}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    profiles:
+      - monitoring
+    networks:
+      - tobogganing
+
+  # Redis Commander - Redis management UI
+  redis-commander:
+    image: rediscommander/redis-commander:latest@sha256:19cd0c49f418779fa2822a0496c5e6516d0c792effc39ed20089e6268477e40a
+    container_name: tobogganing-redis-commander
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    profiles:
+      - tools
+    networks:
+      - tobogganing
+
+  # Adminer - Database management UI
+  adminer:
+    image: adminer:latest@sha256:16a72c6140f64d00a3a9edf8d3d3b18a7b0a29ca31b0453378d9eb71f01f9e34
+    container_name: tobogganing-adminer
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    ports:
+      - "8082:8080"
+    profiles:
+      - tools
+    networks:
+      - tobogganing
+
+volumes:
+  redis_data:
+    driver: local
+  mysql_data:
+    driver: local
+  hub_api_data:
+    driver: local
+  hub_api_certs:
+    driver: local
+  hub_router_data:
+    driver: local
+  hub_router_certs:
+    driver: local
+  hub_router_wg:
+    driver: local
+  nginx_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  tobogganing:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,4 +1,4 @@
-"""Database backup and restore functionality for SASEWaddle Manager."""
+"""Database backup and restore functionality for Tobogganing Manager."""
 
 import os
 import json
@@ -30,7 +30,7 @@ class S3Config:
     def __init__(self):
         self.enabled = os.getenv('BACKUP_S3_ENABLED', 'false').lower() == 'true'
         self.endpoint_url = os.getenv('BACKUP_S3_ENDPOINT_URL')  # For MINIO, etc.
-        self.bucket = os.getenv('BACKUP_S3_BUCKET', 'sasewaddle-backups')
+        self.bucket = os.getenv('BACKUP_S3_BUCKET', 'tobogganing-backups')
         self.region = os.getenv('BACKUP_S3_REGION', 'us-east-1')
         self.access_key = os.getenv('BACKUP_S3_ACCESS_KEY')
         self.secret_key = os.getenv('BACKUP_S3_SECRET_KEY')
@@ -151,7 +151,7 @@ class BackupManager:
             # Generate backup name if not provided
             if not backup_name:
                 timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-                backup_name = f"sasewaddle_backup_{timestamp}"
+                backup_name = f"tobogganing_backup_{timestamp}"
             
             # Determine file extension
             ext = ".json"
@@ -663,7 +663,7 @@ def backup_cli():
     """Command-line interface for backup operations."""
     import argparse
     
-    parser = argparse.ArgumentParser(description='SASEWaddle Database Backup Manager')
+    parser = argparse.ArgumentParser(description='Tobogganing Database Backup Manager')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
     # Create backup command

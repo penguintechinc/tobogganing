@@ -1,4 +1,4 @@
-"""Analytics and monitoring functionality for SASEWaddle Manager."""
+"""Analytics and monitoring functionality for Tobogganing Manager."""
 
 import os
 import json
@@ -32,7 +32,7 @@ class AnalyticsManager:
                 db.Field('os_name', 'string', length=64),  # Windows, macOS, Linux, etc.
                 db.Field('os_version', 'string', length=128),  # 10.0.19041, 12.6.1, 5.15.0-56
                 db.Field('architecture', 'string', length=32),  # x64, arm64, x86
-                db.Field('client_version', 'string', length=64),  # SASEWaddle client version
+                db.Field('client_version', 'string', length=64),  # Tobogganing client version
                 db.Field('ip_address', 'string', length=45),  # IPv4/IPv6
                 db.Field('connected_headend', 'string', length=128),
                 db.Field('connection_duration', 'integer'),  # seconds

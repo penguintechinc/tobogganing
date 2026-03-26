@@ -1,4 +1,4 @@
-"""Cache module for SASEWaddle Manager."""
+"""Cache module for Tobogganing Manager."""
 
 from .redis_cache import RedisCache, FirewallRulesCache, get_cache, get_firewall_cache, cleanup_cache
 

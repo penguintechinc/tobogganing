@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Health check script for SASEWaddle Docker Client
+# Health check script for Tobogganing Docker Client
 # Verifies WireGuard connectivity and authentication status
 
 set -e

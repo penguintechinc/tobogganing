@@ -1,4 +1,4 @@
-// Package mirror implements traffic mirroring capabilities for the SASEWaddle headend proxy.
+// Package mirror implements traffic mirroring capabilities for the Tobogganing headend proxy.
 //
 // The mirror manager provides:
 // - Real-time packet duplication to external security tools
@@ -483,7 +483,7 @@ func (m *Manager) prepareSuricataData(packet *MirrorPacket) []byte {
         "flow_id":      fmt.Sprintf("%x", packet.Timestamp.UnixNano()),
         "event_type":   "mirror",
         "mirror":       envelope,
-        "sasewaddle": map[string]interface{}{
+        "tobogganing": map[string]interface{}{
             "cluster": packet.Metadata["cluster_id"],
             "user":    packet.Metadata["user_id"],
         },

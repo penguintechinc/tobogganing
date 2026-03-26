@@ -1,5 +1,5 @@
 """
-Domain and IP access control management for SASEWaddle users
+Domain and IP access control management for Tobogganing users
 """
 
 import asyncio

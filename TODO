@@ -8,5 +8,5 @@
 
 BONUS FEATURES ADDED:
 - 🎁 Enterprise licensing system - Metrics and SSO are now licensed features (Professional/Enterprise tiers)
-- 🎁 License server integration - Added SASEWaddle product support to license server
+- 🎁 License server integration - Added Tobogganing product support to license server
 - 🎁 Feature gating - Automatic feature checks based on license tier

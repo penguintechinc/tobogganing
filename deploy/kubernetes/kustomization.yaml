@@ -1,20 +1,20 @@
-# Kustomization file for SASEWaddle deployment
+# Kustomization file for Tobogganing deployment
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 metadata:
-  name: sasewaddle
+  name: tobogganing
   annotations:
     config.kubernetes.io/local-config: "true"
 
 # Namespace for all resources
-namespace: sasewaddle
+namespace: tobogganing
 
 # Common labels applied to all resources
 commonLabels:
-  app.kubernetes.io/name: sasewaddle
+  app.kubernetes.io/name: tobogganing
   app.kubernetes.io/instance: production
-  app.kubernetes.io/part-of: sase-platform
+  app.kubernetes.io/part-of: tobogganing-platform
   app.kubernetes.io/managed-by: kustomize
 
 # Resources to include
@@ -31,9 +31,9 @@ resources:
 
 # Image transformations
 images:
-- name: ghcr.io/your-org/sasewaddle/manager
+- name: ghcr.io/your-org/tobogganing/hub-api
   newTag: latest
-- name: ghcr.io/your-org/sasewaddle/headend
+- name: ghcr.io/your-org/tobogganing/hub-router
   newTag: latest
 
 # Patches for environment-specific customizations
@@ -43,7 +43,7 @@ patchesStrategicMerge:
 
 # ConfigMap and Secret generators
 configMapGenerator:
-- name: sasewaddle-env-config
+- name: tobogganing-env-config
   literals:
   - ENVIRONMENT=production
   - DEPLOYMENT_TYPE=kubernetes
@@ -51,7 +51,7 @@ configMapGenerator:
 
 # Replica overrides for production
 replicas:
-- name: manager
+- name: hub-api
   count: 3
 - name: redis
   count: 1  # Redis should remain single instance unless using clustering
@@ -62,7 +62,7 @@ patchesJson6902:
     group: apps
     version: v1
     kind: Deployment
-    name: manager
+    name: hub-api
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/resources/requests/memory
@@ -75,7 +75,7 @@ patchesJson6902:
     group: apps
     version: v1
     kind: Deployment
-    name: headend
+    name: hub-router
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/resources/requests/memory

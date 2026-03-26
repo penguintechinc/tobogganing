@@ -1,4 +1,4 @@
-// Package config implements configuration management for the SASEWaddle native client.
+// Package config implements configuration management for the Tobogganing native client.
 //
 // The config package provides:
 // - Hierarchical configuration loading from multiple sources
@@ -24,7 +24,13 @@ import (
     "github.com/spf13/viper"
 )
 
-// Config holds the configuration for the SASEWaddle native client
+// OpenZitiConfig holds client-side OpenZiti configuration.
+type OpenZitiConfig struct {
+	IdentityFile string `mapstructure:"identity_file" json:"identity_file"`
+	ServiceName  string `mapstructure:"service_name" json:"service_name"`
+}
+
+// Config holds the configuration for the Tobogganing native client
 type Config struct {
     // Manager Service configuration
     ManagerURL string `mapstructure:"manager_url" json:"manager_url"`
@@ -47,6 +53,8 @@ type Config struct {
     
     // Advanced settings
     WireGuardInterface string `mapstructure:"wireguard_interface" json:"wireguard_interface"`
+    OverlayType        string `mapstructure:"overlay_type" json:"overlay_type"`
+    OpenZiti           OpenZitiConfig `mapstructure:"openziti" json:"openziti"`
     DNSServers         []string `mapstructure:"dns_servers" json:"dns_servers"`
     
     // Authentication settings
@@ -62,6 +70,7 @@ func DefaultConfig() *Config {
         LogLevel:             "info",
         Headless:             false,
         ServiceMode:          false,
+        OverlayType:          "dual",
         DNSServers:           []string{"10.200.0.1", "1.1.1.1", "8.8.8.8"},
         AuthRefreshThreshold: 300, // 5 minutes before expiry
     }
@@ -84,16 +93,16 @@ func LoadFromFile(cfg *Config, configFile string) error {
 
 // LoadFromDefaults loads configuration from default locations and environment variables
 func LoadFromDefaults(cfg *Config) error {
-    viper.SetConfigName("sasewaddle")
+    viper.SetConfigName("tobogganing")
     viper.SetConfigType("yaml")
-    
+
     // Add config paths
     viper.AddConfigPath(".")
-    viper.AddConfigPath("$HOME/.sasewaddle")
-    viper.AddConfigPath("/etc/sasewaddle")
-    
+    viper.AddConfigPath("$HOME/.tobogganing")
+    viper.AddConfigPath("/etc/tobogganing")
+
     // Set environment variable prefix
-    viper.SetEnvPrefix("SASEWADDLE")
+    viper.SetEnvPrefix("TOBOGGANING")
     viper.AutomaticEnv()
     
     // Set default values
@@ -105,6 +114,9 @@ func LoadFromDefaults(cfg *Config) error {
     viper.SetDefault("service_mode", false)
     viper.SetDefault("dns_servers", []string{"10.200.0.1", "1.1.1.1", "8.8.8.8"})
     viper.SetDefault("auth_refresh_threshold", 300)
+    viper.SetDefault("overlay_type", "dual")
+    viper.SetDefault("openziti.identity_file", "")
+    viper.SetDefault("openziti.service_name", "tobogganing-headend")
     
     // Try to read config file (it's ok if it doesn't exist)
     if err := viper.ReadInConfig(); err != nil {
@@ -183,7 +195,17 @@ func (c *Config) Validate() error {
     if c.AuthRefreshThreshold < 60 {
         return fmt.Errorf("auth_refresh_threshold must be at least 60 seconds")
     }
-    
+
+    validOverlayTypes := map[string]bool{
+        "wireguard": true,
+        "openziti":  true,
+        "dual":      true,
+    }
+
+    if !validOverlayTypes[c.OverlayType] {
+        return fmt.Errorf("invalid overlay_type: %s (must be wireguard, openziti, or dual)", c.OverlayType)
+    }
+
     return nil
 }
 
@@ -191,17 +213,17 @@ func (c *Config) Validate() error {
 func GetConfigDir() string {
     switch runtime.GOOS {
     case "darwin":
-        return os.Getenv("HOME") + "/.sasewaddle"
+        return os.Getenv("HOME") + "/.tobogganing"
     case "linux":
         configHome := os.Getenv("XDG_CONFIG_HOME")
         if configHome == "" {
             configHome = os.Getenv("HOME") + "/.config"
         }
-        return configHome + "/sasewaddle"
+        return configHome + "/tobogganing"
     case "windows":
-        return os.Getenv("APPDATA") + "\\SASEWaddle"
+        return os.Getenv("APPDATA") + "\\Tobogganing"
     default:
-        return os.Getenv("HOME") + "/.sasewaddle"
+        return os.Getenv("HOME") + "/.tobogganing"
     }
 }
 

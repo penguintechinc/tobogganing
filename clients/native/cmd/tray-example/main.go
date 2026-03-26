@@ -1,4 +1,4 @@
-// Example application demonstrating SASEWaddle tray icon functionality
+// Example application demonstrating Tobogganing tray icon functionality
 package main
 
 import (
@@ -17,7 +17,7 @@ func main() {
 	var configPath = flag.String("config", "config.yaml", "Path to configuration file")
 	flag.Parse()
 
-	log.Println("Starting SASEWaddle Client with System Tray...")
+	log.Println("Starting Tobogganing Client with System Tray...")
 
 	// Load configuration
 	cfg := config.DefaultConfig()

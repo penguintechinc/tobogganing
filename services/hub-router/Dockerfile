@@ -1,9 +1,16 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-bookworm@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb AS builder
 
 WORKDIR /build
 
 # Install build dependencies
-RUN apk add --no-cache git gcc musl-dev linux-headers
+RUN apt-get update && apt-get install -y \
+    git \
+    gcc \
+    libc6-dev \
+    linux-headers-generic \
+    libelf-dev \
+    libz-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy go mod files and download dependencies
 COPY go.mod go.sum ./
@@ -15,36 +22,37 @@ COPY . .
 # Build the Go application
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o headend-proxy ./proxy
 
+# Build the healthcheck binary
+RUN go build -o healthcheck ./cmd/healthcheck
+
 # Production image
-FROM alpine:3.19
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
 # Install runtime dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     wireguard-tools \
     iptables \
     ip6tables \
     iproute2 \
     openssl \
     ca-certificates \
-    tcpdump \
-    curl \
-    jq \
     bash \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Create directories
 RUN mkdir -p /app /etc/wireguard /certs /config
 
 # Copy application and scripts
 COPY --from=builder /build/headend-proxy /app/
+COPY --from=builder /build/healthcheck /app/
 COPY wireguard/scripts/ /app/scripts/
 COPY entrypoint.sh /app/
 
 # Set permissions
-RUN chmod +x /app/headend-proxy /app/entrypoint.sh /app/scripts/*.sh
+RUN chmod +x /app/headend-proxy /app/healthcheck /app/entrypoint.sh /app/scripts/*.sh
 
 # Create wireguard user
-RUN addgroup -S wireguard && adduser -S -G wireguard wireguard
+RUN addgroup --system wireguard && adduser --system --ingroup wireguard wireguard
 
 # Set ownership
 RUN chown -R wireguard:wireguard /etc/wireguard /certs
@@ -52,19 +60,19 @@ RUN chown -R wireguard:wireguard /etc/wireguard /certs
 # Expose ports
 # 51820: WireGuard VPN
 # 8443: HTTPS proxy
-# 8444: TCP proxy  
+# 8444: TCP proxy
 # 8445: UDP proxy
 # 9090: Metrics
 EXPOSE 51820/udp 8443/tcp 8444/tcp 8445/udp 9090/tcp
 
-# Health check
+# Health check using native Go binary
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:9090/health || exit 1
+    CMD /app/healthcheck
 
 # Environment defaults
 ENV CLUSTER_ID=""
 ENV CLUSTER_API_KEY=""
-ENV MANAGER_URL="http://manager:8000"
+ENV MANAGER_URL="http://hub-api:8080"
 ENV HEADEND_AUTH_TYPE="jwt"
 ENV HEADEND_LOG_LEVEL="info"
 ENV HEADEND_MIRROR_ENABLED="false"

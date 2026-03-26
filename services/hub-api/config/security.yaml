@@ -1,4 +1,4 @@
-# SASEWaddle Manager Security Configuration
+# Tobogganing Manager Security Configuration
 
 # Redis configuration for rate limiting
 redis:
@@ -101,7 +101,7 @@ logging:
   
   # Log security events to file
   file_logging: true
-  log_file: "/var/log/sasewaddle/security.log"
+  log_file: "/var/log/tobogganing/security.log"
   
   # Retention period for security events (days)
   retention_days: 90

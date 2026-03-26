@@ -11,9 +11,9 @@ import (
 
 func main() {
 	var rootCmd = &cobra.Command{
-		Use:   "sasewaddle-client",
-		Short: "SASEWaddle Native Client",
-		Long:  "A native client for SASEWaddle SASE solution",
+		Use:   "tobogganing-client",
+		Short: "Tobogganing Native Client",
+		Long:  "A native client for Tobogganing SASE solution",
 		Run:   runClient,
 	}
 
@@ -39,13 +39,13 @@ func runClient(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	fmt.Printf("SASEWaddle Client - Headless Mode\n")
+	fmt.Printf("Tobogganing Client - Headless Mode\n")
 	fmt.Printf("Manager URL: %s\n", cfg.ManagerURL)
 	fmt.Printf("Client Type: %s\n", cfg.ClientType)
 	fmt.Printf("Auto Connect: %v\n", cfg.AutoConnect)
 	
 	if cfg.ManagerURL == "" {
-		fmt.Println("No manager URL configured. Please set SASEWADDLE_MANAGER_URL environment variable or config file.")
+		fmt.Println("No manager URL configured. Please set TOBOGGANING_MANAGER_URL environment variable or config file.")
 		os.Exit(1)
 	}
 	

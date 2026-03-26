@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/testing-beta-services/SKILL.md

@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Authentication renewal script for SASEWaddle Docker Client
+# Authentication renewal script for Tobogganing Docker Client
 # Handles JWT token refresh and certificate rotation
 
 set -e
 
-echo "Starting SASEWaddle authentication renewal service..."
+echo "Starting Tobogganing authentication renewal service..."
 
 while true; do
     # Load current authentication config

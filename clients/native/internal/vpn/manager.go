@@ -1,4 +1,4 @@
-// Package vpn provides WireGuard VPN management functionality for SASEWaddle client.
+// Package vpn provides WireGuard VPN management functionality for Tobogganing client.
 //
 // The vpn package implements a cross-platform WireGuard VPN manager that handles:
 // - Connection establishment and termination
@@ -61,7 +61,7 @@ func NewManager(cfg *config.Config) *Manager {
 	// Determine interface name based on platform
 	interfaceName := "wg0"
 	if runtime.GOOS == platformWindows {
-		interfaceName = "SASEWaddle"
+		interfaceName = "Tobogganing"
 	}
 	
 	manager := &Manager{

@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/validating-containers/SKILL.md

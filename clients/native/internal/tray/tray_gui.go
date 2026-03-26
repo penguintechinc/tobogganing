@@ -1,6 +1,6 @@
 //go:build !nogui && (linux || darwin || windows)
 
-// Package tray provides system tray icon functionality for SASEWaddle client.
+// Package tray provides system tray icon functionality for Tobogganing client.
 //
 // The tray package implements a cross-platform system tray icon that allows users to:
 // - Monitor connection status
@@ -103,8 +103,8 @@ func (t *TrayManager) setupTrayIcon() {
 	// Set icon based on platform and theme
 	iconData := t.getIconData("disconnected")
 	systray.SetIcon(iconData)
-	systray.SetTitle("SASEWaddle")
-	systray.SetTooltip("SASEWaddle - Disconnected")
+	systray.SetTitle("Tobogganing")
+	systray.SetTooltip("Tobogganing - Disconnected")
 }
 
 // setupMenu creates the context menu
@@ -121,10 +121,10 @@ func (t *TrayManager) setupMenu() {
 
 	t.updateItem = systray.AddMenuItem("Update Configuration", "Pull latest configuration from server")
 	t.settingsItem = systray.AddMenuItem("Settings", "Open settings")
-	t.aboutItem = systray.AddMenuItem("About", "About SASEWaddle")
+	t.aboutItem = systray.AddMenuItem("About", "About Tobogganing")
 	systray.AddSeparator()
 
-	t.exitItem = systray.AddMenuItem("Exit", "Exit SASEWaddle")
+	t.exitItem = systray.AddMenuItem("Exit", "Exit Tobogganing")
 
 	// Initially disable disconnect
 	t.disconnectItem.Disable()
@@ -197,7 +197,7 @@ func (t *TrayManager) updateStatus() {
 	t.statusItem.SetTitle(statusText)
 
 	// Update tooltip
-	tooltip := fmt.Sprintf("SASEWaddle - %s", status)
+	tooltip := fmt.Sprintf("Tobogganing - %s", status)
 	systray.SetTooltip(tooltip)
 }
 

@@ -1,12 +1,12 @@
-# SASEWaddle Build Scripts
+# Tobogganing Build Scripts
 
-This directory contains utility scripts for building and managing SASEWaddle applications locally.
+This directory contains utility scripts for building and managing Tobogganing applications locally.
 
 ## Available Scripts
 
 ### `build-apps.sh`
 
-Comprehensive local build script for all SASEWaddle React-based applications.
+Comprehensive local build script for all Tobogganing React-based applications.
 
 **Features:**
 - ✅ Builds React Native mobile app bundles (Android & iOS)

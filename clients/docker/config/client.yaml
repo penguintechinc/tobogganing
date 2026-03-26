@@ -1,11 +1,11 @@
-# SASEWaddle Docker Client Configuration
+# Tobogganing Docker Client Configuration
 # This is the default configuration for the Docker client
 
 # Manager service configuration
 manager:
-  # URL of the SASEWaddle Manager service
+  # URL of the Tobogganing Hub API service
   # Override with MANAGER_URL environment variable
-  url: "https://manager.sasewaddle.local:8000"
+  url: "https://hub-api.tobogganing.local:8080"
   
   # API key for initial client registration
   # Override with API_KEY environment variable  
@@ -27,7 +27,7 @@ client:
   type: "docker-client"
   
   # Client name for display purposes
-  name: "SASEWaddle Docker Client"
+  name: "Tobogganing Docker Client"
   
   # Client version (auto-detected)
   version: "1.0.0"
@@ -85,7 +85,7 @@ logging:
   structured: false
   
   # Log to file
-  file: "/var/log/sasewaddle/client.log"
+  file: "/var/log/tobogganing/client.log"
   
   # Rotate logs
   rotate: true

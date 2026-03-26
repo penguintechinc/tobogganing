@@ -1,4 +1,4 @@
-// Package main implements the SASEWaddle native client application.
+// Package main implements the Tobogganing native client application.
 //
 // The native client provides cross-platform SASE connectivity with:
 // - WireGuard VPN tunnel establishment and management
@@ -42,9 +42,9 @@ var (
 
 func main() {
     var rootCmd = &cobra.Command{
-        Use:   "sasewaddle-client",
-        Short: "SASEWaddle Native Client",
-        Long: `SASEWaddle Native Client provides secure SASE connectivity
+        Use:   "tobogganing-client",
+        Short: "Tobogganing Native Client",
+        Long: `Tobogganing Native Client provides secure SASE connectivity
 with WireGuard VPN and dual authentication (Certificate + JWT/SSO).
 
 Supports:
@@ -63,8 +63,8 @@ Supports:
     // Connect command
     var connectCmd = &cobra.Command{
         Use:   "connect",
-        Short: "Connect to SASEWaddle network",
-        Long:  "Establish VPN connection to the SASEWaddle SASE network with dual authentication",
+        Short: "Connect to Tobogganing network",
+        Long:  "Establish VPN connection to the Tobogganing SASE network with dual authentication",
         RunE:  runConnect,
     }
     
@@ -75,8 +75,8 @@ Supports:
     // Disconnect command
     var disconnectCmd = &cobra.Command{
         Use:   "disconnect",
-        Short: "Disconnect from SASEWaddle network",
-        Long:  "Safely disconnect from the SASEWaddle SASE network",
+        Short: "Disconnect from Tobogganing network",
+        Long:  "Safely disconnect from the Tobogganing SASE network",
         RunE:  runDisconnect,
     }
 
@@ -92,7 +92,7 @@ Supports:
     var guiCmd = &cobra.Command{
         Use:   "gui",
         Short: "Launch GUI interface",
-        Long:  "Start the graphical user interface for SASEWaddle client",
+        Long:  "Start the graphical user interface for Tobogganing client",
         RunE:  runGUI,
     }
 
@@ -100,7 +100,7 @@ Supports:
     var serviceCmd = &cobra.Command{
         Use:   "service",
         Short: "Service management commands",
-        Long:  "Install, uninstall, start, stop the SASEWaddle client service",
+        Long:  "Install, uninstall, start, stop the Tobogganing client service",
     }
 
     var installServiceCmd = &cobra.Command{
@@ -197,7 +197,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
     }
 
     // Pretty print status
-    fmt.Printf("SASEWaddle Client Status\n")
+    fmt.Printf("Tobogganing Client Status\n")
     fmt.Printf("========================\n")
     fmt.Printf("State: %s\n", status.State)
     fmt.Printf("Client ID: %s\n", status.ClientID)

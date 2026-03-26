@@ -1,6 +1,6 @@
 //go:build nogui || !(linux || darwin || windows)
 
-// Package tray provides system tray icon functionality for SASEWaddle client.
+// Package tray provides system tray icon functionality for Tobogganing client.
 // This is the no-GUI stub implementation.
 package tray
 

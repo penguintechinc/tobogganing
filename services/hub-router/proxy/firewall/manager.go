@@ -1,4 +1,4 @@
-// Package firewall implements a comprehensive firewall system for the SASEWaddle headend proxy.
+// Package firewall implements a comprehensive firewall system for the Tobogganing headend proxy.
 //
 // The firewall manager provides:
 // - Domain-based access control with wildcard support (*.example.com)
@@ -162,7 +162,7 @@ func (m *Manager) fetchRules() error {
 	}
 	
 	req.Header.Set("Authorization", "Bearer "+m.authToken)
-	req.Header.Set("User-Agent", "SASEWaddle-Headend/1.0")
+	req.Header.Set("User-Agent", "Tobogganing-Headend/1.0")
 	
 	resp, err := client.Do(req)
 	if err != nil {

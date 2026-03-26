@@ -1,24 +1,25 @@
-# Multi-stage Docker build for SASEWaddle GUI client
+# Multi-stage Docker build for Tobogganing GUI client
 # This provides a consistent build environment with all GUI dependencies
 
-FROM golang:1.23-alpine AS gui-builder
+FROM golang:1.24-bookworm@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb AS gui-builder
 
 # Install GUI development dependencies for Linux
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     gcc \
-    musl-dev \
+    libc6-dev \
     libx11-dev \
     libxcursor-dev \
     libxrandr-dev \
     libxinerama-dev \
     libxi-dev \
-    mesa-dev \
-    pkgconfig \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libglfw3-dev \
+    pkg-config \
     git \
-    libayatana-appindicator-dev \
-    gtk+3.0-dev \
-    libgl1-mesa-glx \
-    libc6-compat
+    libayatana-appindicator3-dev \
+    libgtk-3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /src
@@ -36,16 +37,16 @@ ARG BUILD_TIME
 ARG GIT_COMMIT
 RUN CGO_ENABLED=1 go build \
     -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-    -o sasewaddle-client-gui \
+    -o tobogganing-client-gui \
     ./cmd/gui
 
 # Test stage - verify the binary was built
-FROM alpine:3.19 AS test
-RUN apk add --no-cache file
-COPY --from=gui-builder /src/sasewaddle-client-gui /tmp/
-RUN file /tmp/sasewaddle-client-gui && \
-    ls -la /tmp/sasewaddle-client-gui
+FROM debian:bookworm-slim@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb AS test
+RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
+COPY --from=gui-builder /src/tobogganing-client-gui /tmp/
+RUN file /tmp/tobogganing-client-gui && \
+    ls -la /tmp/tobogganing-client-gui
 
 # Final stage - extract the binary
 FROM scratch
-COPY --from=gui-builder /src/sasewaddle-client-gui /sasewaddle-client-gui
+COPY --from=gui-builder /src/tobogganing-client-gui /tobogganing-client-gui

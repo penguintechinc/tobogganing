@@ -1,5 +1,5 @@
 /**
- * SASEWaddle Mobile Client
+ * Tobogganing Mobile Client
  * React Native app for WireGuard VPN management with same functionality as Go client tray
  */
 

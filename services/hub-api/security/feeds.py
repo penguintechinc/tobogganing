@@ -1,4 +1,4 @@
-"""Security threat feeds integration for SASEWaddle Manager."""
+"""Security threat feeds integration for Tobogganing Manager."""
 
 import os
 import json

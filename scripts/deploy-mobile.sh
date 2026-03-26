@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SASEWaddle Mobile App Deployment Script
+# Tobogganing Mobile App Deployment Script
 # Quick deployment script for building and installing the mobile app
 
 set -e
@@ -26,13 +26,13 @@ ANDROID_DIR="$MOBILE_DIR/android"
 APK_PATH="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
 echo "========================================"
-echo "  SASEWaddle Mobile App Deployment"
+echo "  Tobogganing Mobile App Deployment"
 echo "========================================"
 echo
 
 # Check if mobile project exists
 if [ ! -d "$MOBILE_DIR" ]; then
-    log_error "SASEWaddle mobile project not found at $MOBILE_DIR"
+    log_error "Tobogganing mobile project not found at $MOBILE_DIR"
     exit 1
 fi
 
@@ -45,7 +45,7 @@ export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-
 log_info "Environment configured for Android development"
 
 # Build the app
-log_info "Building SASEWaddle mobile app..."
+log_info "Building Tobogganing mobile app..."
 cd "$ANDROID_DIR" || exit 1
 
 if ./gradlew assembleDebug --no-daemon --quiet; then
@@ -90,8 +90,8 @@ else
     if adb install -r "$APK_PATH" 2>/dev/null; then
         log_success "✅ App installed successfully!"
         echo
-        log_success "🚀 SASEWaddle mobile app deployment complete!"
-        log_info "Launch the app on your device to test the SASE functionality"
+        log_success "🚀 Tobogganing mobile app deployment complete!"
+        log_info "Launch the app on your device to test the Zero Trust functionality"
     else
         log_warning "⚠️  App installation failed"
         log_info "Try manually: adb install -r \"$APK_PATH\""
@@ -103,5 +103,5 @@ log_info "Deployment Summary:"
 echo "  • APK: $(basename "$APK_PATH")"
 echo "  • Size: $(du -h "$APK_PATH" | cut -f1)"
 echo "  • Location: $APK_PATH"
-echo "  • Package: com.sasewaddle.mobile"
+echo "  • Package: com.tobogganing.mobile"
 echo

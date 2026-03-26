@@ -209,3 +209,14 @@ config:
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
   dbType: "sqlite"
+
+## OpenZiti Overlay
+openziti:
+  enabled: false
+  edgeRouterPort: 443
+  identitySecretName: "ziti-hub-router-identity"
+
+## XDP Edge Protection
+xdp:
+  enabled: false
+  # Only needed on bare metal / non-Cilium deployments

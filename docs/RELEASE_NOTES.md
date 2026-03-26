@@ -1,552 +1,309 @@
-# 📋 Tobogganing Release Notes
+# Tobogganing Release Notes
 
 All notable changes to Tobogganing will be documented in this file. New releases will be prepended to this file.
 
 ---
 
-## 🔧 v1.1.4 - "Build System Enhancement" (2025-08-22)
+## v2.0.0 - "Hub Architecture" (2026-02-08)
 
-### 🎯 Major Improvements
+### Breaking Changes
 
-**🐳 Docker-Based GUI Builds**
-- ✅ **Reliable GUI Client Builds** - Implemented Docker-based build system using Ubuntu containers
-- ✅ **Cross-Platform Support** - ARM64 and AMD64 builds via Docker Buildx and QEMU
-- ✅ **Consistent Dependencies** - All GUI libraries included: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev
-- ✅ **Production Ready** - Eliminates environment-specific build issues
+This is a major release with significant architectural changes. Direct upgrades from v1.x are not supported; a migration guide will be published separately.
 
-**🔧 Fyne Framework Fixes**
-- 🐛 **Critical Type Declaration Fix** - Resolved `undefined: app.App` error in GUI code
-- ✅ **Correct Import Pattern** - Fixed Fyne framework usage with proper `fyne.App` interface
-- ✅ **Build Verification** - Added GUI package compilation tests to catch issues early
-- ✅ **Documentation** - Complete troubleshooting guide for common Fyne issues
+**Renamed Project**: SASEWaddle has been renamed to **Tobogganing**. All package names, container images, configuration keys, and API endpoints reflect the new name.
 
-**⚙️ Enhanced CI/CD Pipeline**
-- 🚀 **GitHub Actions Update** - Enhanced workflows with Docker Buildx for Linux builds
-- ✅ **Comprehensive Testing** - Added golangci-lint and GUI compilation verification
-- ✅ **Complete Multi-Platform Matrix** - Full AMD64/ARM64 support across all OS platforms
-- ✅ **Artifact Management** - Proper binary extraction from Docker containers
+**Architecture Migration**: The monolithic three-tier architecture (Manager, Headend, Client) has been replaced with a three-service hub model (hub-api, hub-router, hub-webui). See the migration notes below for details.
 
-**🏗️ Complete Build Matrix Coverage**
-- 🖥️ **GUI Builds**: macOS (AMD64/ARM64), Linux (AMD64/ARM64), Windows (AMD64/ARM64)
-- ⚡ **Headless Builds**: All major architectures plus embedded (ARMv6, ARMv7, MIPS)
-- 📦 **Total**: 14+ binary variants covering every major platform and architecture
-- 🎯 **Universal Binaries**: macOS Universal binaries for both GUI and headless variants
+**License Change**: The project license has changed from MIT to Limited AGPL-3.0 with commercial use restrictions and a Contributor Employer Exception. See `LICENSE.md` at the project root for full terms.
 
-### 🛠️ Technical Details
+### Major New Features
 
-**Fixed Code Issues**
-```go
-// Before (broken):
-import (
-    "fyne.io/fyne/v2/app"
-    "fyne.io/fyne/v2/widget"
-)
-type App struct {
-    fyneApp app.App  // ❌ Wrong type
-}
+**Three-Service Hub Architecture**
 
-// After (correct):
-import (
-    "fyne.io/fyne/v2"
-    "fyne.io/fyne/v2/app"
-    "fyne.io/fyne/v2/widget"
-)
-type App struct {
-    fyneApp fyne.App  // ✅ Correct interface
-}
-```
+The entire backend has been redesigned around a hub model where clients connect to distributed hubs for secure access.
 
-**New Docker Build Process**
-```bash
-# Reliable GUI build via Docker
-docker build -f Dockerfile.gui-ubuntu -t gui-builder .
-docker create --name temp gui-builder
-docker cp temp:/src/tobogganing-client-gui ./client-gui
-docker rm temp
+- **hub-api** (Quart / Python 3.13): Control plane for user management, policy authoring, certificate lifecycle, and hub coordination. Replaces the py4web-based Manager service.
+- **hub-router** (Go 1.24): Data plane for packet processing, policy enforcement, WireGuard tunnel termination, and traffic routing. Replaces the Go Headend server.
+- **hub-webui** (React 18 / Vite 5): Administrative interface for managing hubs, users, policies, and monitoring. Replaces the py4web-embedded web interface.
 
-# Cross-platform build support
-docker buildx build --platform linux/arm64,linux/amd64 \
-    -f Dockerfile.gui-ubuntu .
-```
+**py4web to Quart Migration**
 
-**Enhanced GitHub Actions**
-- **Linux Builds**: Architecture-specific Docker containers (Dockerfile.gui-amd64, Dockerfile.gui-arm64)
-- **macOS Builds**: Native runners (macos-13 for Intel, macos-latest for Apple Silicon)
-- **Windows Builds**: Added GUI compilation verification steps for both AMD64/ARM64
-- **ARM64 CGO Fix**: Eliminates assembly errors by using appropriate native runners
-- **Linting Integration**: Matches local development workflow
+The hub-api migrates from py4web to Quart, an async-native ASGI framework compatible with Flask patterns. This enables:
+- Native async/await for all request handlers
+- Long-lived gRPC streaming connections to hub-routers
+- WebSocket support for real-time status updates in the WebUI
+- uvicorn + uvloop for high-performance async I/O
+- PyDAL retained for multi-database abstraction
 
-**Complete Build Matrix**
-| Platform | GUI AMD64 | GUI ARM64 | Headless AMD64 | Headless ARM64 | Embedded |
-|----------|-----------|-----------|----------------|----------------|----------|
-| macOS    | ✅ | ✅ | ✅ | ✅ | - |
-| Linux    | ✅ | ✅ | ✅ | ✅ | ARMv6/v7, MIPS |
-| Windows  | ✅ | ✅ | ✅ | ✅ | - |
+**XDP/AF_XDP Data Plane**
 
-### 📚 Documentation Updates
+The hub-router introduces a kernel-bypass data plane for high-performance packet processing:
+- **Fast path (XDP)**: eBPF program attached to the NIC processes simple allow/deny decisions at line rate without entering userspace
+- **Slow path (AF_XDP)**: Packets requiring complex inspection (identity-aware routing, logging, application-layer policies) are redirected to Go userspace via AF_XDP sockets
+- **NUMA-aware memory pools**: Packet buffers allocated from NUMA-local memory to minimize cross-socket latency on multi-socket servers
+- **BPF source**: `services/hub-router/bpf/xdp_filter.c` compiled via cilium/ebpf
+- **Performance target**: 10+ Gbps on the fast path, 1+ Gbps on the slow path
 
-**Comprehensive Build Guide**
-- 🏗️ **Docker-Based Approach** - Complete documentation for reliable GUI builds
-- 🐛 **Troubleshooting Section** - Common errors and solutions
-- 🖥️ **Platform-Specific Notes** - macOS, Windows, and Linux considerations
-- ⚡ **Quick Reference** - Build commands for all scenarios
+**Policy Engine**
 
-**Build Process Documentation**
-- ✅ Local testing procedures that match CI/CD workflows
-- ✅ Cross-platform build verification steps
-- ✅ Fyne framework best practices and common pitfalls
-- ✅ Docker container usage for ARM builds
+A new multi-dimensional policy engine enables fine-grained access control:
+- **Domain filtering**: FQDN and wildcard matching (e.g., `*.example.com`)
+- **Port control**: Individual ports and ranges (e.g., `80`, `443`, `8000-9000`)
+- **Protocol filtering**: TCP, UDP, ICMP matching
+- **IP CIDR rules**: Source and destination network matching (e.g., `10.0.0.0/8`)
+- **User identity**: Per-user access policies
+- **Group membership**: Policies applied to groups of users
+- Policies are authored in hub-api and distributed to hub-routers via gRPC streaming with versioning and acknowledgment
 
-### 🔧 Build Verification
+**React WebUI**
 
-**Tested Components**
-- ✅ **GUI Client (Docker)** - Builds successfully on Ubuntu with all dependencies
-- ✅ **Headless Client** - Static compilation verified for embedded deployment
-- ✅ **GitHub Actions** - All workflow matrices tested and working
-- ✅ **Cross-Platform** - ARM64 builds verified via Docker Buildx
+The administrative interface has been rebuilt as a modern single-page application:
+- React 18 with TypeScript for type safety
+- Vite 5 for fast builds and hot module replacement
+- Tailwind CSS 4 for styling with the gold text theme and Elder sidebar pattern
+- TanStack React Query for server state management
+- React Router DOM v6 for client-side routing
+- Vitest with React Testing Library for component testing
+- Role-based UI rendering (Admin, Maintainer, Viewer)
 
-**New Build Commands**
-```bash
-# GUI client via Docker (recommended)
-docker build -f Dockerfile.gui-ubuntu -t gui-builder .
+**gRPC Inter-Service Communication**
 
-# Test GUI package compilation  
-go build -v ./internal/gui
+Hub-api and hub-router communicate over gRPC for real-time operations:
+- `StreamPolicies`: Server-streaming RPC for policy distribution
+- `ReportStatus`: Unary RPC for hub health and client count reporting
+- `SyncCertificates`: Bidirectional streaming for certificate management
+- Automatic reconnection with exponential backoff
+- Policy cache on hub-routers survives brief hub-api outages
 
-# Lint verification (matches CI/CD)
-golangci-lint run --timeout=10m
-```
+**Multi-Hub Client Connections with Failover**
 
-### 🚀 Developer Experience
+Clients now connect to two or more hubs simultaneously:
+- Automatic failover when the primary hub becomes unreachable
+- Hub assignment considers geographic proximity and current load
+- Configurable failback behavior when the primary hub recovers
+- Hub list refreshed periodically from hub-api
 
-**Improved Local Development**
-- 🔄 **Consistent Environment** - Docker eliminates "works on my machine" issues
-- ⚡ **Faster Debugging** - Clear error messages and troubleshooting steps
-- 📋 **Standardized Process** - Local builds match GitHub Actions exactly
-- 🔍 **Better Testing** - GUI package compilation verification
+**Cilium Integration**
 
-**Enhanced CI/CD Reliability**
-- 🎯 **Predictable Builds** - Docker containers ensure consistent dependencies
-- 🚀 **Faster Iteration** - Parallel builds with proper matrix configuration
-- 🔒 **Security** - Updated workflows with latest actions and best practices
-- 📊 **Better Monitoring** - Enhanced logging and verification steps
+For Kubernetes deployments, Cilium replaces the custom k8s-cni component:
+- Mature eBPF-based CNI with extensive community support
+- Native network policy enforcement complementing Tobogganing policies
+- Hubble observability for inter-service traffic visibility
+- Optional WireGuard encryption for intra-cluster traffic
 
-### 🎉 What This Means
+**Identity Provider Support (Premium, License-Gated)**
 
-**For Developers**
-- 🛠️ **Reliable GUI Builds** - No more environment-specific compilation issues
-- 📚 **Clear Documentation** - Complete guides for all build scenarios
-- ⚡ **Faster Development** - Consistent Docker-based approach
-- 🔍 **Better Testing** - Early detection of GUI framework issues
+Premium identity provider integrations are now available with a valid PenguinTech license:
+- **OIDC**: OpenID Connect for single sign-on
+- **SAML**: SAML 2.0 federation with external identity providers
+- **SCIM**: Automated user and group provisioning
+- Graceful fallback to local authentication when license is invalid or expired
+- Local authentication remains free and always available
 
-**For Users**
-- ✅ **More Stable Releases** - Enhanced build verification prevents broken binaries
-- 🚀 **Faster Updates** - Improved CI/CD pipeline reduces release time
-- 🌐 **Better Platform Support** - Reliable ARM64 builds for embedded devices
-- 🔒 **Higher Quality** - Comprehensive testing and linting integration
+### Infrastructure Changes
 
-### 🔗 Upgrade Notes
+**Alpine to Debian Bookworm Migration**
 
-- ✅ **Fully Compatible** - No breaking changes to existing functionality
-- ✅ **Drop-in Replacement** - Existing configurations continue to work
-- ✅ **Enhanced Reliability** - Build system improvements benefit all deployments
-- ✅ **Future Ready** - Foundation for upcoming mobile and embedded features
+All container base images have been migrated from Alpine Linux to Debian bookworm:
+
+| Service | Old Base | New Base | Rationale |
+|---------|----------|----------|-----------|
+| hub-api | python:3.12-alpine | python:3.13-slim-bookworm | Consistent base, better library compatibility |
+| hub-router | golang:1.23-alpine | debian:bookworm-slim (runtime) | CGO required for XDP/eBPF; musl incompatible |
+| hub-webui | node:20-alpine | nginx:stable (runtime) | Static asset serving, consistent with other services |
+
+This change was driven primarily by the hub-router's requirement for glibc and eBPF development headers, which are not reliably available on Alpine/musl.
+
+**Python 3.12 to 3.13 Upgrade**
+
+- Takes advantage of Python 3.13 performance improvements
+- Updated all dependencies to versions compatible with 3.13
+- No code changes required beyond dependency updates
+
+**Go 1.23 to 1.24 Upgrade**
+
+- Enables new standard library features used in the data plane
+- Updated all Go module dependencies
+- `go.mod` specifies `go 1.24`
+
+**Node.js 20 to 22 Upgrade**
+
+- LTS version alignment
+- Performance improvements in V8 engine
+- Updated all npm dependencies
+
+### Component Mapping (v1.x to v2.0.0)
+
+| v1.x Component | v2.0.0 Component | Notes |
+|----------------|------------------|-------|
+| Manager Service (py4web) | hub-api (Quart) | Complete rewrite; async-native |
+| Headend Server (Go) | hub-router (Go) | Refactored; added XDP data plane |
+| Manager Web UI (py4web) | hub-webui (React) | Complete rewrite; SPA architecture |
+| Custom k8s-cni | Cilium (external) | Replaced with mature eBPF CNI |
+| WireGuard kernel module | WireGuard via wgctrl | Same protocol; updated integration |
+| Fyne GUI client | Unchanged | Native client architecture preserved |
+| Docker client | Unchanged | Container client architecture preserved |
+| React Native mobile | Unchanged | Mobile client architecture preserved |
+
+### Removed Features
+
+- **py4web web interface**: Replaced by hub-webui (React SPA)
+- **Custom Kubernetes CNI**: Replaced by Cilium
+- **Monolithic deployment option**: All deployments now use the three-service model
+- **FRR/VRF/OSPF integration**: Removed in favor of policy-based routing through the hub model (may return in a future release)
+- **Suricata IDS/IPS direct integration**: Traffic mirroring capabilities are preserved; IDS/IPS integration will be reintroduced via hub-router plugins
+
+### Security Improvements
+
+- All inter-service communication uses TLS 1.3 or gRPC with TLS
+- Certificate management simplified with dedicated PKI operations in hub-api
+- bandit (Python), gosec (Go), npm audit (JS), and trivy (containers) integrated into CI/CD
+- License enforcement prevents unauthorized use of premium features
+- Audit logging enhanced with structured JSON output
+
+### Developer Experience
+
+- Makefile with comprehensive targets for build, test, lint, deploy, and development
+- `make dev` starts the full development stack with Docker Compose
+- `make seed-mock-data` populates 3-4 items per feature for realistic development
+- `make smoke-test` provides fast build verification in under 2 minutes
+- Hot reload for all three services during development
+- Vitest replaces Jest for faster WebUI test execution
+- golangci-lint replaces individual Go linters
+
+### Build and CI/CD
+
+- GitHub Actions workflows for multi-architecture builds (AMD64, ARM64)
+- Docker Buildx for cross-platform container images
+- Build tags: `beta-<epoch64>` (main), `alpha-<epoch64>` (feature branches), `vX.X.X` (releases)
+- Automated security scanning on every pull request
+- CodeQL compliance for Go and Python
+
+### Known Issues
+
+- XDP fast path requires Linux kernel 5.15+ and does not function on macOS or WSL2
+- SCIM provisioning is limited to user and group sync; role mapping requires manual configuration
+- Multi-hub failback timing is not yet configurable via the WebUI (CLI/API only)
+- Cilium integration tested with Cilium 1.14+; earlier versions may not be compatible
+
+### Migration Guide
+
+A detailed migration guide for v1.x to v2.0.0 will be published as a separate document. Key points:
+
+1. **Data migration**: Export users, certificates, and configuration from the v1.x Manager before upgrading
+2. **Container images**: All image names have changed; update deployment manifests
+3. **Configuration**: Environment variables have been renamed with `HUB_API_`, `HUB_ROUTER_`, and `VITE_` prefixes
+4. **API endpoints**: The REST API has been reorganized under `/api/v1/`; existing client integrations will need updates
+5. **License**: Ensure a valid PenguinTech license if using premium features (OIDC, SAML, SCIM)
+
+### Upgrade Notes
+
+- v1.x to v2.0.0 is a full migration, not an in-place upgrade
+- Existing WireGuard tunnels will need to be re-established after migration
+- Client applications from v1.x are compatible with v2.0.0 hub-routers after re-registration
+- Database schema has changed; use the provided migration tool (published separately)
 
 ---
 
-## 🚀 v1.1.0 - "Enterprise Features" (2025-08-21)
+## v1.1.4 - "Build System Enhancement" (2025-08-22)
 
-### 🎉 Major New Features
+### Major Improvements
+
+**Docker-Based GUI Builds**
+- Reliable GUI client builds using Docker containers with Ubuntu base
+- Cross-platform support for ARM64 and AMD64 via Docker Buildx and QEMU
+- All GUI dependencies included: libayatana-appindicator3-dev, libgtk-3-dev, libgl1-mesa-dev
+- Eliminates environment-specific build issues
+
+**Fyne Framework Fixes**
+- Fixed `undefined: app.App` error by correcting Fyne type declarations
+- Proper import pattern using `fyne.App` interface instead of `app.App`
+- Added GUI package compilation tests to catch issues early
+
+**Enhanced CI/CD Pipeline**
+- GitHub Actions updated with Docker Buildx for Linux builds
+- Comprehensive testing with golangci-lint and GUI compilation verification
+- Complete multi-platform matrix: AMD64/ARM64 across macOS, Linux, Windows
+- 14+ binary variants covering every major platform and architecture
+
+### Build Verification
+
+- GUI client builds successfully via Docker on Ubuntu
+- Headless client static compilation verified for embedded deployment
+- All GitHub Actions workflow matrices tested and working
+- Cross-platform ARM64 builds verified via Docker Buildx
+
+---
+
+## v1.1.0 - "Enterprise Features" (2025-08-21)
+
+### Major New Features
 
 **Advanced Management Portal**
-- 🎛️ **Dynamic Port Configuration** - Admin interface for configuring proxy listening ports
-- 🔥 **Enhanced Firewall System** - Domain, IP, protocol, and port-based access control with real-time testing
-- 🌐 **VRF & OSPF Support** - Enterprise network segmentation with FRR integration
-- 📊 **Real-Time Analytics Dashboard** - Interactive charts with Chart.js and historical data aggregation
+- Dynamic port configuration via admin interface
+- Enhanced firewall system with domain, IP, protocol, and port-based access control
+- VRF and OSPF support with FRR integration
+- Real-time analytics dashboard with Chart.js
 
-**Security & Monitoring**
-- 🚨 **Suricata IDS/IPS Integration** - Traffic mirroring with VXLAN/GRE/ERSPAN protocols
-- 📝 **Syslog Audit Logging** - UDP syslog integration for compliance and security monitoring
-- 🔒 **Advanced Authentication** - Enhanced JWT management and session security
+**Security and Monitoring**
+- Suricata IDS/IPS integration with traffic mirroring (VXLAN/GRE/ERSPAN)
+- Syslog audit logging for compliance
+- Enhanced JWT management and session security
 
-**Database & Infrastructure**
-- 🗄️ **PyDAL Database Layer** - MySQL/PostgreSQL/SQLite support with read replica capability
-- 💾 **Database Backup System** - Local and S3-compatible storage with encryption
-- 🔄 **Redis Caching** - Session management and firewall rule caching
+**Database and Infrastructure**
+- PyDAL database layer with MySQL/PostgreSQL/SQLite support and read replicas
+- Database backup system with local and S3-compatible storage
+- Redis caching for sessions and firewall rule caching
 
-**Deployment & CI/CD**
-- 🐳 **Multi-Architecture Docker** - ARM64 and AMD64 builds with GitHub Actions
-- 🏗️ **Cross-Platform Binaries** - Native builds for Windows, macOS, Linux, and embedded devices
-- 🔄 **Complete CI/CD Pipeline** - Automated testing, building, and releasing
-
-### 📚 Documentation Updates
-
-- 📖 **Comprehensive API Documentation** - Complete REST API reference with examples
-- 🏗️ **Updated Architecture Guide** - Enhanced with all new components and features  
-- 🚀 **Improved Quick Start** - Step-by-step setup with all new services
-- ✨ **Feature Documentation** - Detailed guides for all enterprise features
-
-### 🔧 Technical Improvements
-
-- **Performance**: Enhanced async processing and database connection pooling
-- **Security**: Multi-layer authentication and real-time threat detection
-- **Scalability**: Read replica support and horizontal scaling capabilities
-- **Monitoring**: Prometheus metrics and Grafana dashboard integration
+**Deployment and CI/CD**
+- Multi-architecture Docker builds (ARM64, AMD64) via GitHub Actions
+- Cross-platform native binaries for Windows, macOS, Linux, and embedded devices
 
 ---
 
-## 🔒 v1.0.1 - "Security Patch" (2025-01-21)
+## v1.0.1 - "Security Patch" (2025-01-21)
 
-### 🛡️ Critical Security Fixes
+### Critical Security Fixes
 
-**CVE Patches**
-- 🔐 **CVE-2024-24783** (HIGH) - Fixed panic when parsing invalid palette-color images in golang.org/x/image
-  - Updated `golang.org/x/image` from v0.11.0 to v0.18.0
-  - Affected: Native client through Fyne GUI dependency chain
-  - Impact: Prevents potential DoS attacks via malformed image files
+- **CVE-2024-24783** (HIGH): Fixed panic in golang.org/x/image; updated to v0.18.0
+- **CVE golang.org/x/oauth2** (HIGH): Fixed improper validation; updated to v0.27.0
+- **Protestware detection**: Updated WireGuard dependencies to remove flagged gvisor.dev/gvisor package
 
-- 🔐 **CVE golang.org/x/oauth2** (HIGH) - Fixed improper validation of syntactic correctness in OAuth2 library  
-  - Updated `golang.org/x/oauth2` from v0.15.0 to v0.27.0
-  - Affected: Both headend proxy and native client
-  - Impact: Prevents authorization bypass vulnerabilities
+### Build and Compatibility Fixes
 
-**Dependency Security**
-- 🔍 **Protestware Detection** - Updated WireGuard dependencies to remove flagged gvisor.dev/gvisor package
-  - Updated `golang.zx2c4.com/wireguard` to latest stable version
-  - Enhanced dependency security scanning and validation
-  - Improved supply chain security posture
-
-### 🔧 Build & Compatibility Fixes
-
-**Native Client Improvements**
-- ✅ Fixed missing `headendPublicKey` field in Client struct
-- ✅ Resolved deprecated `systray.GetTooltip()` API calls
-- ✅ Updated Go version to 1.23.1 with latest toolchain
-- ✅ Improved error handling in system tray notifications
-
-**Website Build Fixes**
-- ✅ Fixed missing `CircuitBoardIcon` import in EmbeddedSolutions component
-- ✅ Replaced with valid `CodeBracketIcon` from Heroicons library
-- ✅ Resolved Next.js build failures in production deployment
-
-### 📋 Component Updates
-
-**Headend Proxy**
-- 🔄 Updated all crypto dependencies to latest secure versions
-- 🔄 Improved Go module dependency management
-- ✅ Verified production build compatibility
-
-**Native Client**
-- 🔄 Headless client build confirmed working after updates
-- 🔄 Enhanced security posture with updated dependencies
-- ⚠️ GUI components require additional development environment setup
-
-**Dependencies Updated**
-```
-golang.org/x/image: v0.11.0 → v0.18.0
-golang.org/x/oauth2: v0.15.0 → v0.27.0  
-golang.org/x/crypto: v0.31.0 → v0.37.0
-golang.org/x/net: v0.21.0 → v0.39.0
-golang.org/x/sync: v0.10.0 → v0.13.0
-golang.org/x/sys: v0.28.0 → v0.32.0
-golang.org/x/text: v0.21.0 → v0.24.0
-```
-
-### 🚨 Important Security Notes
-
-**Immediate Action Required**
-- 🔴 **High Priority**: Update all Tobogganing deployments to v1.0.1
-- 🔴 **CVE Impact**: Both patched vulnerabilities were rated HIGH severity
-- 🔴 **Supply Chain**: Enhanced dependency validation prevents future protestware risks
-
-**Upgrade Compatibility**
-- ✅ **Drop-in Replacement**: v1.0.1 is fully compatible with v1.0.0 configurations
-- ✅ **Zero Downtime**: Rolling updates supported for production deployments
-- ✅ **Backwards Compatible**: No breaking changes to APIs or protocols
-
-### 📦 Build Verification
-
-**Tested Components**
-- ✅ Headend proxy builds and runs successfully
-- ✅ Native client headless version builds successfully  
-- ✅ Website builds and deploys to production
-- ✅ Docker containers build with updated dependencies
-- ✅ All critical security vulnerabilities resolved
-
-**Build Commands Verified**
-```bash
-# Headend proxy
-cd headend && go build -o headend-proxy ./proxy
-
-# Native client (headless)  
-cd clients/native && go build -o tobogganing-client-headless ./build-headless.go
-
-# Website
-cd website && npm install && npm run build
-```
-
-### 🔗 Related Resources
-
-- **Security Advisory**: GitHub Security Advisory for detailed CVE information
-- **Upgrade Guide**: See v1.0.0 → v1.0.1 migration notes in documentation
-- **Vulnerability Scanner**: Use updated security scanning in CI/CD pipelines
+- Fixed missing `headendPublicKey` field in Client struct
+- Resolved deprecated `systray.GetTooltip()` API calls
+- Updated Go to 1.23.1 with latest toolchain
+- Fixed missing `CircuitBoardIcon` import in website EmbeddedSolutions component
 
 ---
 
-## 🎉 v1.0.0 - "Genesis" (2024-08-20)
+## v1.0.0 - "Genesis" (2024-08-20)
 
-### 🚀 Major Features
+### Initial Release
 
-**🛡️ Zero Trust Architecture**
-- ✅ Dual authentication system (X.509 certificates + JWT/SSO)
-- ✅ Never trust, always verify principle implementation
-- ✅ Certificate-based WireGuard authentication
-- ✅ Application-level JWT token validation
+**Zero Trust Architecture**
+- Dual authentication: X.509 certificates + JWT/SSO
+- WireGuard encryption (ChaCha20Poly1305)
+- Certificate-based VPN authentication with application-level JWT validation
 
-**🏗️ Three-Tier Architecture**
-- ✅ **Manager Service** - Python 3.12 with py4web framework
-  - Central orchestration and coordination
-  - X.509 certificate lifecycle management
-  - JWT token management with Redis caching
-  - Multi-datacenter support
-  - Web-based administration interface
-  - REST API for client management
+**Three-Tier Architecture**
+- Manager Service: Python 3.12 + py4web, certificate lifecycle, multi-datacenter orchestration
+- Headend Server: Go 1.23, WireGuard termination, multi-protocol proxy
+- Client Applications: Native Go for Mac/Windows/Linux, React Native for Android, Docker container
 
-- ✅ **Headend Server** - Go 1.23 with concurrent architecture
-  - WireGuard VPN termination
-  - Multi-protocol proxy (HTTP/HTTPS, TCP, UDP)
-  - Traffic mirroring for IDS/IPS integration
-  - External IdP integration (SAML2/OAuth2)
-  - High-performance connection handling
+**Multi-Platform Support**
+- macOS Universal binary (Intel + Apple Silicon)
+- Windows x64, Linux AMD64/ARM64
+- Android (React Native), Docker multi-arch
+- Embedded SDK for third-party integration
 
-- ✅ **Client Applications** - Multi-platform support
-  - Native Go applications for Mac, Windows, Linux
-  - React Native mobile apps for Android (iOS planned)
-  - Docker containerized client
-  - Embedded SDK for integration into other products
-  - Automatic configuration and health monitoring
-  - GUI, CLI, and mobile interfaces
-
-**🌐 Multi-Platform Support**
-- ✅ **macOS**: Universal binary (Intel + Apple Silicon)
-- ✅ **Windows**: x64 native application
-- ✅ **Linux**: AMD64 and ARM64 binaries
-- ✅ **Android**: React Native mobile app (v1.0.0)
-- ✅ **iOS**: Planned for v1.1+ (React Native foundation ready)
-- ✅ **Docker**: Multi-architecture containers (AMD64/ARM64)
-- ✅ **Embedded**: SDK for integration into third-party products
-
-**☁️ Cloud Native & Deployment**
-- ✅ **Kubernetes**: Production-ready manifests with auto-scaling
-- ✅ **Docker Compose**: Development and small production setups
-- ✅ **Terraform**: AWS cloud infrastructure as code
-- ✅ **CI/CD**: Comprehensive GitHub Actions pipelines
-
-### 🔒 Security Features
-
-- 🔐 **Encryption**: WireGuard with ChaCha20Poly1305
-- 🔐 **Certificates**: ECC-based X.509 certificate management
-- 🔐 **Authentication**: JWT with RSA signing and Redis caching
-- 🔐 **TLS**: All API communications use TLS 1.3
-- 🔐 **Audit Logging**: Comprehensive security event logging
-- 🔐 **Traffic Mirroring**: VXLAN/GRE/ERSPAN support for IDS/IPS
-
-### 📱 Mobile & Embedded Features
-
-- 📱 **React Native Mobile App**: Native Android application with iOS foundation
-- 🔐 **Mobile Security**: Biometric authentication and secure credential storage
-- 📊 **Real-time Monitoring**: Connection statistics and health monitoring on mobile
-- 🔔 **Push Notifications**: Connection status and security alerts
-- 🔌 **Embedded SDK**: Software development kit for integrating SASE into third-party products
-- 🛠️ **Integration Support**: APIs and documentation for product embedding
-- 📚 **Developer Resources**: Comprehensive guides for embedded integration
-- 🏢 **Partner Program**: Support for companies embedding Tobogganing
-- 💰 **Enterprise Pricing**: Starting at $5/month/user with volume discounts
-- 📞 **Sales Contact**: sales@penguintech.io for embedded and enterprise solutions
-
-### 📊 Performance & Scalability
-
-- ⚡ **Async Python**: High-throughput API server with asyncio
-- ⚡ **Concurrent Go**: Multi-threaded proxy with goroutines
-- ⚡ **Redis Caching**: Session and token caching for performance
-- ⚡ **Horizontal Scaling**: Manager service supports multiple replicas
-- ⚡ **Auto-Scaling**: Kubernetes HPA support
-- ⚡ **Multi-Datacenter**: Built-in orchestration across regions
-
-### 🛠️ Developer Experience
-
-- 📚 **Documentation**: Comprehensive guides and API reference
-- 🧪 **Testing**: Unit, integration, and security tests
-- 🔍 **Code Quality**: Linting for Python, Go, and TypeScript
-- 📦 **Build System**: Multi-platform automated builds
-- 🐳 **Containerization**: Docker images for all services
-- 🏗️ **Infrastructure as Code**: Complete deployment configurations
-
-### 🌐 Website & Documentation
-
-- 📱 **Next.js Website**: Modern marketing and documentation site
-- ☁️ **Cloudflare Pages**: Edge-optimized deployment
-- 📖 **Documentation Portal**: Interactive guides and examples
-- 💾 **Download Center**: Binary releases and installation guides
-- 👥 **Community Hub**: Links to support and contribution channels
-- 🖼️ **Professional Screenshots**: App showcase with mobile and desktop interfaces
-- 💰 **Enterprise Pricing**: Transparent pricing with volume discounts
-- 🔌 **Embedded Integration**: SDK and documentation for third-party product integration
-
-### 📋 Component Details
-
-**Manager Service (Python 3.12)**
-- Framework: py4web with asyncio and multithreading
-- Database: SQLite (dev) / PostgreSQL (prod) support
-- Caching: Redis for sessions and JWT tokens
-- API: RESTful API with OpenAPI documentation
-- Auth: Support for SAML2, OAuth2, and local authentication
-- Certificates: Complete PKI infrastructure
-- Web UI: Administration interface
-
-**Headend Server (Go 1.23)**
-- WireGuard: Native integration with kernel module
-- Proxy: HTTP/HTTPS, TCP, UDP with authentication
-- Performance: Concurrent connection handling
-- Monitoring: Prometheus metrics and health endpoints
-- Security: Traffic mirroring and analysis
-- Configuration: Dynamic configuration from Manager API
-
-**Client Applications**
-- Languages: Go for native clients, React Native for mobile, Docker for containers
-- Platforms: macOS (Universal), Windows (x64), Linux (AMD64/ARM64), Android, Embedded SDK
-- Features: Auto-configuration, health monitoring, system tray, mobile notifications
-- Interfaces: GUI, CLI, and touch-optimized mobile interfaces
-- Security: Biometric authentication support on mobile platforms
-- Updates: Automatic update checking and installation
-
-### 🚢 Deployment Options
-
-**Development Environment**
-- Docker Compose with development tools
-- Hot reloading and debugging support
-- Integrated Redis Commander and Adminer
-- Mock services for testing
-
-**Production Kubernetes**
-- High availability with multiple replicas
-- Persistent storage with PVCs
-- Service mesh compatibility
-- Ingress controllers and load balancers
-- Monitoring with Prometheus and Grafana
-- Auto-scaling with HPA
-
-**Cloud Infrastructure (Terraform)**
-- AWS EKS cluster with multi-AZ support
-- RDS for managed database
-- ElastiCache for Redis
-- Application and Network Load Balancers
-- Route53 DNS management
-- Security groups and IAM roles
-
-### 🔧 Build & CI/CD
-
-**Comprehensive Testing**
-- Python: pytest with coverage reporting
-- Go: race detection and benchmarks
-- Security: Trivy vulnerability scanning
-- Linting: pylint, golangci-lint, eslint
-- Integration: End-to-end testing
-
-**Multi-Architecture Builds**
-- Docker images for AMD64 and ARM64
-- Native binaries for all supported platforms
-- GitHub Container Registry publishing
-- Automated release packaging
-- Checksum generation and verification
-
-**Release Management**
-- Semantic versioning
-- Automated changelog generation
-- Asset distribution with GitHub Releases
-- Example configurations included
-- Installation scripts for quick setup
-
-### 📈 Compliance & Enterprise Features
-
-**Security Compliance**
-- SOC 2 Type II compatible
-- ISO 27001 aligned
-- NIST Cybersecurity Framework
-- HIPAA considerations
-- GDPR compliance features
-
-**Enterprise Integration**
-- LDAP/Active Directory support
-- SAML2 and OAuth2 SSO
-- External PKI integration
-- Audit logging and reporting
-- Role-based access controls
-
-### 🔮 Future Roadmap Preview
-
-**Short Term (v1.1 - v1.5)**
-- 📱 iOS mobile application completion
-- 📊 Enhanced analytics and reporting
-- 🔗 Service mesh integration
-- 🏢 Multi-tenant capabilities
-- 🔌 Enhanced embedded SDK and integration tools
-- 🏪 Mobile app store submissions
-
-**Medium Term (v2.0+)**
-- 🤖 Machine learning threat detection
-- 🧠 Advanced policy engine with WASM
-- 🔗 Blockchain identity management
-- 🌐 Edge computing integration
-
-### 📊 Project Statistics
-
-- **📁 Total Files**: 150+ across all components
-- **💻 Lines of Code**: 25,000+ 
-- **🏗️ Components**: 3 core services + website + infrastructure
-- **🌍 Platforms**: 6 supported deployment targets
-- **🔧 Languages**: Python, Go, TypeScript, YAML
-- **📚 Documentation**: 20+ guides and references
-
-### 🙏 Acknowledgments
-
-**Core Development Team**
-- Architecture and design
-- Security implementation
-- Performance optimization
-- Documentation and testing
-
-**Community Contributors**
-- Beta testing and feedback
-- Bug reports and feature requests
-- Documentation improvements
-- Translation efforts
-
-**Technology Partners**
-- WireGuard for VPN protocol
-- Kubernetes community
-- Cloud provider integrations
-- Open source ecosystem
-
-### 📞 Support & Community
-
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/penguintechinc/tobogganing/issues)
-- **💬 Community**: [Discord Server](https://discord.gg/tobogganing)
-- **📚 Documentation**: [docs.tobogganing.com](https://docs.tobogganing.com)
-- **🔒 Security**: security@tobogganing.com
+**Cloud Native**
+- Kubernetes production manifests with auto-scaling
+- Docker Compose for development and small deployments
+- Terraform for AWS infrastructure
+- GitHub Actions CI/CD pipelines
 
 ---
 
-## 🎯 What's Next?
-
-Tobogganing v1.0.0 represents a complete, production-ready Open Source SASE solution. We're excited to see how the community adopts and contributes to the project!
-
-**Get Started Today:**
-1. 📥 Download from [GitHub Releases](https://github.com/penguintechinc/tobogganing/releases)
-2. 📖 Follow the [Quick Start Guide](https://docs.tobogganing.com/quickstart)
-3. 🚀 Deploy with our [example configurations](https://github.com/penguintechinc/tobogganing/tree/main/deploy)
-4. 💬 Join our [community discussions](https://github.com/penguintechinc/tobogganing/discussions)
-
----
-
-*Release notes format: New releases will be added above this line, maintaining chronological order with newest first.*
+*Release notes format: New releases will be added above the oldest entry, maintaining chronological order with newest first.*

@@ -1,8 +1,9 @@
-FROM python:3.12-slim-bookworm AS builder
+# ---- Build stage ----
+FROM python:3.13-slim-bookworm@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb
 
-WORKDIR /app
+WORKDIR /build
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libssl-dev \
@@ -10,28 +11,39 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+COPY pyproject.toml .
+RUN pip install --no-cache-dir --user .
 
-FROM python:3.12-slim-bookworm
+# ---- Runtime stage ----
+FROM python:3.13-slim-bookworm@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy installed Python packages from builder
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
+# Copy application code
 COPY . .
 
-RUN useradd -m -u 1000 manager && \
-    chown -R manager:manager /app
+# Create non-root user
+RUN useradd -m -u 1000 hubapi && \
+    chown -R hubapi:hubapi /app
 
-USER manager
+USER hubapi
 
-EXPOSE 8000
+# Hub API HTTP port and gRPC port
+EXPOSE 8080 50051
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"
+
+CMD ["python", "-m", "hypercorn", "main:app", \
+     "--bind", "0.0.0.0:8080", \
+     "--workers", "4", \
+     "--access-logfile", "-"]

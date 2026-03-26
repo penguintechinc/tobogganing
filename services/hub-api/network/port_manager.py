@@ -115,7 +115,7 @@ class HeadendPortConfig:
 class PortConfigManager:
     """Manages port configurations for headend servers."""
 
-    def __init__(self, db_path: str = "data/sasewaddle.db"):
+    def __init__(self, db_path: str = "data/tobogganing.db"):
         self.db_path = db_path
         self._ensure_tables()
 

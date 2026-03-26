@@ -1,4 +1,4 @@
-# SASEWaddle MySQL Read Replica Configuration
+# Tobogganing MySQL Read Replica Configuration
 [mysqld]
 # Basic settings
 server-id = 2

@@ -1,4 +1,4 @@
-# SASEWaddle .gitignore
+# Tobogganing .gitignore
 
 # Security - Never commit these
 # Next.js
@@ -154,7 +154,10 @@ temp/
 *.bak
 
 # Build artifacts
-sasewaddle-*
+tobogganing-*
 releases/
 artifacts/
+
+# Git worktrees
+.worktrees/
 

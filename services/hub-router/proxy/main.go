@@ -1,6 +1,6 @@
-// Package main implements the SASEWaddle headend proxy server.
+// Package main implements the Tobogganing hub-router proxy server.
 //
-// The headend proxy is a high-performance, multi-protocol proxy server that:
+// The hub-router proxy is a high-performance, multi-protocol proxy server that:
 // - Terminates WireGuard VPN connections from clients
 // - Provides HTTP/HTTPS/TCP/UDP proxying with authentication
 // - Implements comprehensive firewall rules and traffic filtering
@@ -32,12 +32,14 @@ import (
     log "github.com/sirupsen/logrus"
     "github.com/spf13/viper"
 
-    "github.com/tobogganing/headend/proxy/auth"
-    "github.com/tobogganing/headend/proxy/firewall"
-    "github.com/tobogganing/headend/proxy/mirror"
-    "github.com/tobogganing/headend/proxy/middleware"
-    "github.com/tobogganing/headend/proxy/ports"
-    "github.com/tobogganing/headend/proxy/syslog"
+    "github.com/tobogganing/hub-router/internal/overlay"
+    "github.com/tobogganing/hub-router/internal/xdp"
+    "github.com/tobogganing/hub-router/proxy/auth"
+    "github.com/tobogganing/hub-router/proxy/firewall"
+    "github.com/tobogganing/hub-router/proxy/mirror"
+    "github.com/tobogganing/hub-router/proxy/middleware"
+    "github.com/tobogganing/hub-router/proxy/ports"
+    "github.com/tobogganing/hub-router/proxy/syslog"
 )
 
 type ProxyServer struct {
@@ -51,6 +53,9 @@ type ProxyServer struct {
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
     wgRouter        *WireGuardRouter
+    overlayManager  *overlay.Manager
+    zitiListener    net.Listener
+    xdpProtection   *xdp.XDPProtection
     proxies         map[string]*httputil.ReverseProxy
     mu              sync.RWMutex
 }
@@ -123,11 +128,19 @@ func initConfig() {
     viper.SetDefault("syslog.host", "")
     viper.SetDefault("syslog.port", "514")
     viper.SetDefault("syslog.facility", "local0")
-    viper.SetDefault("syslog.tag", "sasewaddle-headend")
+    viper.SetDefault("syslog.tag", "tobogganing-hub-router")
     viper.SetDefault("ports.dynamic_enabled", true)
     viper.SetDefault("ports.headend_id", "")
     viper.SetDefault("ports.cluster_id", "default")
     viper.SetDefault("ports.refresh_interval", "60s")
+    viper.SetDefault("overlay.type", "wireguard")
+    viper.SetDefault("overlay.openziti.identity_file", "/etc/tobogganing/ziti-identity.json")
+    viper.SetDefault("overlay.openziti.service_name", "tobogganing-headend")
+    viper.SetDefault("xdp.enabled", false)
+    viper.SetDefault("xdp.interface", "eth0")
+    viper.SetDefault("xdp.rate_limit_pps", 10000)
+    viper.SetDefault("xdp.syn_rate_limit_pps", 1000)
+    viper.SetDefault("xdp.udp_rate_limit_pps", 5000)
 
     if err := viper.ReadInConfig(); err != nil {
         log.Warnf("No config file found, using environment variables: %v", err)
@@ -228,6 +241,68 @@ func (s *ProxyServer) Initialize() error {
         log.Info("Firewall manager enabled and started")
     } else {
         log.Info("Firewall manager disabled")
+    }
+
+    // Initialize overlay manager
+    overlayMgr := overlay.NewManager()
+
+    // Always register WireGuard provider (default)
+    wgProvider := overlay.NewWireGuardProvider(overlay.WireGuardConfig{
+        Interface: viper.GetString("wireguard.interface"),
+        Network:   viper.GetString("wireguard.network"),
+    })
+    overlayMgr.RegisterProvider(wgProvider)
+
+    overlayType := viper.GetString("overlay.type")
+
+    if overlayType == "openziti" {
+        zitiProvider := overlay.NewOpenZitiProvider(overlay.OpenZitiConfig{
+            IdentityFile: viper.GetString("overlay.openziti.identity_file"),
+            ServiceName:  viper.GetString("overlay.openziti.service_name"),
+        })
+        overlayMgr.RegisterProvider(zitiProvider)
+
+        ctx := context.Background()
+        if err := zitiProvider.Initialize(ctx); err != nil {
+            return fmt.Errorf("failed to initialize OpenZiti provider: %w", err)
+        }
+        if err := zitiProvider.Connect(ctx); err != nil {
+            return fmt.Errorf("failed to connect OpenZiti provider: %w", err)
+        }
+        if err := overlayMgr.SetPrimary("openziti"); err != nil {
+            return fmt.Errorf("failed to set OpenZiti as primary: %w", err)
+        }
+        s.zitiListener = zitiProvider.Listener()
+        log.Info("OpenZiti overlay active — accepting Ziti dark service connections")
+    } else {
+        if err := overlayMgr.SetPrimary("wireguard"); err != nil {
+            return fmt.Errorf("failed to set WireGuard as primary: %w", err)
+        }
+        log.Info("WireGuard overlay active (default)")
+    }
+
+    s.overlayManager = overlayMgr
+
+    // Initialize XDP edge protection if enabled
+    if viper.GetBool("xdp.enabled") {
+        xdpCfg := xdp.XDPConfig{
+            Enabled:         true,
+            Interface:       viper.GetString("xdp.interface"),
+            RateLimitPPS:    viper.GetInt("xdp.rate_limit_pps"),
+            SYNRateLimitPPS: viper.GetInt("xdp.syn_rate_limit_pps"),
+            UDPRateLimitPPS: viper.GetInt("xdp.udp_rate_limit_pps"),
+            BlocklistSyncURL: viper.GetString("xdp.blocklist_sync_url"),
+        }
+        s.xdpProtection = xdp.New(xdpCfg)
+        if err := s.xdpProtection.Attach(xdpCfg.Interface); err != nil {
+            log.Warnf("Failed to attach XDP protection: %v (continuing without XDP)", err)
+            s.xdpProtection = nil
+        } else {
+            s.xdpProtection.SetRateLimit(xdpCfg.RateLimitPPS)
+            s.xdpProtection.SetSYNRateLimit(xdpCfg.SYNRateLimitPPS)
+            s.xdpProtection.SetUDPRateLimit(xdpCfg.UDPRateLimitPPS)
+            log.Info("XDP edge protection active")
+        }
     }
 
     // Initialize syslog logger if enabled
@@ -380,6 +455,8 @@ func (s *ProxyServer) healthHandler(c *gin.Context) {
         "auth_provider": s.authProvider != nil,
         "tcp_proxy": s.tcpProxy != nil,
         "udp_proxy": s.udpProxy != nil,
+        "overlay_type": viper.GetString("overlay.type"),
+        "ziti_listener_active": s.zitiListener != nil,
     })
 }
 
@@ -643,7 +720,15 @@ func (s *ProxyServer) Run() error {
         if s.portManager != nil {
             s.portManager.Stop()
         }
-        
+
+        if s.overlayManager != nil {
+            s.overlayManager.CloseAll()
+        }
+
+        if s.xdpProtection != nil {
+            s.xdpProtection.Close()
+        }
+
         // Close TCP and UDP proxies
         if s.tcpProxy != nil && s.tcpProxy.listener != nil {
             if err := s.tcpProxy.listener.Close(); err != nil {
@@ -661,8 +746,13 @@ func (s *ProxyServer) Run() error {
         }
     }()
 
+    // Start Ziti connection accept loop if overlay is OpenZiti
+    if s.zitiListener != nil {
+        go s.serveZitiConnections(context.Background(), s.zitiListener)
+    }
+
     log.Infof("Starting headend HTTP proxy on port %s", httpPort)
-    
+
     if certFile != "" && keyFile != "" {
         return s.httpServer.ListenAndServeTLS(certFile, keyFile)
     }
@@ -1324,4 +1414,120 @@ func (s *ProxyServer) extractJWTFromUDPPacket(data []byte) string {
 
 func (s *ProxyServer) extractTargetFromUDPPacket(data []byte) string {
 	return s.extractTargetFromTCPPacket(data) // Same implementation
+}
+
+// serveZitiConnections accepts connections from the OpenZiti dark service listener
+// and handles each in a goroutine. This is the L7 equivalent of the TCP proxy's
+// accept loop, but for connections arriving through the Ziti overlay.
+func (s *ProxyServer) serveZitiConnections(ctx context.Context, listener net.Listener) {
+	log.Info("Starting Ziti connection accept loop")
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				log.Info("Ziti accept loop shutting down")
+				return
+			default:
+				log.WithError(err).Error("Ziti accept error")
+				continue
+			}
+		}
+
+		go s.handleZitiConnection(conn)
+	}
+}
+
+// handleZitiConnection handles a single connection from the OpenZiti overlay.
+// It reuses the same JWT+HOST protocol as the TCP proxy — the client sends
+// "JWT:<token>\nHOST:<target>\n" as the first payload, followed by the actual
+// application data.
+//
+// Because the OpenZiti SDK doesn't expose caller identity on accepted connections,
+// authentication must happen at the application layer via this JWT handshake.
+func (s *ProxyServer) handleZitiConnection(conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Debugf("Error closing Ziti connection: %v", err)
+		}
+	}()
+
+	// Read first packet to extract JWT token and target host
+	buffer := make([]byte, 4096)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		log.WithError(err).Error("Ziti connection read error")
+		return
+	}
+
+	// Extract JWT and target using the same protocol as TCP proxy
+	token := s.extractJWTFromTCPPacket(buffer[:n])
+	if token == "" {
+		log.Error("No JWT token found in Ziti connection handshake")
+		return
+	}
+
+	user, err := s.authProvider.ValidateToken(token)
+	if err != nil {
+		log.WithError(err).Error("Ziti connection authentication failed")
+		return
+	}
+
+	targetHost := s.extractTargetFromTCPPacket(buffer[:n])
+	if targetHost == "" {
+		log.Error("No target host found in Ziti connection handshake")
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"user":    user.ID,
+		"target":  targetHost,
+		"overlay": "openziti",
+	}).Info("Ziti connection authenticated")
+
+	// Check firewall rules
+	if s.firewallManager != nil {
+		if !s.firewallManager.CheckAccess(user.ID, targetHost) {
+			log.Warnf("Firewall blocked Ziti connection for user %s to %s", user.ID, targetHost)
+			if s.syslogLogger != nil {
+				s.syslogLogger.LogTCPAccess(user.ID, user.Name, "ziti-overlay", targetHost, false)
+			}
+			return
+		}
+	}
+
+	// Log allowed access
+	if s.syslogLogger != nil {
+		s.syslogLogger.LogTCPAccess(user.ID, user.Name, "ziti-overlay", targetHost, true)
+	}
+
+	// Use WireGuard router if available for intelligent routing to target
+	if s.wgRouter != nil {
+		if err := s.wgRouter.RouteTraffic(targetHost, conn); err != nil {
+			log.Errorf("WireGuard routing failed for Ziti connection to %s: %v", targetHost, err)
+		}
+		return
+	}
+
+	// Fallback to direct connection
+	targetConn, err := net.Dial("tcp", targetHost)
+	if err != nil {
+		log.Errorf("Failed to connect to target %s from Ziti connection: %v", targetHost, err)
+		return
+	}
+	defer func() {
+		if err := targetConn.Close(); err != nil {
+			log.Debugf("Error closing target connection: %v", err)
+		}
+	}()
+
+	// Mirror traffic if enabled
+	if s.mirrorManager != nil {
+		go s.mirrorManager.MirrorTCP("ziti-overlay", targetHost, buffer[:n])
+	}
+
+	// Bidirectional proxy
+	go s.proxyTCPData(conn, targetConn, "ziti-client->target")
+	s.proxyTCPData(targetConn, conn, "target->ziti-client")
 }

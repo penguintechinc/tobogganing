@@ -1,4 +1,4 @@
-// JWT authentication implementation for SASEWaddle headend proxy.
+// JWT authentication implementation for Tobogganing headend proxy.
 //
 // This file implements JWT (JSON Web Token) based authentication using RSA
 // public key cryptography for secure token validation. Features include:
@@ -158,7 +158,7 @@ func (j *JWTProvider) ValidateToken(tokenString string) (*User, error) {
     user := &User{
         ID:       nodeID,
         Name:     fmt.Sprintf("%s-%s", nodeType, nodeID),
-        Email:    fmt.Sprintf("%s@sasewaddle.local", nodeID),
+        Email:    fmt.Sprintf("%s@tobogganing.local", nodeID),
         Groups:   []string{nodeType},
         Metadata: map[string]interface{}{
             "permissions": permissions,
@@ -177,7 +177,7 @@ func (j *JWTProvider) LoginHandler() gin.HandlerFunc {
         log.Info("JWT login info requested")
         c.JSON(200, gin.H{
             "auth_type": "jwt",
-            "message":   "JWT authentication managed by SASEWaddle Manager Service",
+            "message":   "JWT authentication managed by Tobogganing Manager Service",
             "endpoints": map[string]string{
                 "token":    j.managerURL + "/api/v1/auth/token",
                 "refresh":  j.managerURL + "/api/v1/auth/refresh",

@@ -1,4 +1,4 @@
-"""Backup and restore API routes for SASEWaddle Manager."""
+"""Backup and restore API routes for Tobogganing Manager."""
 
 import os
 from datetime import datetime
@@ -285,7 +285,7 @@ async def upload_backup():
         
         # Save to backup directory
         import tempfile
-        temp_dir = tempfile.mkdtemp(prefix='sasewaddle_upload_')
+        temp_dir = tempfile.mkdtemp(prefix='tobogganing_upload_')
         file_path = os.path.join(temp_dir, backup_file.filename)
         
         with open(file_path, 'wb') as f:

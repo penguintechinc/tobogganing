@@ -1,4 +1,4 @@
-// Package config provides configuration management for SASEWaddle client.
+// Package config provides configuration management for Tobogganing client.
 //
 // The config manager handles:
 // - Automatic configuration updates from the Manager service
@@ -327,7 +327,7 @@ func (cfg *Config) GetManagerURL() string {
 	if cfg.ManagerURL != "" {
 		return cfg.ManagerURL
 	}
-	return "https://manager.sasewaddle.com"
+	return "https://hub-api.tobogganing.local:8080"
 }
 
 func (cfg *Config) GetClientID() string {
@@ -344,7 +344,7 @@ func (cfg *Config) GetAPIKey() string {
 }
 
 func (cfg *Config) GetUserAgent() string {
-	return fmt.Sprintf("SASEWaddle-Client/%s", cfg.GetVersion())
+	return fmt.Sprintf("Tobogganing-Client/%s", cfg.GetVersion())
 }
 
 func (cfg *Config) GetVersion() string {

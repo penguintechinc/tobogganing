@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Initialize security feeds and scanner for SASEWaddle Manager."""
+"""Initialize security feeds and scanner for Tobogganing Manager."""
 
 import os
 import sys
@@ -181,7 +181,7 @@ async def main():
     )
     
     try:
-        logger.info("Starting SASEWaddle security system initialization...")
+        logger.info("Starting Tobogganing security system initialization...")
         
         # Create sample threat indicators for testing
         create_sample_threats()

@@ -1,5 +1,5 @@
 """
-SASEWaddle License Management
+Tobogganing License Management
 Handles license validation and feature gating
 """
 
@@ -15,7 +15,7 @@ logger = structlog.get_logger()
 
 # License server configuration
 LICENSE_SERVER_URL = os.getenv('LICENSE_SERVER_URL', 'https://license.penguintech.io')
-LICENSE_KEY = os.getenv('SASEWADDLE_LICENSE_KEY', '')
+LICENSE_KEY = os.getenv('TOBOGGANING_LICENSE_KEY', '')
 
 # Cache for license validation
 _license_cache = {
@@ -30,7 +30,7 @@ _license_cache = {
 
 def validate_license(force_check: bool = False) -> Dict[str, Any]:
     """
-    Validate SASEWaddle license with the license server
+    Validate Tobogganing license with the license server
     Results are cached for 1 hour to reduce API calls
     """
     global _license_cache
@@ -61,7 +61,7 @@ def validate_license(force_check: bool = False) -> Dict[str, Any]:
             f"{LICENSE_SERVER_URL}/api/validate",
             json={
                 'license_key': LICENSE_KEY,
-                'product': 'sasewaddle'
+                'product': 'tobogganing'
             },
             timeout=5
         )
@@ -78,7 +78,7 @@ def validate_license(force_check: bool = False) -> Dict[str, Any]:
                     'max_clients': None,  # No limits with new model
                     'max_headends': None,  # No limits with new model
                     'organization': data.get('organization', ''),
-                    'product': data.get('product', 'sasewaddle'),
+                    'product': data.get('product', 'tobogganing'),
                     'all_products': data.get('all_products', {})
                 }
                 logger.info(f"License validated: {_license_cache['tier']} tier")

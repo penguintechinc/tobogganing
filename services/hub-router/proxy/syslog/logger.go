@@ -1,4 +1,4 @@
-// Package syslog implements RFC3164 compliant UDP syslog logging for the SASEWaddle headend proxy.
+// Package syslog implements RFC3164 compliant UDP syslog logging for the Tobogganing headend proxy.
 //
 // The syslog logger provides:
 // - RFC3164 compliant syslog message formatting
@@ -91,7 +91,7 @@ func NewSyslogLogger(syslogHost, syslogPort string) *SyslogLogger {
 		facility:    FacilityLocal0,
 		severity:    SeverityInformational,
 		hostname:    hostname,
-		appName:     "sasewaddle-headend",
+		appName:     "tobogganing-hub-router",
 		logQueue:    make(chan AccessLog, 1000), // Buffer up to 1000 logs
 		workers:     3,                          // 3 worker goroutines
 		stopChan:    make(chan bool),
@@ -312,7 +312,7 @@ func getCurrentHostname() (string, error) {
 		if h, err2 := net.LookupAddr("127.0.0.1"); err2 == nil && len(h) > 0 {
 			return h[0], nil
 		}
-		return "sasewaddle-headend", nil
+		return "tobogganing-hub-router", nil
 	}
 	return hostname, nil
 }

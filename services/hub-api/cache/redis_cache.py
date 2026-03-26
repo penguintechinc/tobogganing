@@ -1,4 +1,4 @@
-"""Redis cache service for SASEWaddle Manager."""
+"""Redis cache service for Tobogganing Manager."""
 
 import json
 import logging

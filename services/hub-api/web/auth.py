@@ -12,7 +12,7 @@ user_manager = UserManager()
 
 def get_current_user() -> Optional[User]:
     """Get current authenticated user from session"""
-    session_id = request.get_cookie("sasewaddle_session")
+    session_id = request.get_cookie("tobogganing_session")
     if not session_id:
         return None
     
@@ -93,7 +93,7 @@ async def create_user_session(user: User) -> str:
     
     # Set secure cookie
     response.set_cookie(
-        "sasewaddle_session",
+        "tobogganing_session",
         session.session_id,
         max_age=8*3600,  # 8 hours
         secure=True if request.headers.get('X-Forwarded-Proto') == 'https' else False,
@@ -105,13 +105,13 @@ async def create_user_session(user: User) -> str:
 
 async def logout_user():
     """Logout current user"""
-    session_id = request.get_cookie("sasewaddle_session")
+    session_id = request.get_cookie("tobogganing_session")
     if session_id:
         await user_manager.logout(session_id)
     
     # Clear cookie
     response.set_cookie(
-        "sasewaddle_session", 
+        "tobogganing_session", 
         "", 
         max_age=0,
         secure=True if request.headers.get('X-Forwarded-Proto') == 'https' else False,

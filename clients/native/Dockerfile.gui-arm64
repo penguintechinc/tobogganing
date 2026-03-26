@@ -1,7 +1,7 @@
-# Docker build for SASEWaddle GUI client (ARM64)
+# Docker build for Tobogganing GUI client (ARM64)
 # Optimized for ARM64 builds with cross-compilation toolchain
 
-FROM golang:1.23-bullseye AS gui-builder-arm64
+FROM golang:1.24-bookworm@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb AS gui-builder-arm64
 
 # Add ARM64 architecture and install cross-compilation tools
 RUN dpkg --add-architecture arm64 && \
@@ -48,22 +48,22 @@ ENV GOARCH=arm64
 
 RUN go build \
     -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-    -o sasewaddle-client-gui \
+    -o tobogganing-client-gui \
     ./cmd/gui
 
 # Test stage - verify the binary was built (use ARM64 base)
-FROM arm64v8/ubuntu:20.04 AS test
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a AS test
 RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
-COPY --from=gui-builder-arm64 /src/sasewaddle-client-gui /tmp/
-RUN file /tmp/sasewaddle-client-gui && \
-    ls -la /tmp/sasewaddle-client-gui
+COPY --from=gui-builder-arm64 /src/tobogganing-client-gui /tmp/
+RUN file /tmp/tobogganing-client-gui && \
+    ls -la /tmp/tobogganing-client-gui
 
 # Final stage - minimal runtime image (ARM64)
-FROM arm64v8/ubuntu:20.04
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 RUN apt-get update && apt-get install -y \
     libayatana-appindicator3-1 \
     libgtk-3-0 \
     libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=gui-builder-arm64 /src/sasewaddle-client-gui /usr/local/bin/sasewaddle-client-gui
-ENTRYPOINT ["/usr/local/bin/sasewaddle-client-gui"]
+COPY --from=gui-builder-arm64 /src/tobogganing-client-gui /usr/local/bin/tobogganing-client-gui
+ENTRYPOINT ["/usr/local/bin/tobogganing-client-gui"]

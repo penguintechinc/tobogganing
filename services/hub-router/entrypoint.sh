@@ -2,7 +2,7 @@
 set -e
 
 echo "==========================================="
-echo "  SASEWaddle Headend Server Starting"
+echo "  Tobogganing Headend Server Starting"
 echo "==========================================="
 
 # Validate required environment variables
@@ -131,7 +131,7 @@ if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
     echo "Generating self-signed TLS certificate..."
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout "$KEY_FILE" -out "$CERT_FILE" \
-        -subj "/C=US/ST=CA/L=SF/O=SASEWaddle/CN=headend-$CLUSTER_ID"
+        -subj "/C=US/ST=CA/L=SF/O=Tobogganing/CN=headend-$CLUSTER_ID"
     chmod 600 "$KEY_FILE"
     chmod 644 "$CERT_FILE"
 fi
@@ -150,7 +150,7 @@ echo "Mirror Enabled: $MIRROR_ENABLED"
 echo "==========================================="
 
 # Start the proxy server with proper signal handling
-echo "Starting SASEWaddle Headend Proxy Server..."
+echo "Starting Tobogganing Headend Proxy Server..."
 
 # Trap signals to ensure graceful shutdown
 trap 'echo "Shutting down..."; wg-quick down wg0; exit 0' SIGTERM SIGINT

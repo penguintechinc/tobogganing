@@ -1,5 +1,5 @@
 """
-Web Portal Routes for SASEWaddle Manager
+Web Portal Routes for Tobogganing Manager
 py4web-based web interface with role-based access control
 """
 
@@ -56,7 +56,7 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
             
             # Show login form
             return {
-                "title": "SASEWaddle Manager Login",
+                "title": "Tobogganing Manager Login",
                 "error": request.query.get('error', '')
             }
         
@@ -111,7 +111,7 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
             recent_clients = sorted(clients, key=lambda x: x.last_seen, reverse=True)[:10]
             
             return {
-                "title": "SASEWaddle Manager Dashboard",
+                "title": "Tobogganing Manager Dashboard",
                 "user": user,
                 "stats": {
                     "total_clusters": cluster_count,
@@ -127,7 +127,7 @@ def setup_web_routes(app, cluster_manager, client_registry, cert_manager, jwt_ma
         except Exception as e:
             logger.error("Dashboard error", error=str(e))
             return {
-                "title": "SASEWaddle Manager Dashboard",
+                "title": "Tobogganing Manager Dashboard",
                 "user": user,
                 "error": "Failed to load dashboard data"
             }

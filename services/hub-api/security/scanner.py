@@ -1,4 +1,4 @@
-"""Automated security scanning pipeline for SASEWaddle."""
+"""Automated security scanning pipeline for Tobogganing."""
 
 import os
 import json
@@ -439,7 +439,7 @@ class SecurityScanner:
             try:
                 result = subprocess.run([
                     'trivy', 'fs', '--format', 'json', '--quiet',
-                    '/workspaces/SASEWaddle'
+                    '/workspaces/Tobogganing'
                 ], capture_output=True, text=True, timeout=600)
                 
                 if result.returncode == 0:
@@ -519,7 +519,7 @@ class SecurityScanner:
                 logger.warning(f"Safety check failed: {e}")
             
             # Check Go dependencies
-            go_mod_path = Path('/workspaces/SASEWaddle/headend/proxy/go.mod')
+            go_mod_path = Path('/workspaces/Tobogganing/headend/proxy/go.mod')
             if go_mod_path.exists():
                 try:
                     result = subprocess.run([
@@ -623,7 +623,7 @@ class SecurityScanner:
             logs_to_scan = [
                 '/var/log/auth.log',
                 '/var/log/nginx/access.log',
-                '/var/log/sasewaddle/proxy.log'
+                '/var/log/tobogganing/proxy.log'
             ]
             
             for log_file in logs_to_scan:

@@ -102,7 +102,7 @@ export const VPNProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const config = JSON.parse(savedConfig);
         setStatus(prev => ({
           ...prev,
-          serverName: config.serverName || 'SASEWaddle Server',
+          serverName: config.serverName || 'Tobogganing Server',
           serverIP: config.serverIP || '',
           publicKey: config.publicKey || '',
         }));

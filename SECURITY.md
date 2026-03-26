@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-We actively support the following versions of SASEWaddle with security updates:
+We actively support the following versions of Tobogganing with security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -19,7 +19,7 @@ We take security seriously and appreciate responsible disclosure of security vul
 
 Instead, please report security vulnerabilities via:
 
-- **Email**: security@sasewaddle.com
+- **Email**: security@tobogganing.io
 - **PGP Key**: Available on our website for encrypted communication
 - **Response Time**: We aim to respond within 48 hours
 
@@ -44,7 +44,7 @@ When reporting security vulnerabilities, please include:
 
 ## Security Features
 
-SASEWaddle implements multiple security layers:
+Tobogganing implements multiple security layers:
 
 ### Network Security
 - WireGuard VPN with modern cryptography
@@ -91,7 +91,7 @@ SASEWaddle implements multiple security layers:
 
 1. **Strong Authentication**: Use strong passwords and MFA
 2. **Client Updates**: Keep client applications updated
-3. **Network Security**: Use SASEWaddle on untrusted networks
+3. **Network Security**: Use Tobogganing on untrusted networks
 4. **Report Issues**: Report any suspicious behavior
 
 ### For Developers
@@ -103,7 +103,7 @@ SASEWaddle implements multiple security layers:
 
 ## Compliance
 
-SASEWaddle supports compliance with various security frameworks:
+Tobogganing supports compliance with various security frameworks:
 
 - SOC 2 Type II
 - ISO 27001
@@ -116,7 +116,7 @@ SASEWaddle supports compliance with various security frameworks:
 
 ### Defense in Depth
 
-SASEWaddle implements multiple security layers:
+Tobogganing implements multiple security layers:
 
 1. **Network Layer**: WireGuard encryption and authentication
 2. **Application Layer**: JWT tokens and API authentication
@@ -172,6 +172,6 @@ Security considerations for third-party integrations:
 
 For security-related questions or concerns:
 
-- Email: security@sasewaddle.com
-- Website: https://sasewaddle.com/security
-- Documentation: https://docs.sasewaddle.com/security
+- Email: security@tobogganing.io
+- Website: https://tobogganing.io/security
+- Documentation: https://docs.tobogganing.io/security

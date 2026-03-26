@@ -1,4 +1,4 @@
-// Package config implements configuration management for the SASEWaddle headend.
+// Package config implements configuration management for the Tobogganing headend.
 //
 // The config manager provides:
 // - Centralized configuration retrieval from Manager service
@@ -24,7 +24,7 @@ import (
     log "github.com/sirupsen/logrus"
 )
 
-// Manager handles configuration retrieval from SASEWaddle Manager Service
+// Manager handles configuration retrieval from Tobogganing Manager Service
 type Manager struct {
     managerURL   string
     apiKey       string

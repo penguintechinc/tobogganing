@@ -1,4 +1,4 @@
-// Package wireguard implements WireGuard VPN management for the SASEWaddle headend.
+// Package wireguard implements WireGuard VPN management for the Tobogganing headend.
 //
 // The WireGuard manager provides:
 // - VPN interface creation and lifecycle management

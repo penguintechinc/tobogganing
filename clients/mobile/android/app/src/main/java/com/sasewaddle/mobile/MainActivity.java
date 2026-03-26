@@ -1,4 +1,4 @@
-package com.sasewaddle.mobile;
+package com.tobogganing.mobile;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;

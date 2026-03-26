@@ -1,4 +1,4 @@
-// Package client implements the core SASEWaddle native client functionality.
+// Package client implements the core Tobogganing native client functionality.
 //
 // The client package provides:
 // - WireGuard VPN tunnel management and lifecycle control
@@ -31,8 +31,9 @@ import (
     "golang.zx2c4.com/wireguard/wgctrl"
     "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
-    "github.com/tobogganing/clients/native/internal/config"
     "github.com/tobogganing/clients/native/internal/auth"
+    "github.com/tobogganing/clients/native/internal/config"
+    "github.com/tobogganing/clients/native/internal/overlay"
 )
 
 const (
@@ -42,20 +43,21 @@ const (
     platformLinux   = "linux"
 )
 
-// Client represents the SASEWaddle native client
+// Client represents the Tobogganing native client
 type Client struct {
-    config       *config.Config
-    auth         *auth.Manager
-    wg           *wgctrl.Client
-    httpClient   *http.Client
-    
+    config          *config.Config
+    auth            *auth.Manager
+    wg              *wgctrl.Client
+    httpClient      *http.Client
+    overlayProvider overlay.OverlayProvider
+
     // Current connection state
-    clientID       string
-    accessToken    string
-    refreshToken   string
-    headendURL     string
-    wgPrivateKey   wgtypes.Key
-    wgPublicKey    wgtypes.Key
+    clientID         string
+    accessToken      string
+    refreshToken     string
+    headendURL       string
+    wgPrivateKey     wgtypes.Key
+    wgPublicKey      wgtypes.Key
     headendPublicKey wgtypes.Key
 }
 
@@ -71,7 +73,7 @@ type ConnectionStatus struct {
     LastHandshake  time.Time `json:"last_handshake"`
 }
 
-// New creates a new SASEWaddle client
+// New creates a new Tobogganing client
 func New(cfg *config.Config) (*Client, error) {
     // Create WireGuard control client
     wgClient, err := wgctrl.New()
@@ -97,9 +99,9 @@ func New(cfg *config.Config) (*Client, error) {
     return client, nil
 }
 
-// Connect establishes connection to the SASEWaddle network
+// Connect establishes connection to the Tobogganing network
 func (c *Client) Connect(ctx context.Context) error {
-    fmt.Println("Connecting to SASEWaddle network...")
+    fmt.Println("Connecting to Tobogganing network...")
 
     // Step 1: Register with Manager Service
     if err := c.register(); err != nil {
@@ -111,27 +113,61 @@ func (c *Client) Connect(ctx context.Context) error {
         return fmt.Errorf("authentication failed: %w", err)
     }
 
-    // Step 3: Get WireGuard configuration
-    if err := c.setupWireGuard(); err != nil {
-        return fmt.Errorf("WireGuard setup failed: %w", err)
+    // Step 3-4: Set up overlay based on configuration
+    switch c.config.OverlayType {
+    case "openziti":
+        zitiProvider := overlay.NewOpenZitiProvider(overlay.OpenZitiConfig{
+            IdentityFile: c.config.OpenZiti.IdentityFile,
+            ServiceName:  c.config.OpenZiti.ServiceName,
+        })
+        zitiProvider.SetJWTToken(c.accessToken)
+        c.overlayProvider = zitiProvider
+    case "dual":
+        wgProvider := overlay.NewWireGuardProvider(
+            func() error {
+                if err := c.setupWireGuard(); err != nil {
+                    return err
+                }
+                return c.startWireGuard()
+            },
+            c.stopWireGuard,
+        )
+        zitiProvider := overlay.NewOpenZitiProvider(overlay.OpenZitiConfig{
+            IdentityFile: c.config.OpenZiti.IdentityFile,
+            ServiceName:  c.config.OpenZiti.ServiceName,
+        })
+        zitiProvider.SetJWTToken(c.accessToken)
+        c.overlayProvider = overlay.NewDualProvider(wgProvider, zitiProvider)
+    default: // "wireguard" or ""
+        wgProvider := overlay.NewWireGuardProvider(
+            func() error {
+                if err := c.setupWireGuard(); err != nil {
+                    return err
+                }
+                return c.startWireGuard()
+            },
+            c.stopWireGuard,
+        )
+        c.overlayProvider = wgProvider
     }
 
-    // Step 4: Start WireGuard interface
-    if err := c.startWireGuard(); err != nil {
-        return fmt.Errorf("WireGuard start failed: %w", err)
+    if err := c.overlayProvider.Connect(ctx); err != nil {
+        return fmt.Errorf("overlay connect failed: %w", err)
     }
 
     // Step 5: Start monitoring and keep-alive
     return c.runMonitoring(ctx)
 }
 
-// Disconnect safely disconnects from the SASEWaddle network
+// Disconnect safely disconnects from the Tobogganing network
 func (c *Client) Disconnect() error {
-    fmt.Println("Disconnecting from SASEWaddle network...")
+    fmt.Println("Disconnecting from Tobogganing network...")
 
-    // Stop WireGuard interface
-    if err := c.stopWireGuard(); err != nil {
-        return fmt.Errorf("WireGuard stop failed: %w", err)
+    // Disconnect overlay provider
+    if c.overlayProvider != nil {
+        if err := c.overlayProvider.Disconnect(); err != nil {
+            return fmt.Errorf("overlay disconnect failed: %w", err)
+        }
     }
 
     // Clean up authentication tokens
@@ -508,9 +544,9 @@ func (c *Client) getWireGuardInterface() string {
     case platformDarwin:
         return "utun1"
     case platformLinux:
-        return "wg0"  
+        return "wg0"
     case platformWindows:
-        return "sasewaddle"
+        return "tobogganing"
     default:
         return "wg0"
     }
@@ -588,12 +624,12 @@ func (c *Client) saveCertificates(cert, key, ca string) error {
 func (c *Client) getCertificateDir() string {
     switch runtime.GOOS {
     case platformDarwin:
-        return os.Getenv("HOME") + "/.sasewaddle/certs"
-    case platformLinux: 
-        return os.Getenv("HOME") + "/.sasewaddle/certs"
+        return os.Getenv("HOME") + "/.tobogganing/certs"
+    case platformLinux:
+        return os.Getenv("HOME") + "/.tobogganing/certs"
     case platformWindows:
-        return os.Getenv("APPDATA") + "\\SASEWaddle\\certs"
+        return os.Getenv("APPDATA") + "\\Tobogganing\\certs"
     default:
-        return "/tmp/sasewaddle/certs"
+        return "/tmp/tobogganing/certs"
     }
 }

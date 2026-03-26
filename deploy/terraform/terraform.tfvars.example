@@ -1,8 +1,8 @@
-# SASEWaddle Terraform Configuration Example
+# Tobogganing Terraform Configuration Example
 # Copy this file to terraform.tfvars and modify the values
 
 # Basic Configuration
-cluster_name = "sasewaddle-prod"
+cluster_name = "tobogganing-prod"
 environment  = "production"
 region      = "us-west-2"
 
@@ -61,7 +61,7 @@ node_groups = {
 enable_rds         = true
 rds_instance_class = "db.r5.large"
 rds_allocated_storage = 100
-rds_username       = "sasewaddle"
+rds_username       = "tobogganing"
 # rds_password should be set via environment variable or secure input
 
 # Redis Configuration
@@ -71,16 +71,16 @@ redis_num_nodes = 2
 
 # SSL Configuration
 ssl_certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/12345678-1234-1234-1234-123456789012"
-domain_name        = "sasewaddle.example.com"
+domain_name        = "tobogganing.example.com"
 
 # Application Configuration
 admin_email = "admin@example.com"
 # admin_password and jwt_secret should be set via environment variables
 
 # Container Images
-manager_image = "ghcr.io/your-org/sasewaddle/manager:v1.0.0"
-headend_image = "ghcr.io/your-org/sasewaddle/headend:v1.0.0"
-client_image  = "ghcr.io/your-org/sasewaddle/client:v1.0.0"
+manager_image = "ghcr.io/your-org/tobogganing/hub-api:v1.0.0"
+headend_image = "ghcr.io/your-org/tobogganing/hub-router:v1.0.0"
+client_image  = "ghcr.io/your-org/tobogganing/client:v1.0.0"
 
 # Monitoring
 enable_monitoring = true
