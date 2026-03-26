@@ -67,7 +67,7 @@ jobs:
     - name: Test with pytest
       run: |
         cd services/hub-api
-        python3 -m pytest tests/ -v --cov=. --cov-report=xml || exit 0
+        python3 -m pytest tests/ -v --cov=. --cov-report=xml --cov-fail-under=90
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
@@ -121,6 +121,9 @@ jobs:
       run: |
         cd services/hub-router
         go test -v -race -coverprofile=coverage.out ./...
+        total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+        echo "Total coverage: ${total}%"
+        awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
@@ -182,7 +185,10 @@ jobs:
     - name: Test with go test
       run: |
         cd clients/native
-        go test -tags=nogui -v -race -coverprofile=coverage.out ./... || exit 0
+        go test -tags=nogui -v -race -coverprofile=coverage.out ./...
+        total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+        echo "Total coverage: ${total}%"
+        awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
@@ -190,6 +196,67 @@ jobs:
         file: ./clients/native/coverage.out
         flags: client
         name: client-coverage
+
+  # Test WebUI (Node.js / React)
+  test-webui:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: services/hub-webui/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd services/hub-webui
+        npm ci
+
+    - name: Lint
+      run: |
+        cd services/hub-webui
+        npm run lint
+
+    - name: Run npm audit
+      run: |
+        cd services/hub-webui
+        npm audit --audit-level=high
+      continue-on-error: true
+
+    - name: Run unit tests with coverage
+      run: |
+        cd services/hub-webui
+        npm run test:coverage -- --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.branches=90 --coverage.thresholds.statements=90
+
+    - name: Install Playwright browsers
+      run: |
+        cd services/hub-webui
+        npx playwright install --with-deps chromium
+
+    - name: Run Playwright e2e tests
+      run: |
+        cd services/hub-webui
+        npx playwright test
+      continue-on-error: true
+
+    - name: Upload Playwright report
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      if: always()
+      with:
+        name: playwright-report
+        path: /tmp/playwright-tobogganing/
+        retention-days: 7
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      with:
+        file: ./services/hub-webui/coverage/coverage-final.json
+        flags: webui
+        name: webui-coverage
 
   # Security scanning
   security-scan:
@@ -241,7 +308,7 @@ jobs:
 
   # Build and push Docker images
   build-images:
-    needs: [test-manager, test-headend, test-client, security-scan]
+    needs: [test-manager, test-headend, test-client, test-webui, security-scan]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
