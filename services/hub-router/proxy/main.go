@@ -28,6 +28,7 @@ import (
     "time"
 
     "github.com/gin-gonic/gin"
+    pglog "github.com/penguintechinc/penguin-libs/packages/go-common/logging"
     "github.com/prometheus/client_golang/prometheus/promhttp"
     log "github.com/sirupsen/logrus"
     "github.com/spf13/viper"
@@ -134,6 +135,10 @@ func initConfig() {
     }
 }
 
+// structuredLogger is the go-common sanitized logger used for new log sites.
+// Existing code uses logrus (log.*) for compatibility; migrate incrementally to structuredLogger.
+var structuredLogger *pglog.SanitizedLogger
+
 func initLogging() {
     logLevel := viper.GetString("log.level")
     level, err := log.ParseLevel(logLevel)
@@ -142,6 +147,12 @@ func initLogging() {
     }
     log.SetLevel(level)
     log.SetFormatter(&log.JSONFormatter{})
+
+    // Initialize go-common structured logger (penguin-libs standard)
+    structuredLogger, err = pglog.NewSanitizedLogger("hub-router")
+    if err != nil {
+        log.WithError(err).Warn("Failed to initialize go-common structured logger, using logrus only")
+    }
 }
 
 func (s *ProxyServer) Initialize() error {
