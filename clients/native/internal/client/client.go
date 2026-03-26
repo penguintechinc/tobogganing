@@ -486,7 +486,7 @@ func (c *Client) stopWireGuard() error {
         cmd = exec.Command("wg-quick", "down", configPath)
     case platformWindows:
         // Use WireGuard for Windows service
-        cmd = exec.Command("wg-quick.exe", "up", configPath)
+        cmd = exec.Command("wg-quick.exe", "down", configPath)
     default:
         return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
     }
