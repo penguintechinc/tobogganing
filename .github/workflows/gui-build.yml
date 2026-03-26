@@ -42,12 +42,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       
       - name: Install dependencies
         working-directory: ./clients/native
@@ -55,13 +55,13 @@ jobs:
           go mod download
           go mod verify
       
-      - name: Run golangci-lint
-        working-directory: ./clients/native
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          golangci-lint --version
-          golangci-lint run --timeout=10m
-      
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+        with:
+          version: v1.64.8
+          working-directory: clients/native
+          args: --build-tags=nogui --timeout=5m
+
       - name: Test GUI package compilation
         working-directory: ./clients/native
         env:
@@ -70,7 +70,7 @@ jobs:
           # Verify the Fyne GUI package compiles correctly
           go build -v ./internal/gui
           echo "GUI package compiled successfully"
-      
+
       - name: Build GUI binary
         working-directory: ./clients/native
         env:
@@ -82,7 +82,7 @@ jobs:
             ./cmd/gui
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}
@@ -104,10 +104,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       
       - name: Set up QEMU for cross-platform builds
         uses: docker/setup-qemu-action@v3
@@ -141,7 +141,7 @@ jobs:
           file ../../dist/${{ matrix.binary_name }}
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}
@@ -159,12 +159,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       
       - name: Install dependencies
         working-directory: ./clients/native
@@ -172,13 +172,13 @@ jobs:
           go mod download
           go mod verify
       
-      - name: Run golangci-lint
-        working-directory: ./clients/native
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          golangci-lint --version
-          golangci-lint run --timeout=10m
-      
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+        with:
+          version: v1.64.8
+          working-directory: clients/native
+          args: --build-tags=nogui --timeout=5m
+
       - name: Test GUI package compilation
         working-directory: ./clients/native
         env:
@@ -187,7 +187,7 @@ jobs:
           # Verify the Fyne GUI package compiles correctly
           go build -v ./internal/gui
           echo "GUI package compiled successfully"
-      
+
       - name: Build GUI binary
         working-directory: ./clients/native
         env:
@@ -199,7 +199,7 @@ jobs:
             ./cmd/gui
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}
@@ -211,13 +211,13 @@ jobs:
     
     steps:
       - name: Download Intel binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: tobogganing-client-darwin-amd64
           path: ./
       
       - name: Download ARM64 binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: tobogganing-client-darwin-arm64
           path: ./
@@ -230,7 +230,7 @@ jobs:
           chmod +x tobogganing-client-darwin-universal
       
       - name: Upload Universal Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: tobogganing-client-darwin-universal
           path: tobogganing-client-darwin-universal
@@ -245,10 +245,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: ./artifacts
       

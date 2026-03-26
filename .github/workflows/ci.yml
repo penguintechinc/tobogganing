@@ -213,8 +213,6 @@ jobs:
 
     - name: Run Trivy filesystem scanning
       uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
-        with:
-          trivy-version: 'v0.69.3'
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -244,17 +242,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
-    - name: Read version from .version file
-      id: version
-      run: |
-        VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}" >> $GITHUB_OUTPUT
-        else
-          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}" >> $GITHUB_OUTPUT
-        fi
-    
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
     
@@ -272,7 +259,8 @@ jobs:
     - name: Generate Docker tags
       id: meta
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}"
         else
@@ -294,10 +282,10 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${{ steps.meta.outputs.version }}
           BUILD_TIME=${{ github.run_id }}
           GIT_COMMIT=${{ github.sha }}
-    
+
     - name: Build and push Docker image - Headend
       if: matrix.component == 'headend'
       uses: docker/build-push-action@v5
@@ -309,10 +297,10 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${{ steps.meta.outputs.version }}
           BUILD_TIME=${{ github.run_id }}
           GIT_COMMIT=${{ github.sha }}
-    
+
     - name: Build and push Docker image - Client
       if: matrix.component == 'client'
       uses: docker/build-push-action@v5
@@ -324,7 +312,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${{ steps.meta.outputs.version }}
           BUILD_TIME=${{ github.run_id }}
           GIT_COMMIT=${{ github.sha }}
 
@@ -468,8 +456,6 @@ jobs:
     
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
-        with:
-          trivy-version: 'v0.69.3'
       with:
         scan-type: 'fs'
         scan-ref: '.'
