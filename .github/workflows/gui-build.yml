@@ -55,12 +55,12 @@ jobs:
           go mod download
           go mod verify
       
-      - name: Run golangci-lint
-        working-directory: ./clients/native
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
-          golangci-lint --version
-          golangci-lint run --timeout=10m
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+        with:
+          version: v1.64.8
+          working-directory: clients/native
+          args: --build-tags=nogui --timeout=5m
 
       - name: Run gosec
         uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
@@ -178,12 +178,12 @@ jobs:
           go mod download
           go mod verify
       
-      - name: Run golangci-lint
-        working-directory: ./clients/native
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
-          golangci-lint --version
-          golangci-lint run --timeout=10m
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+        with:
+          version: v1.64.8
+          working-directory: clients/native
+          args: --build-tags=nogui --timeout=5m
 
       - name: Run gosec
         uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
