@@ -33,7 +33,7 @@ jobs:
         cd services/hub-api
         python3 -m pip install --upgrade pip
         pip3 install -r requirements.txt
-        pip3 install pytest pytest-asyncio
+        pip3 install pytest pytest-asyncio pytest-cov
     
     - name: Install Go dependencies
       run: |
@@ -43,17 +43,23 @@ jobs:
     - name: Run Python tests
       run: |
         cd services/hub-api
-        python3 -m pytest tests/ -v || exit 0
-    
+        python3 -m pytest tests/ -v --cov=. --cov-report=xml --cov-fail-under=90
+
     - name: Run Go tests (headend)
       run: |
         cd services/hub-router
-        go test -v ./... || exit 0
-    
+        go test -v -race -coverprofile=coverage.out ./...
+        total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+        echo "Total coverage: ${total}%"
+        awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
+
     - name: Run Go tests (client)
       run: |
         cd clients/native
-        go test -v ./... || exit 0
+        go test -tags=nogui -v -race -coverprofile=coverage.out ./...
+        total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+        echo "Total coverage: ${total}%"
+        awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
 
   # Build release Docker images
   build-release-images:
