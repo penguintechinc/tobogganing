@@ -7,9 +7,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_MANAGER: ${{ github.repository }}/manager
-  IMAGE_NAME_HEADEND: ${{ github.repository }}/headend
-  IMAGE_NAME_CLIENT: ${{ github.repository }}/client
+  IMAGE_NAME_MANAGER: ${{ github.repository }}/tobogganing-manager
+  IMAGE_NAME_HEADEND: ${{ github.repository }}/tobogganing-headend
+  IMAGE_NAME_CLIENT: ${{ github.repository }}/tobogganing-client
 
 jobs:
   # Build and test before release
@@ -18,12 +18,12 @@ jobs:
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
-    - name: Set up Python 3.12
+    - name: Set up Python 3.13
       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
         python-version: 3.13
     
-    - name: Set up Go 1.23
+    - name: Set up Go 1.24
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
       with:
         go-version: 1.24
@@ -109,14 +109,12 @@ jobs:
           TAGS="${IMAGE}:alpha-${EPOCH}"
         fi
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-        
-        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
     
     - name: Build and push Docker image - Manager
       if: matrix.component == 'manager'
       uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
-        context: ./manager
+        context: ./services/hub-api
         platforms: linux/amd64,linux/arm64
         push: true
         tags: ${{ steps.tags.outputs.tags }}
@@ -131,7 +129,7 @@ jobs:
       if: matrix.component == 'headend'
       uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
-        context: ./headend
+        context: ./services/hub-router
         platforms: linux/amd64,linux/arm64
         push: true
         tags: ${{ steps.tags.outputs.tags }}

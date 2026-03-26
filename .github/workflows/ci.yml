@@ -479,7 +479,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       redis:
-        image: redis:7
+        image: redis:7-bookworm@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -493,7 +493,7 @@ jobs:
 
     - name: Set up Docker Compose
       run: |
-        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo curl -L "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
         sudo chmod +x /usr/local/bin/docker-compose
 
     - name: Run integration tests

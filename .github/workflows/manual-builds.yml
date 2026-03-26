@@ -238,13 +238,13 @@ jobs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
       with:
         path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-headend-${{ hashFiles('headend/go.sum') }}
+        key: ${{ runner.os }}-go-headend-${{ hashFiles('services/hub-router/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-headend-
     
     - name: Build headend proxy
       run: |
-        cd headend
+        cd services/hub-router
         go mod download
         
         VERSION="${{ steps.version.outputs.full_version }}"
@@ -270,7 +270,7 @@ jobs:
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: headend-proxy-builds
-        path: headend/build/*
+        path: services/hub-router/build/*
         retention-days: ${{ github.event.inputs.build_type == 'production' && '90' || '30' }}
 
   # Trigger mobile builds
