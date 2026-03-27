@@ -1,11 +1,66 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "hub-api"
-version = "0.2.0"
-requires-python = ">=3.12"
+name = "tobogganing-hub-api"
+version = "2.0.0"
+description = "Tobogganing Hub API - Central management service"
+requires-python = ">=3.13"
+license = {text = "AGPL-3.0"}
+
+dependencies = [
+    "quart",
+    "quart-auth",
+    "quart-cors",
+    "hypercorn",
+    "pydal",
+    "bcrypt",
+    "pyjwt",
+    "cryptography",
+    "prometheus-client",
+    "grpcio",
+    "grpcio-tools",
+    "protobuf",
+    "redis",
+    "structlog",
+    "pydantic>=2.5",
+    "pyyaml",
+    "python-dotenv",
+    "dnspython",
+    "httpx",
+    "aiofiles",
+    "psutil",
+    "boto3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "flake8",
+    "black",
+    "isort",
+    "mypy",
+    "bandit",
+]
+
+[tool.black]
+line-length = 99
+
+[tool.isort]
+profile = "black"
+line_length = 99
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
