@@ -1,0 +1,249 @@
+# ==========================================================================
+# DEPRECATED: Docker Compose support has been deprecated.
+# Kubernetes (microk8s) with Helm v3 is now the standard deployment method.
+#
+# Use instead:
+#   Alpha:  make k8s-alpha-deploy
+#   Beta:   make k8s-beta-deploy
+#   Prod:   make k8s-prod-deploy
+#
+# See k8s/helm/tobogganing/ for Helm charts and values files.
+# This file is retained for reference only and will be removed in a future release.
+# ==========================================================================
+
+version: '3.8'
+
+# Tobogganing - Zero Trust SASE Platform
+# Development Docker Compose configuration with live reload support
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml up
+
+services:
+  # Redis - Session, JWT token, and policy caching
+  redis:
+    image: redis:7-bookworm@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0
+    container_name: tobogganing-dev-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.10
+
+  # MySQL - Primary database
+  mysql:
+    image: mysql:8.0@sha256:5a0c8f5b3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f
+    container_name: tobogganing-dev-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: tobogganing-root-password
+      MYSQL_DATABASE: tobogganing
+      MYSQL_USER: tobogganing
+      MYSQL_PASSWORD: tobogganing-dev-password
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.11
+
+  # Hub API - Policy management, auth, configuration (Quart/Python 3.13)
+  hub-api:
+    build:
+      context: ./services/hub-api
+      dockerfile: Dockerfile
+    container_name: tobogganing-dev-hub-api
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      DB_TYPE: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: tobogganing
+      DB_PASSWORD: tobogganing-dev-password
+      DB_NAME: tobogganing
+      DB_POOL_SIZE: 10
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      SESSION_TIMEOUT_HOURS: 8
+      METRICS_TOKEN: prometheus-scraper-dev-token
+      PORT: 8080
+      GRPC_PORT: 50051
+      WORKERS: 4
+      LOG_LEVEL: debug
+    volumes:
+      - ./services/hub-api:/app
+      - hub_api_dev_data:/app/data
+      - hub_api_dev_certs:/app/certs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.20
+
+  # Hub Router - Inline policy enforcement, WireGuard VPN, traffic routing (Go 1.24)
+  hub-router:
+    build:
+      context: ./services/hub-router
+      dockerfile: Dockerfile
+    container_name: tobogganing-dev-hub-router
+    restart: unless-stopped
+    depends_on:
+      hub-api:
+        condition: service_healthy
+    ports:
+      - "51820:51820/udp"
+      - "8443:8443"
+      - "9090:9090"
+    environment:
+      HEADEND_SERVER_HTTP_PORT: 8443
+      HEADEND_SERVER_TCP_PORT: 8444
+      HEADEND_SERVER_UDP_PORT: 8445
+      HEADEND_SERVER_METRICS_PORT: 9090
+      HEADEND_SERVER_CERT_FILE: /certs/headend.crt
+      HEADEND_SERVER_KEY_FILE: /certs/headend.key
+      HEADEND_AUTH_TYPE: jwt
+      HEADEND_AUTH_MANAGER_URL: http://hub-api:8080
+      HEADEND_WIREGUARD_INTERFACE: wg0
+      HEADEND_WIREGUARD_NETWORK: 10.200.0.0/16
+      HEADEND_WIREGUARD_LISTEN_PORT: 51820
+      HEADEND_MIRROR_ENABLED: "false"
+      HEADEND_METRICS_AUTH_TOKEN: prometheus-scraper-dev-token
+      MANAGER_URL: http://hub-api:8080
+      GRPC_HUB_API_ADDR: hub-api:50051
+      CLUSTER_ID: dev-cluster
+      CLUSTER_NAME: Development Hub
+      CLUSTER_REGION: local
+      HEADEND_LOG_LEVEL: debug
+    volumes:
+      - ./services/hub-router:/app
+      - hub_router_dev_data:/app/data
+      - hub_router_dev_certs:/certs
+      - hub_router_dev_wg:/etc/wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.21
+
+  # Hub WebUI - Admin portal (React/Vite)
+  hub-webui:
+    build:
+      context: ./services/hub-webui
+      dockerfile: Dockerfile
+    container_name: tobogganing-dev-hub-webui
+    restart: unless-stopped
+    depends_on:
+      hub-api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:8080
+      NODE_ENV: development
+    volumes:
+      - ./services/hub-webui:/app
+      - hub_webui_dev_node_modules:/app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.22
+
+  # Redis Commander - Redis management UI
+  redis-commander:
+    image: rediscommander/redis-commander:latest@sha256:19cd0c49f418779fa2822a0496c5e6516d0c792effc39ed20089e6268477e40a
+    container_name: tobogganing-dev-redis-commander
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.30
+
+  # Adminer - Database management UI
+  adminer:
+    image: adminer:latest@sha256:16a72c6140f64d00a3a9edf8d3d3b18a7b0a29ca31b0453378d9eb71f01f9e34
+    container_name: tobogganing-dev-adminer
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    ports:
+      - "8082:8080"
+    networks:
+      tobogganing-dev:
+        ipv4_address: 172.30.0.31
+
+volumes:
+  redis_dev_data:
+    driver: local
+  mysql_dev_data:
+    driver: local
+  hub_api_dev_data:
+    driver: local
+  hub_api_dev_certs:
+    driver: local
+  hub_router_dev_data:
+    driver: local
+  hub_router_dev_certs:
+    driver: local
+  hub_router_dev_wg:
+    driver: local
+  hub_webui_dev_node_modules:
+    driver: local
+
+networks:
+  tobogganing-dev:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
