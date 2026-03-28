@@ -18,7 +18,7 @@ from certs.certificate_manager import CertificateManager
 from auth.jwt_manager import JWTManager
 from auth.user_manager import UserManager
 from metrics.prometheus import manager_metrics
-from config.secrets import load_secrets, get_secret
+from config.sal_loader import load_secrets, get_secret
 
 logger = structlog.get_logger()
 
