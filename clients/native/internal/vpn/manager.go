@@ -11,7 +11,6 @@ package vpn
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -20,9 +19,14 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/tobogganing/clients/native/internal/client"
 	"github.com/tobogganing/clients/native/internal/config"
+	"github.com/tobogganing/clients/native/internal/logger"
 )
+
+var log = logger.Get()
 
 const (
 	// Operating system constants
@@ -89,7 +93,7 @@ func (m *Manager) Connect() error {
 		return fmt.Errorf("already connected")
 	}
 	
-	log.Println("Initiating VPN connection...")
+	log.Info("initiating VPN connection")
 	
 	// Validate configuration
 	if err := m.validateConfig(); err != nil {
@@ -117,7 +121,7 @@ func (m *Manager) Connect() error {
 	// Start monitoring
 	m.startMonitoring()
 	
-	log.Printf("VPN connected successfully to %s", m.config.ManagerURL)
+	log.Info("VPN connected", zap.String("manager_url", m.config.ManagerURL))
 	return nil
 }
 
@@ -130,14 +134,14 @@ func (m *Manager) Disconnect() error {
 		return fmt.Errorf("not connected")
 	}
 	
-	log.Println("Disconnecting VPN...")
+	log.Info("disconnecting VPN")
 	
 	// Stop monitoring
 	m.stopMonitoring()
 	
 	// Platform-specific disconnection logic
 	if err := m.disconnectWireGuard(); err != nil {
-		log.Printf("Warning: error during disconnection: %v", err)
+		log.Warn("error during disconnection", zap.Error(err))
 	}
 	
 	// Update status
@@ -146,7 +150,7 @@ func (m *Manager) Disconnect() error {
 		State: "disconnected",
 	}
 	
-	log.Println("VPN disconnected successfully")
+	log.Info("VPN disconnected")
 	return nil
 }
 
@@ -205,7 +209,7 @@ func (m *Manager) GetStatistics() map[string]interface{} {
 func (m *Manager) Stop() error {
 	if m.isConnected {
 		if err := m.Disconnect(); err != nil {
-			log.Printf("Error disconnecting during stop: %v", err)
+			log.Error("error disconnecting during stop", zap.Error(err))
 		}
 	}
 	
@@ -256,7 +260,7 @@ func (m *Manager) disconnectWireGuard() error {
 // Embedded WireGuard implementations
 
 func (m *Manager) connectEmbedded() error {
-	log.Println("Starting embedded WireGuard tunnel...")
+	log.Info("starting embedded WireGuard tunnel")
 
 	// Read configuration from file
 	configData, err := readWireGuardConfig(m.configPath)
@@ -269,18 +273,18 @@ func (m *Manager) connectEmbedded() error {
 		return fmt.Errorf("failed to start embedded WireGuard: %w", err)
 	}
 
-	log.Printf("Embedded WireGuard tunnel '%s' started successfully", m.interfaceName)
+	log.Info("embedded WireGuard tunnel started", zap.String("interface", m.interfaceName))
 	return nil
 }
 
 func (m *Manager) disconnectEmbedded() error {
-	log.Println("Stopping embedded WireGuard tunnel...")
+	log.Info("stopping embedded WireGuard tunnel")
 
 	if err := m.embeddedWG.Stop(); err != nil {
 		return fmt.Errorf("failed to stop embedded WireGuard: %w", err)
 	}
 
-	log.Printf("Embedded WireGuard tunnel '%s' stopped successfully", m.interfaceName)
+	log.Info("embedded WireGuard tunnel stopped", zap.String("interface", m.interfaceName))
 	return nil
 }
 
@@ -294,7 +298,7 @@ func (m *Manager) connectLinux() error {
 		return fmt.Errorf("wg-quick up failed: %w, output: %s", err, output)
 	}
 	
-	log.Printf("WireGuard interface brought up: %s", string(output))
+	log.Info("WireGuard interface up (linux)", zap.String("output", string(output)))
 	return nil
 }
 
@@ -304,14 +308,14 @@ func (m *Manager) disconnectLinux() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Try alternative method if wg-quick fails
-		log.Printf("wg-quick down failed, trying ip link delete: %v", err)
+		log.Warn("wg-quick down failed, trying ip link delete", zap.Error(err))
 		cmd = exec.Command("sudo", "ip", "link", "delete", m.interfaceName)
 		if err2 := cmd.Run(); err2 != nil {
 			return fmt.Errorf("both wg-quick down and ip link delete failed: %w, %v", err, err2)
 		}
 	}
 	
-	log.Printf("WireGuard interface brought down: %s", string(output))
+	log.Info("WireGuard interface down (linux)", zap.String("output", string(output)))
 	return nil
 }
 
@@ -325,7 +329,7 @@ func (m *Manager) connectMacOS() error {
 		return fmt.Errorf("wg-quick up failed: %w, output: %s", err, output)
 	}
 	
-	log.Printf("WireGuard interface brought up on macOS: %s", string(output))
+	log.Info("WireGuard interface up (macOS)", zap.String("output", string(output)))
 	return nil
 }
 
@@ -336,7 +340,7 @@ func (m *Manager) disconnectMacOS() error {
 		return fmt.Errorf("wg-quick down failed: %w, output: %s", err, output)
 	}
 	
-	log.Printf("WireGuard interface brought down on macOS: %s", string(output))
+	log.Info("WireGuard interface down (macOS)", zap.String("output", string(output)))
 	return nil
 }
 
@@ -352,13 +356,13 @@ func (m *Manager) connectWindows() error {
 		return m.connectWindowsFallback()
 	}
 	
-	log.Printf("WireGuard interface brought up on Windows: %s", string(output))
+	log.Info("WireGuard interface up (windows)", zap.String("output", string(output)))
 	return nil
 }
 
 func (m *Manager) connectWindowsFallback() error {
 	// Fallback method for Windows using wireguard-go
-	log.Println("Using wireguard-go fallback for Windows connection")
+	log.Info("using wireguard-go fallback for Windows connection")
 	
 	// This would implement wireguard-go integration
 	// For now, return an error indicating the limitation
@@ -374,11 +378,11 @@ func (m *Manager) disconnectWindows() error {
 	cmd := exec.Command("wg-quick", "down", m.configPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("wg-quick down failed on Windows: %v, output: %s", err, output)
+		log.Warn("wg-quick down failed on Windows", zap.Error(err), zap.String("output", string(output)))
 		// Don't return error - Windows connection might not have been established via wg-quick
 	}
 	
-	log.Printf("WireGuard interface brought down on Windows: %s", string(output))
+	log.Info("WireGuard interface down (windows)", zap.String("output", string(output)))
 	return nil
 }
 
@@ -446,7 +450,7 @@ func (m *Manager) getInterfaceStatistics() InterfaceStatistics {
 	
 	output, err := m.getWireGuardOutput()
 	if err != nil {
-		log.Printf("Failed to get WireGuard statistics: %v", err)
+		log.Error("failed to get WireGuard statistics", zap.Error(err))
 		return stats
 	}
 	
@@ -560,7 +564,7 @@ func (m *Manager) checkConnection() {
 	// Check if the WireGuard interface is still up
 	_, err := net.InterfaceByName(m.interfaceName)
 	if err != nil {
-		log.Printf("WireGuard interface %s not found, marking as disconnected", m.interfaceName)
+		log.Warn("WireGuard interface not found, marking as disconnected", zap.String("interface", m.interfaceName))
 		m.mutex.Lock()
 		m.isConnected = false
 		m.currentStatus.State = "disconnected"

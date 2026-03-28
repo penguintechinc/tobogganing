@@ -10,6 +10,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/kardianos/service v1.2.2
 	github.com/openziti/sdk-golang v0.23.38
+	github.com/penguintechinc/penguin-libs/packages/go-common v0.0.0-local
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2

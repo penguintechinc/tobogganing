@@ -15,13 +15,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/tobogganing/clients/native/internal/logger"
 )
+
+var log = logger.Get()
 
 // Manager handles configuration updates and scheduling
 type Manager struct {
@@ -68,7 +73,7 @@ func NewConfigManager(cfg *Config) *Manager {
 
 // Start begins the automatic configuration update scheduler
 func (cm *Manager) Start() error {
-	log.Println("Starting configuration manager")
+	log.Info("starting configuration manager")
 	
 	// Schedule the next update randomly between 45-60 minutes
 	cm.scheduleNextUpdate()
@@ -81,7 +86,7 @@ func (cm *Manager) Start() error {
 
 // Stop gracefully stops the configuration manager
 func (cm *Manager) Stop() error {
-	log.Println("Stopping configuration manager")
+	log.Info("stopping configuration manager")
 	
 	cm.cancel()
 	
@@ -122,11 +127,11 @@ func (cm *Manager) PullConfig() error {
 		cm.updateMutex.Unlock()
 	}()
 	
-	log.Println("Pulling configuration from Manager service")
+	log.Info("pulling configuration from manager service")
 	
 	err := cm.fetchAndUpdateConfig()
 	if err != nil {
-		log.Printf("Failed to pull configuration: %v", err)
+		log.Error("failed to pull configuration", zap.Error(err))
 		return err
 	}
 	
@@ -137,7 +142,7 @@ func (cm *Manager) PullConfig() error {
 	
 	cm.scheduleNextUpdate()
 	
-	log.Println("Configuration updated successfully")
+	log.Info("configuration updated")
 	return nil
 }
 
@@ -154,7 +159,7 @@ func (cm *Manager) runScheduler() {
 				// Time for an update
 				go func() {
 					if err := cm.PullConfig(); err != nil {
-						log.Printf("Scheduled configuration update failed: %v", err)
+						log.Error("scheduled configuration update failed", zap.Error(err))
 						// Retry after a shorter interval on failure
 						cm.scheduleRetryUpdate()
 					}
@@ -183,8 +188,8 @@ func (cm *Manager) scheduleNextUpdate() {
 	cm.nextUpdate = nextUpdateTime
 	cm.updateMutex.Unlock()
 	
-	log.Printf("Next configuration update scheduled for %s (in %d minutes)",
-		nextUpdateTime.Format("15:04:05"), randomMinutes)
+	log.Info("next configuration update scheduled",
+		zap.String("at", nextUpdateTime.Format("15:04:05")), zap.Int("in_minutes", randomMinutes))
 }
 
 // scheduleRetryUpdate schedules a retry update after a shorter interval (5-10 minutes)
@@ -200,8 +205,8 @@ func (cm *Manager) scheduleRetryUpdate() {
 	cm.nextUpdate = nextUpdateTime
 	cm.updateMutex.Unlock()
 	
-	log.Printf("Configuration update retry scheduled for %s (in %d minutes)",
-		nextUpdateTime.Format("15:04:05"), randomMinutes)
+	log.Info("configuration update retry scheduled",
+		zap.String("at", nextUpdateTime.Format("15:04:05")), zap.Int("in_minutes", randomMinutes))
 }
 
 // fetchAndUpdateConfig fetches configuration from the Manager service and updates local config
@@ -271,7 +276,7 @@ func (cm *Manager) fetchAndUpdateConfig() error {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 	
-	log.Printf("Configuration updated successfully (version %d)", configResp.Version)
+	log.Info("configuration updated", zap.Int("version", configResp.Version))
 	return nil
 }
 
@@ -295,7 +300,7 @@ func (cm *Manager) validateAndSaveConfig(configData string) error {
 		return fmt.Errorf("failed to write configuration file: %w", err)
 	}
 	
-	log.Printf("Configuration saved to %s", configPath)
+	log.Info("configuration saved", zap.String("path", configPath))
 	return nil
 }
 
@@ -388,7 +393,7 @@ func (cm *Manager) IsUpdateInProgress() bool {
 
 // ForceUpdate forces an immediate configuration update, bypassing the schedule
 func (cm *Manager) ForceUpdate() error {
-	log.Println("Forcing immediate configuration update")
+	log.Info("forcing immediate configuration update")
 	return cm.PullConfig()
 }
 
