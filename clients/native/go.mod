@@ -14,6 +14,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
+	go.uber.org/zap v1.27.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230429144221-925a1e7659e6
 )

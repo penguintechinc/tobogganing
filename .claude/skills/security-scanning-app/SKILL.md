@@ -1,0 +1,1 @@
+/home/penguin/code/.claude/skills/security-scanning-app/SKILL.md
