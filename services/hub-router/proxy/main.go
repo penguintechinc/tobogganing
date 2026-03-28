@@ -28,6 +28,7 @@ import (
     "time"
 
     "github.com/gin-gonic/gin"
+    "github.com/penguintechinc/penguin-libs/packages/go-aaa/authn"
     pglog "github.com/penguintechinc/penguin-libs/packages/go-common/logging"
     "github.com/prometheus/client_golang/prometheus/promhttp"
     log "github.com/sirupsen/logrus"
@@ -50,6 +51,7 @@ type ProxyServer struct {
     udpProxy        *UDPProxy
     portManager     *ports.PortManager
     authProvider    auth.Provider
+    oidcRP          *authn.OIDCRelyingParty // go-aaa OIDC relying party for gin middleware
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
@@ -209,6 +211,27 @@ func (s *ProxyServer) Initialize() error {
 
     if err != nil {
         return fmt.Errorf("failed to initialize auth provider: %w", err)
+    }
+
+    // Initialize go-aaa OIDC relying party for gin middleware token validation.
+    // Reads OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET from the environment.
+    // If OIDC_ISSUER_URL is not set we log a warning and skip OIDC setup — the server
+    // will start in dev mode with token validation disabled.
+    oidcIssuer := os.Getenv("OIDC_ISSUER_URL")
+    if oidcIssuer == "" {
+        log.Warn("OIDC_ISSUER_URL not set — running in dev mode, gin middleware token validation is DISABLED")
+    } else {
+        rpCfg := authn.OIDCRPConfig{
+            IssuerURL:    oidcIssuer,
+            ClientID:     os.Getenv("OIDC_CLIENT_ID"),
+            ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
+        }
+        rp, rpErr := authn.NewOIDCRelyingParty(context.Background(), rpCfg)
+        if rpErr != nil {
+            return fmt.Errorf("failed to initialize OIDC relying party: %w", rpErr)
+        }
+        s.oidcRP = rp
+        log.Infof("OIDC relying party initialized (issuer: %s)", oidcIssuer)
     }
 
     // Initialize traffic mirroring if enabled
@@ -417,12 +440,12 @@ func (s *ProxyServer) setupRoutes() {
         authGroup.POST("/login", s.authProvider.LoginHandler())
         authGroup.GET("/callback", s.authProvider.CallbackHandler())
         authGroup.POST("/logout", s.authProvider.LogoutHandler())
-        authGroup.GET("/userinfo", middleware.AuthRequired(s.authProvider), s.userInfoHandler)
+        authGroup.GET("/userinfo", middleware.NewAuthMiddleware(s.oidcRP), s.userInfoHandler)
     }
 
     // Proxy endpoints (require authentication)
     proxyGroup := s.router.Group("/proxy")
-    proxyGroup.Use(middleware.AuthRequired(s.authProvider))
+    proxyGroup.Use(middleware.NewAuthMiddleware(s.oidcRP))
     {
         proxyGroup.Any("/*path", s.proxyHandler)
     }
@@ -528,8 +551,15 @@ func (s *ProxyServer) metricsHandler(c *gin.Context) {
 }
 
 func (s *ProxyServer) userInfoHandler(c *gin.Context) {
-    user := c.MustGet("user").(auth.User)
-    c.JSON(http.StatusOK, user)
+    claims := c.MustGet("claims").(*authn.Claims)
+    c.JSON(http.StatusOK, gin.H{
+        "sub":    claims.Sub,
+        "iss":    claims.Iss,
+        "tenant": claims.Tenant,
+        "scope":  claims.Scope,
+        "roles":  claims.Roles,
+        "teams":  claims.Teams,
+    })
 }
 
 func (s *ProxyServer) proxyHandler(c *gin.Context) {
@@ -539,34 +569,34 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
         return
     }
 
-    user := c.MustGet("user").(auth.User)
+    claims := c.MustGet("claims").(*authn.Claims)
     sourceIP := c.ClientIP()
     method := c.Request.Method
     path := c.Request.URL.Path
     userAgent := c.GetHeader("User-Agent")
     requestID := c.GetHeader("X-Request-ID")
-    
+
     // Check firewall rules if firewall manager is enabled
     var allowed bool
     if s.firewallManager != nil {
-        allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
+        allowed = s.firewallManager.CheckAccess(claims.Sub, targetHost)
     } else {
         allowed = true
     }
-        
+
     if !allowed {
-            log.Warnf("Firewall blocked access for user %s to %s", user.ID, targetHost)
-            
+            log.Warnf("Firewall blocked access for subject %s to %s", claims.Sub, targetHost)
+
             // Log denied access to syslog
             if s.syslogLogger != nil {
-                s.syslogLogger.LogHTTPAccess(user.ID, user.Name, sourceIP, targetHost, method, path, userAgent, requestID, 403, 0, false)
+                s.syslogLogger.LogHTTPAccess(claims.Sub, claims.Sub, sourceIP, targetHost, method, path, userAgent, requestID, 403, 0, false)
             }
-            
+
             c.JSON(http.StatusForbidden, gin.H{"error": "Access denied by firewall policy"})
             return
     }
-        
-    log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
+
+    log.Debugf("Firewall allowed access for subject %s to %s", claims.Sub, targetHost)
 
     // Get or create proxy for target
     proxy := s.getOrCreateProxy(targetHost)
@@ -577,7 +607,7 @@ func (s *ProxyServer) proxyHandler(c *gin.Context) {
         mirrorManager:  s.mirrorManager,
         syslogLogger:   s.syslogLogger,
         request:        c.Request,
-        user:           user,
+        userSub:        claims.Sub,
         targetHost:     targetHost,
         sourceIP:       sourceIP,
         method:         method,
@@ -776,7 +806,7 @@ type responseWriterWrapper struct {
     mirrorManager *mirror.Manager
     syslogLogger  *syslog.SyslogLogger
     request       *http.Request
-    user          auth.User
+    userSub       string // subject claim from validated JWT (replaces auth.User)
     targetHost    string
     sourceIP      string
     method        string
@@ -816,8 +846,8 @@ func (w *responseWriterWrapper) Flush() {
     // Log to syslog - uses internal worker queue for performance
     if w.syslogLogger != nil {
         w.syslogLogger.LogHTTPAccess(
-            w.user.ID,
-            w.user.Name,
+            w.userSub,
+            w.userSub,
             w.sourceIP,
             w.targetHost,
             w.method,

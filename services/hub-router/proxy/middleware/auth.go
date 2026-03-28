@@ -1,148 +1,182 @@
 // Package middleware implements HTTP middleware components for the Tobogganing hub-router proxy.
 //
-// This file provides authentication middleware that implements Tobogganing's
-// dual authentication architecture:
-// 1. X.509 client certificate validation (handled at TLS layer)
-// 2. JWT/SSO token validation (handled by middleware)
+// This file provides authentication middleware built on go-aaa (penguin-libs).
+// It implements Tobogganing's dual authentication architecture:
+//  1. X.509 client certificate validation (handled at TLS layer — not this file)
+//  2. OIDC token validation via authn.OIDCRelyingParty (handled here)
 //
-// The middleware integrates with various authentication providers (JWT, SAML2, OAuth2)
-// and enforces access controls before requests are proxied to backend services.
+// Scope-based authorization is enforced via authz.HasAllScopes.
 // All authentication events are logged for security auditing.
 package middleware
 
 import (
-    "net/http"
-    "strings"
+	"context"
+	"net/http"
+	"strings"
 
-    "github.com/gin-gonic/gin"
-    log "github.com/sirupsen/logrus"
-
-    "github.com/tobogganing/headend/proxy/auth"
+	"github.com/gin-gonic/gin"
+	"github.com/penguintechinc/penguin-libs/packages/go-aaa/authn"
+	"github.com/penguintechinc/penguin-libs/packages/go-aaa/authz"
+	log "github.com/sirupsen/logrus"
 )
 
-// AuthRequired middleware validates both certificate and JWT/SSO authentication
-// This implements the dual authentication architecture:
-// 1. Client certificate (handled at TLS layer)
-// 2. JWT/SSO token (handled here)
-func AuthRequired(authProvider auth.Provider) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        // Step 1: Verify client certificate (already handled by TLS)
-        // The certificate validation happens at the TLS layer
-        
-        // Step 2: Verify JWT or SSO authentication  
-        authHeader := c.GetHeader("Authorization")
-        if authHeader == "" {
-            log.Warn("Missing Authorization header")
-            c.JSON(http.StatusUnauthorized, gin.H{
-                "error": "Authorization required",
-                "message": "Both client certificate and JWT/SSO authentication required",
-            })
-            c.Abort()
-            return
-        }
-        
-        var token string
-        if strings.HasPrefix(authHeader, "Bearer ") {
-            token = authHeader[7:] // Remove 'Bearer ' prefix
-        } else {
-            log.Warn("Invalid Authorization header format")
-            c.JSON(http.StatusUnauthorized, gin.H{
-                "error": "Invalid authorization format", 
-                "message": "Expected 'Bearer <token>'",
-            })
-            c.Abort()
-            return
-        }
-        
-        // Validate the token using the configured auth provider (JWT/SSO)
-        user, err := authProvider.ValidateToken(token)
-        if err != nil {
-            log.Errorf("Authentication failed: %v", err)
-            c.JSON(http.StatusUnauthorized, gin.H{
-                "error": "Authentication failed",
-                "message": err.Error(),
-            })
-            c.Abort()
-            return
-        }
-        
-        // Store user information in context
-        c.Set("user", user)
-        c.Set("user_id", user.ID)
-        
-        // Extract permissions from metadata
-        if permissions, ok := user.Metadata["permissions"]; ok {
-            c.Set("permissions", permissions)
-        }
-        
-        log.Infof("User authenticated: %s (name: %s)", user.ID, user.Name)
-        c.Next()
-    }
+// NewAuthMiddleware returns a gin.HandlerFunc that validates Bearer tokens using the
+// provided OIDCRelyingParty. On success it stores *authn.Claims under the key "claims"
+// and the tenant string under "tenant" in the gin context.
+//
+// If rp is nil (e.g. OIDC_ISSUER_URL was not set and dev mode is active) the middleware
+// logs a warning and passes the request through without validating the token — this is
+// intentional for local development only and must never be used in production.
+func NewAuthMiddleware(rp *authn.OIDCRelyingParty) gin.HandlerFunc {
+	if rp == nil {
+		log.Warn("auth: OIDC relying party is nil — token validation is DISABLED (dev mode only)")
+	}
+	return func(c *gin.Context) {
+		// TLS certificate validation is handled at the TLS layer.
+		// Here we only validate the JWT Bearer token.
+
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			log.Warn("auth: missing Authorization header")
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Authorization required",
+				"message": "Bearer token required",
+			})
+			c.Abort()
+			return
+		}
+
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			log.Warn("auth: invalid Authorization header format")
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Invalid authorization format",
+				"message": "Expected 'Bearer <token>'",
+			})
+			c.Abort()
+			return
+		}
+
+		rawToken := authHeader[len("Bearer "):]
+
+		// Dev mode: skip validation when no RP is configured.
+		if rp == nil {
+			log.Warn("auth: skipping token validation (dev mode — no OIDC provider configured)")
+			c.Next()
+			return
+		}
+
+		claims, err := rp.ValidateToken(context.Background(), rawToken)
+		if err != nil {
+			log.Errorf("auth: token validation failed: %v", err)
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Authentication failed",
+				"message": err.Error(),
+			})
+			c.Abort()
+			return
+		}
+
+		// Store claims and tenant for downstream middleware and handlers.
+		c.Set("claims", claims)
+		c.Set("tenant", claims.Tenant)
+
+		log.Infof("auth: subject authenticated: %s (tenant: %s)", claims.Sub, claims.Tenant)
+		c.Next()
+	}
 }
 
-// PermissionRequired middleware checks if user has required permissions
-func PermissionRequired(requiredPermissions ...string) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        userPerms, exists := c.Get("permissions")
-        if !exists {
-            c.JSON(http.StatusForbidden, gin.H{
-                "error": "No permissions found",
-                "message": "User authentication required",
-            })
-            c.Abort()
-            return
-        }
-        
-        permissions, ok := userPerms.([]string)
-        if !ok {
-            c.JSON(http.StatusForbidden, gin.H{
-                "error": "Invalid permissions format",
-            })
-            c.Abort()
-            return
-        }
-        
-        // Check if user has required permissions
-        for _, required := range requiredPermissions {
-            found := false
-            for _, userPerm := range permissions {
-                if userPerm == required {
-                    found = true
-                    break
-                }
-            }
-            if !found {
-                log.Warnf("User missing required permission: %s", required)
-                c.JSON(http.StatusForbidden, gin.H{
-                    "error": "Insufficient permissions",
-                    "message": "Missing required permission: " + required,
-                })
-                c.Abort()
-                return
-            }
-        }
-        
-        c.Next()
-    }
+// ScopeRequired returns a gin.HandlerFunc that checks whether the *authn.Claims stored
+// by NewAuthMiddleware contain all of the required scopes. If any scope is missing the
+// request is rejected with 403 Forbidden.
+func ScopeRequired(requiredScopes ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw, exists := c.Get("claims")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "No claims found",
+				"message": "Authentication required before scope check",
+			})
+			c.Abort()
+			return
+		}
+
+		claims, ok := raw.(*authn.Claims)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Invalid claims type in context",
+			})
+			c.Abort()
+			return
+		}
+
+		if !authz.HasAllScopes(claims.Scope, requiredScopes...) {
+			log.Warnf("auth: subject %s missing required scopes %v (has: %v)", claims.Sub, requiredScopes, claims.Scope)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "Insufficient scope",
+				"message": "Missing one or more required scopes",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }
 
-// CertificateInfo extracts certificate information from TLS connection
+// TenantRequired returns a gin.HandlerFunc that rejects requests where the authenticated
+// token carries no tenant claim. This enforces tenant isolation for multi-tenant paths.
+func TenantRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw, exists := c.Get("claims")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "No claims found",
+				"message": "Authentication required before tenant check",
+			})
+			c.Abort()
+			return
+		}
+
+		claims, ok := raw.(*authn.Claims)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Invalid claims type in context",
+			})
+			c.Abort()
+			return
+		}
+
+		if claims.Tenant == "" {
+			log.Warnf("auth: subject %s has no tenant claim", claims.Sub)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "Tenant required",
+				"message": "Token must carry a tenant claim",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// CertificateInfo extracts certificate information from the TLS connection and stores it
+// in the gin context. Certificate validation itself is performed at the TLS layer.
 func CertificateInfo() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        if c.Request.TLS != nil && len(c.Request.TLS.PeerCertificates) > 0 {
-            cert := c.Request.TLS.PeerCertificates[0]
-            
-            // Store certificate information in context
-            c.Set("client_cert_subject", cert.Subject.String())
-            c.Set("client_cert_serial", cert.SerialNumber.String())
-            c.Set("client_cert_valid", true)
-            
-            log.Infof("Client certificate validated: %s", cert.Subject.CommonName)
-        } else {
-            c.Set("client_cert_valid", false)
-            log.Warn("No client certificate provided")
-        }
-        
-        c.Next()
-    }
+	return func(c *gin.Context) {
+		if c.Request.TLS != nil && len(c.Request.TLS.PeerCertificates) > 0 {
+			cert := c.Request.TLS.PeerCertificates[0]
+
+			c.Set("client_cert_subject", cert.Subject.String())
+			c.Set("client_cert_serial", cert.SerialNumber.String())
+			c.Set("client_cert_valid", true)
+
+			log.Infof("auth: client certificate present: %s", cert.Subject.CommonName)
+		} else {
+			c.Set("client_cert_valid", false)
+			log.Warn("auth: no client certificate provided")
+		}
+
+		c.Next()
+	}
 }

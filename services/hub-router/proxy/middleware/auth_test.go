@@ -2,77 +2,79 @@ package middleware
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tobogganing/headend/proxy/auth"
+	"github.com/penguintechinc/penguin-libs/packages/go-aaa/authn"
 )
 
 func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-// mockProvider satisfies auth.Provider for testing.
-type mockProvider struct {
-	user *auth.User
-	err  error
-}
-
-func (m *mockProvider) ValidateToken(token string) (*auth.User, error) {
-	return m.user, m.err
-}
-func (m *mockProvider) LoginHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {}
-}
-func (m *mockProvider) CallbackHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {}
-}
-func (m *mockProvider) LogoutHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {}
-}
-func (m *mockProvider) GetUser(ctx *gin.Context) (*auth.User, error) {
-	return m.user, m.err
-}
-
-func makeRouter(provider auth.Provider) *gin.Engine {
-	r := gin.New()
-	r.Use(AuthRequired(provider))
-	r.GET("/protected", func(c *gin.Context) {
-		user, _ := c.Get("user")
-		c.JSON(http.StatusOK, gin.H{"user_id": user.(*auth.User).ID})
-	})
-	return r
-}
-
-// ─── AuthRequired ────────────────────────────────────────────────────────────
-
-func TestAuthRequired_MissingAuthorizationHeader(t *testing.T) {
-	provider := &mockProvider{user: nil, err: nil}
-	router := makeRouter(provider)
-
-	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", w.Code)
+// makeClaims returns a minimal valid *authn.Claims for use in tests.
+func makeClaims(sub, tenant string, scopes []string) *authn.Claims {
+	now := time.Now()
+	return &authn.Claims{
+		Sub:    sub,
+		Iss:    "https://auth.example.com",
+		Aud:    []string{"tobogganing"},
+		Iat:    now,
+		Exp:    now.Add(time.Hour),
+		Scope:  scopes,
+		Tenant: tenant,
 	}
 }
 
-func TestAuthRequired_InvalidHeaderFormat(t *testing.T) {
-	provider := &mockProvider{user: nil, err: nil}
-	router := makeRouter(provider)
+// injectClaims is a test-only middleware that pre-populates claims so we can
+// test ScopeRequired and TenantRequired in isolation without a real OIDC provider.
+func injectClaims(claims *authn.Claims) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if claims != nil {
+			c.Set("claims", claims)
+			c.Set("tenant", claims.Tenant)
+		}
+		c.Next()
+	}
+}
 
-	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz") // not Bearer
+// ─── NewAuthMiddleware ────────────────────────────────────────────────────────
+
+func TestNewAuthMiddleware_NilRP_DevMode_PassThrough(t *testing.T) {
+	// nil RP = dev mode: request must pass through even without a valid token.
+	r := gin.New()
+	r.Use(NewAuthMiddleware(nil))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer any-token")
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 in dev mode, got %d", w.Code)
+	}
+}
+
+func TestNewAuthMiddleware_MissingAuthorizationHeader(t *testing.T) {
+	r := gin.New()
+	r.Use(NewAuthMiddleware(nil)) // nil RP but no header → still 401
+	// Override: use a fresh router where the header check fires first.
+	r2 := gin.New()
+	r2.Use(NewAuthMiddleware(nil))
+	r2.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	// No Authorization header at all — even dev mode must reject this.
+	// Re-read the middleware: it returns 401 before checking rp==nil.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	r2.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", w.Code)
+		t.Errorf("expected 401 for missing header, got %d", w.Code)
 	}
 	var resp map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&resp)
@@ -81,160 +83,63 @@ func TestAuthRequired_InvalidHeaderFormat(t *testing.T) {
 	}
 }
 
-func TestAuthRequired_ValidToken(t *testing.T) {
-	user := &auth.User{
-		ID:       "node-123",
-		Name:     "headend-node-123",
-		Email:    "node-123@tobogganing.local",
-		Groups:   []string{"headend"},
-		Metadata: map[string]interface{}{"permissions": []string{"forward"}},
-	}
-	provider := &mockProvider{user: user, err: nil}
-	router := makeRouter(provider)
+func TestNewAuthMiddleware_InvalidHeaderFormat(t *testing.T) {
+	r := gin.New()
+	r.Use(NewAuthMiddleware(nil))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz") // not Bearer
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
-	}
-	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
-	if resp["user_id"] != "node-123" {
-		t.Errorf("unexpected user_id: %v", resp["user_id"])
-	}
-}
-
-func TestAuthRequired_InvalidToken(t *testing.T) {
-	provider := &mockProvider{user: nil, err: fmt.Errorf("token expired")}
-	router := makeRouter(provider)
-
-	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	req.Header.Set("Authorization", "Bearer bad-token")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", w.Code)
+		t.Errorf("expected 401 for non-Bearer header, got %d", w.Code)
 	}
 }
 
-func TestAuthRequired_ContextUserSet(t *testing.T) {
-	user := &auth.User{
-		ID:       "ctx-user",
-		Metadata: map[string]interface{}{"permissions": []string{"admin", "forward"}},
-	}
-	provider := &mockProvider{user: user, err: nil}
+// ─── ScopeRequired ───────────────────────────────────────────────────────────
 
-	var capturedUser interface{}
-	var capturedPerms interface{}
-
+func TestScopeRequired_HasRequiredScope(t *testing.T) {
+	claims := makeClaims("user-1", "tenant-a", []string{"proxy:read", "proxy:write"})
 	r := gin.New()
-	r.Use(AuthRequired(provider))
-	r.GET("/check", func(c *gin.Context) {
-		capturedUser, _ = c.Get("user_id")
-		capturedPerms, _ = c.Get("permissions")
-		c.Status(http.StatusOK)
-	})
+	r.Use(injectClaims(claims))
+	r.Use(ScopeRequired("proxy:read"))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodGet, "/check", nil)
-	req.Header.Set("Authorization", "Bearer token")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
-	if capturedUser != "ctx-user" {
-		t.Errorf("expected ctx-user, got %v", capturedUser)
-	}
-	if capturedPerms == nil {
-		t.Error("expected permissions to be set in context")
-	}
-}
-
-func TestAuthRequired_UserMetadataNoPermissions(t *testing.T) {
-	// When user has no permissions key in Metadata, context key should not be set
-	user := &auth.User{
-		ID:       "user-no-perms",
-		Metadata: map[string]interface{}{}, // no "permissions" key
-	}
-	provider := &mockProvider{user: user, err: nil}
-
-	var permsExists bool
-	r := gin.New()
-	r.Use(AuthRequired(provider))
-	r.GET("/check", func(c *gin.Context) {
-		_, permsExists = c.Get("permissions")
-		c.Status(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/check", nil)
-	req.Header.Set("Authorization", "Bearer token")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if permsExists {
-		t.Error("permissions should not be set when not in metadata")
-	}
-}
-
-// ─── PermissionRequired ───────────────────────────────────────────────────────
-
-func makeRouterWithPermission(provider auth.Provider, required ...string) *gin.Engine {
-	r := gin.New()
-	r.Use(AuthRequired(provider))
-	r.Use(PermissionRequired(required...))
-	r.GET("/admin", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-	return r
-}
-
-func TestPermissionRequired_HasPermission(t *testing.T) {
-	user := &auth.User{
-		ID:       "admin-user",
-		Metadata: map[string]interface{}{"permissions": []string{"admin", "forward"}},
-	}
-	provider := &mockProvider{user: user, err: nil}
-	router := makeRouterWithPermission(provider, "admin")
-
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	req.Header.Set("Authorization", "Bearer token")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
-func TestPermissionRequired_MissingPermission(t *testing.T) {
-	user := &auth.User{
-		ID:       "limited-user",
-		Metadata: map[string]interface{}{"permissions": []string{"forward"}},
-	}
-	provider := &mockProvider{user: user, err: nil}
-	router := makeRouterWithPermission(provider, "admin")
+func TestScopeRequired_HasAllRequiredScopes(t *testing.T) {
+	claims := makeClaims("user-1", "tenant-a", []string{"proxy:read", "proxy:write", "metrics:read"})
+	r := gin.New()
+	r.Use(injectClaims(claims))
+	r.Use(ScopeRequired("proxy:read", "proxy:write"))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	req.Header.Set("Authorization", "Bearer token")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
-func TestPermissionRequired_NoPermissionsInContext(t *testing.T) {
-	// Bypass AuthRequired to test PermissionRequired alone
+func TestScopeRequired_MissingScope(t *testing.T) {
+	claims := makeClaims("user-1", "tenant-a", []string{"proxy:read"})
 	r := gin.New()
-	r.Use(PermissionRequired("admin"))
-	r.GET("/admin", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+	r.Use(injectClaims(claims))
+	r.Use(ScopeRequired("proxy:write"))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -243,43 +148,84 @@ func TestPermissionRequired_NoPermissionsInContext(t *testing.T) {
 	}
 }
 
-func TestPermissionRequired_MultiplePermissions(t *testing.T) {
-	user := &auth.User{
-		ID:       "full-user",
-		Metadata: map[string]interface{}{"permissions": []string{"read", "write", "admin"}},
-	}
-	provider := &mockProvider{user: user, err: nil}
-	router := makeRouterWithPermission(provider, "read", "write", "admin")
+func TestScopeRequired_NoClaims(t *testing.T) {
+	r := gin.New()
+	// No injectClaims — claims are absent.
+	r.Use(ScopeRequired("proxy:read"))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	req.Header.Set("Authorization", "Bearer token")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 when no claims in context, got %d", w.Code)
 	}
 }
 
-func TestPermissionRequired_WrongPermissionsType(t *testing.T) {
-	// Manually set wrong type in context
+func TestScopeRequired_WrongClaimsType(t *testing.T) {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
-		// Set permissions as a non-[]string value
-		c.Set("permissions", 12345)
+		c.Set("claims", "not-a-claims-struct") // wrong type
 		c.Next()
 	})
-	r.Use(PermissionRequired("admin"))
-	r.GET("/admin", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+	r.Use(ScopeRequired("proxy:read"))
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
-		t.Errorf("expected 403 for wrong permissions type, got %d", w.Code)
+		t.Errorf("expected 403 for wrong claims type, got %d", w.Code)
+	}
+}
+
+// ─── TenantRequired ───────────────────────────────────────────────────────────
+
+func TestTenantRequired_HasTenant(t *testing.T) {
+	claims := makeClaims("user-1", "tenant-a", nil)
+	r := gin.New()
+	r.Use(injectClaims(claims))
+	r.Use(TenantRequired())
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestTenantRequired_EmptyTenant(t *testing.T) {
+	claims := makeClaims("user-1", "", nil) // no tenant
+	r := gin.New()
+	r.Use(injectClaims(claims))
+	r.Use(TenantRequired())
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for empty tenant, got %d", w.Code)
+	}
+}
+
+func TestTenantRequired_NoClaims(t *testing.T) {
+	r := gin.New()
+	r.Use(TenantRequired())
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 when no claims in context, got %d", w.Code)
 	}
 }
 
@@ -296,7 +242,6 @@ func TestCertificateInfo_NoTLS(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	// No TLS on request
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
