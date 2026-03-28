@@ -1,5 +1,4 @@
 import {
-  Fingerprint,
   Users,
   Globe,
   KeyRound,

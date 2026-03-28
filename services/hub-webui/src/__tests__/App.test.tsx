@@ -65,6 +65,7 @@ describe('App routing — unauthenticated', () => {
       user: null,
       loading: false,
       login: vi.fn(),
+      loginWithToken: vi.fn(),
       logout: vi.fn(),
     })
   })
@@ -97,6 +98,7 @@ describe('App routing — authenticated', () => {
       user: mockUser,
       loading: false,
       login: vi.fn(),
+      loginWithToken: vi.fn(),
       logout: vi.fn(),
     })
   })

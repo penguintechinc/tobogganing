@@ -33,6 +33,7 @@ describe('Layout component', () => {
       },
       loading: false,
       login: vi.fn(),
+      loginWithToken: vi.fn(),
       logout: mockLogout,
     })
   })
@@ -67,9 +68,9 @@ describe('Layout component', () => {
     expect(mockLogout).toHaveBeenCalledOnce()
   })
 
-  it('renders sidebar', () => {
+  it('renders sidebar with brand name', () => {
     renderLayout()
-    // Sidebar renders the Tobogganing title
+    // SidebarMenu renders Tobogganing brand in logo slot
     expect(screen.getByText('Tobogganing')).toBeInTheDocument()
   })
 
@@ -84,6 +85,7 @@ describe('Layout component', () => {
       },
       loading: false,
       login: vi.fn(),
+      loginWithToken: vi.fn(),
       logout: mockLogout,
     })
 
@@ -92,30 +94,4 @@ describe('Layout component', () => {
     expect(screen.getByText('maintainer')).toBeInTheDocument()
   })
 
-  it('collapses sidebar when toggle button clicked', async () => {
-    const user = userEvent.setup()
-    renderLayout()
-
-    // The collapse button in Sidebar
-    const collapseBtn = screen.getByRole('button', { name: /Collapse sidebar/i })
-    await user.click(collapseBtn)
-
-    // After collapsing, the expand button appears
-    expect(screen.getByRole('button', { name: /Expand sidebar/i })).toBeInTheDocument()
-    // The title should be hidden
-    expect(screen.queryByText('Tobogganing')).not.toBeInTheDocument()
-  })
-
-  it('expands sidebar when expand button clicked after collapse', async () => {
-    const user = userEvent.setup()
-    renderLayout()
-
-    // Collapse
-    await user.click(screen.getByRole('button', { name: /Collapse sidebar/i }))
-    expect(screen.queryByText('Tobogganing')).not.toBeInTheDocument()
-
-    // Expand
-    await user.click(screen.getByRole('button', { name: /Expand sidebar/i }))
-    expect(screen.getByText('Tobogganing')).toBeInTheDocument()
-  })
 })

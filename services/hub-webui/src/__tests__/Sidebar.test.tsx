@@ -1,116 +1,58 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 
-function renderSidebar(collapsed = false, onToggle = vi.fn()) {
+function renderSidebar(path = '/', mobileOpen?: boolean, onMobileClose = vi.fn()) {
   return render(
-    <BrowserRouter>
-      <Sidebar collapsed={collapsed} onToggle={onToggle} />
-    </BrowserRouter>
+    <MemoryRouter initialEntries={[path]}>
+      <Sidebar mobileOpen={mobileOpen} onMobileClose={onMobileClose} />
+    </MemoryRouter>
   )
 }
 
 describe('Sidebar component', () => {
-  it('renders the brand name when expanded', () => {
-    renderSidebar(false)
-    expect(screen.getByText('Tobogganing')).toBeInTheDocument()
+  it('renders the brand name', () => {
+    renderSidebar()
+    expect(screen.getAllByText('Tobogganing').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('hides brand name when collapsed', () => {
-    renderSidebar(true)
-    expect(screen.queryByText('Tobogganing')).not.toBeInTheDocument()
+  it('renders all primary navigation items', () => {
+    renderSidebar()
+    expect(screen.getAllByText('Dashboard').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Policies').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Clients').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Hubs').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders all navigation links', () => {
-    renderSidebar(false)
-    expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('Policies')).toBeInTheDocument()
-    expect(screen.getByText('Clients')).toBeInTheDocument()
-    expect(screen.getByText('Hubs')).toBeInTheDocument()
-    expect(screen.getByText('Users')).toBeInTheDocument()
-    expect(screen.getByText('Identity')).toBeInTheDocument()
-    expect(screen.getByText('Settings')).toBeInTheDocument()
-    expect(screen.getByText('Audit Logs')).toBeInTheDocument()
+  it('renders management navigation items', () => {
+    renderSidebar()
+    expect(screen.getAllByText('Users').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Identity').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Settings').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('hides navigation labels when collapsed', () => {
-    renderSidebar(true)
-    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
-    expect(screen.queryByText('Policies')).not.toBeInTheDocument()
-    expect(screen.queryByText('Clients')).not.toBeInTheDocument()
+  it('renders observability navigation items', () => {
+    renderSidebar()
+    expect(screen.getAllByText('Audit Logs').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders correct number of nav links', () => {
-    renderSidebar(false)
-    const links = screen.getAllByRole('link')
-    expect(links).toHaveLength(8)
+  it('renders Management section header', () => {
+    renderSidebar()
+    expect(screen.getAllByText('Management').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('nav links have correct hrefs', () => {
-    renderSidebar(false)
-    expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute('href', '/')
-    expect(screen.getByText('Policies').closest('a')).toHaveAttribute('href', '/policies')
-    expect(screen.getByText('Clients').closest('a')).toHaveAttribute('href', '/clients')
-    expect(screen.getByText('Hubs').closest('a')).toHaveAttribute('href', '/hubs')
-    expect(screen.getByText('Users').closest('a')).toHaveAttribute('href', '/users')
-    expect(screen.getByText('Identity').closest('a')).toHaveAttribute('href', '/identity')
-    expect(screen.getByText('Settings').closest('a')).toHaveAttribute('href', '/settings')
-    expect(screen.getByText('Audit Logs').closest('a')).toHaveAttribute('href', '/audit')
+  it('renders Observability section header', () => {
+    renderSidebar()
+    expect(screen.getAllByText('Observability').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders collapse toggle button when expanded', () => {
-    renderSidebar(false)
-    const btn = screen.getByRole('button', { name: /Collapse sidebar/i })
-    expect(btn).toBeInTheDocument()
+  it('accepts mobileOpen prop without error', () => {
+    expect(() => renderSidebar('/', true)).not.toThrow()
   })
 
-  it('renders expand toggle button when collapsed', () => {
-    renderSidebar(true)
-    const btn = screen.getByRole('button', { name: /Expand sidebar/i })
-    expect(btn).toBeInTheDocument()
-  })
-
-  it('calls onToggle when toggle button clicked', async () => {
-    const onToggle = vi.fn()
-    const user = userEvent.setup()
-    renderSidebar(false, onToggle)
-
-    await user.click(screen.getByRole('button', { name: /Collapse sidebar/i }))
-
-    expect(onToggle).toHaveBeenCalledOnce()
-  })
-
-  it('adds title attribute to nav links when collapsed (for tooltip)', () => {
-    renderSidebar(true)
-    const links = screen.getAllByRole('link')
-    const linksWithTitle = links.filter(link => link.hasAttribute('title'))
-    expect(linksWithTitle.length).toBe(8)
-  })
-
-  it('does not add title to nav links when expanded', () => {
-    renderSidebar(false)
-    const links = screen.getAllByRole('link')
-    const linksWithTitle = links.filter(link => link.hasAttribute('title'))
-    expect(linksWithTitle.length).toBe(0)
-  })
-
-  it('renders as aside element', () => {
-    renderSidebar(false)
-    const aside = screen.getByRole('complementary')
-    expect(aside).toBeInTheDocument()
-  })
-
-  it('applies correct width class when collapsed', () => {
-    renderSidebar(true)
-    const aside = screen.getByRole('complementary')
-    expect(aside.className).toContain('w-16')
-  })
-
-  it('applies correct width class when expanded', () => {
-    renderSidebar(false)
-    const aside = screen.getByRole('complementary')
-    expect(aside.className).toContain('w-60')
+  it('accepts onMobileClose callback without error', () => {
+    const onMobileClose = vi.fn()
+    expect(() => renderSidebar('/', false, onMobileClose)).not.toThrow()
   })
 })

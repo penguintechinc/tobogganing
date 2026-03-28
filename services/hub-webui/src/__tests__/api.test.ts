@@ -67,6 +67,7 @@ const mockIdentityProvider = {
   type: 'saml' as const,
   enabled: false,
   config: {},
+  premium: false,
 }
 
 const mockAuditLog = {

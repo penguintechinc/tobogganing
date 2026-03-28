@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PolicyManagement from '../pages/PolicyManagement'
@@ -126,7 +126,7 @@ describe('PolicyManagement page', () => {
       expect(screen.getByText('Create Policy', { selector: 'h2' })).toBeInTheDocument()
 
       // Click the X close button (not the Create Policy button in the form)
-      const modal = screen.getByText('Create Policy', { selector: 'h2' }).closest('div[class*="max-h"]')!
+      const modal = screen.getByText('Create Policy', { selector: 'h2' }).closest('div[class*="max-h"]') as HTMLElement
       const closeBtn = within(modal).getByRole('button', { name: '' })
       await user.click(closeBtn)
 
@@ -165,9 +165,6 @@ describe('PolicyManagement page', () => {
       expect(screen.getAllByPlaceholderText('Value')).toHaveLength(2)
 
       // Remove first rule via X button
-      const removeButtons = screen.getAllByRole('button').filter(
-        btn => btn.querySelector('svg') && !btn.textContent?.trim()
-      )
       // The first X button in the rules list removes a rule
       // Find the remove rule buttons (they appear only when >1 rule)
       const valueInputsBefore = screen.getAllByPlaceholderText('Value')
@@ -267,7 +264,6 @@ describe('PolicyManagement page', () => {
 
       // Find and click the first remove-rule X button
       // When there are 2 rules, each has an X button
-      const allButtons = screen.getAllByRole('button')
       // The X buttons for rules don't have text labels
       // Filter to find the ones inside the rule rows
       const valueInputs = screen.getAllByPlaceholderText('Value')

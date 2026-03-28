@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { LogOut, User as UserIcon } from "lucide-react";
-import clsx from "clsx";
 import { useAuth } from "../lib/auth";
 import Sidebar from "./Sidebar";
 import type { ReactNode } from "react";
@@ -11,7 +10,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -20,17 +19,12 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-bg-primary">
       <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
       />
 
-      {/* Main content area */}
-      <div
-        className={clsx(
-          "flex min-h-screen flex-col transition-all duration-300",
-          sidebarCollapsed ? "ml-16" : "ml-60",
-        )}
-      >
+      {/* Main content area — SidebarMenu renders w-64 by default on desktop (lg+) */}
+      <div className="flex min-h-screen flex-col lg:pl-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-end border-b border-border bg-bg-secondary/95 px-6 backdrop-blur">
           <div className="flex items-center gap-4">

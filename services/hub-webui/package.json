@@ -15,6 +15,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@penguintechinc/react-aaa": "file:/home/penguin/code/penguin-libs/packages/react-aaa",
+    "@penguintechinc/react-libs": "file:/home/penguin/code/penguin-libs/packages/react-libs",
     "@tanstack/react-query": "5.17.0",
     "axios": "1.6.7",
     "axios-mock-adapter": "1.22.0",
@@ -26,7 +28,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.41.0",
-    "@tailwindcss/vite": "4.0.0",
+    "@tailwindcss/vite": "4.1.18",
     "@testing-library/jest-dom": "6.2.0",
     "@testing-library/react": "14.1.2",
     "@testing-library/user-event": "14.5.2",
@@ -41,9 +43,9 @@
     "eslint-plugin-react-refresh": "0.4.5",
     "jsdom": "24.0.0",
     "prettier": "3.2.4",
-    "tailwindcss": "4.0.0",
+    "tailwindcss": "4.1.18",
     "typescript": "5.3.3",
-    "vite": "5.0.12",
+    "vite": "5.4.19",
     "vitest": "1.6.0"
   }
 }

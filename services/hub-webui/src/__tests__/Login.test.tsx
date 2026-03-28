@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import Login from '../pages/Login'
 
@@ -8,9 +7,37 @@ vi.mock('../lib/auth', () => ({
   useAuth: vi.fn(),
 }))
 
+// LoginPageBuilder from react-libs renders the full login form
+// Mock it to keep tests focused on the Login page wrapper
+vi.mock('@penguintechinc/react-libs', () => ({
+  LoginPageBuilder: ({
+    branding,
+    onSuccess,
+  }: {
+    branding: { appName: string; tagline?: string }
+    onSuccess: (r: { token?: string; user?: { id: string; email: string; name?: string; roles?: string[] } }) => void
+  }) => (
+    <div data-testid="login-page-builder">
+      <div data-testid="app-name">{branding.appName}</div>
+      {branding.tagline && <div data-testid="tagline">{branding.tagline}</div>}
+      <button
+        data-testid="mock-success-btn"
+        onClick={() =>
+          onSuccess({
+            token: 'test-token',
+            user: { id: 'u1', email: 'admin@test.com', name: 'Admin', roles: ['admin'] },
+          })
+        }
+      >
+        Trigger Success
+      </button>
+    </div>
+  ),
+}))
+
 import { useAuth } from '../lib/auth'
 
-const mockLogin = vi.fn()
+const mockLoginWithToken = vi.fn()
 
 function renderLogin() {
   return render(
@@ -26,140 +53,49 @@ describe('Login page', () => {
     vi.mocked(useAuth).mockReturnValue({
       user: null,
       loading: false,
-      login: mockLogin,
+      login: vi.fn(),
+      loginWithToken: mockLoginWithToken,
       logout: vi.fn(),
     })
   })
 
-  it('renders the login form with all required elements', () => {
+  it('renders LoginPageBuilder', () => {
     renderLogin()
-    expect(screen.getByText('Tobogganing')).toBeInTheDocument()
-    expect(screen.getByText('Hub Management Console')).toBeInTheDocument()
-    // "Sign In" appears as both h2 heading and button — check for both
-    expect(screen.getAllByText('Sign In').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(screen.getByTestId('login-page-builder')).toBeInTheDocument()
   })
 
-  it('shows Penguin Tech branding at the bottom', () => {
+  it('passes correct app name to LoginPageBuilder', () => {
     renderLogin()
-    expect(screen.getByText(/Powered by Penguin Tech Inc/i)).toBeInTheDocument()
+    expect(screen.getByTestId('app-name')).toHaveTextContent('Tobogganing')
   })
 
-  it('email input has correct type and attributes', () => {
+  it('passes correct tagline to LoginPageBuilder', () => {
     renderLogin()
-    const emailInput = screen.getByLabelText(/email/i)
-    expect(emailInput).toHaveAttribute('type', 'email')
-    expect(emailInput).toHaveAttribute('required')
-    expect(emailInput).toHaveAttribute('autocomplete', 'email')
+    expect(screen.getByTestId('tagline')).toHaveTextContent('Hub Management Console')
   })
 
-  it('password input has correct type and attributes', () => {
-    renderLogin()
-    const passwordInput = screen.getByLabelText(/password/i)
-    expect(passwordInput).toHaveAttribute('type', 'password')
-    expect(passwordInput).toHaveAttribute('required')
-    expect(passwordInput).toHaveAttribute('autocomplete', 'current-password')
+  it('calls loginWithToken on successful login', async () => {
+    const { getByTestId } = renderLogin()
+    getByTestId('mock-success-btn').click()
+
+    expect(mockLoginWithToken).toHaveBeenCalledWith(
+      'test-token',
+      expect.objectContaining({
+        id: 'u1',
+        email: 'admin@test.com',
+        name: 'Admin',
+        role: 'admin',
+      })
+    )
   })
 
-  it('calls login with email and password on form submit', async () => {
-    mockLogin.mockResolvedValue(undefined)
-    const user = userEvent.setup()
-    renderLogin()
+  it('maps first role from roles array to role field', async () => {
+    const { getByTestId } = renderLogin()
+    getByTestId('mock-success-btn').click()
 
-    await user.type(screen.getByLabelText(/email/i), 'admin@test.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    await waitFor(() => {
-      expect(mockLogin).toHaveBeenCalledWith('admin@test.com', 'password123')
-    })
-  })
-
-  it('shows loading state while submitting', async () => {
-    // login never resolves so we can check loading state
-    mockLogin.mockImplementation(() => new Promise(() => {}))
-    const user = userEvent.setup()
-    renderLogin()
-
-    await user.type(screen.getByLabelText(/email/i), 'admin@test.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /signing in/i })).toBeInTheDocument()
-    })
-    expect(screen.getByRole('button', { name: /signing in/i })).toBeDisabled()
-  })
-
-  it('shows error message on login failure', async () => {
-    mockLogin.mockRejectedValue(new Error('Invalid credentials'))
-    const user = userEvent.setup()
-    renderLogin()
-
-    await user.type(screen.getByLabelText(/email/i), 'bad@test.com')
-    await user.type(screen.getByLabelText(/password/i), 'wrongpass')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Invalid email or password/i)).toBeInTheDocument()
-    })
-  })
-
-  it('clears error on new submission attempt', async () => {
-    mockLogin.mockRejectedValueOnce(new Error('Invalid credentials'))
-    mockLogin.mockResolvedValueOnce(undefined)
-    const user = userEvent.setup()
-    renderLogin()
-
-    await user.type(screen.getByLabelText(/email/i), 'bad@test.com')
-    await user.type(screen.getByLabelText(/password/i), 'wrongpass')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Invalid email or password/i)).toBeInTheDocument()
-    })
-
-    // Try again - error should clear
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    // While submitting, error disappears
-    await waitFor(() => {
-      expect(screen.queryByText(/Invalid email or password/i)).not.toBeInTheDocument()
-    })
-  })
-
-  it('button is re-enabled after failed submission', async () => {
-    mockLogin.mockRejectedValue(new Error('Invalid credentials'))
-    const user = userEvent.setup()
-    renderLogin()
-
-    await user.type(screen.getByLabelText(/email/i), 'bad@test.com')
-    await user.type(screen.getByLabelText(/password/i), 'wrongpass')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    await waitFor(() => {
-      const btn = screen.getByRole('button', { name: /sign in/i })
-      expect(btn).not.toBeDisabled()
-    })
-  })
-
-  it('updates email field value as user types', async () => {
-    const user = userEvent.setup()
-    renderLogin()
-
-    const emailInput = screen.getByLabelText(/email/i)
-    await user.type(emailInput, 'hello@world.com')
-    expect(emailInput).toHaveValue('hello@world.com')
-  })
-
-  it('updates password field value as user types', async () => {
-    const user = userEvent.setup()
-    renderLogin()
-
-    const passwordInput = screen.getByLabelText(/password/i)
-    await user.type(passwordInput, 'mypassword')
-    expect(passwordInput).toHaveValue('mypassword')
+    expect(mockLoginWithToken).toHaveBeenCalledWith(
+      'test-token',
+      expect.objectContaining({ role: 'admin' })
+    )
   })
 })
