@@ -14,7 +14,7 @@ dependencies = [
     "quart-auth",
     "quart-cors",
     "hypercorn",
-    "pydal",
+    "penguin-dal @ file:///home/penguin/code/penguin-libs/packages/python-dal",
     "bcrypt",
     "pyjwt",
     "cryptography",

@@ -13,7 +13,6 @@ import logging
 from urllib.parse import urlparse
 
 from database import get_db, get_database_uri
-from pydal import DAL
 
 try:
     import boto3
@@ -174,20 +173,25 @@ class BackupManager:
             }
             
             # Backup each table
+            # db.tables is a dict[str, sqlalchemy.Table] in penguin-dal
             for table_name in db.tables:
-                table = db[table_name]
-                rows = db(table).select()
-                
+                sa_table = db.tables[table_name]
+                table_proxy = getattr(db, table_name)
+                # Select all rows using a full-table query via QuerySet
+                from penguin_dal.query import Query
+                from sqlalchemy import true as sa_true
+                rows = db(Query(sa_true(), table=sa_table)).select()
+
                 # Convert rows to JSON-serializable format
                 table_data = []
                 for row in rows:
                     row_dict = {}
-                    for field in table.fields:
-                        value = row[field]
+                    for col_name in sa_table.columns.keys():
+                        value = row.get(col_name)
                         # Handle datetime objects
                         if isinstance(value, datetime):
                             value = value.isoformat()
-                        row_dict[field] = value
+                        row_dict[col_name] = value
                     table_data.append(row_dict)
                 
                 backup_data["data"][table_name] = table_data
@@ -328,7 +332,7 @@ class BackupManager:
                 "total_rows_restored": 0,
                 "errors": []
             }
-            
+
             # Restore each table
             for table_name, table_data in backup_data['data'].items():
                 try:
@@ -336,39 +340,43 @@ class BackupManager:
                         logger.warning(f"Table {table_name} not found in current schema, skipping")
                         restore_stats["errors"].append(f"Table {table_name} not found")
                         continue
-                    
-                    table = db[table_name]
-                    
-                    # Clear existing data (optional - could make this configurable)
-                    db(table).delete()
-                    
+
+                    sa_table = db.tables[table_name]
+                    table_proxy = getattr(db, table_name)
+                    col_names = set(sa_table.columns.keys())
+
+                    # Clear existing data
+                    from penguin_dal.query import Query
+                    from sqlalchemy import true as sa_true
+                    db(Query(sa_true(), table=sa_table)).delete()
+
                     # Insert backup data
                     rows_restored = 0
                     for row_data in table_data:
-                        # Convert datetime strings back to datetime objects
+                        # Convert datetime strings back; drop unknown columns
+                        clean: dict = {}
                         for field, value in row_data.items():
-                            if field in table.fields:
-                                field_type = table[field].type
-                                if field_type == 'datetime' and value:
-                                    row_data[field] = datetime.fromisoformat(value)
-                        
-                        table.insert(**row_data)
+                            if field not in col_names:
+                                continue
+                            col_type = str(sa_table.columns[field].type)
+                            if 'DATETIME' in col_type.upper() and value:
+                                value = datetime.fromisoformat(value)
+                            clean[field] = value
+
+                        table_proxy.insert(**clean)
                         rows_restored += 1
-                    
-                    db.commit()
-                    
+
                     restore_stats["tables_restored"].append({
                         "name": table_name,
                         "rows": rows_restored
                     })
                     restore_stats["total_rows_restored"] += rows_restored
-                    
+
                     logger.info(f"Restored {rows_restored} rows to table {table_name}")
-                    
+
                 except Exception as e:
                     logger.error(f"Error restoring table {table_name}: {e}")
                     restore_stats["errors"].append(f"Table {table_name}: {str(e)}")
-                    db.rollback()
             
             restore_stats["completed_at"] = datetime.utcnow().isoformat()
             logger.info(f"Restore completed: {restore_stats['total_rows_restored']} rows restored")
