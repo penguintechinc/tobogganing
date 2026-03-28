@@ -18,6 +18,7 @@ from certs.certificate_manager import CertificateManager
 from auth.jwt_manager import JWTManager
 from auth.user_manager import UserManager
 from metrics.prometheus import manager_metrics
+from config.secrets import load_secrets, get_secret
 
 logger = structlog.get_logger()
 
@@ -83,9 +84,22 @@ def create_app() -> Quart:
 
         logger.info("Starting Tobogganing Hub API Service")
 
-        # Initialize database first
-        logger.info("Initializing PyDAL database connection")
-        initialize_database()
+        # Load secrets first — other services depend on them.
+        # Reads from K8s Secrets (when K8S_NAMESPACE is set) or env vars.
+        logger.info("Loading secrets via penguin-sal")
+        load_secrets()
+
+        # Wire loaded secrets back into the environment so downstream code
+        # that still uses os.getenv() continues to work unchanged.
+        import os as _os
+        for _secret_key in ("JWT_SECRET_KEY", "DB_PASS", "REDIS_PASSWORD"):
+            _val = get_secret(_secret_key)
+            if _val:
+                _os.environ.setdefault(_secret_key, _val)
+
+        # Initialize database first — registers penguin-dal AsyncDB on app
+        logger.info("Initializing penguin-dal (AsyncDB) database connection")
+        initialize_database(app)
 
         # Initialize core services
         cluster_manager = ClusterManager()
@@ -146,7 +160,7 @@ def create_app() -> Quart:
             )
 
         # Close database connections
-        close_database()
+        await close_database()
 
         # Shutdown thread pool
         thread_pool.shutdown(wait=True)

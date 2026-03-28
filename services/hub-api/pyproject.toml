@@ -32,6 +32,8 @@ dependencies = [
     "aiofiles",
     "psutil",
     "boto3",
+    "penguin-aaa @ file:///home/penguin/code/penguin-libs/packages/python-aaa",
+    "penguin-sal @ file:///home/penguin/code/penguin-libs/packages/python-secrets",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +46,8 @@ dev = [
     "isort",
     "mypy",
     "bandit",
+    "penguin-aaa @ file:///home/penguin/code/penguin-libs/packages/python-aaa",
+    "penguin-sal @ file:///home/penguin/code/penguin-libs/packages/python-secrets",
 ]
 
 [tool.black]
