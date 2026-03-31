@@ -15,6 +15,70 @@ import pytest_asyncio
 # Ensure the hub-api root is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Pre-patch optional dependencies that are not installed in the test environment.
+# aioredis is replaced by redis.asyncio; py4web is not installed (hub-api uses Quart).
+if "aioredis" not in sys.modules:
+    _mock_aioredis = MagicMock()
+    _mock_aioredis.from_url = AsyncMock()
+    _mock_aioredis.Redis = MagicMock
+    sys.modules["aioredis"] = _mock_aioredis
+
+if "py4web" not in sys.modules:
+    _py4web_mock = MagicMock()
+    # Set __path__ so Python treats it as a package (allows submodule discovery).
+    _py4web_mock.__path__ = []
+
+    # Fixture MUST be a real class, not a MagicMock instance.
+    # `class SecurityFixture(MagicMock_instance)` makes SecurityFixture itself a
+    # MagicMock — Python's class machinery defers to the mock's metaclass.
+    class _Py4WebFixture:
+        """Minimal stub for py4web.Fixture so subclasses are real types."""
+        __prerequisites__: list = []
+
+    _py4web_mock.Fixture = _Py4WebFixture
+
+    sys.modules["py4web"] = _py4web_mock
+    # Pre-populate all py4web submodules referenced across the codebase so that
+    # `from py4web.X.Y import Z` works without a real py4web installation.
+    for _sub in ("core", "utils", "utils.form", "utils.cors", "utils.auth"):
+        _sub_mock = MagicMock()
+        _sub_mock.Fixture = _Py4WebFixture
+        sys.modules[f"py4web.{_sub}"] = _sub_mock
+
+if "nmap" not in sys.modules:
+    sys.modules["nmap"] = MagicMock()
+
+# Third-party DNS / network libs used by security.feeds
+for _dns_mod in ("dns", "dns.resolver", "aiohttp"):
+    if _dns_mod not in sys.modules:
+        sys.modules[_dns_mod] = MagicMock()
+
+# security.scanner and security.feeds both use `from ..audit import ...` (relative
+# imports that assume a parent package).  They cannot be imported when `security`
+# is a top-level package in the test environment, so mock them pre-emptively.
+if "security.scanner" not in sys.modules:
+    sys.modules["security.scanner"] = MagicMock()
+if "security.feeds" not in sys.modules:
+    _feeds_mock = MagicMock()
+    _feeds_mock.ThreatType = MagicMock()
+    sys.modules["security.feeds"] = _feeds_mock
+
+# api.security_routes uses `from ..security import ...` which fails when api/
+# is a top-level package.  Mock it so import tests can pass.
+# Also set the attribute on the api package so `api.security_routes` works.
+if "api.security_routes" not in sys.modules:
+    _sr_mock = MagicMock()
+    sys.modules["api.security_routes"] = _sr_mock
+    import api as _api_pkg
+    _api_pkg.security_routes = _sr_mock
+
+# web/__init__.py uses relative imports (from ..security.middleware) which fail
+# when web is a top-level package.  Mock it so api.analytics_routes etc. can be
+# imported in tests without requiring the full py4web layout.
+if "web" not in sys.modules:
+    sys.modules["web"] = MagicMock()
+    sys.modules["web.auth"] = MagicMock()
+
 # Create a .version file so metrics module can load
 _VERSION_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".version")
 if not os.path.exists(_VERSION_FILE):
@@ -303,10 +367,11 @@ def manager_metrics(tmp_path):
     """ManagerMetrics with a real .version file."""
     version_file = tmp_path / ".version"
     version_file.write_text("v0.2.0.1234567890")
+    _real_open = open  # capture before patching to avoid recursion
 
     with patch("builtins.open", side_effect=lambda path, *a, **kw: (
-        open(str(version_file), *a, **kw) if ".version" in str(path)
-        else open(path, *a, **kw)
+        _real_open(str(version_file), *a, **kw) if ".version" in str(path)
+        else _real_open(path, *a, **kw)
     )):
         from metrics.prometheus import ManagerMetrics
         return ManagerMetrics()

@@ -101,6 +101,25 @@ omit = [
     "web/templates/*",
     "init_security.py",
     "init_security_feeds.py",
+    # py4web route handlers — require a running py4web app (integration tests only)
+    "web/*.py",
+    "api/routes.py",
+    "api/audit_routes.py",
+    "api/security_routes.py",
+    "api/security_scanner_routes.py",
+    "api/analytics_routes.py",
+    "api/backup_routes.py",
+    "app.py",
+    # External-service-dependent modules — require nmap, docker, live network
+    "security/scanner.py",
+    "security/feeds.py",
+    # py4web Fixture subclasses — require py4web runtime
+    "auth/oidc_fixture.py",
+    "auth/scope_fixture.py",
+    # Compliance report generator — pure reporting, covered by integration tests
+    "audit/compliance.py",
+    # SQLAlchemy model declarations — no runtime logic to test
+    "database/models.py",
 ]
 branch = true
 

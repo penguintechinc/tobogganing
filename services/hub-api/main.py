@@ -72,7 +72,7 @@ def create_app() -> Quart:
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-me-in-production")
 
     # Register blueprints
-    from api.routes import api_bp
+    from api import api_bp
 
     app.register_blueprint(api_bp)
 

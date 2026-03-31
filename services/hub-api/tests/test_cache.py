@@ -79,8 +79,11 @@ class TestRedisCacheConnect:
 
     @pytest.mark.asyncio
     async def test_connect_returns_false_on_error(self):
+        import sys
         cache = RedisCache(redis_url="redis://localhost:6379/0")
-        _mock_aioredis.from_url = AsyncMock(side_effect=ConnectionError("refused"))
+        # Update the module that is actually imported (may differ from local _mock_aioredis
+        # if conftest.py pre-populated sys.modules["aioredis"] first).
+        sys.modules["aioredis"].from_url = AsyncMock(side_effect=ConnectionError("refused"))
         result = await cache.connect()
         assert result is False
         assert cache.connected is False
@@ -243,7 +246,7 @@ class TestTTLOperations:
     async def test_extend_ttl_calls_expire(self, redis_cache, pool_mock):
         pool_mock.ttl = AsyncMock(return_value=60)
         pool_mock.expire = AsyncMock(return_value=True)
-        await redis_cache.extend_ttl("ttlkey", additional_seconds=60)
+        await redis_cache.extend_ttl("ttlkey", ttl=60)
         # Either ttl or expire should have been called
         assert pool_mock.ttl.called or pool_mock.expire.called
 
@@ -287,12 +290,14 @@ class TestModuleHelpers:
     def test_cleanup_cache_is_callable(self):
         assert callable(cleanup_cache)
 
-    def test_get_cache_returns_redis_cache_type(self):
-        cache = get_cache()
+    @pytest.mark.asyncio
+    async def test_get_cache_returns_redis_cache_type(self):
+        cache = await get_cache()
         assert isinstance(cache, RedisCache)
 
-    def test_get_firewall_cache_returns_instance(self):
-        cache = get_firewall_cache()
+    @pytest.mark.asyncio
+    async def test_get_firewall_cache_returns_instance(self):
+        cache = await get_firewall_cache()
         assert isinstance(cache, FirewallRulesCache)
 
 
@@ -316,3 +321,255 @@ class TestFirewallRulesCache:
         pool_mock.setex = AsyncMock(return_value=True)
         await fw_cache.cache.set("fw:rules:user-001", [{"rule": "data"}])
         assert pool_mock.setex.called
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for missing coverage
+# ---------------------------------------------------------------------------
+
+class TestRedisDisconnect:
+    """Test disconnect method path coverage."""
+
+    @pytest.mark.asyncio
+    async def test_disconnect_when_pool_is_none_does_nothing(self, pool_mock):
+        """Disconnect when pool is None does nothing (connected unchanged)."""
+        cache = RedisCache()
+        cache.pool = None
+        cache.connected = True
+        await cache.disconnect()
+        # When pool is None, the method returns early without changing connected
+        assert cache.connected is True
+
+    @pytest.mark.asyncio
+    async def test_disconnect_calls_pool_close(self, redis_cache, pool_mock):
+        """Disconnect calls pool.close() when pool is set."""
+        pool_mock.close = AsyncMock()
+        redis_cache.pool = pool_mock
+        redis_cache.connected = True
+        await redis_cache.disconnect()
+        # pool.close should have been called
+        assert pool_mock.close.called
+        assert redis_cache.connected is False
+
+
+class TestSetEdgeCases:
+    """Test edge cases in set() method."""
+
+    @pytest.mark.asyncio
+    async def test_set_with_none_pool_returns_false(self, redis_cache):
+        """Set returns False when pool is None but connected=True."""
+        redis_cache.pool = None
+        result = await redis_cache.set("key", "value")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_set_serializes_datetime(self, redis_cache, pool_mock):
+        """Set handles datetime objects via JSON serialization."""
+        from datetime import datetime
+        dt = datetime(2025, 1, 1, 12, 0, 0)
+        pool_mock.setex = AsyncMock(return_value=True)
+        result = await redis_cache.set("dt_key", dt)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_set_serializes_float(self, redis_cache, pool_mock):
+        """Set handles float values."""
+        pool_mock.setex = AsyncMock(return_value=True)
+        result = await redis_cache.set("float_key", 3.14159)
+        assert result is True
+
+
+class TestGetEdgeCases:
+    """Test edge cases in get() method."""
+
+    @pytest.mark.asyncio
+    async def test_get_with_none_pool_returns_none(self, redis_cache):
+        """Get returns None when pool is None."""
+        redis_cache.pool = None
+        result = await redis_cache.get("missing_key")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_returns_plain_string_when_json_fails(self, redis_cache, pool_mock):
+        """Get returns plain string if JSON decode fails."""
+        pool_mock.get = AsyncMock(return_value="not json, just text")
+        result = await redis_cache.get("plain_text_key")
+        assert result == "not json, just text"
+
+
+class TestDeleteEdgeCases:
+    """Test edge cases in delete() method."""
+
+    @pytest.mark.asyncio
+    async def test_delete_with_none_pool_returns_false(self, redis_cache):
+        """Delete returns False when pool is None."""
+        redis_cache.pool = None
+        result = await redis_cache.delete("key_to_delete")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_delete_returns_false_when_key_not_found(self, redis_cache, pool_mock):
+        """Delete returns False when pool.delete returns 0."""
+        pool_mock.delete = AsyncMock(return_value=0)
+        result = await redis_cache.delete("nonexistent_key")
+        assert result is False
+
+
+class TestExistsEdgeCases:
+    """Test edge cases in exists() method."""
+
+    @pytest.mark.asyncio
+    async def test_exists_with_none_pool_returns_false(self, redis_cache):
+        """Exists returns False when pool is None."""
+        redis_cache.pool = None
+        result = await redis_cache.exists("key")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_exists_handles_redis_error(self, redis_cache, pool_mock):
+        """Exists returns False on Redis error."""
+        pool_mock.exists = AsyncMock(side_effect=RuntimeError("Redis down"))
+        result = await redis_cache.exists("key")
+        assert result is False
+
+
+class TestTTLEdgeCases:
+    """Test edge cases in TTL operations."""
+
+    @pytest.mark.asyncio
+    async def test_get_ttl_returns_negative_when_not_connected(self, redis_cache):
+        """Get TTL returns -2 when not connected."""
+        redis_cache.connected = False
+        result = await redis_cache.get_ttl("key")
+        assert result == -2
+
+    @pytest.mark.asyncio
+    async def test_get_ttl_handles_redis_error(self, redis_cache, pool_mock):
+        """Get TTL returns -2 on Redis error."""
+        pool_mock.ttl = AsyncMock(side_effect=Exception("Redis error"))
+        result = await redis_cache.get_ttl("key")
+        assert result == -2
+
+    @pytest.mark.asyncio
+    async def test_extend_ttl_when_not_connected(self, redis_cache):
+        """Extend TTL returns False when not connected."""
+        redis_cache.connected = False
+        result = await redis_cache.extend_ttl("key", 600)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_extend_ttl_handles_redis_error(self, redis_cache, pool_mock):
+        """Extend TTL returns False on Redis error."""
+        pool_mock.expire = AsyncMock(side_effect=Exception("Redis error"))
+        result = await redis_cache.extend_ttl("key", 600)
+        assert result is False
+
+
+class TestInvalidatePatternEdgeCases:
+    """Test edge cases in invalidate_pattern() method."""
+
+    @pytest.mark.asyncio
+    async def test_invalidate_pattern_when_not_connected(self, redis_cache):
+        """Invalidate pattern returns 0 when not connected."""
+        redis_cache.connected = False
+        result = await redis_cache.invalidate_pattern("test:*")
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_invalidate_pattern_handles_redis_error(self, redis_cache, pool_mock):
+        """Invalidate pattern returns 0 on Redis error."""
+        pool_mock.keys = AsyncMock(side_effect=Exception("Redis error"))
+        result = await redis_cache.invalidate_pattern("error:*")
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_invalidate_pattern_with_multiple_keys(self, redis_cache, pool_mock):
+        """Invalidate pattern correctly deletes multiple keys."""
+        pool_mock.keys = AsyncMock(return_value=["key1", "key2", "key3"])
+        pool_mock.delete = AsyncMock(return_value=3)
+        result = await redis_cache.invalidate_pattern("pattern:*")
+        assert result == 3
+
+
+class TestFirewallCacheIntegration:
+    """Test FirewallRulesCache functionality."""
+
+    @pytest.mark.asyncio
+    async def test_get_user_rules(self, redis_cache, pool_mock):
+        """FirewallRulesCache.get_user_rules retrieves user rules."""
+        fw = FirewallRulesCache(redis_cache)
+        rules = {"rule_id": "r1", "action": "allow"}
+        pool_mock.get = AsyncMock(return_value=json.dumps(rules))
+        result = await fw.get_user_rules("user-123")
+        assert result == rules
+
+    @pytest.mark.asyncio
+    async def test_set_user_rules_adds_timestamp(self, redis_cache, pool_mock):
+        """FirewallRulesCache.set_user_rules includes cached_at timestamp."""
+        fw = FirewallRulesCache(redis_cache)
+        rules = {"rule_id": "r1", "action": "allow"}
+        pool_mock.setex = AsyncMock(return_value=True)
+        result = await fw.set_user_rules("user-456", rules, ttl=300)
+        assert result is True
+        # Check that setex was called with serialized data including timestamp
+        assert pool_mock.setex.called
+
+    @pytest.mark.asyncio
+    async def test_get_all_rules(self, redis_cache, pool_mock):
+        """FirewallRulesCache.get_all_rules retrieves all rules."""
+        fw = FirewallRulesCache(redis_cache)
+        all_rules = {"users": ["user1", "user2"]}
+        pool_mock.get = AsyncMock(return_value=json.dumps(all_rules))
+        result = await fw.get_all_rules()
+        assert result == all_rules
+
+    @pytest.mark.asyncio
+    async def test_set_all_rules_with_shorter_ttl(self, redis_cache, pool_mock):
+        """FirewallRulesCache.set_all_rules uses shorter TTL."""
+        fw = FirewallRulesCache(redis_cache)
+        rules = {"users": ["user1", "user2"]}
+        pool_mock.setex = AsyncMock(return_value=True)
+        result = await fw.set_all_rules(rules, ttl=180)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_invalidate_user_deletes_user_and_all_rules(self, redis_cache, pool_mock):
+        """FirewallRulesCache.invalidate_user deletes both user and all_rules caches."""
+        fw = FirewallRulesCache(redis_cache)
+        pool_mock.delete = AsyncMock(return_value=1)
+        result = await fw.invalidate_user("user-789")
+        assert result is True
+        # Should be called twice: once for user, once for all_rules
+        assert pool_mock.delete.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_invalidate_all_firewall_caches(self, redis_cache, pool_mock):
+        """FirewallRulesCache.invalidate_all clears all firewall caches."""
+        fw = FirewallRulesCache(redis_cache)
+        pool_mock.keys = AsyncMock(return_value=["firewall:user:1", "firewall:all_rules"])
+        pool_mock.delete = AsyncMock(return_value=2)
+        result = await fw.invalidate_all()
+        assert result == 2
+
+
+class TestGlobalSingleton:
+    """Test module-level singleton functions with real initialization."""
+
+    @pytest.mark.asyncio
+    async def test_cleanup_cache_clears_globals(self, pool_mock):
+        """cleanup_cache clears global cache_instance and firewall_cache."""
+        # Set up a mock cache
+        cache = RedisCache()
+        cache.pool = pool_mock
+        cache.connected = True
+
+        # Manually set globals (would be set by get_cache/get_firewall_cache in real scenario)
+        import cache.redis_cache as cache_mod
+        cache_mod.cache_instance = cache
+        cache_mod.firewall_cache = FirewallRulesCache(cache)
+
+        await cleanup_cache()
+
+        # Verify globals are cleared
+        assert cache_mod.cache_instance is None
+        assert cache_mod.firewall_cache is None

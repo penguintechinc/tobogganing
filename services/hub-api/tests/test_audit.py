@@ -229,7 +229,7 @@ class TestGetAuditEvents:
         try:
             result = audit_logger_inst.get_audit_events(
                 user_id="user-001",
-                event_type=AuditEventType.USER_LOGIN,
+                event_types=[AuditEventType.USER_LOGIN],
                 limit=50,
             )
             assert isinstance(result, list)
@@ -249,7 +249,21 @@ class TestGetAuditStatistics:
         db.__call__ = MagicMock(return_value=query_result)
         db.executesql = MagicMock(return_value=[])
 
-        result = audit_logger_inst.get_audit_statistics()
+        # PyDAL field comparisons (>=, <=, ==, !=) return NotImplemented by default
+        # in MagicMock, causing datetime's fallback comparison to raise TypeError.
+        # Configure each field's comparison operators to return a query mock.
+        _q = MagicMock()
+        for field_name in ("timestamp", "archived", "risk_score", "outcome", "user_id", "ip_address"):
+            field = getattr(db.audit_events, field_name)
+            field.__ge__ = MagicMock(return_value=_q)
+            field.__le__ = MagicMock(return_value=_q)
+            field.__eq__ = MagicMock(return_value=_q)
+            field.__ne__ = MagicMock(return_value=_q)
+
+        from datetime import datetime, timedelta, timezone
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=7)
+        result = audit_logger_inst.get_audit_statistics(start_date=start, end_date=end)
         assert isinstance(result, dict)
 
 
@@ -264,6 +278,12 @@ class TestIntegrity:
         db.__call__ = MagicMock(return_value=query_result)
         db.executesql = MagicMock(return_value=[])
 
+        # Configure timestamp field comparisons to avoid NotImplemented / TypeError.
+        _q = MagicMock()
+        db.audit_events.timestamp.__ge__ = MagicMock(return_value=_q)
+        db.audit_events.timestamp.__le__ = MagicMock(return_value=_q)
+        db.audit_integrity.day_date.__eq__ = MagicMock(return_value=_q)
+
         try:
             result = audit_logger_inst.calculate_daily_integrity(
                 date=datetime.utcnow().date()
@@ -277,8 +297,331 @@ class TestIntegrity:
         query_result.select = MagicMock(return_value=[])
         db.__call__ = MagicMock(return_value=query_result)
 
+        # Configure timestamp field comparisons to avoid NotImplemented / TypeError.
+        _q = MagicMock()
+        db.audit_events.timestamp.__ge__ = MagicMock(return_value=_q)
+        db.audit_events.timestamp.__le__ = MagicMock(return_value=_q)
+        db.audit_integrity.day_date.__ge__ = MagicMock(return_value=_q)
+        db.audit_integrity.day_date.__le__ = MagicMock(return_value=_q)
+        db.audit_integrity.day_date.__eq__ = MagicMock(return_value=_q)
+
+        from datetime import date, timedelta
+        end = date.today()
+        start = end - timedelta(days=7)
+
         try:
-            result = audit_logger_inst.verify_audit_integrity()
+            result = audit_logger_inst.verify_audit_integrity(start_date=start, end_date=end)
             assert result is None or isinstance(result, (bool, dict))
         except Exception as exc:
             pytest.fail(f"verify_audit_integrity raised: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for missing coverage
+# ---------------------------------------------------------------------------
+
+class TestAuditEventTypeCompleteness:
+    """Test all AuditEventType enum values."""
+
+    def test_user_session_expired_exists(self):
+        assert AuditEventType.USER_SESSION_EXPIRED is not None
+
+    def test_resource_created_exists(self):
+        assert AuditEventType.RESOURCE_CREATED is not None
+
+    def test_resource_modified_exists(self):
+        assert AuditEventType.RESOURCE_MODIFIED is not None
+
+    def test_resource_accessed_unauthorized_exists(self):
+        assert AuditEventType.RESOURCE_ACCESSED_UNAUTHORIZED is not None
+
+    def test_system_config_changed_exists(self):
+        assert AuditEventType.SYSTEM_CONFIG_CHANGED is not None
+
+    def test_user_created_exists(self):
+        assert AuditEventType.USER_CREATED is not None
+
+    def test_user_modified_exists(self):
+        assert AuditEventType.USER_MODIFIED is not None
+
+    def test_user_deleted_exists(self):
+        assert AuditEventType.USER_DELETED is not None
+
+    def test_role_assigned_exists(self):
+        assert AuditEventType.ROLE_ASSIGNED is not None
+
+    def test_role_revoked_exists(self):
+        assert AuditEventType.ROLE_REVOKED is not None
+
+    def test_ip_blocked_exists(self):
+        assert AuditEventType.IP_BLOCKED is not None
+
+    def test_ip_unblocked_exists(self):
+        assert AuditEventType.IP_UNBLOCKED is not None
+
+    def test_rate_limit_exceeded_exists(self):
+        assert AuditEventType.RATE_LIMIT_EXCEEDED is not None
+
+    def test_ddos_detected_exists(self):
+        assert AuditEventType.DDOS_DETECTED is not None
+
+    def test_data_import_exists(self):
+        assert AuditEventType.DATA_IMPORT is not None
+
+    def test_data_backup_exists(self):
+        assert AuditEventType.DATA_BACKUP is not None
+
+    def test_data_restore_exists(self):
+        assert AuditEventType.DATA_RESTORE is not None
+
+    def test_system_start_exists(self):
+        assert AuditEventType.SYSTEM_START is not None
+
+    def test_system_stop_exists(self):
+        assert AuditEventType.SYSTEM_STOP is not None
+
+    def test_service_start_exists(self):
+        assert AuditEventType.SERVICE_START is not None
+
+    def test_service_stop_exists(self):
+        assert AuditEventType.SERVICE_STOP is not None
+
+
+class TestComplianceFrameworkCompleteness:
+    """Test all ComplianceFramework enum values."""
+
+    def test_gdpr_exists(self):
+        assert ComplianceFramework.GDPR is not None
+
+    def test_hipaa_exists(self):
+        assert ComplianceFramework.HIPAA is not None
+
+    def test_pci_dss_exists(self):
+        assert ComplianceFramework.PCI_DSS is not None
+
+    def test_iso27001_exists(self):
+        assert ComplianceFramework.ISO27001 is not None
+
+    def test_nist_exists(self):
+        assert ComplianceFramework.NIST is not None
+
+
+class TestLogEventWithVariations:
+    """Test log_event with different parameter combinations."""
+
+    def test_log_event_with_severity_high(self, audit_logger_inst):
+        try:
+            event_id = audit_logger_inst.log_event(
+                event_type=AuditEventType.SECURITY_INCIDENT,
+                action="Malicious activity detected",
+                ip_address="192.168.1.100",
+                severity="critical",
+                outcome="failure",
+            )
+            assert isinstance(event_id, str)
+            assert len(event_id) > 0
+        except Exception as exc:
+            pytest.fail(f"log_event with critical severity raised: {exc}")
+
+    def test_log_event_with_custom_risk_score(self, audit_logger_inst):
+        try:
+            event_id = audit_logger_inst.log_event(
+                event_type=AuditEventType.PRIVILEGE_ESCALATION,
+                action="Admin escalated privileges",
+                ip_address="10.0.0.5",
+                custom_risk_score=9,
+                outcome="success",
+            )
+            assert isinstance(event_id, str)
+        except Exception as exc:
+            pytest.fail(f"log_event with custom_risk_score raised: {exc}")
+
+    def test_log_event_with_session_and_request_ids(self, audit_logger_inst):
+        try:
+            event_id = audit_logger_inst.log_event(
+                event_type=AuditEventType.USER_LOGIN,
+                action="User logged in",
+                ip_address="10.0.0.1",
+                session_id="sess-abc123",
+                request_id="req-def456",
+                user_id="user-001",
+                outcome="success",
+            )
+            assert isinstance(event_id, str)
+        except Exception as exc:
+            pytest.fail(f"log_event with session/request IDs raised: {exc}")
+
+    def test_log_event_with_resource_access(self, audit_logger_inst):
+        try:
+            event_id = audit_logger_inst.log_event(
+                event_type=AuditEventType.RESOURCE_ACCESS,
+                action="Accessed cluster configuration",
+                ip_address="10.1.1.1",
+                resource_type="cluster",
+                resource_id="cluster-prod-001",
+                outcome="success",
+            )
+            assert isinstance(event_id, str)
+        except Exception as exc:
+            pytest.fail(f"log_event with resource access raised: {exc}")
+
+    def test_log_event_partial_outcome(self, audit_logger_inst):
+        try:
+            event_id = audit_logger_inst.log_event(
+                event_type=AuditEventType.DATA_EXPORT,
+                action="Exported audit logs",
+                ip_address="10.2.2.2",
+                outcome="partial",
+                severity="warning",
+            )
+            assert isinstance(event_id, str)
+        except Exception as exc:
+            pytest.fail(f"log_event with partial outcome raised: {exc}")
+
+
+class TestRiskScoreCalculationVariations:
+    """Test risk score calculation with different combinations."""
+
+    def test_privilege_escalation_has_high_base_score(self, audit_logger_inst):
+        score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.PRIVILEGE_ESCALATION,
+            severity="info",
+            outcome="success",
+        )
+        assert score >= 6  # Privilege escalation has high base score
+
+    def test_security_incident_highest_score(self, audit_logger_inst):
+        score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.SECURITY_INCIDENT,
+            severity="critical",
+            outcome="failure",
+        )
+        assert score >= 8  # Security incident should be high risk
+
+    def test_ddos_detected_high_score(self, audit_logger_inst):
+        score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.DDOS_DETECTED,
+            severity="critical",
+            outcome="failure",
+        )
+        assert score >= 6
+
+    def test_user_logout_lowest_score(self, audit_logger_inst):
+        score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.USER_LOGOUT,
+            severity="debug",
+            outcome="success",
+        )
+        assert score <= 2  # User logout should be low risk
+
+    def test_risk_score_respects_severity_multiplier(self, audit_logger_inst):
+        debug_score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.USER_LOGIN_FAILED,
+            severity="debug",
+            outcome="failure",
+        )
+        critical_score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.USER_LOGIN_FAILED,
+            severity="critical",
+            outcome="failure",
+        )
+        assert critical_score > debug_score
+
+    def test_risk_score_respects_outcome_multiplier(self, audit_logger_inst):
+        success_score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.CONFIG_CHANGED,
+            severity="info",
+            outcome="success",
+        )
+        failure_score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.CONFIG_CHANGED,
+            severity="info",
+            outcome="failure",
+        )
+        assert failure_score > success_score
+
+    def test_risk_score_clamped_to_max_10(self, audit_logger_inst):
+        score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.SECURITY_INCIDENT,
+            severity="critical",
+            outcome="failure",
+        )
+        assert score <= 10
+
+    def test_risk_score_clamped_to_min_1(self, audit_logger_inst):
+        score = audit_logger_inst._calculate_risk_score(
+            event_type=AuditEventType.USER_LOGIN,
+            severity="debug",
+            outcome="success",
+        )
+        assert score >= 1
+
+
+class TestGetAuditEventsFiltering:
+    """Test get_audit_events with various filters."""
+
+    def test_get_audit_events_with_date_range(self, audit_logger_inst, db):
+        from datetime import datetime, timedelta, timezone
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=7)
+
+        # Mock the query field comparisons
+        _q = MagicMock()
+        db.audit_events.timestamp.__ge__ = MagicMock(return_value=_q)
+        db.audit_events.timestamp.__le__ = MagicMock(return_value=_q)
+        db.audit_events.archived.__eq__ = MagicMock(return_value=_q)
+        _q.__and__ = MagicMock(return_value=_q)
+
+        query_result = MagicMock()
+        query_result.select = MagicMock(return_value=[])
+        db.__call__ = MagicMock(return_value=query_result)
+
+        try:
+            result = audit_logger_inst.get_audit_events(
+                start_date=start,
+                end_date=end,
+            )
+            assert isinstance(result, list)
+        except Exception as exc:
+            pytest.fail(f"get_audit_events with date range raised: {exc}")
+
+    def test_get_audit_events_with_severity_filter(self, audit_logger_inst):
+        try:
+            result = audit_logger_inst.get_audit_events(
+                severity_filter=["error", "critical"],
+                limit=100,
+            )
+            assert isinstance(result, list)
+        except Exception as exc:
+            pytest.fail(f"get_audit_events with severity_filter raised: {exc}")
+
+    def test_get_audit_events_with_offset(self, audit_logger_inst):
+        try:
+            result = audit_logger_inst.get_audit_events(
+                limit=50,
+                offset=100,
+            )
+            assert isinstance(result, list)
+        except Exception as exc:
+            pytest.fail(f"get_audit_events with offset raised: {exc}")
+
+
+class TestIntegrityCalculation:
+    """Test audit integrity checksum calculations."""
+
+    def test_recalculate_daily_checksum_returns_hex_string(self, audit_logger_inst, db):
+        from datetime import date, datetime
+
+        # Mock the query field comparisons
+        _q = MagicMock()
+        db.audit_events.timestamp.__ge__ = MagicMock(return_value=_q)
+        db.audit_events.timestamp.__le__ = MagicMock(return_value=_q)
+        _q.__and__ = MagicMock(return_value=_q)
+
+        query_result = MagicMock()
+        query_result.select = MagicMock(return_value=[])
+        db.__call__ = MagicMock(return_value=query_result)
+
+        checksum = audit_logger_inst._recalculate_daily_checksum(date.today())
+        assert isinstance(checksum, str)
+        assert len(checksum) == 64  # SHA-256 hex digest length
