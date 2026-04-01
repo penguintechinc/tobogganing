@@ -28,6 +28,15 @@ This repository may contain `.local.md` variant files that provide project-speci
 
 **Always check for and read `.local.md` files** alongside standard files to ensure you have the complete context for this specific repository.
 
+## Global vs Local Rules and Skills
+
+**Standard rules and skills are installed globally at `~/.claude/{rules,skills}/`** by the `update_standards.sh` script in the `admin` repo. They are NOT symlinked into individual repos.
+
+- **Global** (`~/.claude/rules/*.md`, `~/.claude/skills/*/SKILL.md`): Managed centrally, apply to all projects
+- **Local** (`{REPO_ROOT}/.claude/rules/*.local.md`, `{REPO_ROOT}/.claude/skills/*/*.local.md`): Project-specific overrides, stay in the repo
+
+The `update_standards.sh` script copies rules/skills from `~/code/.claude/` to `~/.claude/` and cleans up old per-repo symlinks (preserving `.local.md` files).
+
 ---
 
 ## MCP Servers
