@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/integrating-license-server/SKILL.md

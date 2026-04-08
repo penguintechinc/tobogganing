@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/implementing-database-patterns/SKILL.md
