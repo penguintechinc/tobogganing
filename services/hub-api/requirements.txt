@@ -37,7 +37,7 @@ structlog==23.2.0
 
 # PenguinTech shared libraries
 # TODO: regenerate with pip-compile --generate-hashes once penguin-utils and penguin-licensing are published to PyPI
-penguin-utils>=0.2.0
+penguin-utils>=0.1.0
 penguin-licensing>=0.1.0
 
 # Utilities

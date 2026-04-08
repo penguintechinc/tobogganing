@@ -208,17 +208,28 @@ jobs:
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
+    - name: Check out penguin-libs (local package dependencies)
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        repository: penguintechinc/penguin-libs
+        token: ${{ secrets.GITHUB_TOKEN }}
+        path: /home/runner/work/penguin-libs
+
+    - name: Rewrite local package paths for CI environment
+      run: |
+        sed -i 's|file:/home/penguin/code/penguin-libs|file:///home/runner/work/penguin-libs|g' services/hub-webui/package.json
+
     - name: Set up Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        cache-dependency-path: services/hub-webui/package-lock.json
+        cache-dependency-path: services/hub-webui/package.json
 
     - name: Install dependencies
       run: |
         cd services/hub-webui
-        npm ci
+        npm install
 
     - name: Lint
       run: |

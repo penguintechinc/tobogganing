@@ -105,6 +105,10 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/pelletier/go-toml/v2 v2.1.0 h1:FnwAJ4oYMvbT/34k9zzHuZNrhlz48GB3/s6at6/MHO4=
 github.com/pelletier/go-toml/v2 v2.1.0/go.mod h1:tJU2Z3ZkXwnxa4DPO899bsyIoywizdUvyaeZurnPPDc=
+github.com/penguintechinc/penguin-libs/packages/go-aaa v0.0.0-20260401222633-36861ceb9e3a h1:Kv3N5NDx6wgIHVJ5JA6rHACctngOqc5SC4mO8KGpbTE=
+github.com/penguintechinc/penguin-libs/packages/go-aaa v0.0.0-20260401222633-36861ceb9e3a/go.mod h1:OURC+v2TG8kxQubn1T6R7CKkqQmMmZs7pv7M3773xMU=
+github.com/penguintechinc/penguin-libs/packages/go-common v0.0.0-20260401222633-36861ceb9e3a h1:8Pd9DM1ldoWy5S1x7C4Blq+n023SX+fPCp6yD+sSEKk=
+github.com/penguintechinc/penguin-libs/packages/go-common v0.0.0-20260401222633-36861ceb9e3a/go.mod h1:3oO0kKIhVa2I8nbYKFlb+qTa+XptfkyewIC4I6/ysco=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
