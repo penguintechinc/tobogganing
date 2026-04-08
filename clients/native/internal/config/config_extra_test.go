@@ -9,7 +9,7 @@ import (
 // --- GetConfigDir Linux XDG_CONFIG_HOME branch ---
 
 func TestGetConfigDir_Linux_WithXDGConfigHome(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != platformLinux {
 		t.Skip("XDG_CONFIG_HOME test only runs on Linux")
 	}
 
@@ -24,7 +24,7 @@ func TestGetConfigDir_Linux_WithXDGConfigHome(t *testing.T) {
 }
 
 func TestGetConfigDir_Linux_WithoutXDGConfigHome(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != platformLinux {
 		t.Skip("Linux-only test")
 	}
 

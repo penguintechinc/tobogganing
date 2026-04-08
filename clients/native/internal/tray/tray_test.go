@@ -94,9 +94,9 @@ func TestTrayManager_Stop_CancelsContext(t *testing.T) {
 	mgr.Stop()
 	select {
 	case <-mgr.ctx.Done():
-		// context was cancelled — expected
+		// context was canceled — expected
 	default:
-		t.Error("context should be cancelled after Stop")
+		t.Error("context should be canceled after Stop")
 	}
 }
 

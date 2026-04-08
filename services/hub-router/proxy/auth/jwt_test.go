@@ -69,7 +69,7 @@ func setupJWTServerReal(t *testing.T, key *rsa.PrivateKey) *httptest.Server {
 		}
 		body, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
-		_ = w.Write(body)
+		_, _ = w.Write(body)
 	}))
 }
 

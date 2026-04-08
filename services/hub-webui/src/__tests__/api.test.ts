@@ -226,7 +226,7 @@ describe('API client module', () => {
     })
 
     it('create posts policy data and returns created policy', async () => {
-      const { id, created_at, updated_at, ...policyData } = mockPolicy
+      const { id: _id, created_at: _created_at, updated_at: _updated_at, ...policyData } = mockPolicy
       mock.onPost('/policies').reply(201, mockPolicy)
 
       const result = await policiesApi.create(policyData)
@@ -285,7 +285,7 @@ describe('API client module', () => {
     })
 
     it('create posts hub data and returns created hub', async () => {
-      const { id, ...hubData } = mockHub
+      const { id: _id, ...hubData } = mockHub
       mock.onPost('/hubs').reply(201, mockHub)
 
       const result = await hubsApi.create(hubData)
@@ -308,7 +308,7 @@ describe('API client module', () => {
     })
 
     it('create posts user data and returns created user', async () => {
-      const { id, created_at, ...userData } = mockUser
+      const { id: _id, created_at: _created_at, ...userData } = mockUser
       mock.onPost('/users').reply(201, mockUser)
 
       const result = await usersApi.create({ ...userData, password: 'pass123' })
@@ -338,7 +338,7 @@ describe('API client module', () => {
     })
 
     it('create posts provider data and returns created provider', async () => {
-      const { id, ...providerData } = mockIdentityProvider
+      const { id: _id, ...providerData } = mockIdentityProvider
       mock.onPost('/identity').reply(201, mockIdentityProvider)
 
       const result = await identityApi.create(providerData)

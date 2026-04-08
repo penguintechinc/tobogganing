@@ -10,6 +10,8 @@ import (
 	"github.com/tobogganing/clients/native/internal/config"
 )
 
+const nonExistentWGInterface = "wg-nonexistent-9999"
+
 // buildTestConfig creates a Config suitable for tests.
 func buildTestConfig(t *testing.T) *config.Config {
 	t.Helper()
@@ -100,8 +102,8 @@ func TestManager_GetStatistics_ConnectedField_False(t *testing.T) {
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
 	stats := m.GetStatistics()
-	if connected, ok := stats["connected"]; ok {
-		if connected.(bool) {
+	if connected, ok := stats["connected"].(bool); ok {
+		if connected {
 			t.Error("expected connected=false in statistics when not connected")
 		}
 	}
@@ -444,7 +446,7 @@ func TestManager_StartStop_Monitoring(t *testing.T) {
 func TestManager_GetLocalIP_NonExistentInterface(t *testing.T) {
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
-	m.interfaceName = "wg-nonexistent-9999"
+	m.interfaceName = nonExistentWGInterface
 
 	// Should return "unknown" for nonexistent interface.
 	ip := m.getLocalIP()
@@ -458,7 +460,7 @@ func TestManager_GetLocalIP_NonExistentInterface(t *testing.T) {
 func TestManager_GetWireGuardOutput_NonExistentInterface(t *testing.T) {
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
-	m.interfaceName = "wg-nonexistent-9999"
+	m.interfaceName = nonExistentWGInterface
 
 	// wg show will fail — should return error.
 	_, err := m.getWireGuardOutput()
@@ -473,7 +475,7 @@ func TestManager_GetWireGuardOutput_NonExistentInterface(t *testing.T) {
 func TestManager_GetInterfaceStatistics_NonExistentInterface(t *testing.T) {
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
-	m.interfaceName = "wg-nonexistent-9999"
+	m.interfaceName = nonExistentWGInterface
 
 	// Should return zero stats gracefully.
 	stats := m.getInterfaceStatistics()
@@ -486,7 +488,7 @@ func TestManager_GetInterfaceStatistics_NonExistentInterface(t *testing.T) {
 func TestManager_CheckConnection_NonExistentInterface(t *testing.T) {
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
-	m.interfaceName = "wg-nonexistent-9999"
+	m.interfaceName = nonExistentWGInterface
 	m.mutex.Lock()
 	m.isConnected = true
 	m.mutex.Unlock()
@@ -587,12 +589,12 @@ func TestManager_GetStatistics_Connected(t *testing.T) {
 	m := NewManager(cfg)
 	m.mutex.Lock()
 	m.isConnected = true
-	m.interfaceName = "wg-nonexistent-9999" //nolint:goconst
+	m.interfaceName = nonExistentWGInterface
 	m.mutex.Unlock()
 
 	stats := m.GetStatistics()
-	if connected, ok := stats["connected"]; ok {
-		if !connected.(bool) {
+	if connected, ok := stats["connected"].(bool); ok {
+		if !connected {
 			t.Error("expected connected=true in stats")
 		}
 	}
@@ -640,7 +642,7 @@ func TestManager_DisconnectLinux_InvalidInterface(t *testing.T) {
 	}
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
-	m.interfaceName = "wg-nonexistent-9999" //nolint:goconst
+	m.interfaceName = nonExistentWGInterface
 
 	err := m.disconnectLinux()
 	if err == nil {

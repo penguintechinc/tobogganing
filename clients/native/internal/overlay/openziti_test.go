@@ -89,7 +89,10 @@ func TestOpenZitiProvider_SetJWTToken_EmptyToken(t *testing.T) {
 	// Should not panic.
 	p.SetJWTToken("")
 
-	impl := p.(*openZitiProvider)
+	impl, ok := p.(*openZitiProvider)
+	if !ok {
+		t.Fatal("type assertion to *openZitiProvider failed")
+	}
 	impl.mu.Lock()
 	got := impl.jwtToken
 	impl.mu.Unlock()

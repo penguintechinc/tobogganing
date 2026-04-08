@@ -121,7 +121,7 @@ func TestFetchConfig_ConnectionRefused(t *testing.T) {
 
 func TestFetchConfig_InvalidJSON(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = w.Write([]byte("not-json"))
+		_, _ = w.Write([]byte("not-json"))
 	}))
 	defer ts.Close()
 
@@ -182,7 +182,7 @@ func TestFetchConfig_URLBuilding(t *testing.T) {
 	var gotPath string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		_ = json.NewEncoder(w).Encode(makeValidConfig())
+		_, _ = json.NewEncoder(w).Encode(makeValidConfig())
 	}))
 	defer ts.Close()
 
@@ -202,7 +202,7 @@ func TestFetchConfig_SendsAuthHeader(t *testing.T) {
 	var gotAuth string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		_ = json.NewEncoder(w).Encode(makeValidConfig())
+		_, _ = json.NewEncoder(w).Encode(makeValidConfig())
 	}))
 	defer ts.Close()
 
@@ -360,10 +360,10 @@ func TestGetConfig_UsesCacheWhenFresh(t *testing.T) {
 	cm := NewManager(ts.URL, "key")
 
 	// First call fetches
-	_ = cm.GetConfig()
+	_, _ = cm.GetConfig()
 
 	// Second call within 5 minutes should use cache
-	_ = cm.GetConfig()
+	_, _ = cm.GetConfig()
 
 	if callCount != 1 {
 		t.Errorf("expected 1 HTTP call (cached), got %d", callCount)
@@ -384,13 +384,13 @@ func TestGetConfig_RefetchesWhenStale(t *testing.T) {
 	cm := NewManager(ts.URL, "key")
 
 	// First fetch
-	_ = cm.GetConfig()
+	_, _ = cm.GetConfig()
 
 	// Set last update to >5 minutes ago to force a refresh
 	cm.lastUpdate = time.Now().Add(-6 * time.Minute)
 
 	// Should re-fetch
-	_ = cm.GetConfig()
+	_, _ = cm.GetConfig()
 
 	if callCount != 2 {
 		t.Errorf("expected 2 HTTP calls (stale cache), got %d", callCount)
