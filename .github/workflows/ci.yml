@@ -213,11 +213,11 @@ jobs:
       with:
         repository: penguintechinc/penguin-libs
         token: ${{ secrets.GITHUB_TOKEN }}
-        path: /home/runner/work/penguin-libs
+        path: penguin-libs
 
     - name: Rewrite local package paths for CI environment
       run: |
-        sed -i 's|file:/home/penguin/code/penguin-libs|file:///home/runner/work/penguin-libs|g' services/hub-webui/package.json
+        sed -i "s|file:/home/penguin/code/penguin-libs|file://${GITHUB_WORKSPACE}/penguin-libs|g" services/hub-webui/package.json
 
     - name: Set up Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
