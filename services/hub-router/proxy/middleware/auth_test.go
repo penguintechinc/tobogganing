@@ -77,7 +77,7 @@ func TestNewAuthMiddleware_MissingAuthorizationHeader(t *testing.T) {
 		t.Errorf("expected 401 for missing header, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["error"] == nil {
 		t.Error("expected error field in response")
 	}

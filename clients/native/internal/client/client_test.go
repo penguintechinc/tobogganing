@@ -44,11 +44,11 @@ func TestConnectionStatus_ZeroValue(t *testing.T) {
 
 func TestConnectionStatus_Fields(t *testing.T) {
 	s := ConnectionStatus{
-		State:      "connected",
+		State:      stateConnected,
 		ClientID:   "client-123",
 		HeadendURL: "https://headend.example.com", //nolint:govet
 	}
-	if s.State != "connected" {
+	if s.State != stateConnected {
 		t.Errorf("State: got %q", s.State)
 	}
 	if s.ClientID != "client-123" {
@@ -84,7 +84,7 @@ func TestClient_Status_DisconnectedByDefault(t *testing.T) {
 		t.Fatalf("Status: %v", err)
 	}
 	// Without a connection, state should be disconnected.
-	if status.State != "disconnected" && status.State != "" {
+	if status.State != stateDisconnected && status.State != "" {
 		t.Errorf("unexpected state: %q", status.State)
 	}
 }
@@ -405,15 +405,15 @@ func TestClient_GetWireGuardInterface_PlatformSpecific(t *testing.T) {
 
 	iface := c.getWireGuardInterface()
 	switch runtime.GOOS {
-	case "linux":
+	case platformLinux:
 		if iface != "wg0" {
 			t.Errorf("Linux: expected wg0, got %q", iface)
 		}
-	case "darwin":
+	case platformDarwin:
 		if iface != "utun1" {
 			t.Errorf("macOS: expected utun1, got %q", iface)
 		}
-	case "windows":
+	case platformWindows:
 		if iface != "tobogganing" {
 			t.Errorf("Windows: expected tobogganing, got %q", iface)
 		}
@@ -468,7 +468,7 @@ func TestClient_CreateWireGuardConfig_WritesFile(t *testing.T) {
 	// Override WireGuard config path to temp directory.
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == platformLinux {
 		// The path is /etc/wireguard/wg0.conf — can't write there without root.
 		// We just test the function composes the config correctly.
 		// Create the directory if needed.
@@ -876,7 +876,7 @@ func TestClient_Status_ConnectedFields(t *testing.T) {
 func TestConnectionStatus_JSONRoundtrip(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	s := ConnectionStatus{
-		State:          "connected",
+		State:          stateConnected,
 		ClientID:       "c-1",
 		WireGuardIP:    "10.0.0.2",
 		HeadendURL:     "https://headend.example.com",
@@ -895,8 +895,8 @@ func TestConnectionStatus_JSONRoundtrip(t *testing.T) {
 	if err := json.Unmarshal(data, &s2); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if s2.State != "connected" {
-		t.Errorf("State: want %q, got %q", "connected", s2.State)
+	if s2.State != stateConnected {
+		t.Errorf("State: want %q, got %q", stateConnected, s2.State)
 	}
 	if s2.BytesSent != 1024 {
 		t.Errorf("BytesSent: want 1024, got %d", s2.BytesSent)
@@ -981,7 +981,7 @@ func TestGetCertificateDir_LinuxDarwinPath(t *testing.T) {
 }
 
 func TestGetCertificateDir_WindowsPath(t *testing.T) {
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != platformWindows {
 		t.Skip("Windows-only test")
 	}
 	cfg := buildTestConfig(t)
@@ -1040,7 +1040,7 @@ func TestClient_SaveCertificates_FileContents(t *testing.T) {
 }
 
 func TestClient_SaveCertificates_KeyFilePermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Unix file permission test")
 	}
 	cfg := buildTestConfig(t)
@@ -1068,7 +1068,7 @@ func TestClient_SaveCertificates_KeyFilePermissions(t *testing.T) {
 }
 
 func TestClient_SaveCertificates_DirPermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Unix file permission test")
 	}
 	cfg := buildTestConfig(t)
@@ -1098,7 +1098,7 @@ func TestClient_SaveCertificates_DirPermissions(t *testing.T) {
 // --- processRegistrationResponse error path ---
 
 func TestClient_ProcessRegistrationResponse_CertSaveError(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Unix permission test")
 	}
 	cfg := buildTestConfig(t)
@@ -1218,7 +1218,7 @@ func TestClient_SetupWireGuard_ServerProvidesPrivateKey(t *testing.T) {
 // --- startWireGuard / stopWireGuard (platform command invocation) ---
 
 func TestClient_StartWireGuard_ReturnsErrorWithoutBinary(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Skipping on Windows")
 	}
 	cfg := buildTestConfig(t)
@@ -1238,7 +1238,7 @@ func TestClient_StartWireGuard_ReturnsErrorWithoutBinary(t *testing.T) {
 }
 
 func TestClient_StopWireGuard_ReturnsErrorWithoutBinary(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Skipping on Windows")
 	}
 	cfg := buildTestConfig(t)
@@ -1374,7 +1374,7 @@ func TestClient_Status_ReturnsClientInfo(t *testing.T) {
 		t.Errorf("HeadendURL: want status-headend, got %q", status.HeadendURL)
 	}
 	// When WireGuard device not found, state should be disconnected.
-	if status.State != "disconnected" {
+	if status.State != stateDisconnected {
 		t.Errorf("State: want disconnected, got %q", status.State)
 	}
 }
@@ -1411,14 +1411,14 @@ func TestClient_RunMonitoring_DisconnectsOnCancel(t *testing.T) {
 	}
 
 	if !disconnected {
-		t.Error("expected Disconnect to be called when context is cancelled")
+		t.Error("expected Disconnect to be called when context is canceled")
 	}
 }
 
 // --- getInterfaceIP parsing ---
 
 func TestClient_GetInterfaceIP_Parsing(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("ip command not available on Windows")
 	}
 	cfg := buildTestConfig(t)
@@ -1686,7 +1686,7 @@ func TestClient_Connect_DefaultWireGuardType_OverlayFails(t *testing.T) {
 // --- saveCertificates error paths ---
 
 func TestClient_SaveCertificates_CertWriteError(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Unix permission test")
 	}
 	cfg := buildTestConfig(t)
@@ -1721,7 +1721,7 @@ func TestClient_SaveCertificates_CertWriteError(t *testing.T) {
 }
 
 func TestClient_SaveCertificates_KeyWriteError(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Unix permission test")
 	}
 	if os.Getuid() == 0 {
@@ -1758,7 +1758,7 @@ func TestClient_SaveCertificates_KeyWriteError(t *testing.T) {
 }
 
 func TestClient_SaveCertificates_CAWriteError(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("Unix permission test")
 	}
 	if os.Getuid() == 0 {
@@ -1875,6 +1875,40 @@ func TestClient_RunMonitoring_HealthCheckOnTick(t *testing.T) {
 
 // --- getInterfaceIP "IP address not found" path ---
 
+// parseInterfaceName extracts the interface name from an "ip link show" output line.
+// Returns empty string if the line is not an interface line or the name is "lo".
+func parseInterfaceName(line string) string {
+	if !strings.Contains(line, ": <") {
+		return ""
+	}
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return ""
+	}
+	name := strings.TrimSuffix(fields[1], ":")
+	if idx := strings.Index(name, "@"); idx >= 0 {
+		name = name[:idx]
+	}
+	if name == "" || name == "lo" {
+		return ""
+	}
+	return name
+}
+
+// interfaceHasIPv4 checks whether the named interface has at least one IPv4 address.
+func interfaceHasIPv4(name string) bool {
+	addrOut, err := exec.Command("ip", "addr", "show", name).Output()
+	if err != nil {
+		return false
+	}
+	for _, addrLine := range strings.Split(string(addrOut), "\n") {
+		if strings.Contains(addrLine, "inet ") && !strings.Contains(addrLine, "inet6") {
+			return true
+		}
+	}
+	return false
+}
+
 // findIPv6OnlyInterface looks for a network interface that has no IPv4 address
 // (only IPv6 or no addresses), which will exercise the "IP not found" path in
 // getInterfaceIP.
@@ -1885,36 +1919,11 @@ func findIPv6OnlyInterface(t *testing.T) string {
 		return ""
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		// Lines like "28: cali57df87c9acd@if2: ..."
-		if !strings.Contains(line, ": <") {
+		name := parseInterfaceName(line)
+		if name == "" {
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		rawName := fields[1]
-		// Strip trailing colon and @... suffix (for veth pairs).
-		name := strings.TrimSuffix(rawName, ":")
-		if idx := strings.Index(name, "@"); idx >= 0 {
-			name = name[:idx]
-		}
-		if name == "" || name == "lo" {
-			continue
-		}
-		// Check if this interface has any inet (IPv4) address.
-		addrOut, err := exec.Command("ip", "addr", "show", name).Output()
-		if err != nil {
-			continue
-		}
-		hasIPv4 := false
-		for _, addrLine := range strings.Split(string(addrOut), "\n") {
-			if strings.Contains(addrLine, "inet ") && !strings.Contains(addrLine, "inet6") {
-				hasIPv4 = true
-				break
-			}
-		}
-		if !hasIPv4 {
+		if !interfaceHasIPv4(name) {
 			return name
 		}
 	}
@@ -1922,7 +1931,7 @@ func findIPv6OnlyInterface(t *testing.T) string {
 }
 
 func TestClient_GetInterfaceIP_NoIPv4Address(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != platformLinux {
 		t.Skip("test relies on Linux ip command")
 	}
 	cfg := buildTestConfig(t)
@@ -1946,7 +1955,7 @@ func TestClient_GetInterfaceIP_NoIPv4Address(t *testing.T) {
 }
 
 func TestClient_GetInterfaceIP_NonExistentInterfaceError(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == platformWindows {
 		t.Skip("ip command not available on Windows")
 	}
 	cfg := buildTestConfig(t)
@@ -1975,13 +1984,13 @@ func TestClient_GetCertificateDir_AllPlatformValues(t *testing.T) {
 	}
 
 	switch runtime.GOOS {
-	case "linux", "darwin":
+	case platformLinux, platformDarwin:
 		dir := c.getCertificateDir()
 		home := os.Getenv("HOME")
 		if !strings.HasPrefix(dir, home) {
 			t.Errorf("Linux/Darwin cert dir should start with HOME (%q), got %q", home, dir)
 		}
-	case "windows":
+	case platformWindows:
 		dir := c.getCertificateDir()
 		appdata := os.Getenv("APPDATA")
 		if !strings.HasPrefix(dir, appdata) {
@@ -2001,15 +2010,15 @@ func TestClient_GetWireGuardConfigPath_MatchesPlatform(t *testing.T) {
 
 	path := c.getWireGuardConfigPath()
 	switch runtime.GOOS {
-	case "linux":
+	case platformLinux:
 		if !strings.HasPrefix(path, "/etc/wireguard/") {
 			t.Errorf("Linux: want /etc/wireguard/ prefix, got %q", path)
 		}
-	case "darwin":
+	case platformDarwin:
 		if !strings.HasPrefix(path, "/usr/local/etc/wireguard/") {
 			t.Errorf("macOS: want /usr/local/etc/wireguard/ prefix, got %q", path)
 		}
-	case "windows":
+	case platformWindows:
 		if !strings.HasPrefix(path, "C:\\Program Files\\WireGuard") {
 			t.Errorf("Windows: want WireGuard path prefix, got %q", path)
 		}

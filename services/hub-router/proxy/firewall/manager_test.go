@@ -479,7 +479,7 @@ func TestFetchRules_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer ts.Close()
 
@@ -509,7 +509,7 @@ func TestFetchRules_HTTPError(t *testing.T) {
 
 func TestFetchRules_InvalidJSON(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not-json"))
+		_, _ = w.Write([]byte("not-json"))
 	}))
 	defer ts.Close()
 
@@ -534,7 +534,7 @@ func TestStartStop(t *testing.T) {
 			UserRules: map[string]UserRules{},
 		}
 		body, _ := json.Marshal(resp)
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
 	defer ts.Close()
 

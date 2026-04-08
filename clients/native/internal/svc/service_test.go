@@ -287,11 +287,6 @@ func (m *mockService) Platform() string {
 	return "mock"
 }
 
-// injectMockService replaces m.svc with a mock for error testing
-func injectMockService(m *Manager, mock *mockService) {
-	m.svc = mock
-}
-
 func TestManager_Install_WrapsError(t *testing.T) {
 	m := &Manager{svc: &mockService{installErr: fmt.Errorf("permission denied")}}
 	err := m.Install()

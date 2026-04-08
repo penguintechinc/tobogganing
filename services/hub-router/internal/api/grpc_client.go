@@ -39,8 +39,6 @@ const (
 	// reconnectInterval is the interval between gRPC reconnection attempts.
 	reconnectInterval = 10 * time.Second
 
-	// grpcDialTimeout is the timeout for establishing a gRPC connection.
-	grpcDialTimeout = 10 * time.Second
 )
 
 // Policy represents a network policy fetched from hub-api.
@@ -153,12 +151,8 @@ func (c *HubAPIClient) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	dialCtx, cancel := context.WithTimeout(ctx, grpcDialTimeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(dialCtx, c.grpcAddr,
+	conn, err := grpc.NewClient(c.grpcAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		log.Warnf("gRPC connection to %s failed: %v (falling back to REST at %s)",
@@ -193,12 +187,9 @@ func (c *HubAPIClient) reconnectLoop() {
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), grpcDialTimeout)
-			conn, err := grpc.DialContext(ctx, c.grpcAddr,
+			conn, err := grpc.NewClient(c.grpcAddr,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
 			)
-			cancel()
 
 			if err != nil {
 				c.mu.Unlock()

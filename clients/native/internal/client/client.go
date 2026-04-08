@@ -41,6 +41,10 @@ const (
     platformWindows = "windows"
     platformDarwin  = "darwin"
     platformLinux   = "linux"
+
+    // Connection state constants
+    stateConnected    = "connected"
+    stateDisconnected = "disconnected"
 )
 
 // Client represents the Tobogganing native client
@@ -182,7 +186,7 @@ func (c *Client) Disconnect() error {
 // Status returns current connection status
 func (c *Client) Status() (*ConnectionStatus, error) {
     status := &ConnectionStatus{
-        State:    "disconnected",
+        State:    stateDisconnected,
         ClientID: c.clientID,
         HeadendURL: c.headendURL,
     }
@@ -194,7 +198,7 @@ func (c *Client) Status() (*ConnectionStatus, error) {
         return status, nil // Interface not found, client is disconnected
     }
 
-    status.State = "connected"
+    status.State = stateConnected
     
     // Get interface IP
     if ip, err := c.getInterfaceIP(interfaceName); err == nil {

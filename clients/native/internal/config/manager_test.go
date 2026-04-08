@@ -689,7 +689,7 @@ func TestConfigManager_Start_SchedulesUpdate(t *testing.T) {
 		t.Error("Start should schedule next update")
 	}
 
-	m.Stop()
+	_ = m.Stop()
 }
 
 // --- PullConfig concurrent safety ---
@@ -795,7 +795,7 @@ func TestConfigManager_RunScheduler_ExitsOnContextCancel(t *testing.T) {
 	// but Stop should complete without hanging)
 	done := make(chan struct{})
 	go func() {
-		m.Stop()
+		_ = m.Stop()
 		close(done)
 	}()
 

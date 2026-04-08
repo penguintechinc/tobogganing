@@ -148,7 +148,7 @@ func TestPeer_JSONOmitEmptyEndpoint(t *testing.T) {
 	}
 	data, _ := json.Marshal(p)
 	var m map[string]interface{}
-	json.Unmarshal(data, &m)
+	_ = json.Unmarshal(data, &m)
 	if _, exists := m["endpoint"]; exists {
 		t.Error("endpoint should be omitted when empty (omitempty)")
 	}
@@ -277,7 +277,7 @@ func TestFetchPeersFromManager_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(peerResponse{
+		_ = json.NewEncoder(w).Encode(peerResponse{
 			Peers: []Peer{
 				{NodeID: "n1", NodeType: "client", PublicKey: "key1", AllowedIPs: "10.1.0.1/32"},
 				{NodeID: "n2", NodeType: "client", PublicKey: "key2", AllowedIPs: "10.1.0.2/32"},
@@ -346,7 +346,7 @@ func TestFetchPeersFromManager_SendsAuthHeader(t *testing.T) {
 	}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		json.NewEncoder(w).Encode(peerResponse{})
+		_ = json.NewEncoder(w).Encode(peerResponse{})
 	}))
 	defer ts.Close()
 
@@ -368,7 +368,7 @@ func TestFetchPeersFromManager_EmptyPeerList(t *testing.T) {
 		Total int    `json:"total"`
 	}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(peerResponse{Peers: []Peer{}, Total: 0})
+		_ = json.NewEncoder(w).Encode(peerResponse{Peers: []Peer{}, Total: 0})
 	}))
 	defer ts.Close()
 
@@ -389,7 +389,7 @@ func TestFetchPeersFromManager_PeerWithEndpoint(t *testing.T) {
 		Total int    `json:"total"`
 	}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(peerResponse{
+		_ = json.NewEncoder(w).Encode(peerResponse{
 			Peers: []Peer{
 				{NodeID: "n1", PublicKey: "key1", AllowedIPs: "10.0.0.1/32", Endpoint: "1.2.3.4:51820"},
 			},
@@ -482,7 +482,7 @@ func TestStartPeriodicSync_RespondsToCancel(t *testing.T) {
 		Total int    `json:"total"`
 	}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(peerResponse{})
+		_ = json.NewEncoder(w).Encode(peerResponse{})
 	}))
 	defer ts.Close()
 

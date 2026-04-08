@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const testManagerURL = "https://example.com"
+
 // --- DefaultConfig ---
 
 func TestDefaultConfig_ReturnsNonNil(t *testing.T) {
@@ -396,7 +398,7 @@ func TestLoadFromFile_ValidYAML(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 
-	content := `manager_url: "https://example.com"
+	content := `manager_url: "` + testManagerURL + `"
 api_key: "testkey"
 client_name: "testclient"
 client_type: "client_native"
@@ -414,8 +416,8 @@ overlay_type: "dual"
 		t.Fatalf("LoadFromFile: %v", err)
 	}
 
-	if cfg.ManagerURL != "https://example.com" {
-		t.Errorf("ManagerURL: want %q, got %q", "https://example.com", cfg.ManagerURL)
+	if cfg.ManagerURL != testManagerURL {
+		t.Errorf("ManagerURL: want %q, got %q", testManagerURL, cfg.ManagerURL)
 	}
 	if cfg.APIKey != "testkey" {
 		t.Errorf("APIKey: want %q, got %q", "testkey", cfg.APIKey)
