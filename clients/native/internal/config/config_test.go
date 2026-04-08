@@ -440,8 +440,8 @@ func TestLoadFromFile_NonExistentFile_ReturnsError(t *testing.T) {
 
 func TestLoadFromDefaults_SetsDefaults(t *testing.T) {
 	// Unset any env that might interfere.
-	os.Unsetenv("TOBOGGANING_MANAGER_URL")
-	os.Unsetenv("TOBOGGANING_API_KEY")
+	_ = os.Unsetenv("TOBOGGANING_MANAGER_URL")
+	_ = os.Unsetenv("TOBOGGANING_API_KEY")
 
 	cfg := &Config{}
 	if err := LoadFromDefaults(cfg); err != nil {
@@ -468,7 +468,7 @@ func TestLoadFromDefaults_SetsDefaults(t *testing.T) {
 
 func TestLoadFromDefaults_EnvVarOverride(t *testing.T) {
 	t.Setenv("TOBOGGANING_MANAGER_URL", "https://env-override.example.com")
-	defer os.Unsetenv("TOBOGGANING_MANAGER_URL")
+	defer func() { _ = os.Unsetenv("TOBOGGANING_MANAGER_URL") }()
 
 	cfg := &Config{}
 	if err := LoadFromDefaults(cfg); err != nil {

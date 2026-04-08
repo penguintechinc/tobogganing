@@ -72,7 +72,7 @@ func TestFetchConfig_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(cfg)
+		_ = json.NewEncoder(w).Encode(cfg)
 	}))
 	defer ts.Close()
 
@@ -121,7 +121,7 @@ func TestFetchConfig_ConnectionRefused(t *testing.T) {
 
 func TestFetchConfig_InvalidJSON(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not-json"))
+		_ = w.Write([]byte("not-json"))
 	}))
 	defer ts.Close()
 
@@ -138,7 +138,7 @@ func TestFetchConfig_InvalidJSON(t *testing.T) {
 func TestFetchConfig_SetsLastUpdate(t *testing.T) {
 	cfg := makeValidConfig()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(cfg)
+		_ = json.NewEncoder(w).Encode(cfg)
 	}))
 	defer ts.Close()
 
@@ -161,7 +161,7 @@ func TestFetchConfig_SetsLastUpdate(t *testing.T) {
 func TestFetchConfig_CachesConfig(t *testing.T) {
 	cfg := makeValidConfig()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(cfg)
+		_ = json.NewEncoder(w).Encode(cfg)
 	}))
 	defer ts.Close()
 
@@ -182,7 +182,7 @@ func TestFetchConfig_URLBuilding(t *testing.T) {
 	var gotPath string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewEncoder(w).Encode(makeValidConfig())
+		_ = json.NewEncoder(w).Encode(makeValidConfig())
 	}))
 	defer ts.Close()
 
@@ -190,7 +190,7 @@ func TestFetchConfig_URLBuilding(t *testing.T) {
 	defer os.Unsetenv("CLUSTER_ID")
 
 	cm := NewManager(ts.URL, "key")
-	cm.FetchConfig()
+	_ = cm.FetchConfig()
 
 	expected := "/api/v1/clusters/my-cluster/headend-config"
 	if gotPath != expected {
@@ -202,7 +202,7 @@ func TestFetchConfig_SendsAuthHeader(t *testing.T) {
 	var gotAuth string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		json.NewEncoder(w).Encode(makeValidConfig())
+		_ = json.NewEncoder(w).Encode(makeValidConfig())
 	}))
 	defer ts.Close()
 
@@ -210,7 +210,7 @@ func TestFetchConfig_SendsAuthHeader(t *testing.T) {
 	defer os.Unsetenv("CLUSTER_ID")
 
 	cm := NewManager(ts.URL, "secret-api-key")
-	cm.FetchConfig()
+	_ = cm.FetchConfig()
 
 	if gotAuth != "Bearer secret-api-key" {
 		t.Errorf("unexpected auth header: %s", gotAuth)
@@ -360,10 +360,10 @@ func TestGetConfig_UsesCacheWhenFresh(t *testing.T) {
 	cm := NewManager(ts.URL, "key")
 
 	// First call fetches
-	cm.GetConfig()
+	_ = cm.GetConfig()
 
 	// Second call within 5 minutes should use cache
-	cm.GetConfig()
+	_ = cm.GetConfig()
 
 	if callCount != 1 {
 		t.Errorf("expected 1 HTTP call (cached), got %d", callCount)
@@ -384,13 +384,13 @@ func TestGetConfig_RefetchesWhenStale(t *testing.T) {
 	cm := NewManager(ts.URL, "key")
 
 	// First fetch
-	cm.GetConfig()
+	_ = cm.GetConfig()
 
 	// Set last update to >5 minutes ago to force a refresh
 	cm.lastUpdate = time.Now().Add(-6 * time.Minute)
 
 	// Should re-fetch
-	cm.GetConfig()
+	_ = cm.GetConfig()
 
 	if callCount != 2 {
 		t.Errorf("expected 2 HTTP calls (stale cache), got %d", callCount)
@@ -592,7 +592,7 @@ func TestAuthConfig_OAuth2Fields(t *testing.T) {
 	}
 	data, _ := json.Marshal(auth)
 	var decoded AuthConfig
-	json.Unmarshal(data, &decoded)
+	_ = json.Unmarshal(data, &decoded)
 
 	if decoded.OAuth2.Issuer != "https://auth.example.com" {
 		t.Errorf("OAuth2.Issuer mismatch: %s", decoded.OAuth2.Issuer)
@@ -613,7 +613,7 @@ func TestAuthConfig_SAML2Fields(t *testing.T) {
 	}
 	data, _ := json.Marshal(auth)
 	var decoded AuthConfig
-	json.Unmarshal(data, &decoded)
+	_ = json.Unmarshal(data, &decoded)
 
 	if decoded.SAML2.IDPMetadataURL != "https://idp.example.com/metadata" {
 		t.Errorf("SAML2.IDPMetadataURL mismatch: %s", decoded.SAML2.IDPMetadataURL)

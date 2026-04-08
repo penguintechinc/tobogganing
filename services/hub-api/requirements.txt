@@ -1,7 +1,7 @@
 # Core framework
 py4web>=1.20240901.1
-uvicorn[standard]==0.24.0
-uvloop==0.19.0
+uvicorn[standard]>=0.24.0
+uvloop>=0.21.0
 
 # Async and HTTP
 aiohttp==3.9.1
@@ -17,7 +17,7 @@ pyjwt>=2.12.0
 pydal>=20231112.1
 pymysql>=1.1.0
 psycopg2-binary>=2.9.9
-asyncpg==0.29.0
+asyncpg>=0.30.0
 sqlalchemy==2.0.23
 
 # Redis

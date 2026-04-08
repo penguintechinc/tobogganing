@@ -8,25 +8,6 @@ import (
 	"time"
 )
 
-// helpers to build UserRules with specific rules set
-func userRulesWithAllowDomain(pattern string, priority int) *UserRules {
-	ur := &UserRules{UserID: "user1"}
-	ur.Rules.AllowDomains = []FirewallRule{{Pattern: pattern, Priority: priority}}
-	return ur
-}
-
-func userRulesWithDenyDomain(pattern string, priority int) *UserRules {
-	ur := &UserRules{UserID: "user1"}
-	ur.Rules.DenyDomains = []FirewallRule{{Pattern: pattern, Priority: priority}}
-	return ur
-}
-
-func managerWithRules(userID string, rules *UserRules) *Manager {
-	m := NewManager("http://manager:8080", "token")
-	m.userRules[userID] = rules
-	return m
-}
-
 // ─── NewManager ───────────────────────────────────────────────────────────────
 
 func TestNewManager(t *testing.T) {

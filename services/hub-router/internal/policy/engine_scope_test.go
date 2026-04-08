@@ -9,7 +9,7 @@ func TestOverlayScopeFiltering(t *testing.T) {
 	engine := NewPolicyEngine()
 
 	// Policy that only applies to openziti traffic
-	engine.OnPolicyUpdate([]RawPolicy{
+	_ = engine.OnPolicyUpdate([]RawPolicy{
 		{
 			ID:       "ziti-only",
 			Name:     "Allow OpenZiti",
@@ -54,7 +54,7 @@ func TestOverlayScopeFiltering(t *testing.T) {
 func TestEmptyScopeMatchesAll(t *testing.T) {
 	engine := NewPolicyEngine()
 
-	engine.OnPolicyUpdate([]RawPolicy{
+	_ = engine.OnPolicyUpdate([]RawPolicy{
 		{
 			ID:       "any-scope",
 			Name:     "Allow All Overlays",

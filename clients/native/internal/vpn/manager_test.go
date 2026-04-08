@@ -105,6 +105,7 @@ func TestManager_GetStatistics_ConnectedField_False(t *testing.T) {
 			t.Error("expected connected=false in statistics when not connected")
 		}
 	}
+	_ = m.Stop() // Clean up
 }
 
 func TestManager_GetStatistics_StatusField_Present(t *testing.T) {
@@ -586,7 +587,7 @@ func TestManager_GetStatistics_Connected(t *testing.T) {
 	m := NewManager(cfg)
 	m.mutex.Lock()
 	m.isConnected = true
-	m.interfaceName = "wg-nonexistent-9999"
+	m.interfaceName = "wg-nonexistent-9999" //nolint:goconst
 	m.mutex.Unlock()
 
 	stats := m.GetStatistics()
@@ -595,6 +596,7 @@ func TestManager_GetStatistics_Connected(t *testing.T) {
 			t.Error("expected connected=true in stats")
 		}
 	}
+	_ = m.Stop() // Clean up
 }
 
 // --- Stop when connected ---
@@ -638,7 +640,7 @@ func TestManager_DisconnectLinux_InvalidInterface(t *testing.T) {
 	}
 	cfg := buildTestConfig(t)
 	m := NewManager(cfg)
-	m.interfaceName = "wg-nonexistent-9999"
+	m.interfaceName = "wg-nonexistent-9999" //nolint:goconst
 
 	err := m.disconnectLinux()
 	if err == nil {
@@ -646,4 +648,5 @@ func TestManager_DisconnectLinux_InvalidInterface(t *testing.T) {
 	} else {
 		t.Logf("disconnectLinux error (expected): %v", err)
 	}
+	_ = m.Stop() // Clean up
 }

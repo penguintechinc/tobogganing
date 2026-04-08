@@ -26,12 +26,12 @@ func TestApp_Start_NoError(t *testing.T) {
 	}
 }
 
-func TestApp_Start_CancelledContext_NoError(t *testing.T) {
+func TestApp_Start_CanceledContext_NoError(t *testing.T) {
 	app := NewApp()
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancelled
+	cancel() // pre-canceled
 	if err := app.Start(ctx); err != nil {
-		t.Errorf("Start with cancelled context: %v", err)
+		t.Errorf("Start with canceled context: %v", err)
 	}
 }
 

@@ -7,9 +7,9 @@ import (
 	pglog "github.com/penguintechinc/penguin-libs/packages/go-common/logging"
 )
 
-var log *pglog.SanitizedLogger
+var log *pglog.SanitizedLogger //nolint:gochecknoglobals
 
-func init() {
+func init() { //nolint:gochecknoinits
 	var err error
 	log, err = pglog.NewSanitizedLogger("tobogganing-client")
 	if err != nil {

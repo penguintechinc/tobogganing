@@ -355,7 +355,7 @@ func TestFetchPeersFromManager_SendsAuthHeader(t *testing.T) {
 
 	m := makeManagerWithoutWgctrl(ts.URL)
 
-	m.fetchPeersFromManager()
+	_ = m.fetchPeersFromManager()
 
 	if gotAuth != "Bearer test-cluster-key-xyz" {
 		t.Errorf("unexpected auth header: %q", gotAuth)
@@ -446,7 +446,7 @@ func TestGetStats_NilClient(t *testing.T) {
 			t.Logf("GetStats with nil client panics as expected: %v", r)
 		}
 	}()
-	m.GetStats()
+	_ = m.GetStats()
 }
 
 func TestGetStats_ReturnsErrorWithoutInterface(t *testing.T) {

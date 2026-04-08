@@ -119,7 +119,7 @@ func TestRun_WithConfig_NoError(t *testing.T) {
 // --- Run (TrayManager method) ---
 // TrayManager.Run blocks until the context is done, so we need to stop it.
 
-func TestTrayManager_Run_StopsOnCancel(t *testing.T) {
+func TestTrayManager_Run_StopsOnCanceled(t *testing.T) {
 	vpn := &stubVPNManager{}
 	cfg := &stubConfigManager{}
 	mgr := NewTrayManager(vpn, cfg)

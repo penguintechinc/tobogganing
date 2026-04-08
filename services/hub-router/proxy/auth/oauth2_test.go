@@ -191,7 +191,7 @@ func TestOAuth2LogoutHandler(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["message"] != "logged out" {
 		t.Errorf("unexpected message: %v", resp["message"])
 	}

@@ -15,7 +15,7 @@ func TestGetConfigDir_Linux_WithXDGConfigHome(t *testing.T) {
 
 	// Set XDG_CONFIG_HOME to a custom path.
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/test-xdg-config")
-	defer os.Unsetenv("XDG_CONFIG_HOME")
+	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
 
 	dir := GetConfigDir()
 	if dir != "/tmp/test-xdg-config/tobogganing" {
@@ -29,7 +29,7 @@ func TestGetConfigDir_Linux_WithoutXDGConfigHome(t *testing.T) {
 	}
 
 	// Unset XDG_CONFIG_HOME to exercise the fallback to HOME/.config.
-	os.Unsetenv("XDG_CONFIG_HOME")
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
 	home := os.Getenv("HOME")
 
 	dir := GetConfigDir()

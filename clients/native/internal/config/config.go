@@ -24,6 +24,13 @@ import (
     "github.com/spf13/viper"
 )
 
+const (
+	clientTypeNative = "client_native"
+	platformLinux    = "linux"
+	platformWindows  = "windows"
+	platformDarwin   = "darwin"
+)
+
 // OpenZitiConfig holds client-side OpenZiti configuration.
 type OpenZitiConfig struct {
 	IdentityFile string `mapstructure:"identity_file" json:"identity_file"`
@@ -173,7 +180,7 @@ func (c *Config) Validate() error {
         return fmt.Errorf("api_key is required")
     }
     
-    if c.ClientType != "client_native" {
+    if c.ClientType != clientTypeNative {
         return fmt.Errorf("invalid client_type: %s", c.ClientType)
     }
     
@@ -212,15 +219,15 @@ func (c *Config) Validate() error {
 // GetConfigDir returns the platform-specific configuration directory
 func GetConfigDir() string {
     switch runtime.GOOS {
-    case "darwin":
+    case platformDarwin:
         return os.Getenv("HOME") + "/.tobogganing"
-    case "linux":
+    case platformLinux:
         configHome := os.Getenv("XDG_CONFIG_HOME")
         if configHome == "" {
             configHome = os.Getenv("HOME") + "/.config"
         }
         return configHome + "/tobogganing"
-    case "windows":
+    case platformWindows:
         return os.Getenv("APPDATA") + "\\Tobogganing"
     default:
         return os.Getenv("HOME") + "/.tobogganing"

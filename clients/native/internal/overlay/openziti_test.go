@@ -140,6 +140,7 @@ func TestOpenZitiProvider_Status_AfterFailedConnect_StillDisconnected(t *testing
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
+	_ = p.Connect(context.Background()) // Will fail - error already checked above
 	if status.Connected {
 		t.Error("expected Connected=false after failed Connect")
 	}

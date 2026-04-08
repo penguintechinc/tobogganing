@@ -108,7 +108,7 @@ func TestFetchConfig_IncludesAuthHeader(t *testing.T) {
 	defer ts.Close()
 
 	cc := NewConfigClient(ts.URL, "secret-token", "h1", "c1")
-	cc.FetchConfig()
+	_ = cc.FetchConfig()
 
 	if gotAuth != "Bearer secret-token" {
 		t.Errorf("unexpected auth header: %s", gotAuth)
@@ -126,7 +126,7 @@ func TestFetchConfig_URLBuilding(t *testing.T) {
 	defer ts.Close()
 
 	cc := NewConfigClient(ts.URL, "tok", "myheadend", "mycluster")
-	cc.FetchConfig()
+	_ = cc.FetchConfig()
 
 	expectedPath := "/api/v1/headend/myheadend/ports?cluster_id=mycluster"
 	if gotPath != expectedPath {

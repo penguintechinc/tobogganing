@@ -26,7 +26,7 @@ import (
 	"github.com/tobogganing/clients/native/internal/logger"
 )
 
-var log = logger.Get()
+var log = logger.Get() //nolint:gochecknoglobals
 
 const (
 	// Operating system constants

@@ -539,16 +539,22 @@ func (c *Client) checkAuthentication() error {
     return nil
 }
 
+const (
+	defaultWireGuardInterface = "wg0"
+	darwinWireGuardInterface  = "utun1"
+	windowsWireGuardInterface = "tobogganing"
+)
+
 func (c *Client) getWireGuardInterface() string {
     switch runtime.GOOS {
     case platformDarwin:
-        return "utun1"
+        return darwinWireGuardInterface
     case platformLinux:
-        return "wg0"
+        return defaultWireGuardInterface
     case platformWindows:
-        return "tobogganing"
+        return windowsWireGuardInterface
     default:
-        return "wg0"
+        return defaultWireGuardInterface
     }
 }
 

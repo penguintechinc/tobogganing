@@ -132,7 +132,7 @@ func TestManager_IsTokenExpired_FutureToken(t *testing.T) {
 	manager := &Manager{}
 
 	// JWT with exp in the far future (year 2100 = Unix 4102444800).
-	futureToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6InVzZXIifQ.signature"
+	futureToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6InVzZXIifQ.signature" //nolint:goconst
 
 	expired := manager.IsTokenExpired(futureToken, time.Minute)
 	if expired {

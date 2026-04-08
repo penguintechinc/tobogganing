@@ -69,7 +69,7 @@ func setupJWTServerReal(t *testing.T, key *rsa.PrivateKey) *httptest.Server {
 		}
 		body, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+		_ = w.Write(body)
 	}))
 }
 
@@ -324,9 +324,7 @@ func TestJWTValidateToken_NoPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(user.Groups) == 0 {
-		// groups is set from node_type, not permissions
-	}
+	_ = len(user.Groups)
 	if user.ID != "node-noperm" {
 		t.Errorf("unexpected ID: %s", user.ID)
 	}
@@ -388,7 +386,7 @@ func TestJWTLoginHandler(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["auth_type"] != "jwt" {
 		t.Errorf("unexpected auth_type: %v", resp["auth_type"])
 	}
@@ -444,7 +442,7 @@ func TestJWTLogoutHandler(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["message"] == nil {
 		t.Error("expected message in logout response")
 	}

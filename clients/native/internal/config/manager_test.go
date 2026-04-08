@@ -176,7 +176,7 @@ Endpoint = server.example.com:51820
 
 	cfg := DefaultConfig()
 	cfg.ManagerURL = server.URL
-	cfg.ClientName = "test-client"
+	cfg.ClientName = "test-client" //nolint:goconst
 	cfg.APIKey = "test-key"
 	m := NewConfigManager(cfg)
 
@@ -519,7 +519,7 @@ func TestConfigManager_WriteConfigFile_WritesToPath(t *testing.T) {
 func TestConfigUpdateEntry_Fields(t *testing.T) {
 	now := time.Now()
 	entry := ConfigUpdateEntry{
-		Timestamp: now,
+		Timestamp: now, //nolint:govet
 		Version:   42,
 		Success:   true,
 		Error:     "some error",

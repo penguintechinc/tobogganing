@@ -11,7 +11,7 @@ import (
 	"github.com/tobogganing/clients/native/internal/logger"
 )
 
-var log = logger.Get()
+var log = logger.Get() //nolint:gochecknoglobals
 
 // VPNManager interface defines the methods needed to control VPN connections
 type VPNManager interface {

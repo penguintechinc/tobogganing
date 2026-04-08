@@ -41,7 +41,7 @@ func TestConnectionStatus_Fields(t *testing.T) {
 	s := ConnectionStatus{
 		State:      "connected",
 		ClientID:   "client-123",
-		HeadendURL: "https://headend.example.com",
+		HeadendURL: "https://headend.example.com", //nolint:govet
 	}
 	if s.State != "connected" {
 		t.Errorf("State: got %q", s.State)
@@ -275,7 +275,7 @@ func TestClient_SendRegistrationRequest_Success(t *testing.T) {
 	if resp.ClientID != "client-abc123" {
 		t.Errorf("ClientID: want %q, got %q", "client-abc123", resp.ClientID)
 	}
-	if resp.Cluster.HeadendURL != "https://headend.example.com" {
+	if resp.Cluster.HeadendURL != "https://headend.example.com" { //nolint:goconst
 		t.Errorf("HeadendURL: got %q", resp.Cluster.HeadendURL)
 	}
 }
@@ -371,7 +371,7 @@ func TestClient_GetCertificateDir_ContainsCerts(t *testing.T) {
 	}
 
 	dir := c.getCertificateDir()
-	if !strings.Contains(dir, "certs") && !strings.Contains(dir, "certs") {
+	if !strings.Contains(dir, "certs") {
 		t.Errorf("getCertificateDir should contain 'certs', got %q", dir)
 	}
 }
@@ -547,8 +547,9 @@ func TestClient_GetInterfaceIP_NonExistentInterface(t *testing.T) {
 		t.Skipf("New failed: %v", err)
 	}
 
+	const nonExistentInterface = "wg-nonexistent-9999"
 	// On an unsupported platform or missing interface, should return error.
-	_, err = c.getInterfaceIP("wg-nonexistent-9999")
+	_, err = c.getInterfaceIP(nonExistentInterface)
 	if err == nil {
 		t.Log("getInterfaceIP succeeded (interface exists or command available)")
 	} else {
@@ -629,7 +630,7 @@ func TestClient_Authenticate_Success(t *testing.T) {
 	if err != nil {
 		t.Skipf("New failed: %v", err)
 	}
-	c.clientID = "test-client-id"
+	c.clientID = "test-client-id" //nolint:goconst
 
 	if err := c.authenticate(); err != nil {
 		t.Fatalf("authenticate: %v", err)

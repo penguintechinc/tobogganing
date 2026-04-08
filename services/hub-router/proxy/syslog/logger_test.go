@@ -288,7 +288,7 @@ func TestSendLog_WithRealUDP(t *testing.T) {
 
 	// Read from server
 	buf := make([]byte, 4096)
-	server.SetReadDeadline(time.Now().Add(time.Second))
+	_ = server.SetReadDeadline(time.Now().Add(time.Second))
 	n, _, err := server.ReadFromUDP(buf)
 	if err != nil {
 		t.Fatalf("failed to read UDP data: %v", err)

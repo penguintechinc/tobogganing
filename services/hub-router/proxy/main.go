@@ -150,10 +150,6 @@ func initConfig() {
     }
 }
 
-// structuredLogger is the go-common sanitized logger used for new log sites.
-// Existing code uses logrus (log.*) for compatibility; migrate incrementally to structuredLogger.
-var structuredLogger *pglog.SanitizedLogger
-
 func initLogging() {
     logLevel := viper.GetString("log.level")
     level, err := log.ParseLevel(logLevel)
@@ -164,7 +160,7 @@ func initLogging() {
     log.SetFormatter(&log.JSONFormatter{})
 
     // Initialize go-common structured logger (penguin-libs standard)
-    structuredLogger, err = pglog.NewSanitizedLogger("hub-router")
+    _, err = pglog.NewSanitizedLogger("hub-router")
     if err != nil {
         log.WithError(err).Warn("Failed to initialize go-common structured logger, using logrus only")
     }
