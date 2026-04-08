@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppConsoleVersion, type AppConsoleVersionProps } from "@penguintechinc/react-libs";
 
 // Cast to FC since the library returns ReactNode (valid JSX) but is typed as ReactNode not JSX.Element
+// eslint-disable-next-line react-refresh/only-export-components
 const AppConsoleVersionFC = AppConsoleVersion as React.FC<AppConsoleVersionProps>;
 import { AuthProvider } from "./lib/auth";
 import App from "./App";

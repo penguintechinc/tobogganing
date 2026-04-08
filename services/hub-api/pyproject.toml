@@ -14,7 +14,7 @@ dependencies = [
     "quart-auth",
     "quart-cors",
     "hypercorn",
-    "penguin-dal @ file:///home/penguin/code/penguin-libs/packages/python-dal",
+    "penguin-dal",
     "bcrypt",
     "pyjwt",
     "cryptography",
@@ -32,8 +32,8 @@ dependencies = [
     "aiofiles",
     "psutil",
     "boto3",
-    "penguin-aaa @ file:///home/penguin/code/penguin-libs/packages/python-aaa",
-    "penguin-sal @ file:///home/penguin/code/penguin-libs/packages/python-secrets",
+    "penguin-aaa",
+    "penguin-sal",
 ]
 
 [project.optional-dependencies]
@@ -46,8 +46,8 @@ dev = [
     "isort",
     "mypy",
     "bandit",
-    "penguin-aaa @ file:///home/penguin/code/penguin-libs/packages/python-aaa",
-    "penguin-sal @ file:///home/penguin/code/penguin-libs/packages/python-secrets",
+    "penguin-aaa",
+    "penguin-sal",
 ]
 
 [tool.black]

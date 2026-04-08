@@ -15,7 +15,7 @@ pyjwt>=2.8.0
 
 # Database
 # penguin-dal bundles SQLAlchemy; pydal is no longer a direct dependency.
-penguin-dal @ file:///home/penguin/code/penguin-libs/packages/python-dal
+penguin-dal
 aiomysql>=0.2.0
 asyncpg==0.29.0
 aiosqlite>=0.19.0
@@ -38,8 +38,11 @@ pyyaml==6.0.1
 structlog==23.2.0
 
 # PenguinTech shared libraries
-penguin-utils>=0.2.0
-penguin-licensing>=0.1.0
+penguin-dal @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-dal
+penguin-aaa @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-aaa
+penguin-sal @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-secrets
+penguin-utils @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-utils
+penguin-licensing @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-licensing
 
 # Utilities
 dnspython==2.4.2

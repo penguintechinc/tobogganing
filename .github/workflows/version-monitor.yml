@@ -75,14 +75,14 @@ jobs:
     - name: Verify Manager Service (Python 3.13)
       run: |
         echo "Manager Service Version Check"
-        [ -f "manager/app.py" ] && echo "  ✓ Manager app.py found"
-        [ -f "manager/requirements.txt" ] && echo "  ✓ Manager requirements.txt found"
+        [ -f "services/hub-api/app.py" ] && echo "  ✓ Manager app.py found"
+        [ -f "services/hub-api/requirements.txt" ] && echo "  ✓ Manager requirements.txt found"
 
     - name: Verify Headend Server (Go 1.24)
       run: |
         echo "Headend Server Version Check"
-        [ -f "headend/go.mod" ] && echo "  ✓ Headend go.mod found"
-        [ -d "headend/proxy" ] && echo "  ✓ Headend proxy package found"
+        [ -f "services/hub-router/go.mod" ] && echo "  ✓ Headend go.mod found"
+        [ -d "services/hub-router/proxy" ] && echo "  ✓ Headend proxy package found"
 
     - name: Verify Docker Client (Go 1.24)
       run: |
@@ -95,17 +95,11 @@ jobs:
         [ -f "clients/native/go.mod" ] && echo "  ✓ Native Client go.mod found"
         [ -d "clients/native/cmd" ] && echo "  ✓ Native Client cmd directory found"
 
-    - name: Verify K8s CNI Plugin (Go 1.24)
-      run: |
-        echo "K8s CNI Plugin Version Check"
-        [ -f "k8s-cni/go.mod" ] && echo "  ✓ K8s CNI go.mod found"
-        [ -d "k8s-cni/cmd/tobogganing-cni" ] && echo "  ✓ K8s CNI binary directory found"
-
-    - name: Verify Frontend (Node.js 18)
+    - name: VerifyFrontend (Node.js 18)
       run: |
         echo "Frontend Version Check"
-        [ -f "website/package.json" ] && echo "  ✓ Frontend package.json found"
-        [ -d "website/src" ] && echo "  ✓ Frontend src directory found"
+        [ -f "services/hub-webui/package.json" ] && echo "  ✓ Frontend package.json found"
+        [ -d "services/hub-webui/src" ] && echo "  ✓ Frontend src directory found"
 
   security-check:
     runs-on: ubuntu-24.04

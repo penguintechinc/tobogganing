@@ -182,7 +182,7 @@ func TestFetchConfig_URLBuilding(t *testing.T) {
 	var gotPath string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		_, _ = json.NewEncoder(w).Encode(makeValidConfig())
+		_ = json.NewEncoder(w).Encode(makeValidConfig())
 	}))
 	defer ts.Close()
 
@@ -190,7 +190,7 @@ func TestFetchConfig_URLBuilding(t *testing.T) {
 	defer os.Unsetenv("CLUSTER_ID")
 
 	cm := NewManager(ts.URL, "key")
-	_ = cm.FetchConfig()
+	_, _ = cm.FetchConfig()
 
 	expected := "/api/v1/clusters/my-cluster/headend-config"
 	if gotPath != expected {
@@ -202,7 +202,7 @@ func TestFetchConfig_SendsAuthHeader(t *testing.T) {
 	var gotAuth string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		_, _ = json.NewEncoder(w).Encode(makeValidConfig())
+		_ = json.NewEncoder(w).Encode(makeValidConfig())
 	}))
 	defer ts.Close()
 
@@ -210,7 +210,7 @@ func TestFetchConfig_SendsAuthHeader(t *testing.T) {
 	defer os.Unsetenv("CLUSTER_ID")
 
 	cm := NewManager(ts.URL, "secret-api-key")
-	_ = cm.FetchConfig()
+	_, _ = cm.FetchConfig()
 
 	if gotAuth != "Bearer secret-api-key" {
 		t.Errorf("unexpected auth header: %s", gotAuth)

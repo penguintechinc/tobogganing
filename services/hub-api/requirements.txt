@@ -37,10 +37,13 @@ pyyaml>=6.0.1
 # Logging
 structlog==23.2.0
 
-# PenguinTech shared libraries
-# TODO: regenerate with pip-compile --generate-hashes once penguin-utils and penguin-licensing are published to PyPI
-penguin-utils>=0.1.0
-penguin-licensing>=0.1.0
+# PenguinTech shared libraries — installed from git (not yet on PyPI)
+# Pinned to commit 36861ceb9e3a (penguin-libs main, 2026-04-01)
+penguin-dal @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-dal
+penguin-aaa @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-aaa
+penguin-sal @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-secrets
+penguin-utils @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-utils
+penguin-licensing @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-licensing
 
 # Utilities
 dnspython==2.4.2
