@@ -455,3 +455,143 @@ All hub-api REST endpoints are prefixed with `/api/v1/`. Breaking changes requir
 | Database abstraction | PyDAL | Multi-database support matching template standard |
 | gRPC over REST | gRPC for inter-service | Streaming support, binary protocol, schema enforcement |
 | Identity protocols | OIDC/SAML/SCIM | Industry standard; premium features for revenue |
+
+## MarchProxy Data Plane Architecture
+
+As of v2.0, Tobogganing uses MarchProxy as its data plane rather than Go's stdlib `httputil.ReverseProxy`. This follows the control-plane / data-plane separation model.
+
+### Design Principle
+
+MarchProxy is a **dumb data plane** — it only receives and enforces simple lever instructions (block CIDR, allow domain, route to cluster, set OIDC provider). All policy evaluation, threat scoring, and rule compilation stays in the **hub-policy controller**. The controller pushes compiled rules to MarchProxy; MarchProxy enforces them locally at wire speed with no per-request callback.
+
+### Traffic Path
+
+```
+Client
+  └─ hub-ingress (WireGuard/OpenZiti termination + JWT auth)
+       └─ Adds identity headers: X-User-ID, X-User-Groups, X-Overlay-Scope
+          └─ proxy-egress (MarchProxy — enforces pre-compiled rules locally)
+               └─ proxy-alb (MarchProxy — LB to upstream endpoints)
+                    └─ Upstream services
+```
+
+hub-ingress is the renamed hub-router. It owns only overlay termination and identity enrichment — no HTTP proxying, no per-request firewall checks.
+
+### hub-policy Controller Service
+
+`services/hub-policy/` is a new Go service that owns all policy logic:
+
+| Responsibility | Details |
+|----------------|---------|
+| Policy sync | Subscribes to hub-api via gRPC stream (30s REST poll fallback) |
+| Rule compilation | Converts `[]Policy` → `CompiledRuleSet` via PolicyEngine |
+| Cerberus enrichment | Optional — folds threat blocklists into compiled rules at compile time |
+| Rule push | POSTs `CompiledRuleSet` to proxy-egress via MarchProxy Levers API |
+
+**`CompiledRuleSet` structure:**
+```go
+type CompiledRuleSet struct {
+    BlockCIDRs    []string
+    AllowCIDRs    []string
+    BlockDomains  []string
+    AllowDomains  []string
+    RouteClusters []ClusterDef       // {Name, Endpoints, LBPolicy}
+    RateLimits    map[string]int     // src_ip → pps cap
+    OIDCProvider  *OIDCConfig        // optional — reconfigures inline JWT validation
+}
+```
+
+### MarchProxy Levers API
+
+proxy-egress exposes a push-receiver at `POST /api/v1/levers/rules`. hub-policy calls it whenever rules change. proxy-egress stores rules locally and enforces them without any controller dependency per request.
+
+**Lever types:**
+- `BlockCIDR` / `AllowCIDR` → writes to eBPF `cidr_deny_map` / `cidr_allow_map`
+- `BlockDomain` / `AllowDomain` → updates Envoy domain filter list
+- `SetUpstreamCluster` → updates xDS cluster config in proxy-alb
+- `SetRateLimit` → updates eBPF rate limit map
+- `SetOIDCProvider` → reconfigures inline JWKS-caching JWT validator
+
+### OIDC Lever
+
+proxy-egress validates Bearer tokens inline against a configured OIDC/OAuth2 provider. JWKS is fetched and cached with a 1-hour TTL. Token validation happens locally on every request — no round-trip to hub-policy. hub-policy can push `SetOIDCProvider` to reconfigure the issuer dynamically.
+
+**Config via levers push:**
+```json
+{
+  "oidc_provider": {
+    "issuer_url": "https://auth.example.com",
+    "client_id": "tobogganing",
+    "audience": "api"
+  }
+}
+```
+
+### Environment Variables
+
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `MARCHPROXY_LEVERS_URL` | hub-policy | Base URL of proxy-egress levers API (nil-safe: skips push if unset) |
+| `PROXY_EGRESS_URL` | hub-ingress | URL to forward traffic to after identity enrichment (default: `http://proxy-egress:10000`) |
+
+## Cerberus NGFW Integration (Optional)
+
+[Cerberus](https://github.com/PenguinCloud/Cerberus) is PenguinTech's enterprise Next-Generation Firewall and Unified Threat Management platform. Tobogganing integrates with Cerberus as an **optional nil-safe module** — zero impact when Cerberus is not deployed.
+
+### What Cerberus Provides
+
+| Feature | Description |
+|---------|-------------|
+| **IPS Engine** | Suricata-powered Intrusion Prevention System with real-time threat detection |
+| **Content Filtering** | DPI-based policy and URL categorization |
+| **SSL/TLS Inspection** | Decrypt and inspect encrypted traffic |
+| **Threat Intelligence** | Current blocklists: malicious IPs, threat domains |
+| **Traffic Mirror** | Suricata endpoint for passive traffic analysis |
+| **VPN Services** | WireGuard, IPSec, OpenVPN (separate from Tobogganing tunnels) |
+
+### Integration Points
+
+Cerberus integrates with Tobogganing in two places:
+
+#### 1. Threat Blocklist Enrichment (hub-policy)
+
+hub-policy optionally calls `cerberus.GetCurrentBlocklists()` during rule compilation. The returned threat IPs and domains are folded into the `CompiledRuleSet` pushed to proxy-egress. Enforcement happens locally in proxy-egress via eBPF — proxy-egress never knows about Cerberus.
+
+```
+hub-policy compiles rules
+  └─ [if CERBERUS_URL set] calls cerberus.GetCurrentBlocklists()
+       └─ threat IPs → appended to CompiledRuleSet.BlockCIDRs
+          threat domains → appended to CompiledRuleSet.BlockDomains
+  └─ pushes enriched CompiledRuleSet to proxy-egress levers API
+       └─ proxy-egress enforces via eBPF — no Cerberus knowledge in the proxy
+```
+
+#### 2. Traffic Mirror (hub-ingress)
+
+hub-ingress (formerly hub-router) can optionally mirror traffic to Cerberus's Suricata endpoint for passive threat analysis. When `CERBERUS_MIRROR_ENDPOINT` is set, it is appended to the mirror destinations list alongside any directly configured Suricata host.
+
+### Configuration
+
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `CERBERUS_URL` | hub-policy | Base URL of Cerberus API (nil-safe: enrichment skipped if unset) |
+| `CERBERUS_MIRROR_ENDPOINT` | hub-ingress | Cerberus Suricata mirror endpoint (nil-safe: mirroring skipped if unset) |
+
+### Nil-Safe Pattern
+
+Both integration points use the Skauswatch nil-safe factory pattern:
+
+```go
+// hub-policy startup — cerberus.NewClientFromEnv() returns nil if CERBERUS_URL unset
+cerberusClient := cerberus.NewClientFromEnv()
+
+// All methods safe on nil receiver — zero-cost when not configured
+threatIPs, threatDomains := cerberusClient.GetCurrentBlocklists(ctx)
+// Returns empty slices when cerberusClient == nil
+```
+
+When `CERBERUS_URL` is absent: no errors, no Cerberus calls, rules push as normal without threat enrichment.
+
+### Deployment
+
+Cerberus runs as a separate deployment — it is not bundled with Tobogganing. Connect them by setting the environment variables above. Cerberus documentation: `~/code/cerberus/` or https://github.com/PenguinCloud/Cerberus.
