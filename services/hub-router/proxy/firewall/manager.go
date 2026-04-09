@@ -1,17 +1,21 @@
 // Package firewall implements a comprehensive firewall system for the Tobogganing headend proxy.
 //
-// The firewall manager provides:
+// DEPRECATED: The per-request firewall enforcement in this package is no longer called in the proxy pipeline.
+// Policy enforcement is now handled by hub-policy (controller) which compiles rules and pushes them to
+// proxy-egress (data plane) via the levers API. The hub-router proxy now only enriches requests with
+// identity headers (X-User-ID, X-User-Groups, X-Overlay-Scope) and forwards them to proxy-egress for
+// enforcement with pre-compiled rules.
+//
+// This package is retained for reference during the v2.0.x → v3.0.x transition and may be removed
+// in a future version.
+//
+// Legacy functionality preserved below:
 // - Domain-based access control with wildcard support (*.example.com)
 // - IPv4 and IPv6 address filtering with CIDR support
 // - Protocol-level filtering (TCP, UDP, ICMP, etc.)
 // - Source and destination port range filtering
 // - Directional traffic control (inbound, outbound, bidirectional)
 // - Priority-based rule processing and conflict resolution
-// - Real-time rule updates from the Manager service
-// - Redis caching with randomized refresh intervals to prevent thundering herd
-//
-// The firewall integrates with the proxy's request processing pipeline to
-// enforce access controls before traffic is forwarded to destinations.
 package firewall
 
 import (

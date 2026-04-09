@@ -14,7 +14,6 @@ package main
 
 import (
     "context"
-    "crypto/tls"
     "fmt"
     "net"
     "net/http"
@@ -59,7 +58,7 @@ type ProxyServer struct {
     overlayManager  *overlay.Manager
     zitiListener    net.Listener
     xdpProtection   *xdp.XDPProtection
-    proxies         map[string]*httputil.ReverseProxy
+    egressProxy     *httputil.ReverseProxy // single proxy to proxy-egress
     mu              sync.RWMutex
 }
 
@@ -87,9 +86,7 @@ func main() {
     initConfig()
     initLogging()
 
-    server := &ProxyServer{
-        proxies: make(map[string]*httputil.ReverseProxy),
-    }
+    server := &ProxyServer{}
 
     if err := server.Initialize(); err != nil {
         log.Fatalf("Failed to initialize server: %v", err)
@@ -408,8 +405,20 @@ func (s *ProxyServer) Initialize() error {
     }
     
     if err := s.initializeUDPProxy(); err != nil {
-        return fmt.Errorf("failed to initialize UDP proxy: %w", err)  
+        return fmt.Errorf("failed to initialize UDP proxy: %w", err)
     }
+
+    // Initialize reverse proxy to proxy-egress
+    egressURL := os.Getenv("PROXY_EGRESS_URL")
+    if egressURL == "" {
+        egressURL = "http://proxy-egress:10000"
+    }
+    parsed, err := url.Parse(egressURL)
+    if err != nil {
+        return fmt.Errorf("invalid PROXY_EGRESS_URL: %w", err)
+    }
+    s.egressProxy = httputil.NewSingleHostReverseProxy(parsed)
+    log.Infof("Reverse proxy to proxy-egress initialized (URL: %s)", egressURL)
 
     // Setup HTTP routes
     s.setupRoutes()
@@ -559,110 +568,25 @@ func (s *ProxyServer) userInfoHandler(c *gin.Context) {
 }
 
 func (s *ProxyServer) proxyHandler(c *gin.Context) {
-    targetHost := c.GetHeader("X-Target-Host")
-    if targetHost == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Missing X-Target-Host header"})
-        return
-    }
-
     claims := c.MustGet("claims").(*authn.Claims)
-    sourceIP := c.ClientIP()
-    method := c.Request.Method
-    path := c.Request.URL.Path
-    userAgent := c.GetHeader("User-Agent")
-    requestID := c.GetHeader("X-Request-ID")
 
-    // Check firewall rules if firewall manager is enabled
-    var allowed bool
-    if s.firewallManager != nil {
-        allowed = s.firewallManager.CheckAccess(claims.Sub, targetHost)
-    } else {
-        allowed = true
-    }
+    // Enrich request with identity headers for proxy-egress enforcement.
+    // proxy-egress uses pre-compiled rules from hub-policy (levers), not per-request checks.
+    c.Request.Header.Set("X-User-ID", claims.Sub)
+    c.Request.Header.Set("X-User-Groups", strings.Join(claims.Teams, ","))
+    c.Request.Header.Set("X-Overlay-Scope", s.overlayScope())
 
-    if !allowed {
-            log.Warnf("Firewall blocked access for subject %s to %s", claims.Sub, targetHost)
-
-            // Log denied access to syslog
-            if s.syslogLogger != nil {
-                s.syslogLogger.LogHTTPAccess(claims.Sub, claims.Sub, sourceIP, targetHost, method, path, userAgent, requestID, 403, 0, false)
-            }
-
-            c.JSON(http.StatusForbidden, gin.H{"error": "Access denied by firewall policy"})
-            return
-    }
-
-    log.Debugf("Firewall allowed access for subject %s to %s", claims.Sub, targetHost)
-
-    // Get or create proxy for target
-    proxy := s.getOrCreateProxy(targetHost)
-
-    // Create response writer wrapper for monitoring
-    wrapper := &responseWriterWrapper{
-        ResponseWriter: c.Writer,
-        mirrorManager:  s.mirrorManager,
-        syslogLogger:   s.syslogLogger,
-        request:        c.Request,
-        userSub:        claims.Sub,
-        targetHost:     targetHost,
-        sourceIP:       sourceIP,
-        method:         method,
-        path:           path,
-        userAgent:      userAgent,
-        requestID:      requestID,
-    }
-    c.Writer = wrapper
-
-    // Proxy the request
-    proxy.ServeHTTP(c.Writer, c.Request)
-    
-    // Ensure logging and mirroring happens
-    if wrapper, ok := c.Writer.(*responseWriterWrapper); ok {
-        wrapper.Flush()
-    }
+    // Forward to proxy-egress
+    s.egressProxy.ServeHTTP(c.Writer, c.Request)
 }
 
-func (s *ProxyServer) getOrCreateProxy(targetHost string) *httputil.ReverseProxy {
-    s.mu.RLock()
-    proxy, exists := s.proxies[targetHost]
-    s.mu.RUnlock()
-
-    if exists {
-        return proxy
+// overlayScope returns the configured overlay type: "wireguard" or "openziti", defaulting to "wireguard".
+func (s *ProxyServer) overlayScope() string {
+    overlayType := viper.GetString("overlay.type")
+    if overlayType == "openziti" {
+        return "openziti"
     }
-
-    s.mu.Lock()
-    defer s.mu.Unlock()
-
-    // Double-check after acquiring write lock
-    if proxy, exists := s.proxies[targetHost]; exists {
-        return proxy
-    }
-
-    // Create new proxy
-    targetURL, _ := url.Parse(fmt.Sprintf("https://%s", targetHost))
-    proxy = httputil.NewSingleHostReverseProxy(targetURL)
-
-    // Configure proxy
-    proxy.Transport = &http.Transport{
-        TLSClientConfig: &tls.Config{
-            InsecureSkipVerify: viper.GetBool("proxy.skip_tls_verify"),
-        },
-        MaxIdleConns:        100,
-        MaxIdleConnsPerHost: 10,
-        IdleConnTimeout:     90 * time.Second,
-    }
-
-    proxy.ModifyResponse = func(resp *http.Response) error {
-        // Add security headers
-        resp.Header.Set("X-Frame-Options", "DENY")
-        resp.Header.Set("X-Content-Type-Options", "nosniff")
-        resp.Header.Set("X-XSS-Protection", "1; mode=block")
-        return nil
-    }
-
-    s.proxies[targetHost] = proxy
-    return proxy
+    return "wireguard"
 }
 
 func (s *ProxyServer) initializeTCPProxy() error {
@@ -797,70 +721,6 @@ func (s *ProxyServer) Run() error {
     return s.httpServer.ListenAndServe()
 }
 
-type responseWriterWrapper struct {
-    gin.ResponseWriter
-    mirrorManager *mirror.Manager
-    syslogLogger  *syslog.SyslogLogger
-    request       *http.Request
-    userSub       string // subject claim from validated JWT (replaces auth.User)
-    targetHost    string
-    sourceIP      string
-    method        string
-    path          string
-    userAgent     string
-    requestID     string
-    statusCode    int
-    bytesWritten  int64
-    written       []byte
-}
-
-func (w *responseWriterWrapper) WriteHeader(code int) {
-    w.statusCode = code
-    w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *responseWriterWrapper) Write(data []byte) (int, error) {
-    // Only store data for mirroring if mirror is enabled
-    if w.mirrorManager != nil {
-        w.written = append(w.written, data...)
-    }
-    w.bytesWritten += int64(len(data))
-    
-    // Mirror and log are handled by worker queues for performance
-    // Just track the data here, actual work is deferred
-    
-    return w.ResponseWriter.Write(data)
-}
-
-// Flush handles final logging and mirroring when the response is complete
-func (w *responseWriterWrapper) Flush() {
-    // Send to mirror asynchronously if enabled
-    if w.mirrorManager != nil && len(w.written) > 0 {
-        go w.mirrorManager.MirrorHTTP(w.request, w.statusCode, w.written)
-    }
-    
-    // Log to syslog - uses internal worker queue for performance
-    if w.syslogLogger != nil {
-        w.syslogLogger.LogHTTPAccess(
-            w.userSub,
-            w.userSub,
-            w.sourceIP,
-            w.targetHost,
-            w.method,
-            w.path,
-            w.userAgent,
-            w.requestID,
-            w.statusCode,
-            w.bytesWritten,
-            true, // allowed (we wouldn't get here if not allowed)
-        )
-    }
-    
-    // Call the underlying Flush if available
-    if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-        flusher.Flush()
-    }
-}
 
 // TCP Proxy Implementation
 func (t *TCPProxy) Start() {

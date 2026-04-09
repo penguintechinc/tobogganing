@@ -21,6 +21,7 @@ import (
     "fmt"
     "net"
     "net/http"
+    "os"
     "sync"
     "time"
 
@@ -64,7 +65,13 @@ func NewManager(destinations []string, protocol string, bufferSize int) *Manager
     if protocol == "" {
         protocol = "VXLAN"
     }
-    
+
+    // Add Cerberus mirror endpoint if configured
+    if endpoint := os.Getenv("CERBERUS_MIRROR_ENDPOINT"); endpoint != "" {
+        log.WithField("endpoint", endpoint).Info("mirror: Cerberus mirror endpoint configured")
+        destinations = append(destinations, endpoint)
+    }
+
     return &Manager{
         destinations: destinations,
         protocol:     protocol,
@@ -80,7 +87,13 @@ func NewManagerWithSuricata(destinations []string, protocol string, bufferSize i
     if protocol == "" {
         protocol = "VXLAN"
     }
-    
+
+    // Add Cerberus mirror endpoint if configured
+    if endpoint := os.Getenv("CERBERUS_MIRROR_ENDPOINT"); endpoint != "" {
+        log.WithField("endpoint", endpoint).Info("mirror: Cerberus mirror endpoint configured")
+        destinations = append(destinations, endpoint)
+    }
+
     return &Manager{
         destinations:    destinations,
         protocol:        protocol,
