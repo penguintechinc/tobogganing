@@ -304,12 +304,18 @@ func (s *SyslogLogger) sendLog(accessLog AccessLog) error {
 	return nil
 }
 
+// lookupCNAMEFn is overridable in tests to simulate DNS failures.
+var lookupCNAMEFn = net.LookupCNAME
+
+// lookupAddrFn is overridable in tests to simulate reverse DNS failures.
+var lookupAddrFn = net.LookupAddr
+
 // getCurrentHostname gets the current hostname with fallback
 func getCurrentHostname() (string, error) {
-	hostname, err := net.LookupCNAME("localhost")
+	hostname, err := lookupCNAMEFn("localhost")
 	if err != nil {
 		// Fallback to local hostname
-		if h, err2 := net.LookupAddr("127.0.0.1"); err2 == nil && len(h) > 0 {
+		if h, err2 := lookupAddrFn("127.0.0.1"); err2 == nil && len(h) > 0 {
 			return h[0], nil
 		}
 		return "tobogganing-hub-router", nil

@@ -330,3 +330,162 @@ func TestManager_RevokeToken_ServerError(t *testing.T) {
 		t.Error("expected error for 500 response")
 	}
 }
+
+// TestManager_GetToken_NetworkError covers error path when http.Client.Do() fails
+func TestManager_GetToken_NetworkError(t *testing.T) {
+	// Create client with very short timeout that will fail
+	client := &http.Client{
+		Timeout: 1 * time.Nanosecond,  // Will timeout immediately
+	}
+	manager := &Manager{
+		managerURL: "http://example.com",
+		httpClient: client,
+	}
+
+	_, err := manager.GetToken("test-node", "client", "test-key")
+	if err == nil {
+		t.Error("expected error for network timeout")
+	}
+}
+
+// TestManager_RefreshToken_NetworkError covers error path when http.Client.Do() fails
+func TestManager_RefreshToken_NetworkError(t *testing.T) {
+	// Create client with very short timeout that will fail
+	client := &http.Client{
+		Timeout: 1 * time.Nanosecond,  // Will timeout immediately
+	}
+	manager := &Manager{
+		managerURL: "http://example.com",
+		httpClient: client,
+	}
+
+	_, err := manager.RefreshToken("test-refresh-token")
+	if err == nil {
+		t.Error("expected error for network timeout")
+	}
+}
+
+// TestManager_ValidateToken_NetworkError covers error path when http.Client.Do() fails
+func TestManager_ValidateToken_NetworkError(t *testing.T) {
+	// Create client with very short timeout that will fail
+	client := &http.Client{
+		Timeout: 1 * time.Nanosecond,  // Will timeout immediately
+	}
+	manager := &Manager{
+		managerURL: "http://example.com",
+		httpClient: client,
+	}
+
+	_, err := manager.ValidateToken("test-token")
+	if err == nil {
+		t.Error("expected error for network timeout")
+	}
+}
+
+// TestManager_RevokeToken_NetworkError covers error path when http.Client.Do() fails
+func TestManager_RevokeToken_NetworkError(t *testing.T) {
+	// Create client with very short timeout that will fail
+	client := &http.Client{
+		Timeout: 1 * time.Nanosecond,  // Will timeout immediately
+	}
+	manager := &Manager{
+		managerURL: "http://example.com",
+		httpClient: client,
+	}
+
+	tokenWithJTI := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyIiwianRpIjoidGVzdC1qdGktMTIzNDUifQ.signature"
+	err := manager.RevokeToken(tokenWithJTI)
+	if err == nil {
+		t.Error("expected error for network timeout")
+	}
+}
+
+// TestManager_GetToken_BadJSONResponse covers error path for invalid JSON response
+func TestManager_GetToken_BadJSONResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{invalid json`))  // Malformed JSON
+	}))
+	defer server.Close()
+
+	manager, err := New(server.URL)
+	if err != nil {
+		t.Fatalf("Failed to create auth manager: %v", err)
+	}
+
+	_, err = manager.GetToken("test-node", "client", "test-key")
+	if err == nil {
+		t.Error("expected error for bad JSON response")
+	}
+}
+
+// TestManager_RefreshToken_BadJSONResponse covers error path for invalid JSON response
+func TestManager_RefreshToken_BadJSONResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{invalid json`))  // Malformed JSON
+	}))
+	defer server.Close()
+
+	manager, err := New(server.URL)
+	if err != nil {
+		t.Fatalf("Failed to create auth manager: %v", err)
+	}
+
+	_, err = manager.RefreshToken("test-token")
+	if err == nil {
+		t.Error("expected error for bad JSON response")
+	}
+}
+
+// TestManager_RevokeToken_ErrorResponse covers error path for non-200 response
+func TestManager_RevokeToken_ErrorResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error": "internal error"}`))
+	}))
+	defer server.Close()
+
+	manager, err := New(server.URL)
+	if err != nil {
+		t.Fatalf("Failed to create auth manager: %v", err)
+	}
+
+	tokenWithJTI := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyIiwianRpIjoidGVzdC1qdGktMTIzNDUifQ.signature"
+	err = manager.RevokeToken(tokenWithJTI)
+	if err == nil {
+		t.Error("expected error for non-200 response")
+	}
+}
+
+// TestManager_GetToken_WithTokenExpiryParsing covers the token expiry extraction path
+func TestManager_GetToken_WithTokenExpiryParsing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Token without expires_at field - should parse from JWT exp claim
+		_, _ = w.Write([]byte(`{
+			"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyIiwiZXhwIjoxNzA0NjcxOTk5fQ.signature",
+			"refresh_token": "test-refresh",
+			"token_type": "Bearer"
+		}`))
+	}))
+	defer server.Close()
+
+	manager, err := New(server.URL)
+	if err != nil {
+		t.Fatalf("Failed to create auth manager: %v", err)
+	}
+
+	tokenInfo, err := manager.GetToken("test-node", "client", "test-key")
+	if err != nil {
+		t.Fatalf("Failed to get token: %v", err)
+	}
+
+	// Verify expiry was parsed from token
+	if tokenInfo.ExpiresAt.IsZero() {
+		t.Error("expected ExpiresAt to be parsed from token")
+	}
+}

@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -232,5 +234,70 @@ func TestLoadFromDefaults_UnmarshalError(t *testing.T) {
 	if err := LoadFromDefaults(cfg); err != nil {
 		// Error is acceptable if no config files exist; just check no panic.
 		_ = err
+	}
+}
+
+// --- Save function error paths ---
+
+func TestConfig_Save_MkdirError(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ManagerURL = "https://example.com"
+	cfg.APIKey = "test-key"
+
+	// Try to save to a path that can't be created (e.g., /dev/null/config.yaml)
+	invalidPath := "/dev/null/subdir/config.yaml"
+
+	err := cfg.Save(invalidPath)
+	if err == nil {
+		t.Error("expected error for invalid path")
+	}
+	if !strings.Contains(err.Error(), "failed to create") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// --- GetConfigDir platform tests ---
+
+func TestGetConfigDir_CoveragePath(t *testing.T) {
+	// This function dispatches on runtime.GOOS, so we're just verifying it returns a non-empty string
+	dir := GetConfigDir()
+	if dir == "" {
+		t.Error("GetConfigDir returned empty string")
+	}
+}
+
+// --- WriteFile function tests ---
+
+func TestConfig_WriteFile_Success(t *testing.T) {
+	cfg := DefaultConfig()
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.conf")
+
+	testData := []byte("test configuration data")
+	err := cfg.WriteFile(filePath, testData)
+	if err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Verify file was written
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("failed to read written file: %v", err)
+	}
+	if !bytes.Equal(data, testData) {
+		t.Errorf("written data mismatch: expected %v, got %v", testData, data)
+	}
+}
+
+func TestConfig_WriteFile_MkdirError(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Try to write to an invalid path that can't be created
+	invalidPath := "/dev/null/subdir/file.conf"
+
+	testData := []byte("test data")
+	err := cfg.WriteFile(invalidPath, testData)
+	if err == nil {
+		t.Error("expected error for invalid path")
 	}
 }

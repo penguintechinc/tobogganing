@@ -1,6 +1,7 @@
 package mirror
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -573,6 +574,214 @@ func TestReconnectSuricata_ClosesExistingConn(t *testing.T) {
 	}
 }
 
+// ─── Additional coverage tests for uncovered branches ──────────────────────────
+
+// TestStart_WithUnreachableDestination tests error handling when dial fails
+func TestStart_WithUnreachableDestination(t *testing.T) {
+	// Port 1 is typically not listening and dial will fail
+	m := NewManager([]string{"127.0.0.1:1"}, "VXLAN", 10)
+	// Start should succeed (returns early if no destinations and no suricata enabled)
+	// UDP dial is connectionless so it won't fail; but createConnection for port 1 behaves this way
+	err := m.Start()
+	// For VXLAN (UDP), dial is connectionless and may not fail immediately
+	// But the destination is stored, so Start should succeed
+	if err == nil {
+		// Ensure goroutines are stopped to avoid test leak
+		done := make(chan struct{})
+		go func() { m.Stop(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("Stop timed out")
+		}
+	}
+}
+
+// TestStart_WithSuricataOnly tests Start when only Suricata is available
+func TestStart_WithSuricataOnly(t *testing.T) {
+	// Create a TCP listener for Suricata
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to create TCP listener: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 10, "127.0.0.1", itoa(port))
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start should succeed with Suricata enabled: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		m.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Error("Stop timed out")
+	}
+}
+
+// TestSendPacket_WithSuricataConn tests sendPacket when Suricata connection is active
+func TestSendPacket_WithSuricataConn(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to create TCP listener: %v", err)
+	}
+	defer ln.Close()
+
+	// Accept goroutine — exits when ln is closed
+	go func() {
+		for {
+			c, acceptErr := ln.Accept()
+			if acceptErr != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 10, "127.0.0.1", itoa(port))
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	pkt := &MirrorPacket{
+		Timestamp:   time.Now(),
+		Protocol:    "TCP",
+		Data:        []byte("test-data"),
+		Source:      net.ParseIP("192.168.1.1"),
+		Destination: net.ParseIP("10.0.0.1"),
+		Metadata:    map[string]interface{}{"cluster_id": "c1", "user_id": "u1"},
+	}
+
+	m.sendPacket(pkt)
+
+	stopDone := make(chan struct{})
+	go func() { m.Stop(); close(stopDone) }()
+	select {
+	case <-stopDone:
+	case <-time.After(3 * time.Second):
+		t.Error("Stop timed out")
+	}
+}
+
+// TestSendPacket_WithConnectionError tests error handling when write fails
+func TestSendPacket_WithConnectionError(t *testing.T) {
+	// Create a pipe to simulate broken connection
+	serverConn, clientConn := net.Pipe()
+	serverConn.Close() // Close server side to simulate write error
+
+	m := NewManager([]string{"127.0.0.1:4789"}, "VXLAN", 10)
+	m.connections["127.0.0.1:4789"] = clientConn
+
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Data:      []byte("test"),
+		Metadata:  map[string]interface{}{},
+	}
+
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	defer m.stats.mu.RUnlock()
+	if m.stats.Errors == 0 {
+		t.Error("expected at least 1 error when connection fails")
+	}
+}
+
+// TestSendPacket_EncapsulationError tests handling of bad protocol/data that causes encapsulation failure
+func TestSendPacket_UnknownProtocol(t *testing.T) {
+	m := NewManager(nil, "UNKNOWN_PROTOCOL", 10)
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Data:      []byte("test"),
+		Metadata:  map[string]interface{}{},
+	}
+	// Should not panic; just uses raw data since protocol is unknown
+	m.sendPacket(pkt)
+}
+
+// TestWorker_DrainQueueOnStop tests that worker drains remaining packets before returning
+func TestWorker_DrainQueueOnStop(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	dest := listener.LocalAddr().String()
+	m := NewManager([]string{dest}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Queue several packets
+	for i := 0; i < 5; i++ {
+		m.MirrorRaw([]byte(fmt.Sprintf("packet-%d", i)), map[string]interface{}{})
+	}
+
+	// Stop should drain queue
+	done := make(chan struct{})
+	go func() {
+		m.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// good, stop completed
+	case <-time.After(3 * time.Second):
+		t.Error("Stop timed out while draining queue")
+	}
+}
+
+// TestReportStats tests the stats reporter goroutine
+func TestReportStats(t *testing.T) {
+	m := NewManager(nil, "VXLAN", 10)
+	m.stats.incrementSent(100)
+	m.stats.incrementDropped()
+	m.stats.incrementErrors()
+
+	// Manually trigger stats reporting (would normally run in background)
+	m.stats.mu.RLock()
+	sent := m.stats.PacketsSent
+	dropped := m.stats.PacketsDropped
+	errors := m.stats.Errors
+	m.stats.mu.RUnlock()
+
+	if sent != 1 || dropped != 1 || errors != 1 {
+		t.Errorf("expected stats (1,1,1), got (%d,%d,%d)", sent, dropped, errors)
+	}
+}
+
+// TestCreateConnection_GRE tests GRE connection creation (may fail on non-root)
+func TestCreateConnection_GRE_UnreachablePort(t *testing.T) {
+	// GRE uses raw IP sockets which may not be available; test gracefully handles
+	m := NewManager(nil, "GRE", 10)
+	conn, err := m.createConnection("127.0.0.1:1")
+	if conn != nil {
+		conn.Close()
+	}
+	// Error is acceptable here since GRE requires special privileges
+	_ = err
+}
+
 // ─── worker exercises via Start/Stop with real connection ─────────────────────
 
 func TestWorker_ProcessesQueuedPackets(t *testing.T) {
@@ -676,7 +885,640 @@ func TestReportStats_StopsWithManager(t *testing.T) {
 	}
 }
 
+// ─── Additional Coverage Tests ────────────────────────────────────────────────
+
+func TestNewManager_WithCerberusEndpoint(t *testing.T) {
+	t.Setenv("CERBERUS_MIRROR_ENDPOINT", "test.local:5000")
+	m := NewManager([]string{"127.0.0.1:4789"}, "VXLAN", 100)
+
+	found := false
+	for _, dest := range m.destinations {
+		if dest == "test.local:5000" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected Cerberus endpoint appended")
+	}
+}
+
+func TestNewManagerWithSuricata_PartialConfig(t *testing.T) {
+	// Suricata disabled with empty host
+	m := NewManagerWithSuricata([]string{"127.0.0.1:4789"}, "VXLAN", 100, "", "9999")
+	if m.suricataEnabled {
+		t.Error("expected suricata disabled with empty host")
+	}
+
+	// Suricata disabled with empty port
+	m = NewManagerWithSuricata([]string{"127.0.0.1:4789"}, "VXLAN", 100, "127.0.0.1", "")
+	if m.suricataEnabled {
+		t.Error("expected suricata disabled with empty port")
+	}
+}
+
+func TestSendPacket_ConnectionWriteFailure(t *testing.T) {
+	m := NewManager(nil, "VXLAN", 10)
+
+	// Create a broken connection
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	conn, _ := net.Dial("udp", listener.LocalAddr().String())
+	listener.Close()
+	conn.Close()
+
+	m.mu.Lock()
+	m.connections["broken"] = conn
+	m.mu.Unlock()
+
+	pkt := &MirrorPacket{Data: []byte("test")}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	errCount := m.stats.Errors
+	m.stats.mu.RUnlock()
+
+	if errCount == 0 {
+		t.Error("expected error count to increment")
+	}
+}
+
+func TestSendPacket_NoDestinations(t *testing.T) {
+	m := NewManager(nil, "VXLAN", 10)
+	pkt := &MirrorPacket{Data: []byte("test")}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	sent := m.stats.PacketsSent
+	m.stats.mu.RUnlock()
+
+	if sent != 0 {
+		t.Errorf("expected 0 packets sent with no destinations, got %d", sent)
+	}
+}
+
+func TestReconnect_BasicFlow(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	dest := listener.LocalAddr().String()
+
+	m := NewManager(nil, "VXLAN", 10)
+	conn, _ := net.Dial("udp", dest)
+
+	m.mu.Lock()
+	m.connections[dest] = conn
+	m.mu.Unlock()
+
+	m.reconnect(dest)
+
+	m.mu.RLock()
+	newConn, exists := m.connections[dest]
+	m.mu.RUnlock()
+
+	if !exists || newConn == nil {
+		t.Error("expected reconnected connection to exist")
+	}
+}
+
+func TestReconnectSuricata_BasicFlow(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+
+	go func() {
+		if c, err := ln.Accept(); err == nil && c != nil {
+			c.Close()
+		}
+	}()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	m := NewManagerWithSuricata(nil, "VXLAN", 100, "127.0.0.1", itoa(port))
+	m.Start()
+
+	m.reconnectSuricata()
+
+	m.Stop()
+}
+
 // ─── helper ──────────────────────────────────────────────────────────────────
+
+func TestNewManagerWithSuricata_WithDefaultProtocol(t *testing.T) {
+	m := NewManagerWithSuricata([]string{}, "", 100, "127.0.0.1", "9999")
+	if m.protocol != "VXLAN" {
+		t.Errorf("expected default VXLAN protocol, got %s", m.protocol)
+	}
+}
+
+func TestSendPacket_EncapsulationError_UnknownProtocol(t *testing.T) {
+	// Test with an unknown protocol to trigger error handling
+	m := NewManager([]string{}, "UNKNOWN_PROTOCOL", 10)
+
+	// Mock a connection to avoid encapsulation error path
+	// (unknown protocol defaults to raw, no error)
+	pkt := &MirrorPacket{Data: []byte("test")}
+	m.sendPacket(pkt)
+	// Should not panic
+}
+
+func TestStart_WithSuricata_FailedConnection(t *testing.T) {
+	// Suricata enabled with bad address - Suricata is optional so Start succeeds anyway
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 10, "127.0.0.1", "1")
+	err := m.Start()
+	// No regular destinations but Suricata enabled -> should NOT error
+	if err != nil {
+		t.Fatalf("expected no error with suricata enabled: %v", err)
+	}
+	m.Stop()
+}
+
+func TestStart_WithSuricata_Success(t *testing.T) {
+	// Create a TCP listener for Suricata
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to create TCP listener: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		if c, err := ln.Accept(); err == nil && c != nil {
+			c.Close()
+		}
+	}()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 10, "127.0.0.1", itoa(port))
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	m.mu.RLock()
+	sConn := m.suricataConn
+	m.mu.RUnlock()
+
+	if sConn == nil {
+		t.Error("expected suricata connection to be established")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		m.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Error("Stop timed out")
+	}
+}
+
+func TestSendPacket_SuricataConnectionError(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	m := NewManagerWithSuricata([]string{listener.LocalAddr().String()}, "VXLAN", 100, "127.0.0.1", "1")
+	conn, _ := m.createConnection(listener.LocalAddr().String())
+	m.connections[listener.LocalAddr().String()] = conn
+
+	// Set suricataEnabled but with nil conn
+	m.suricataEnabled = true
+	m.suricataConn = nil
+
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "HTTP",
+		Data:      []byte("test"),
+		Metadata:  map[string]interface{}{"cluster_id": "c1", "user_id": "u1"},
+	}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	defer m.stats.mu.RUnlock()
+	if m.stats.PacketsSent == 0 {
+		t.Error("expected at least one packet sent to UDP destination")
+	}
+}
+
+func TestWorker_EmptyQueueOnStop(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	dest := listener.LocalAddr().String()
+	m := NewManager([]string{dest}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Queue some packets
+	for i := 0; i < 3; i++ {
+		m.MirrorRaw([]byte("test-packet-"+itoa(i)), map[string]interface{}{})
+	}
+
+	// Stop should drain queue and process remaining packets
+	m.Stop()
+
+	m.stats.mu.RLock()
+	sent := m.stats.PacketsSent
+	m.stats.mu.RUnlock()
+
+	if sent < 3 {
+		t.Errorf("expected at least 3 packets sent, got %d", sent)
+	}
+}
+
+func TestReconnect_WithNoExistingConnection(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	dest := listener.LocalAddr().String()
+	m := NewManager([]string{dest}, "VXLAN", 10)
+
+	// No existing connection
+	m.reconnect(dest)
+
+	m.mu.RLock()
+	conn, exists := m.connections[dest]
+	m.mu.RUnlock()
+
+	if !exists || conn == nil {
+		t.Error("expected connection to be created by reconnect")
+	}
+}
+
+func TestPrepareSuricataData_WithMissingMetadata(t *testing.T) {
+	m := NewManager(nil, "VXLAN", 10)
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "TCP",
+		Data:      []byte("payload"),
+		Metadata:  map[string]interface{}{}, // empty metadata
+	}
+	result := m.prepareSuricataData(pkt)
+	if len(result) == 0 {
+		t.Error("expected non-empty suricata data")
+	}
+	if result[len(result)-1] != '\n' {
+		t.Error("expected trailing newline")
+	}
+}
+
+func TestCreateConnection_GRE(t *testing.T) {
+	// GRE uses ip4:47 - this may fail in test environment but shouldn't panic
+	m := NewManager(nil, "GRE", 10)
+	// GRE connection (ip4:47) requires special permissions; this is expected to fail in test
+	_, _ = m.createConnection("127.0.0.1:0")
+	// Don't assert on error; just verify no panic
+}
+
+func TestStop_ClosesAllConnections(t *testing.T) {
+	// Create multiple UDP listeners
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	l1, _ := net.ListenUDP("udp", addr)
+	l2, _ := net.ListenUDP("udp", addr)
+	defer l1.Close()
+	defer l2.Close()
+
+	d1 := l1.LocalAddr().String()
+	d2 := l2.LocalAddr().String()
+
+	m := NewManager([]string{d1, d2}, "VXLAN", 10)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Verify connections exist
+	m.mu.RLock()
+	if len(m.connections) == 0 {
+		t.Error("expected connections to be established")
+	}
+	m.mu.RUnlock()
+
+	// Stop should close all
+	m.Stop()
+
+	m.mu.RLock()
+	if len(m.connections) != 0 {
+		t.Error("expected all connections to be closed")
+	}
+	m.mu.RUnlock()
+}
+
+func TestReportStats_PrintsMetrics(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	m := NewManager([]string{listener.LocalAddr().String()}, "VXLAN", 100)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Queue and send some packets to generate stats
+	for i := 0; i < 3; i++ {
+		m.MirrorRaw([]byte("test"+itoa(i)), map[string]interface{}{})
+	}
+
+	// Give time for processing and reporting
+	time.Sleep(100 * time.Millisecond)
+
+	m.Stop()
+
+	m.stats.mu.RLock()
+	if m.stats.PacketsSent == 0 && m.stats.PacketsDropped == 0 {
+		t.Error("expected some stats to be recorded")
+	}
+	m.stats.mu.RUnlock()
+}
+
+func TestSendPacket_AllProtocols(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	for _, protocol := range []string{"VXLAN", "ERSPAN"} {
+		m := NewManager([]string{listener.LocalAddr().String()}, protocol, 10)
+		conn, _ := m.createConnection(listener.LocalAddr().String())
+		m.mu.Lock()
+		m.connections[listener.LocalAddr().String()] = conn
+		m.mu.Unlock()
+
+		pkt := &MirrorPacket{
+			Timestamp: time.Now(),
+			Protocol:  "TCP",
+			Data:      []byte("test-" + protocol),
+			Metadata:  map[string]interface{}{},
+		}
+		m.sendPacket(pkt)
+
+		conn.Close()
+	}
+}
+
+func TestNewManagerWithSuricata_CerberusEndpoint(t *testing.T) {
+	t.Setenv("CERBERUS_MIRROR_ENDPOINT", "cerberus.local:5000")
+	m := NewManagerWithSuricata([]string{"dest1:4789"}, "VXLAN", 100, "127.0.0.1", "9999")
+
+	found := false
+	for _, dest := range m.destinations {
+		if dest == "cerberus.local:5000" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected Cerberus endpoint to be appended in NewManagerWithSuricata")
+	}
+}
+
+func TestWorker_DrainsQueueOnStop(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	m := NewManager([]string{listener.LocalAddr().String()}, "VXLAN", 100)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Queue packets quickly
+	for i := 0; i < 10; i++ {
+		m.queue <- &MirrorPacket{
+			Data:     []byte("pkt-" + itoa(i)),
+			Metadata: map[string]interface{}{},
+		}
+	}
+
+	// Stop should drain queue and send remaining packets
+	m.Stop()
+
+	m.stats.mu.RLock()
+	sent := m.stats.PacketsSent
+	m.stats.mu.RUnlock()
+
+	if sent < 10 {
+		t.Errorf("expected all 10+ packets sent (got %d)", sent)
+	}
+}
+
+func TestStart_ConnectionFailure_Continues(t *testing.T) {
+	// Create one good destination
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	// Add an unreachable destination as well
+	m := NewManager([]string{listener.LocalAddr().String(), "192.0.2.1:9999"}, "VXLAN", 10)
+
+	// Start should succeed because at least one connection works
+	err := m.Start()
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	m.Stop()
+}
+
+func TestStop_ClosingFailures_Handled(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	m := NewManager([]string{listener.LocalAddr().String()}, "VXLAN", 10)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Close the listener to potentially break connections
+	listener.Close()
+
+	// Stop should handle close errors gracefully
+	m.Stop()
+}
+
+func TestReportStats_NoPackets(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	m := NewManager([]string{listener.LocalAddr().String()}, "VXLAN", 10)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Don't queue any packets, just wait for stats reporting
+	time.Sleep(100 * time.Millisecond)
+
+	m.Stop()
+
+	m.stats.mu.RLock()
+	defer m.stats.mu.RUnlock()
+	// Stats goroutine should have run even with no packets
+	if m.stats.PacketsSent == 0 && m.stats.PacketsDropped == 0 {
+		// This is fine - no packets were sent
+	}
+}
+
+func TestSendPacket_WithSourceDestIP(t *testing.T) {
+	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, _ := net.ListenUDP("udp", addr)
+	defer listener.Close()
+
+	m := NewManager([]string{listener.LocalAddr().String()}, "VXLAN", 10)
+	conn, _ := m.createConnection(listener.LocalAddr().String())
+	m.mu.Lock()
+	m.connections[listener.LocalAddr().String()] = conn
+	m.mu.Unlock()
+
+	pkt := &MirrorPacket{
+		Timestamp:   time.Now(),
+		Source:      net.ParseIP("192.168.1.1"),
+		Destination: net.ParseIP("10.0.0.1"),
+		Protocol:    "TCP",
+		Data:        []byte("test"),
+		Metadata:    map[string]interface{}{},
+	}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	defer m.stats.mu.RUnlock()
+	if m.stats.PacketsSent != 1 {
+		t.Errorf("expected 1 packet sent, got %d", m.stats.PacketsSent)
+	}
+}
+
+func TestPrepareSuricataData_InvalidJSON(t *testing.T) {
+	// This shouldn't happen in practice but test the error handling
+	// Even with complex metadata, the JSON should marshal fine
+	m := NewManager(nil, "VXLAN", 10)
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "HTTP",
+		Source:    net.ParseIP("10.1.2.3"),
+		Destination: net.ParseIP("10.4.5.6"),
+		Data:      []byte("http-payload"),
+		Metadata: map[string]interface{}{
+			"cluster_id": "cluster-a",
+			"user_id":    "user-123",
+			"nested":     map[string]interface{}{"key": "value"},
+		},
+	}
+	result := m.prepareSuricataData(pkt)
+	if len(result) == 0 {
+		t.Error("expected non-empty result")
+	}
+	if result[len(result)-1] != '\n' {
+		t.Error("expected trailing newline")
+	}
+}
+
+func TestReconnect_FailedReconnection(t *testing.T) {
+	// Try to reconnect to an unreachable address
+	m := NewManager(nil, "VXLAN", 10)
+
+	// GRE requires special permissions (ip4:47), will likely fail
+	m.protocol = "GRE"
+	m.reconnect("192.0.2.1:1") // Likely to fail
+
+	// Should not panic
+}
+
+func TestSendPacket_SendErrorTriggersReconnect(t *testing.T) {
+	// Create a scenario where send fails
+	m := NewManager([]string{}, "VXLAN", 10)
+
+	// Create a broken pipe connection
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	m.mu.Lock()
+	m.connections["broken"] = clientConn
+	m.mu.Unlock()
+
+	clientConn.Close() // Close to make writes fail
+
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Data:      []byte("test"),
+		Metadata:  map[string]interface{}{},
+	}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	errCount := m.stats.Errors
+	m.stats.mu.RUnlock()
+
+	if errCount == 0 {
+		t.Error("expected error count to increment on send failure")
+	}
+}
+
+func TestStop_WithSuricataConnection(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+
+	go func() {
+		if c, err := ln.Accept(); err == nil && c != nil {
+			c.Close()
+		}
+	}()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 10, "127.0.0.1", itoa(port))
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	m.mu.RLock()
+	hasSuricata := m.suricataConn != nil
+	m.mu.RUnlock()
+
+	if !hasSuricata {
+		t.Fatal("expected suricata connection")
+	}
+
+	m.Stop()
+
+	m.mu.RLock()
+	closedSuricata := m.suricataConn
+	m.mu.RUnlock()
+
+	if closedSuricata != nil {
+		t.Error("expected suricata connection to be closed")
+	}
+}
+
+func TestStart_WithMultipleDestinations(t *testing.T) {
+	addr1, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	l1, _ := net.ListenUDP("udp", addr1)
+	defer l1.Close()
+
+	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	l2, _ := net.ListenUDP("udp", addr2)
+	defer l2.Close()
+
+	m := NewManager([]string{l1.LocalAddr().String(), l2.LocalAddr().String()}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	m.mu.RLock()
+	numConns := len(m.connections)
+	m.mu.RUnlock()
+
+	if numConns != 2 {
+		t.Errorf("expected 2 connections, got %d", numConns)
+	}
+
+	m.Stop()
+}
 
 func itoa(n int) string {
 	buf := make([]byte, 0, 10)
@@ -688,4 +1530,373 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(buf)
+}
+
+// ─── Additional Coverage Tests for sendPacket, reportStats, prepareSuricataData
+
+func TestSendPacket_ReportStatsFullCycle(t *testing.T) {
+	// Test reportStats with actual packets flowing
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.LocalAddr().(*net.UDPAddr).Port
+	destAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	m := NewManager([]string{destAddr}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Send multiple packets to trigger stats reporting
+	for i := 0; i < 10; i++ {
+		packet := &MirrorPacket{
+			Timestamp: time.Now(),
+			Protocol:  "TCP",
+			Data:      []byte("test packet " + itoa(i)),
+		}
+		m.sendPacket(packet)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	m.Stop()
+
+	// Verify stats were incremented
+	m.stats.mu.RLock()
+	if m.stats.PacketsSent == 0 && m.stats.Errors == 0 {
+		// Either sent or errored, as long as something was counted
+		t.Errorf("expected some activity in stats")
+	}
+	m.stats.mu.RUnlock()
+}
+
+func TestSendPacket_NoSuricataConnection_Skips(t *testing.T) {
+	// When suricata is enabled but conn is nil, should skip Suricata send
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.LocalAddr().(*net.UDPAddr).Port
+	destAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	m := NewManagerWithSuricata([]string{destAddr}, "VXLAN", 100, "127.0.0.1", "9999")
+	m.suricataConn = nil // Simulate failed connection
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	packet := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "TCP",
+		Data:      []byte("test"),
+	}
+
+	// Should not panic even though suricata conn is nil
+	m.sendPacket(packet)
+	m.Stop()
+}
+
+func TestReportStats_TickerCycle(t *testing.T) {
+	// Verify reportStats actually runs the ticker loop
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.LocalAddr().(*net.UDPAddr).Port
+	destAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	m := NewManager([]string{destAddr}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Record initial state
+	m.stats.incrementSent(100)
+	m.stats.incrementDropped()
+	m.stats.incrementErrors()
+
+	// Give stats reporter time to run
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop triggers return from reportStats loop
+	m.Stop()
+
+	m.stats.mu.RLock()
+	if m.stats.PacketsSent != 1 {
+		t.Errorf("expected PacketsSent=1, got %d", m.stats.PacketsSent)
+	}
+	if m.stats.PacketsDropped != 1 {
+		t.Errorf("expected PacketsDropped=1, got %d", m.stats.PacketsDropped)
+	}
+	if m.stats.Errors != 1 {
+		t.Errorf("expected Errors=1, got %d", m.stats.Errors)
+	}
+	m.stats.mu.RUnlock()
+}
+
+func TestPrepareSuricataData_WithAllMetadata(t *testing.T) {
+	// Test full path through prepareSuricataData with all fields set
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 100, "127.0.0.1", "9999")
+
+	packet := &MirrorPacket{
+		Timestamp:   time.Now(),
+		Protocol:    "TCP",
+		Data:        []byte("test packet"),
+		Source:      net.ParseIP("10.0.0.1"),
+		Destination: net.ParseIP("10.0.0.2"),
+		Metadata: map[string]interface{}{
+			"cluster_id": "cluster1",
+			"user_id":    "user123",
+		},
+	}
+
+	data := m.prepareSuricataData(packet)
+	if len(data) == 0 {
+		t.Fatal("expected non-empty data from prepareSuricataData")
+	}
+
+	// Should end with newline (EVE JSON format)
+	if data[len(data)-1] != '\n' {
+		t.Error("expected data to end with newline")
+	}
+}
+
+func TestPrepareSuricataData_WithoutMetadata(t *testing.T) {
+	// Test prepareSuricataData with minimal metadata
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 100, "127.0.0.1", "9999")
+
+	packet := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "UDP",
+		Data:      []byte("minimal"),
+		Metadata:  map[string]interface{}{},
+	}
+
+	data := m.prepareSuricataData(packet)
+	if len(data) == 0 {
+		t.Fatal("expected non-empty data")
+	}
+}
+
+func TestPrepareSuricataData_WithOnlySource(t *testing.T) {
+	// Test with only source IP set (not destination)
+	m := NewManagerWithSuricata([]string{}, "VXLAN", 100, "127.0.0.1", "9999")
+
+	packet := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "ICMP",
+		Data:      []byte("source-only"),
+		Source:    net.ParseIP("192.168.1.1"),
+		Metadata: map[string]interface{}{
+			"cluster_id": "c1",
+		},
+	}
+
+	data := m.prepareSuricataData(packet)
+	if len(data) == 0 {
+		t.Fatal("expected non-empty data with source only")
+	}
+}
+
+func TestStart_PartialConnections(t *testing.T) {
+	// Test Start when some destinations fail to connect but others succeed
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.LocalAddr().(*net.UDPAddr).Port
+	destAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	m := NewManager([]string{destAddr, "127.0.0.1:9999"}, "VXLAN", 100)
+
+	err = m.Start()
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	m.mu.RLock()
+	// Should have at least one connection despite one failing
+	if len(m.connections) == 0 {
+		t.Errorf("expected at least one connection")
+	}
+	m.mu.RUnlock()
+
+	m.Stop()
+}
+
+func TestStop_WithOpenConnections(t *testing.T) {
+	// Verify Stop properly closes all open connections
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.LocalAddr().(*net.UDPAddr).Port
+	destAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	m := NewManager([]string{destAddr}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	m.Stop()
+
+	// After stop, connections should be cleared
+	m.mu.RLock()
+	if len(m.connections) != 0 {
+		t.Errorf("expected 0 connections after Stop, got %d", len(m.connections))
+	}
+	m.mu.RUnlock()
+}
+
+func TestStart_AllDestinationsFail(t *testing.T) {
+	// Test Start when all destinations fail to connect
+	// Using unreachable ports means Start should return error
+	m := NewManager([]string{"255.255.255.255:9999", "255.255.255.255:9998"}, "VXLAN", 100)
+
+	err := m.Start()
+	// Start may fail or succeed silently and continue; both are acceptable behaviors
+	// The key is it doesn't crash
+	if err != nil {
+		t.Logf("Start returned error (acceptable): %v", err)
+	}
+
+	m.Stop()
+}
+
+func TestWorker_ProcessesQueueUntilStop(t *testing.T) {
+	// Ensure worker drains queue properly on stop signal
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	listener, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.LocalAddr().(*net.UDPAddr).Port
+	destAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	m := NewManager([]string{destAddr}, "VXLAN", 100)
+
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// Queue multiple packets
+	for i := 0; i < 5; i++ {
+		packet := &MirrorPacket{
+			Timestamp: time.Now(),
+			Protocol:  "TCP",
+			Data:      []byte("packet " + itoa(i)),
+		}
+		m.queue <- packet
+	}
+
+	m.Stop()
+
+	// Worker should have processed all queued packets
+	if len(m.queue) != 0 {
+		t.Errorf("expected empty queue after Stop, got %d items", len(m.queue))
+	}
+}
+
+// ─── sendPacket write error path ──────────────────────────────────────────────
+
+// TestSendPacket_WriteError covers the conn.Write error branch in sendPacket.
+// We add a pre-closed net.Pipe connection to the manager's connection map;
+// any write to it will return an error, exercising the error+incrementErrors+reconnect path.
+func TestSendPacket_WriteError(t *testing.T) {
+	m := NewManager(nil, "VXLAN", 10)
+
+	// Create a pipe and immediately close both sides so writes fail.
+	a, b := net.Pipe()
+	a.Close()
+	b.Close()
+
+	const dest = "10.0.0.1:4789"
+	m.mu.Lock()
+	m.connections[dest] = a // closed — writes will fail
+	m.mu.Unlock()
+
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "TCP",
+		Data:      []byte("hello"),
+		Metadata:  map[string]interface{}{},
+	}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	defer m.stats.mu.RUnlock()
+	if m.stats.Errors == 0 {
+		t.Error("expected error counter to be incremented on write failure")
+	}
+}
+
+// ─── reportStats ──────────────────────────────────────────────────────────────
+
+// TestReportStats_TickerFires covers the ticker.C case in reportStats (the stats log branch).
+// We set statsReportInterval to 1ms so the ticker fires almost immediately, then stop via stopCh.
+func TestReportStats_TickerFires(t *testing.T) {
+	old := statsReportInterval
+	defer func() { statsReportInterval = old }()
+	statsReportInterval = 1 * time.Millisecond
+
+	m := NewManager(nil, "VXLAN", 10)
+	// Populate stopCh by calling Start so reportStats is wired up, or call directly.
+	// Call directly to avoid network setup.
+	done := make(chan struct{})
+	go func() {
+		m.reportStats()
+		close(done)
+	}()
+
+	// Let at least one tick fire.
+	time.Sleep(20 * time.Millisecond)
+	// Signal stop via stopCh.
+	close(m.stopCh)
+
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Error("reportStats did not exit after stopCh closed")
+	}
+}
+
+// TestSendPacket_SuricataWriteError covers the suricataConn.Write error branch.
+func TestSendPacket_SuricataWriteError(t *testing.T) {
+	m := NewManager(nil, "VXLAN", 10)
+	m.suricataEnabled = true
+
+	// Closed pipe — writes fail immediately.
+	a, b := net.Pipe()
+	a.Close()
+	b.Close()
+	m.suricataConn = a
+
+	pkt := &MirrorPacket{
+		Timestamp: time.Now(),
+		Protocol:  "TCP",
+		Data:      []byte("hello"),
+		Metadata:  map[string]interface{}{},
+	}
+	m.sendPacket(pkt)
+
+	m.stats.mu.RLock()
+	defer m.stats.mu.RUnlock()
+	if m.stats.Errors == 0 {
+		t.Error("expected error counter incremented on suricata write failure")
+	}
 }

@@ -573,3 +573,95 @@ func TestJWTKeyRefresh_OnStaleKey(t *testing.T) {
 		t.Errorf("unexpected ID: %s", user.ID)
 	}
 }
+
+func TestJWTKeyRefresh_StaleKey_FetchFails(t *testing.T) {
+	// Cover the "refresh failed → warn and proceed with old key" branch.
+	key := generateTestRSAKey(t)
+	ts := setupJWTServerReal(t, key)
+
+	provider, err := NewJWTProvider(ts.URL, "")
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	jwtP := provider.(*JWTProvider)
+
+	// Close the server so the refresh HTTP call fails.
+	ts.Close()
+
+	// Backdate to force a refresh attempt.
+	jwtP.lastKeyFetch = time.Now().Add(-2 * time.Hour)
+
+	// Token is still valid against the already-cached public key.
+	claims := jwt.MapClaims{
+		"sub":       "stale-refresh",
+		"node_type": "headend",
+		"type":      "access",
+		"exp":       float64(time.Now().Add(time.Hour).Unix()),
+	}
+	tokenStr := makeTestJWTToken(t, key, claims)
+
+	// Should succeed using the cached key even though the refresh failed.
+	user, err := jwtP.ValidateToken(tokenStr)
+	if err != nil {
+		t.Fatalf("unexpected error (expected cached key still valid): %v", err)
+	}
+	if user.ID != "stale-refresh" {
+		t.Errorf("unexpected ID: %s", user.ID)
+	}
+}
+
+func TestJWTFetchPublicKey_BodyReadError(t *testing.T) {
+	// Verify fetchPublicKey returns error when body read fails.
+	// We fake a response that closes immediately after writing header.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Write a valid 200 but then hijack the connection to cause a read error.
+		// The simplest way is to close the connection mid-response.
+		w.Header().Set("Content-Length", "10000") // claim large body
+		w.WriteHeader(http.StatusOK)
+		// Flush only a partial response so body.Read fails.
+		w.(http.Flusher).Flush()
+		// Closing the connection here causes the client to get an EOF mid-read.
+		if hj, ok := w.(http.Hijacker); ok {
+			conn, _, _ := hj.Hijack()
+			conn.Close()
+		}
+	}))
+	defer ts.Close()
+
+	// fetchPublicKey should return an error because the JSON is incomplete.
+	jwtP := &JWTProvider{
+		managerURL: ts.URL,
+		client:     &http.Client{Timeout: 2 * time.Second},
+	}
+	err := jwtP.fetchPublicKey()
+	if err == nil {
+		t.Error("expected error when body read/parse fails due to premature connection close")
+	}
+}
+
+func TestJWTValidateToken_InvalidClaims(t *testing.T) {
+	// Cover the !token.Valid and invalid claims branches.
+	// We use a key that is set in the provider but produce a malformed token.
+	key := generateTestRSAKey(t)
+	ts := setupJWTServerReal(t, key)
+	defer ts.Close()
+
+	provider, err := NewJWTProvider(ts.URL, "")
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	jwtP := provider.(*JWTProvider)
+
+	// Token signed with the correct key but missing all standard claims — jwt.Parse
+	// will return a valid structural token; the type check will fire "invalid token type".
+	claims := jwt.MapClaims{
+		"sub": "node-x",
+		"exp": float64(time.Now().Add(time.Hour).Unix()),
+		// "type" is intentionally absent → invalid token type path
+	}
+	tokenStr := makeTestJWTToken(t, key, claims)
+	_, err = jwtP.ValidateToken(tokenStr)
+	if err == nil {
+		t.Error("expected error for missing token type")
+	}
+}

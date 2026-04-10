@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
-	"github.com/tobogganing/clients/native/internal/config"
 	"github.com/tobogganing/clients/native/internal/svc"
 )
 
@@ -18,59 +19,68 @@ const (
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	if err := run(ctx, os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// run executes the client with the given arguments and context.
+// All real logic is extracted here so it can be tested without os.Exit.
+func run(ctx context.Context, args []string) error {
 	var rootCmd = &cobra.Command{
 		Use:   "tobogganing-client",
 		Short: "Tobogganing Native Client",
 		Long:  "A native client for Tobogganing SASE solution",
-		Run:   runClient,
+		RunE:  runClient,
 	}
 
 	var configFile string
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file path")
 
-	// Service management subcommands
+	// Service management subcommands — default factory creates a real OS manager.
+	mgr := defaultManagerFactory
 	rootCmd.AddCommand(
-		newServiceInstallCmd(),
-		newServiceUninstallCmd(),
-		newServiceStartCmd(),
-		newServiceStopCmd(),
-		newServiceStatusCmd(),
+		newServiceInstallCmd(mgr),
+		newServiceUninstallCmd(mgr),
+		newServiceStartCmd(mgr),
+		newServiceStopCmd(mgr),
+		newServiceStatusCmd(mgr),
 	)
 
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
-	}
+	rootCmd.SetArgs(args)
+	rootCmd.SetContext(ctx)
+
+	return rootCmd.Execute()
 }
 
-func runClient(cmd *cobra.Command, args []string) {
-	cfg := config.DefaultConfig()
-
+// runClient is the cobra RunE handler for the root command.
+func runClient(cmd *cobra.Command, args []string) error {
 	configFile, _ := cmd.Flags().GetString("config")
-	if configFile != "" {
-		if err := config.LoadFromFile(cfg, configFile); err != nil {
-			log.Fatalf("Failed to load config: %v", err)
-		}
-	} else {
-		if err := config.LoadFromDefaults(cfg); err != nil {
-			log.Fatalf("Failed to load default config: %v", err)
-		}
+
+	cfg, err := parseConfigFlags(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	fmt.Printf("Tobogganing Client - Headless Mode\n")
-	fmt.Printf("Manager URL: %s\n", cfg.ManagerURL)
-	fmt.Printf("Client Type: %s\n", cfg.ClientType)
-	fmt.Printf("Auto Connect: %v\n", cfg.AutoConnect)
+	printConfigInfo(cfg)
 
-	if cfg.ManagerURL == "" {
-		fmt.Println("No manager URL configured. Please set TOBOGGANING_MANAGER_URL environment variable or config file.")
-		os.Exit(1)
+	if err := validateConfig(cfg); err != nil {
+		return fmt.Errorf("no manager URL configured. Please set TOBOGGANING_MANAGER_URL environment variable or config file")
 	}
 
 	fmt.Println("Client would start here...")
+	return nil
 }
 
-// newServiceManager constructs a svc.Manager with standard config.
-func newServiceManager() (*svc.Manager, error) {
+// managerFactory is a function that creates a ServiceManagerIface.
+// The default uses the real OS service manager; tests inject a mock.
+type managerFactory func() (svc.ServiceManagerIface, error)
+
+// defaultManagerFactory creates a real OS service manager.
+func defaultManagerFactory() (svc.ServiceManagerIface, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("resolve executable path: %w", err)
@@ -83,12 +93,12 @@ func newServiceManager() (*svc.Manager, error) {
 	})
 }
 
-func newServiceInstallCmd() *cobra.Command {
+func newServiceInstallCmd(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service-install",
 		Short: "Register sasewaddle-client as a system service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := newServiceManager()
+			m, err := factory()
 			if err != nil {
 				return err
 			}
@@ -101,12 +111,12 @@ func newServiceInstallCmd() *cobra.Command {
 	}
 }
 
-func newServiceUninstallCmd() *cobra.Command {
+func newServiceUninstallCmd(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service-uninstall",
 		Short: "Remove the sasewaddle-client system service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := newServiceManager()
+			m, err := factory()
 			if err != nil {
 				return err
 			}
@@ -119,12 +129,12 @@ func newServiceUninstallCmd() *cobra.Command {
 	}
 }
 
-func newServiceStartCmd() *cobra.Command {
+func newServiceStartCmd(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service-start",
 		Short: "Start the sasewaddle-client system service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := newServiceManager()
+			m, err := factory()
 			if err != nil {
 				return err
 			}
@@ -137,12 +147,12 @@ func newServiceStartCmd() *cobra.Command {
 	}
 }
 
-func newServiceStopCmd() *cobra.Command {
+func newServiceStopCmd(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service-stop",
 		Short: "Stop the sasewaddle-client system service",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := newServiceManager()
+			m, err := factory()
 			if err != nil {
 				return err
 			}
@@ -155,12 +165,12 @@ func newServiceStopCmd() *cobra.Command {
 	}
 }
 
-func newServiceStatusCmd() *cobra.Command {
+func newServiceStatusCmd(factory managerFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service-status",
 		Short: "Show the sasewaddle-client system service status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := newServiceManager()
+			m, err := factory()
 			if err != nil {
 				return err
 			}

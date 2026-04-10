@@ -327,3 +327,70 @@ func (t *TokenInfo) IsExpired() bool {
 func (t *TokenInfo) IsExpiringSoon(threshold time.Duration) bool {
 	return time.Until(t.ExpiresAt) < threshold
 }
+
+// --- GetToken: request creation error path (invalid URL) ---
+
+func TestManager_GetToken_InvalidURL_RequestCreationError(t *testing.T) {
+	// An invalid URL causes http.NewRequest to fail.
+	manager := &Manager{
+		managerURL: "http://host with spaces",
+		httpClient: &http.Client{},
+	}
+	_, err := manager.GetToken("node", "type", "key")
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+}
+
+// --- GetToken: request creation error (invalid URL produces bad request) ---
+
+func TestManager_GetToken_InvalidURL_DoError(t *testing.T) {
+	// Use an address that is not listening so Do() returns a network error.
+	manager, _ := New("http://127.0.0.1:1") // port 1 is typically closed
+	manager.httpClient.Timeout = 500 * time.Millisecond
+	_, err := manager.GetToken("node", "type", "key")
+	if err == nil {
+		t.Error("expected error for unreachable server")
+	}
+}
+
+// --- RefreshToken: request creation error (invalid URL) ---
+
+func TestManager_RefreshToken_InvalidURL_RequestCreationError(t *testing.T) {
+	manager := &Manager{
+		managerURL: "http://host with spaces",
+		httpClient: &http.Client{},
+	}
+	_, err := manager.RefreshToken("old-token")
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+}
+
+// --- ValidateToken: request creation error (invalid URL) ---
+
+func TestManager_ValidateToken_InvalidURL_RequestCreationError(t *testing.T) {
+	manager := &Manager{
+		managerURL: "http://host with spaces",
+		httpClient: &http.Client{},
+	}
+	_, err := manager.ValidateToken("token")
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+}
+
+// --- RevokeToken: request creation error (invalid URL after jti extraction) ---
+
+func TestManager_RevokeToken_InvalidURL_RequestCreationError(t *testing.T) {
+	// A JWT with a jti so we pass the jti check and reach http.NewRequest.
+	tokenWithJTI := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyIiwianRpIjoidGVzdC1qdGktMTIzNDUifQ.signature"
+	manager := &Manager{
+		managerURL: "http://host with spaces",
+		httpClient: &http.Client{},
+	}
+	err := manager.RevokeToken(tokenWithJTI)
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+}

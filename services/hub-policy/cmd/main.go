@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,7 +12,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// pollInterval controls the ticker duration for the policy compile + push loop.
+// Exposed at package level to allow tests to override it.
+var pollInterval = 30 * time.Second
+
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run executes the hub-policy controller loop until ctx is cancelled.
+func run(ctx context.Context) error {
 	log.SetFormatter(&log.JSONFormatter{})
 
 	cerberusClient := cerberus.NewClientFromEnv()
@@ -24,16 +36,12 @@ func main() {
 	pushClient := push.NewClientFromEnv()
 	comp := compiler.New()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// TODO: wire hub_api_client sync loop → compiler.Compile() → push to MarchProxy
 	_ = comp
-	_ = ctx
 
 	// Periodic compile + push loop (placeholder)
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(pollInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -53,8 +61,7 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-ctx.Done()
 	log.Info("hub-policy shutting down")
+	return nil
 }

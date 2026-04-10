@@ -18,32 +18,47 @@ import (
 	"time"
 )
 
-func main() {
+// healthCheckHTTP performs HTTP health endpoint check.
+func healthCheckHTTP(url string) error {
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("HTTP request error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// healthCheckWireGuard checks if WireGuard interface exists.
+func healthCheckWireGuard(path string) error {
+	_, err := os.Stat(path)
+	return err
+}
+
+// run executes the health check logic and returns an error if any check fails.
+// It takes args for testability (unused in main but available for extension).
+func run(args []string) error {
 	healthURL := os.Getenv("HEALTH_CHECK_URL")
 	if healthURL == "" {
 		healthURL = "http://localhost:9090/health"
 	}
 
 	// Check 1: HTTP health endpoint
-	client := &http.Client{
-		Timeout: 5 * time.Second,
+	if err := healthCheckHTTP(healthURL); err != nil {
+		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
+		return err
 	}
 
-	resp, err := client.Get(healthURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Health check failed: HTTP request error: %v\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "Health check failed: HTTP status %d\n", resp.StatusCode)
-		os.Exit(1)
-	}
-
-	// Check 2: WireGuard interface exists
-	_, err = os.Stat("/sys/class/net/wg0")
-	if err != nil {
+	// Check 2: WireGuard interface exists (warning only)
+	if err := healthCheckWireGuard("/sys/class/net/wg0"); err != nil {
 		fmt.Fprintf(os.Stderr, "Health check warning: WireGuard interface wg0 not found: %v\n", err)
 		// WireGuard interface may not be up yet during startup, so we treat
 		// this as a warning rather than a hard failure. The HTTP health
@@ -51,5 +66,12 @@ func main() {
 	}
 
 	fmt.Println("Health check passed")
+	return nil
+}
+
+func main() {
+	if err := run(os.Args); err != nil {
+		os.Exit(1)
+	}
 	os.Exit(0)
 }

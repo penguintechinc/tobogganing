@@ -13,12 +13,42 @@ import (
     "golang.org/x/oauth2"
 )
 
+// idTokenVerifier is a narrow interface for oidc.IDTokenVerifier, enabling
+// test mocks without requiring a live OIDC provider.
+type idTokenVerifier interface {
+    Verify(ctx context.Context, rawIDToken string) (*oidc.IDToken, error)
+}
+
+// tokenExchanger abstracts the oauth2 code→token exchange so tests can inject
+// a fake implementation without a live token endpoint.
+type tokenExchanger interface {
+    Exchange(ctx context.Context, code string) (*oauth2.Token, error)
+}
+
+// oauth2ConfigExchanger adapts *oauth2.Config to tokenExchanger.
+type oauth2ConfigExchanger struct{ cfg *oauth2.Config }
+
+func (e *oauth2ConfigExchanger) Exchange(ctx context.Context, code string) (*oauth2.Token, error) {
+    return e.cfg.Exchange(ctx, code)
+}
+
+// oidcClaims holds the user-facing claims extracted from an ID token.
+type oidcClaims struct {
+    Email    string   `json:"email"`
+    Name     string   `json:"name"`
+    Subject  string   `json:"sub"`
+    Groups   []string `json:"groups"`
+    Verified bool     `json:"email_verified"`
+}
+
 type OAuth2Provider struct {
-    config       *oauth2.Config
-    oidcProvider *oidc.Provider
-    verifier     *oidc.IDTokenVerifier
-    issuer       string
-    clientID     string
+    config           *oauth2.Config
+    exchanger        tokenExchanger   // defaults to &oauth2ConfigExchanger{config}
+    oidcProvider     *oidc.Provider
+    verifier         idTokenVerifier
+    claimsExtractFn  func(token *oidc.IDToken, dst *oidcClaims) error // injectable for tests
+    issuer           string
+    clientID         string
 }
 
 func NewOAuth2Provider(issuer, clientID, clientSecret string) (*OAuth2Provider, error) {
@@ -41,13 +71,18 @@ func NewOAuth2Provider(issuer, clientID, clientSecret string) (*OAuth2Provider, 
         ClientID: clientID,
     })
     
-    return &OAuth2Provider{
+    p := &OAuth2Provider{
         config:       config,
         oidcProvider: provider,
         verifier:     verifier,
         issuer:       issuer,
         clientID:     clientID,
-    }, nil
+    }
+    p.exchanger = &oauth2ConfigExchanger{cfg: config}
+    p.claimsExtractFn = func(token *oidc.IDToken, dst *oidcClaims) error {
+        return token.Claims(dst)
+    }
+    return p, nil
 }
 
 func (p *OAuth2Provider) LoginHandler() gin.HandlerFunc {
@@ -80,7 +115,11 @@ func (p *OAuth2Provider) CallbackHandler() gin.HandlerFunc {
         }
         
         ctx := context.Background()
-        token, err := p.config.Exchange(ctx, code)
+        exc := p.exchanger
+        if exc == nil {
+            exc = &oauth2ConfigExchanger{cfg: p.config}
+        }
+        token, err := exc.Exchange(ctx, code)
         if err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to exchange token"})
             return
@@ -98,19 +137,18 @@ func (p *OAuth2Provider) CallbackHandler() gin.HandlerFunc {
             return
         }
         
-        var claims struct {
-            Email    string   `json:"email"`
-            Name     string   `json:"name"`
-            Subject  string   `json:"sub"`
-            Groups   []string `json:"groups"`
-            Verified bool     `json:"email_verified"`
+        var claims oidcClaims
+        extractFn := p.claimsExtractFn
+        if extractFn == nil {
+            extractFn = func(token *oidc.IDToken, dst *oidcClaims) error {
+                return token.Claims(dst)
+            }
         }
-        
-        if err := idToken.Claims(&claims); err != nil {
+        if err := extractFn(idToken, &claims); err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse claims"})
             return
         }
-        
+
         // Create session token
         sessionToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
             "sub":    claims.Subject,

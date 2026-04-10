@@ -39,6 +39,8 @@ const (
 	// reconnectInterval is the interval between gRPC reconnection attempts.
 	reconnectInterval = 10 * time.Second
 
+	// defaultPollInterval is the default polling interval for policy updates.
+	defaultPollInterval = 30 * time.Second
 )
 
 // Policy represents a network policy fetched from hub-api.
@@ -88,6 +90,10 @@ type ClientRegistration struct {
 // PolicyUpdateCallback is invoked when policies are updated.
 type PolicyUpdateCallback func(policies []Policy)
 
+// dialFunc is a function that creates a new gRPC client connection.
+// It matches the signature of grpc.NewClient to allow test injection.
+type dialFunc func(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
+
 // HubAPIClient provides communication with the hub-api service.
 // It uses gRPC as the primary transport and falls back to REST
 // when gRPC is unavailable.
@@ -112,6 +118,15 @@ type HubAPIClient struct {
 
 	// onPolicyUpdate is the callback for policy update notifications.
 	onPolicyUpdate PolicyUpdateCallback
+
+	// pollInterval is the interval for polling policy updates.
+	pollInterval time.Duration
+
+	// reconnectIntervalDuration is the interval for gRPC reconnection attempts (configurable for testing).
+	reconnectIntervalDuration time.Duration
+
+	// dialFn is the function used to create gRPC connections (injectable for testing).
+	dialFn dialFunc
 
 	// mu protects concurrent access to the client state.
 	mu sync.RWMutex
@@ -139,8 +154,11 @@ func NewHubAPIClient(grpcAddr, restBaseURL string) *HubAPIClient {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		cacheTTL: defaultCacheTTL,
-		stopCh:   make(chan struct{}),
+		cacheTTL:                  defaultCacheTTL,
+		pollInterval:              defaultPollInterval,
+		reconnectIntervalDuration: reconnectInterval,
+		dialFn:                    grpc.NewClient,
+		stopCh:                    make(chan struct{}),
 	}
 }
 
@@ -151,7 +169,7 @@ func (c *HubAPIClient) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	conn, err := grpc.NewClient(c.grpcAddr,
+	conn, err := c.dialFn(c.grpcAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -173,7 +191,7 @@ func (c *HubAPIClient) Connect(ctx context.Context) error {
 
 // reconnectLoop periodically attempts to re-establish the gRPC connection.
 func (c *HubAPIClient) reconnectLoop() {
-	ticker := time.NewTicker(reconnectInterval)
+	ticker := time.NewTicker(c.reconnectIntervalDuration)
 	defer ticker.Stop()
 
 	for {
@@ -187,7 +205,7 @@ func (c *HubAPIClient) reconnectLoop() {
 				return
 			}
 
-			conn, err := grpc.NewClient(c.grpcAddr,
+			conn, err := c.dialFn(c.grpcAddr,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 			)
 
@@ -342,7 +360,7 @@ func (c *HubAPIClient) SubscribePolicyUpdates(ctx context.Context, callback Poli
 	log.Info("Policy update subscription started (stub - polling fallback)")
 
 	// Fallback: poll for updates periodically
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(c.pollInterval)
 	defer ticker.Stop()
 
 	for {

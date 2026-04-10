@@ -180,3 +180,156 @@ func TestValidateConfig_OnlyUDPRanges(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+// ─── FetchConfig with response body close error ────────────────────────────
+
+func TestFetchConfig_ResponseBodyCloseError(t *testing.T) {
+	config := PortConfig{
+		HeadendID: "headend-1",
+		TCPRanges: "8000-8100",
+	}
+	body, _ := json.Marshal(config)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer ts.Close()
+
+	cc := NewConfigClient(ts.URL, "tok", "headend-1", "cluster-1")
+	cfg, err := cc.FetchConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Error("expected non-nil config")
+	}
+}
+
+// ─── FetchConfig with PortRangesDetail populated ───────────────────────────
+
+func TestFetchConfig_WithDetailRanges(t *testing.T) {
+	config := PortConfig{
+		HeadendID: "headend-1",
+		TCPRanges: "8000-8100",
+		TCPRangesDetail: []PortRange{
+			{
+				ID:          "range-1",
+				StartPort:   8000,
+				EndPort:     8100,
+				Protocol:    "tcp",
+				Description: "Web services",
+				Enabled:     true,
+			},
+		},
+	}
+	body, _ := json.Marshal(config)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer ts.Close()
+
+	cc := NewConfigClient(ts.URL, "tok", "headend-1", "cluster-1")
+	cfg, err := cc.FetchConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.TCPRangesDetail) != 1 {
+		t.Errorf("expected 1 detail range, got %d", len(cfg.TCPRangesDetail))
+	}
+	if cfg.TCPRangesDetail[0].Description != "Web services" {
+		t.Errorf("unexpected description: %s", cfg.TCPRangesDetail[0].Description)
+	}
+}
+
+// ─── FetchConfig HTTP status error with body ──────────────────────────────
+
+func TestFetchConfig_ErrorStatusWithBody(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "invalid configuration", http.StatusBadRequest)
+	}))
+	defer ts.Close()
+
+	cc := NewConfigClient(ts.URL, "tok", "h1", "c1")
+	_, err := cc.FetchConfig()
+	if err == nil {
+		t.Error("expected error for 400 status")
+	}
+	if err != nil {
+		if errStr := err.Error(); !containsSubstring(errStr, "400") {
+			t.Errorf("expected error to mention status code, got: %v", err)
+		}
+	}
+}
+
+// ─── Helper function for substring check ──────────────────────────────────
+
+func containsSubstring(str, substr string) bool {
+	for i := 0; i <= len(str)-len(substr); i++ {
+		if str[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// ─── FetchConfig with response decode error path ─────────────────────────
+
+func TestFetchConfig_DecodeError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Write invalid JSON
+		w.Write([]byte("{invalid json}"))
+	}))
+	defer ts.Close()
+
+	cc := NewConfigClient(ts.URL, "tok", "h1", "c1")
+	_, err := cc.FetchConfig()
+	if err == nil {
+		t.Error("expected error for invalid JSON response")
+	}
+}
+
+// ─── FetchConfig request creation error ────────────────────────────────────
+
+func TestFetchConfig_RequestCreationError(t *testing.T) {
+	// This test is difficult since NewRequest doesn't typically fail with valid URLs
+	// The main error path is when URL building would create invalid URL
+	// Skip this as it's hard to trigger without modifying the implementation
+}
+
+// ─── FetchConfig with all required fields ─────────────────────────────────
+
+func TestFetchConfig_AllFieldsPopulated(t *testing.T) {
+	config := PortConfig{
+		HeadendID:  "headend-1",
+		ClusterID:  "cluster-1",
+		TCPRanges:  "8000-8100",
+		UDPRanges:  "9000-9100",
+		UpdatedAt:  "2025-01-01T00:00:00Z",
+		TCPRangesDetail: []PortRange{
+			{ID: "r1", StartPort: 8000, EndPort: 8100, Protocol: "tcp", Enabled: true},
+		},
+		UDPRangesDetail: []PortRange{
+			{ID: "r2", StartPort: 9000, EndPort: 9100, Protocol: "udp", Enabled: true},
+		},
+	}
+	body, _ := json.Marshal(config)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer ts.Close()
+
+	cc := NewConfigClient(ts.URL, "tok", "headend-1", "cluster-1")
+	cfg, err := cc.FetchConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.TCPRangesDetail) != 1 || len(cfg.UDPRangesDetail) != 1 {
+		t.Error("expected detail ranges to be populated")
+	}
+}

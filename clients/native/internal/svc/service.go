@@ -19,10 +19,24 @@ type Config struct {
 	Arguments   []string
 }
 
+// ServiceManagerIface abstracts OS service lifecycle operations.
+// Callers depend on this interface rather than *Manager directly,
+// enabling tests to inject a mock without touching the OS service manager.
+type ServiceManagerIface interface {
+	Install() error
+	Uninstall() error
+	Start() error
+	Stop() error
+	Status() (string, error)
+}
+
 // Manager manages lifecycle of the system service.
 type Manager struct {
 	svc service.Service
 }
+
+// Ensure Manager satisfies the interface at compile time.
+var _ ServiceManagerIface = (*Manager)(nil)
 
 // program satisfies the kardianos service.Interface.
 type program struct{}

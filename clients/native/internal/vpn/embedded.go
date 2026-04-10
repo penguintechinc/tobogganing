@@ -15,25 +15,59 @@ import (
 	"golang.zx2c4.com/wireguard/tun"
 )
 
-// EmbeddedWireGuard manages a WireGuard interface using wireguard-go
-type EmbeddedWireGuard struct {
-	device      *device.Device
-	tun         tun.Device
-	interfaceName string
-	config      string
-	isRunning   bool
-	mutex       sync.RWMutex
-	ctx         context.Context
-	cancel      context.CancelFunc
+// TunnelBackend abstracts TUN/device creation so it can be mocked in tests.
+type TunnelBackend interface {
+	// CreateTUN creates a new TUN device with the given name and MTU.
+	CreateTUN(name string, mtu int) (tun.Device, error)
+	// NewDevice creates a new WireGuard device on the given TUN device.
+	NewDevice(tunDev tun.Device, bind conn.Bind, logger *device.Logger) *device.Device
 }
 
-// NewEmbeddedWireGuard creates a new embedded WireGuard instance
+// realTunnelBackend is the production implementation that calls wireguard-go
+// functions that require kernel access.
+type realTunnelBackend struct{}
+
+func (r *realTunnelBackend) CreateTUN(name string, mtu int) (tun.Device, error) {
+	return tun.CreateTUN(name, mtu)
+}
+
+func (r *realTunnelBackend) NewDevice(tunDev tun.Device, bind conn.Bind, logger *device.Logger) *device.Device {
+	return device.NewDevice(tunDev, bind, logger)
+}
+
+// DefaultTunnelBackend returns the production TunnelBackend.
+func DefaultTunnelBackend() TunnelBackend {
+	return &realTunnelBackend{}
+}
+
+// EmbeddedWireGuard manages a WireGuard interface using wireguard-go
+type EmbeddedWireGuard struct {
+	device        *device.Device
+	tun           tun.Device
+	interfaceName string
+	config        string
+	isRunning     bool
+	mutex         sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
+	backend       TunnelBackend
+}
+
+// NewEmbeddedWireGuard creates a new embedded WireGuard instance using the
+// production (kernel-backed) TunnelBackend.
 func NewEmbeddedWireGuard(interfaceName string) *EmbeddedWireGuard {
+	return NewEmbeddedWireGuardWithBackend(interfaceName, DefaultTunnelBackend())
+}
+
+// NewEmbeddedWireGuardWithBackend creates a new EmbeddedWireGuard that delegates
+// TUN/device creation to the supplied backend. Use this in tests to inject a mock.
+func NewEmbeddedWireGuardWithBackend(interfaceName string, backend TunnelBackend) *EmbeddedWireGuard {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EmbeddedWireGuard{
 		interfaceName: interfaceName,
 		ctx:           ctx,
 		cancel:        cancel,
+		backend:       backend,
 	}
 }
 
@@ -46,17 +80,17 @@ func (ew *EmbeddedWireGuard) Start(config string) error {
 		return fmt.Errorf("WireGuard is already running")
 	}
 
-	// Create TUN interface
-	tunDevice, err := ew.createTunInterface()
+	// Create TUN interface via the injected backend.
+	tunDevice, err := ew.backend.CreateTUN(ew.interfaceName, device.DefaultMTU)
 	if err != nil {
 		return fmt.Errorf("failed to create TUN interface: %w", err)
 	}
 	ew.tun = tunDevice
 
-	// Create WireGuard device
+	// Create WireGuard device via the injected backend.
 	logger := device.NewLogger(device.LogLevelVerbose, fmt.Sprintf("(%s) ", ew.interfaceName))
 	bind := conn.NewDefaultBind()
-	wgDevice := device.NewDevice(ew.tun, bind, logger)
+	wgDevice := ew.backend.NewDevice(ew.tun, bind, logger)
 	ew.device = wgDevice
 
 	// Configure WireGuard device
@@ -110,17 +144,6 @@ func (ew *EmbeddedWireGuard) GetConfig() string {
 // GetInterfaceName returns the interface name
 func (ew *EmbeddedWireGuard) GetInterfaceName() string {
 	return ew.interfaceName
-}
-
-// createTunInterface creates a platform-specific TUN interface
-func (ew *EmbeddedWireGuard) createTunInterface() (tun.Device, error) {
-	// Create TUN device with the specified interface name
-	tunDevice, err := tun.CreateTUN(ew.interfaceName, device.DefaultMTU)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create TUN device: %w", err)
-	}
-
-	return tunDevice, nil
 }
 
 // configureDevice applies WireGuard configuration to the device
@@ -202,16 +225,22 @@ func (ew *EmbeddedWireGuard) configureNetworking(config string) error {
 	return nil
 }
 
-// extractConfigValue extracts a value from WireGuard config
+// extractConfigValue extracts a value from WireGuard config.
+// Handles both "Key=Value" and "Key = Value" (with optional spaces around =).
 func (ew *EmbeddedWireGuard) extractConfigValue(config, key string) string {
 	lines := strings.Split(config, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(strings.ToLower(line), strings.ToLower(key)+"=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
-			}
+		if !strings.Contains(line, "=") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		lineKey := strings.TrimSpace(strings.ToLower(parts[0]))
+		if lineKey == strings.ToLower(key) {
+			return strings.TrimSpace(parts[1])
 		}
 	}
 	return ""
@@ -228,13 +257,13 @@ func (ew *EmbeddedWireGuard) configureInterfaceIP(address string) error {
 	// For embedded implementation, we would configure the TUN interface
 	// This is platform-specific and would require different implementations
 	// for Windows, macOS, and Linux
-	
-	fmt.Printf("Configuring interface %s with IP %s (network %s)\n", 
+
+	fmt.Printf("Configuring interface %s with IP %s (network %s)\n",
 		ew.interfaceName, ip.String(), ipNet.String())
 
 	// In a full implementation, this would call platform-specific functions
 	// to configure the interface IP address and routing table
-	
+
 	return nil
 }
 
@@ -249,16 +278,21 @@ func (ew *EmbeddedWireGuard) configureDNS(dns string) error {
 
 	// In a full implementation, this would configure system DNS settings
 	// This is platform-specific and requires elevated privileges
-	
+
 	return nil
 }
 
-// cleanup releases resources
+// cleanup releases resources.
+// device.Close() internally closes the underlying TUN, so we must not call
+// ew.tun.Close() again to avoid a double-close panic.
 func (ew *EmbeddedWireGuard) cleanup() {
 	if ew.device != nil {
-		ew.device.Close()
+		ew.device.Close() // also closes ew.tun internally
 		ew.device = nil
+		ew.tun = nil // already closed by device.Close()
+		return
 	}
+	// Device was never created but tun might still be open.
 	if ew.tun != nil {
 		_ = ew.tun.Close()
 		ew.tun = nil

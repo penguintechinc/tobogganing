@@ -85,16 +85,18 @@ func DefaultConfig() *Config {
 
 // LoadFromFile loads configuration from a file
 func LoadFromFile(cfg *Config, configFile string) error {
-    viper.SetConfigFile(configFile)
-    
-    if err := viper.ReadInConfig(); err != nil {
+    // Create a new viper instance to avoid polluting global state
+    v := viper.New()
+    v.SetConfigFile(configFile)
+
+    if err := v.ReadInConfig(); err != nil {
         return fmt.Errorf("failed to read config file: %w", err)
     }
-    
-    if err := viper.Unmarshal(cfg); err != nil {
+
+    if err := v.Unmarshal(cfg); err != nil {
         return fmt.Errorf("failed to unmarshal config: %w", err)
     }
-    
+
     return nil
 }
 
@@ -218,7 +220,14 @@ func (c *Config) Validate() error {
 
 // GetConfigDir returns the platform-specific configuration directory
 func GetConfigDir() string {
-    switch runtime.GOOS {
+    return getConfigDirForOS(runtime.GOOS)
+}
+
+// getConfigDirForOS returns the configuration directory for the given OS string.
+// It is a separate function so tests can exercise all platform branches
+// without running on multiple operating systems.
+func getConfigDirForOS(goos string) string {
+    switch goos {
     case platformDarwin:
         return os.Getenv("HOME") + "/.tobogganing"
     case platformLinux:

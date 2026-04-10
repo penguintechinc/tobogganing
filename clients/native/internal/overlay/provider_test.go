@@ -67,3 +67,32 @@ func TestOpenZitiConfig_Fields(t *testing.T) {
 		t.Errorf("ServiceName mismatch: got %q", cfg.ServiceName)
 	}
 }
+
+// TestNewWireGuardProvider_WithValidCallbacks verifies factory function works
+func TestNewWireGuardProvider_WithValidCallbacks(t *testing.T) {
+	connectCalls := 0
+	disconnectCalls := 0
+
+	p := NewWireGuardProvider(
+		func() error { connectCalls++; return nil },
+		func() error { disconnectCalls++; return nil },
+	)
+
+	if p == nil {
+		t.Fatal("expected non-nil provider")
+	}
+}
+
+// TestNewDualProvider_WithValidProviders verifies factory function works
+func TestNewDualProvider_WithValidProviders(t *testing.T) {
+	primary := NewWireGuardProvider(
+		func() error { return nil },
+		func() error { return nil },
+	)
+	secondary := NewOpenZitiProvider(OpenZitiConfig{})
+
+	p := NewDualProvider(primary, secondary)
+	if p == nil {
+		t.Fatal("expected non-nil dual provider")
+	}
+}

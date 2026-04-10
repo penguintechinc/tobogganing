@@ -44,44 +44,108 @@ type Manager struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	mutex          sync.RWMutex
-	
+
 	// WireGuard interface management
-	interfaceName  string
-	configPath     string
-	
+	interfaceName string
+	configPath    string
+
 	// Connection monitoring
-	monitorTicker  *time.Ticker
-	
+	monitorTicker *time.Ticker
+
 	// Embedded WireGuard
-	embeddedWG     *EmbeddedWireGuard
-	useEmbedded    bool
-	monitorStop    chan struct{}
+	embeddedWG  *EmbeddedWireGuard
+	useEmbedded bool
+	monitorStop chan struct{}
+
+	// wgOutputFn is the function used to retrieve wg show output.
+	// Replaceable in tests to avoid requiring the wg binary.
+	wgOutputFn func(iface string) ([]byte, error)
+
+	// monitorInterval controls how frequently checkConnection runs.
+	// Defaults to 5 seconds; override in tests for faster ticks.
+	monitorInterval time.Duration
+
+	// platformConnectFn and platformDisconnectFn allow injecting the
+	// platform-specific connect/disconnect logic in tests. Defaults to
+	// runtime-GOOS dispatch.
+	platformConnectFn    func() error
+	platformDisconnectFn func() error
+
+	// platformName is the OS identifier used for platform dispatch.
+	// Defaults to runtime.GOOS; overridable in tests.
+	platformName string
 }
 
-// NewManager creates a new VPN manager instance
+// NewManager creates a new VPN manager instance using the production TunnelBackend.
 func NewManager(cfg *config.Config) *Manager {
+	return NewManagerWithBackend(cfg, DefaultTunnelBackend())
+}
+
+// NewManagerWithBackend creates a new VPN manager instance injecting the given
+// TunnelBackend into EmbeddedWireGuard. Use this in tests to avoid kernel calls.
+func NewManagerWithBackend(cfg *config.Config, backend TunnelBackend) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Determine interface name based on platform
 	interfaceName := "wg0"
 	if runtime.GOOS == platformWindows {
 		interfaceName = "Tobogganing"
 	}
-	
+
 	manager := &Manager{
-		config:        cfg,
-		ctx:           ctx,
-		cancel:        cancel,
-		interfaceName: interfaceName,
-		configPath:    cfg.GetWireGuardConfigPath(),
-		monitorStop:   make(chan struct{}),
-		useEmbedded:   true, // Use embedded WireGuard by default
+		config:          cfg,
+		ctx:             ctx,
+		cancel:          cancel,
+		interfaceName:   interfaceName,
+		configPath:      cfg.GetWireGuardConfigPath(),
+		monitorStop:     make(chan struct{}),
+		useEmbedded:     true, // Use embedded WireGuard by default
+		wgOutputFn:      defaultWGOutputFn,
+		monitorInterval: 5 * time.Second,
+		platformName:    runtime.GOOS,
 	}
-	
-	// Initialize embedded WireGuard
-	manager.embeddedWG = NewEmbeddedWireGuard(interfaceName)
-	
+
+	// Initialize embedded WireGuard with the injected backend.
+	manager.embeddedWG = NewEmbeddedWireGuardWithBackend(interfaceName, backend)
+
+	// Default platform connect/disconnect dispatch by runtime.GOOS.
+	manager.platformConnectFn = manager.defaultPlatformConnect
+	manager.platformDisconnectFn = manager.defaultPlatformDisconnect
+
 	return manager
+}
+
+// defaultPlatformConnect dispatches to the OS-specific connect method.
+func (m *Manager) defaultPlatformConnect() error {
+	switch m.platformName {
+	case "linux":
+		return m.connectLinux()
+	case "darwin":
+		return m.connectMacOS()
+	case platformWindows:
+		return m.connectWindows()
+	default:
+		return fmt.Errorf("unsupported platform: %s", m.platformName)
+	}
+}
+
+// defaultPlatformDisconnect dispatches to the OS-specific disconnect method.
+func (m *Manager) defaultPlatformDisconnect() error {
+	switch m.platformName {
+	case "linux":
+		return m.disconnectLinux()
+	case "darwin":
+		return m.disconnectMacOS()
+	case platformWindows:
+		return m.disconnectWindows()
+	default:
+		return fmt.Errorf("unsupported platform: %s", m.platformName)
+	}
+}
+
+// defaultWGOutputFn runs "wg show <iface>" and returns its output.
+func defaultWGOutputFn(iface string) ([]byte, error) {
+	return exec.Command("wg", "show", iface).Output()
 }
 
 // Connect establishes a VPN connection
@@ -224,18 +288,7 @@ func (m *Manager) connectWireGuard() error {
 	if m.useEmbedded {
 		return m.connectEmbedded()
 	}
-	
-	// Fallback to platform-specific methods
-	switch runtime.GOOS {
-	case "linux":
-		return m.connectLinux()
-	case "darwin":
-		return m.connectMacOS()
-	case platformWindows:
-		return m.connectWindows()
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
+	return m.platformConnectFn()
 }
 
 // disconnectWireGuard terminates the WireGuard connection
@@ -243,18 +296,7 @@ func (m *Manager) disconnectWireGuard() error {
 	if m.useEmbedded {
 		return m.disconnectEmbedded()
 	}
-	
-	// Fallback to platform-specific methods
-	switch runtime.GOOS {
-	case "linux":
-		return m.disconnectLinux()
-	case "darwin":
-		return m.disconnectMacOS()
-	case platformWindows:
-		return m.disconnectWindows()
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
+	return m.platformDisconnectFn()
 }
 
 // Embedded WireGuard implementations
@@ -459,8 +501,7 @@ func (m *Manager) getInterfaceStatistics() InterfaceStatistics {
 }
 
 func (m *Manager) getWireGuardOutput() ([]byte, error) {
-	cmd := exec.Command("wg", "show", m.interfaceName)
-	return cmd.Output()
+	return m.wgOutputFn(m.interfaceName)
 }
 
 func (m *Manager) parseWireGuardOutput(output string, stats *InterfaceStatistics) {
@@ -533,7 +574,7 @@ func (m *Manager) parseTransferAmount(amountStr string) uint64 {
 // Connection monitoring
 
 func (m *Manager) startMonitoring() {
-	m.monitorTicker = time.NewTicker(5 * time.Second)
+	m.monitorTicker = time.NewTicker(m.monitorInterval)
 	
 	go func() {
 		for {

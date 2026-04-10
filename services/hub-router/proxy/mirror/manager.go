@@ -432,8 +432,12 @@ func (m *Manager) reconnect(dest string) {
     log.Infof("Reconnected to mirror destination %s", dest)
 }
 
+// statsReportInterval controls how often mirror statistics are logged.
+// Overridable in tests to avoid waiting 60 seconds.
+var statsReportInterval = 60 * time.Second
+
 func (m *Manager) reportStats() {
-    ticker := time.NewTicker(60 * time.Second)
+    ticker := time.NewTicker(statsReportInterval)
     defer ticker.Stop()
     
     for {

@@ -47,13 +47,39 @@ const (
     stateDisconnected = "disconnected"
 )
 
+// wgDeviceClient abstracts the subset of wgctrl.Client used by Client,
+// allowing tests to inject a mock without a real WireGuard kernel interface.
+type wgDeviceClient interface {
+    Device(name string) (*wgtypes.Device, error)
+}
+
+// cmdRunner abstracts exec.Cmd.CombinedOutput to allow test injection.
+type cmdRunner func(cmd *exec.Cmd) ([]byte, error)
+
+// defaultCmdRunner executes a command and returns its combined stdout+stderr.
+func defaultCmdRunner(cmd *exec.Cmd) ([]byte, error) {
+    return cmd.CombinedOutput()
+}
+
 // Client represents the Tobogganing native client
 type Client struct {
     config          *config.Config
     auth            *auth.Manager
-    wg              *wgctrl.Client
+    wg              wgDeviceClient
     httpClient      *http.Client
     overlayProvider overlay.OverlayProvider
+
+    // monitoringInterval controls how often healthCheck runs. Defaults to 30s;
+    // tests may set it to a shorter value to exercise the ticker path.
+    monitoringInterval time.Duration
+
+    // runCmd executes an exec.Cmd and returns its output. Defaults to
+    // defaultCmdRunner; tests may replace this to avoid invoking real binaries.
+    runCmd cmdRunner
+
+    // getInterfaceIPFn overrides interface IP lookup; nil means use the real implementation.
+    // Tests set this to return a known IP without running system commands.
+    getInterfaceIPFn func(name string) (string, error)
 
     // Current connection state
     clientID         string
@@ -91,16 +117,21 @@ func New(cfg *config.Config) (*Client, error) {
         return nil, fmt.Errorf("failed to create auth manager: %w", err)
     }
 
-    client := &Client{
+    return newWithDeps(cfg, wgClient, authManager), nil
+}
+
+// newWithDeps creates a Client with injected dependencies. Used by tests to avoid
+// requiring a real WireGuard kernel interface or network-reachable auth service.
+func newWithDeps(cfg *config.Config, wgDev wgDeviceClient, authMgr *auth.Manager) *Client {
+    return &Client{
         config: cfg,
-        auth:   authManager,
-        wg:     wgClient,
+        auth:   authMgr,
+        wg:     wgDev,
         httpClient: &http.Client{
             Timeout: 30 * time.Second,
         },
+        runCmd: defaultCmdRunner,
     }
-
-    return client, nil
 }
 
 // Connect establishes connection to the Tobogganing network
@@ -199,9 +230,13 @@ func (c *Client) Status() (*ConnectionStatus, error) {
     }
 
     status.State = stateConnected
-    
+
     // Get interface IP
-    if ip, err := c.getInterfaceIP(interfaceName); err == nil {
+    ipFn := c.getInterfaceIPFn
+    if ipFn == nil {
+        ipFn = c.getInterfaceIP
+    }
+    if ip, err := ipFn(interfaceName); err == nil {
         status.WireGuardIP = ip
     }
 
@@ -454,25 +489,44 @@ PersistentKeepalive = 25
     return os.WriteFile(configPath, []byte(config), 0600)
 }
 
+// wireGuardUpCmd returns the OS-appropriate command to bring up a WireGuard config.
+// Returns an error if goos is not a supported platform.
+func wireGuardUpCmd(goos, configPath string) (*exec.Cmd, error) {
+    switch goos {
+    case platformDarwin, platformLinux:
+        return exec.Command("wg-quick", "up", configPath), nil
+    case platformWindows:
+        return exec.Command("wg-quick.exe", "up", configPath), nil
+    default:
+        return nil, fmt.Errorf("unsupported platform: %s", goos)
+    }
+}
+
+// wireGuardDownCmd returns the OS-appropriate command to bring down a WireGuard config.
+// Returns an error if goos is not a supported platform.
+func wireGuardDownCmd(goos, configPath string) (*exec.Cmd, error) {
+    switch goos {
+    case platformDarwin, platformLinux:
+        return exec.Command("wg-quick", "down", configPath), nil
+    case platformWindows:
+        return exec.Command("wg-quick.exe", "down", configPath), nil
+    default:
+        return nil, fmt.Errorf("unsupported platform: %s", goos)
+    }
+}
+
 func (c *Client) startWireGuard() error {
     fmt.Println("Starting WireGuard interface...")
 
     interfaceName := c.getWireGuardInterface()
     configPath := c.getWireGuardConfigPath()
 
-    var cmd *exec.Cmd
-    switch runtime.GOOS {
-    case platformDarwin, platformLinux:
-        cmd = exec.Command("wg-quick", "up", configPath)
-    case platformWindows:
-        // On Windows, we'd need to use WireGuard service
-        // Use WireGuard for Windows service
-        cmd = exec.Command("wg-quick.exe", "up", configPath)
-    default:
-        return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+    cmd, err := wireGuardUpCmd(runtime.GOOS, configPath)
+    if err != nil {
+        return err
     }
 
-    if output, err := cmd.CombinedOutput(); err != nil {
+    if output, err := c.runCmd(cmd); err != nil {
         return fmt.Errorf("failed to start WireGuard: %v, output: %s", err, output)
     }
 
@@ -484,18 +538,12 @@ func (c *Client) stopWireGuard() error {
     interfaceName := c.getWireGuardInterface()
     configPath := c.getWireGuardConfigPath()
 
-    var cmd *exec.Cmd
-    switch runtime.GOOS {
-    case platformDarwin, platformLinux:
-        cmd = exec.Command("wg-quick", "down", configPath)
-    case platformWindows:
-        // Use WireGuard for Windows service
-        cmd = exec.Command("wg-quick.exe", "down", configPath)
-    default:
-        return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+    cmd, err := wireGuardDownCmd(runtime.GOOS, configPath)
+    if err != nil {
+        return err
     }
 
-    if output, err := cmd.CombinedOutput(); err != nil {
+    if output, err := c.runCmd(cmd); err != nil {
         return fmt.Errorf("failed to stop WireGuard: %v, output: %s", err, output)
     }
 
@@ -506,7 +554,11 @@ func (c *Client) stopWireGuard() error {
 func (c *Client) runMonitoring(ctx context.Context) error {
     fmt.Println("Starting connection monitoring...")
 
-    ticker := time.NewTicker(30 * time.Second)
+    interval := c.monitoringInterval
+    if interval <= 0 {
+        interval = 30 * time.Second
+    }
+    ticker := time.NewTicker(interval)
     defer ticker.Stop()
 
     for {
@@ -549,12 +601,11 @@ const (
 	windowsWireGuardInterface = "tobogganing"
 )
 
-func (c *Client) getWireGuardInterface() string {
-    switch runtime.GOOS {
+// wireGuardInterfaceForOS returns the WireGuard interface name for the given OS.
+func wireGuardInterfaceForOS(goos string) string {
+    switch goos {
     case platformDarwin:
         return darwinWireGuardInterface
-    case platformLinux:
-        return defaultWireGuardInterface
     case platformWindows:
         return windowsWireGuardInterface
     default:
@@ -562,14 +613,11 @@ func (c *Client) getWireGuardInterface() string {
     }
 }
 
-func (c *Client) getWireGuardConfigPath() string {
-    interfaceName := c.getWireGuardInterface()
-    
-    switch runtime.GOOS {
+// wireGuardConfigPathForOS returns the WireGuard config file path for the given OS and interface.
+func wireGuardConfigPathForOS(goos, interfaceName string) string {
+    switch goos {
     case platformDarwin:
         return fmt.Sprintf("/usr/local/etc/wireguard/%s.conf", interfaceName)
-    case platformLinux:
-        return fmt.Sprintf("/etc/wireguard/%s.conf", interfaceName)
     case platformWindows:
         return fmt.Sprintf("C:\\Program Files\\WireGuard\\Data\\Configurations\\%s.conf", interfaceName)
     default:
@@ -577,16 +625,41 @@ func (c *Client) getWireGuardConfigPath() string {
     }
 }
 
-func (c *Client) getInterfaceIP(interfaceName string) (string, error) {
-    var cmd *exec.Cmd
-    
-    switch runtime.GOOS {
+// interfaceIPCmd returns the OS-appropriate command to query interface addresses.
+func interfaceIPCmd(goos, interfaceName string) (*exec.Cmd, error) {
+    switch goos {
     case platformDarwin, platformLinux:
-        cmd = exec.Command("ip", "addr", "show", interfaceName)
+        return exec.Command("ip", "addr", "show", interfaceName), nil
     case platformWindows:
-        cmd = exec.Command("netsh", "interface", "ip", "show", "addresses", interfaceName)
+        return exec.Command("netsh", "interface", "ip", "show", "addresses", interfaceName), nil
     default:
-        return "", fmt.Errorf("unsupported platform")
+        return nil, fmt.Errorf("unsupported platform")
+    }
+}
+
+// certificateDirForOS returns the certificate directory for the given OS.
+func certificateDirForOS(goos string) string {
+    switch goos {
+    case platformWindows:
+        return os.Getenv("APPDATA") + "\\Tobogganing\\certs"
+    default:
+        return os.Getenv("HOME") + "/.tobogganing/certs"
+    }
+}
+
+func (c *Client) getWireGuardInterface() string {
+    return wireGuardInterfaceForOS(runtime.GOOS)
+}
+
+func (c *Client) getWireGuardConfigPath() string {
+    interfaceName := c.getWireGuardInterface()
+    return wireGuardConfigPathForOS(runtime.GOOS, interfaceName)
+}
+
+func (c *Client) getInterfaceIP(interfaceName string) (string, error) {
+    cmd, err := interfaceIPCmd(runtime.GOOS, interfaceName)
+    if err != nil {
+        return "", err
     }
 
     output, err := cmd.Output()
@@ -632,14 +705,5 @@ func (c *Client) saveCertificates(cert, key, ca string) error {
 }
 
 func (c *Client) getCertificateDir() string {
-    switch runtime.GOOS {
-    case platformDarwin:
-        return os.Getenv("HOME") + "/.tobogganing/certs"
-    case platformLinux:
-        return os.Getenv("HOME") + "/.tobogganing/certs"
-    case platformWindows:
-        return os.Getenv("APPDATA") + "\\Tobogganing\\certs"
-    default:
-        return "/tmp/tobogganing/certs"
-    }
+    return certificateDirForOS(runtime.GOOS)
 }

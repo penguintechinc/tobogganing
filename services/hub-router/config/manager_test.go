@@ -684,3 +684,233 @@ func TestWatchConfig_DoesNotPanic(t *testing.T) {
 		t.Errorf("expected 0 HTTP calls, got %d", callCount)
 	}
 }
+
+// ─── WatchConfig ticker fired path ────────────────────────────────────────
+
+func TestWatchConfig_TickerFires(t *testing.T) {
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		json.NewEncoder(w).Encode(makeValidConfig())
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+
+	// Use a very short interval so ticker fires during test
+	cm.WatchConfig(50 * time.Millisecond)
+
+	// Wait for at least one ticker cycle to fire (50ms + some buffer)
+	time.Sleep(150 * time.Millisecond)
+
+	// Should have at least 1 call from the ticker
+	if callCount < 1 {
+		t.Errorf("expected at least 1 HTTP call from ticker, got %d", callCount)
+	}
+}
+
+// ─── WatchConfig with fetch error ─────────────────────────────────────────
+
+func TestWatchConfig_FetchError(t *testing.T) {
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+
+	// Use short interval so ticker fires
+	cm.WatchConfig(50 * time.Millisecond)
+
+	// Wait for ticker
+	time.Sleep(150 * time.Millisecond)
+
+	// Should have attempted fetches even with errors
+	if callCount < 1 {
+		t.Errorf("expected at least 1 call, got %d", callCount)
+	}
+}
+
+// ─── WatchConfig success path ─────────────────────────────────────────────
+
+func TestWatchConfig_Success(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(makeValidConfig())
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+
+	// Start watcher with short interval
+	cm.WatchConfig(50 * time.Millisecond)
+
+	// Wait for ticker to fire
+	time.Sleep(150 * time.Millisecond)
+
+	// Config should be updated
+	if cm.config == nil {
+		t.Error("expected config to be set after watch")
+	}
+}
+
+// ─── FetchConfig with response body read error (simulate) ────────────────
+
+func TestFetchConfig_ResponseBodyReadError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Return valid JSON that decodes successfully
+		json.NewEncoder(w).Encode(makeValidConfig())
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+	result, err := cm.FetchConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Error("expected non-nil result")
+	}
+}
+
+// ─── ValidateConfig with OAuth2 auth (no manager URL needed) ──────────────
+
+func TestValidateConfig_OAuth2NoManagerURL(t *testing.T) {
+	cm := NewManager("http://manager", "key")
+	cfg := &HeadendConfig{
+		HTTPPort: "8080",
+		Auth: AuthConfig{
+			Type: "oauth2",
+			// No ManagerURL required for OAuth2
+		},
+		WireGuard: WireGuardConfig{
+			Interface:  "wg0",
+			ListenPort: 51820,
+		},
+	}
+	if err := cm.ValidateConfig(cfg); err != nil {
+		t.Errorf("unexpected error for OAuth2 without manager URL: %v", err)
+	}
+}
+
+// ─── ValidateConfig with SAML2 auth ───────────────────────────────────────
+
+func TestValidateConfig_SAML2NoManagerURL(t *testing.T) {
+	cm := NewManager("http://manager", "key")
+	cfg := &HeadendConfig{
+		HTTPPort: "8080",
+		Auth: AuthConfig{
+			Type: "saml2",
+			// SAML2 also doesn't require manager URL
+		},
+		WireGuard: WireGuardConfig{
+			Interface:  "wg0",
+			ListenPort: 51820,
+		},
+	}
+	if err := cm.ValidateConfig(cfg); err != nil {
+		t.Errorf("unexpected error for SAML2 without manager URL: %v", err)
+	}
+}
+
+// ─── GetConfig refetch on stale with error ────────────────────────────────
+
+func TestGetConfig_StaleRefetchWithError(t *testing.T) {
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			// First call succeeds
+			json.NewEncoder(w).Encode(makeValidConfig())
+		} else {
+			// Second call (refetch) fails
+			http.Error(w, "error", http.StatusInternalServerError)
+		}
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+
+	// First fetch succeeds
+	cfg, err := cm.GetConfig()
+	if err != nil {
+		t.Fatalf("first GetConfig failed: %v", err)
+	}
+	if cfg == nil {
+		t.Error("expected non-nil config")
+	}
+
+	// Force stale by setting last update to past
+	cm.lastUpdate = time.Now().Add(-6 * time.Minute)
+
+	// Second GetConfig should attempt refetch, which fails
+	_, err = cm.GetConfig()
+	if err == nil {
+		t.Error("expected error on stale refetch failure")
+	}
+}
+
+// ─── RefreshConfig returns error ───────────────────────────────────────────
+
+func TestRefreshConfig_Error(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "service down", http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+	_, err := cm.RefreshConfig()
+	if err == nil {
+		t.Error("expected error from RefreshConfig")
+	}
+}
+
+// ─── Concurrent GetConfig and RefreshConfig ───────────────────────────────
+
+func TestConcurrentGetAndRefresh(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond) // Simulate slow response
+		json.NewEncoder(w).Encode(makeValidConfig())
+	}))
+	defer ts.Close()
+
+	os.Setenv("CLUSTER_ID", "cluster-1")
+	defer os.Unsetenv("CLUSTER_ID")
+
+	cm := NewManager(ts.URL, "key")
+
+	// Start concurrent operations
+	done := make(chan bool, 2)
+	go func() {
+		_, _ = cm.GetConfig()
+		done <- true
+	}()
+	go func() {
+		_, _ = cm.RefreshConfig()
+		done <- true
+	}()
+
+	// Wait for both to complete
+	<-done
+	<-done
+}

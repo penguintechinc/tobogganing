@@ -20,14 +20,23 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TokenValidator is the subset of authn.OIDCRelyingParty used by NewAuthMiddleware.
+// Defining it as an interface allows tests to inject mocks without a live OIDC provider.
+type TokenValidator interface {
+	ValidateToken(ctx context.Context, rawToken string) (*authn.Claims, error)
+}
+
 // NewAuthMiddleware returns a gin.HandlerFunc that validates Bearer tokens using the
-// provided OIDCRelyingParty. On success it stores *authn.Claims under the key "claims"
+// provided TokenValidator. On success it stores *authn.Claims under the key "claims"
 // and the tenant string under "tenant" in the gin context.
 //
 // If rp is nil (e.g. OIDC_ISSUER_URL was not set and dev mode is active) the middleware
 // logs a warning and passes the request through without validating the token — this is
 // intentional for local development only and must never be used in production.
-func NewAuthMiddleware(rp *authn.OIDCRelyingParty) gin.HandlerFunc {
+//
+// *authn.OIDCRelyingParty satisfies TokenValidator directly, so existing call sites
+// need no changes.
+func NewAuthMiddleware(rp TokenValidator) gin.HandlerFunc {
 	if rp == nil {
 		log.Warn("auth: OIDC relying party is nil — token validation is DISABLED (dev mode only)")
 	}

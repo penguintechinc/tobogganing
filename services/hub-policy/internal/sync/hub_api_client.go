@@ -40,6 +40,28 @@ const (
 	reconnectInterval = 10 * time.Second
 )
 
+// PolicyUpdate represents a single policy update message received from the stream.
+type PolicyUpdate struct {
+	// Policies is the updated set of policies.
+	Policies []Policy `json:"policies"`
+	// Sequence is the monotonic sequence number for ordering.
+	Sequence int64 `json:"sequence"`
+}
+
+// PolicyStream is the interface for consuming a gRPC policy update stream.
+// It is satisfied by the generated gRPC client stream type and by mock
+// implementations used in tests.
+type PolicyStream interface {
+	// Recv blocks until the next PolicyUpdate arrives, or an error occurs.
+	// Returns io.EOF when the stream ends normally.
+	Recv() (*PolicyUpdate, error)
+}
+
+// PolicyStreamFactory creates a PolicyStream for the given context.
+// The factory is called each time the client (re-)connects to the stream.
+// Injecting a custom factory in tests allows full control over stream behaviour.
+type PolicyStreamFactory func(ctx context.Context) (PolicyStream, error)
+
 // Policy represents a network policy fetched from hub-api.
 type Policy struct {
 	// ID is the unique policy identifier.
@@ -85,6 +107,10 @@ type ControllerRegistration struct {
 // PolicyUpdateCallback is invoked when policies are updated.
 type PolicyUpdateCallback func(policies []Policy)
 
+// grpcDialFunc is the signature of the function used to create a gRPC
+// connection. Replacing it in tests allows simulating dial failures.
+type grpcDialFunc func(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
+
 // HubAPIClient provides communication with the hub-api service.
 // It uses gRPC as the primary transport and falls back to REST
 // when gRPC is unavailable.
@@ -98,6 +124,16 @@ type HubAPIClient struct {
 	grpcConn *grpc.ClientConn
 	// grpcAvailable indicates whether gRPC is currently available.
 	grpcAvailable bool
+
+	// dialFn is the function used to create gRPC connections. If nil,
+	// grpc.NewClient is used. Overriding this in tests enables dial-failure
+	// simulation without requiring a real unreachable host.
+	dialFn grpcDialFunc
+
+	// streamFactory creates a PolicyStream when the client subscribes to updates.
+	// If nil, the polling fallback is used. Injecting a non-nil factory enables
+	// gRPC streaming and allows tests to supply mock streams.
+	streamFactory PolicyStreamFactory
 
 	// httpClient is used for REST API fallback calls.
 	httpClient *http.Client
@@ -141,6 +177,25 @@ func NewHubAPIClient(grpcAddr, restBaseURL string) *HubAPIClient {
 	}
 }
 
+// dial creates a new gRPC connection using the injected dialFn if set,
+// otherwise falls back to grpc.NewClient.
+func (c *HubAPIClient) dial() (*grpc.ClientConn, error) {
+	fn := c.dialFn
+	if fn == nil {
+		fn = grpc.NewClient
+	}
+	return fn(c.grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+}
+
+// SetStreamFactory sets the factory used to create gRPC policy streams.
+// Call this before SubscribePolicyUpdates to enable streaming (rather than
+// polling). Tests inject a mock factory here.
+func (c *HubAPIClient) SetStreamFactory(f PolicyStreamFactory) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.streamFactory = f
+}
+
 // Connect establishes the gRPC connection to hub-api.
 // If the connection fails, the client will fall back to REST and
 // periodically retry the gRPC connection in the background.
@@ -148,9 +203,7 @@ func (c *HubAPIClient) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	conn, err := grpc.NewClient(c.grpcAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	conn, err := c.dial()
 	if err != nil {
 		log.Warnf("gRPC connection to %s failed: %v (falling back to REST at %s)",
 			c.grpcAddr, err, c.restBaseURL)
@@ -170,37 +223,7 @@ func (c *HubAPIClient) Connect(ctx context.Context) error {
 
 // reconnectLoop periodically attempts to re-establish the gRPC connection.
 func (c *HubAPIClient) reconnectLoop() {
-	ticker := time.NewTicker(reconnectInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.stopCh:
-			return
-		case <-ticker.C:
-			c.mu.Lock()
-			if c.grpcAvailable {
-				c.mu.Unlock()
-				return
-			}
-
-			conn, err := grpc.NewClient(c.grpcAddr,
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-			)
-
-			if err != nil {
-				c.mu.Unlock()
-				log.Debugf("gRPC reconnection to %s failed: %v", c.grpcAddr, err)
-				continue
-			}
-
-			c.grpcConn = conn
-			c.grpcAvailable = true
-			c.mu.Unlock()
-			log.Infof("Re-established gRPC connection to hub-api at %s", c.grpcAddr)
-			return
-		}
-	}
+	c.reconnectLoopFast(reconnectInterval)
 }
 
 // FetchPolicies retrieves the current policy set from hub-api.
@@ -301,64 +324,80 @@ func (c *HubAPIClient) fetchPoliciesREST(ctx context.Context) ([]Policy, error) 
 	return policies, nil
 }
 
-// SubscribePolicyUpdates subscribes to real-time policy updates via gRPC streaming.
-// When policies change on hub-api, the callback is invoked with the updated policy set.
+// SubscribePolicyUpdates subscribes to real-time policy updates.
 //
-// This method blocks until the context is cancelled or the stop channel is closed.
-// If the gRPC stream disconnects, it automatically reconnects.
+// When a PolicyStreamFactory has been set (via SetStreamFactory), this method
+// consumes the gRPC stream: each received PolicyUpdate triggers the callback
+// and updates the local cache.  The method handles io.EOF (clean server-side
+// close) and transient errors (logs a warning and returns), so callers can
+// restart it if needed.
+//
+// When no factory is set, it falls back to periodic REST polling every 30s.
+//
+// The method blocks until the context is cancelled, the stop channel is closed,
+// the stream reaches EOF, or a non-EOF stream error occurs.
 func (c *HubAPIClient) SubscribePolicyUpdates(ctx context.Context, callback PolicyUpdateCallback) error {
 	c.mu.Lock()
 	c.onPolicyUpdate = callback
+	factory := c.streamFactory
 	c.mu.Unlock()
 
-	// TODO: Implement using gRPC streaming:
-	//
-	//   client := pb.NewPolicyServiceClient(c.grpcConn)
-	//   stream, err := client.WatchPolicies(ctx, &pb.WatchPoliciesRequest{})
-	//   if err != nil { return err }
-	//
-	//   for {
-	//       update, err := stream.Recv()
-	//       if err == io.EOF { break }
-	//       if err != nil {
-	//           log.Warnf("Policy stream error: %v, reconnecting...", err)
-	//           time.Sleep(reconnectInterval)
-	//           continue
-	//       }
-	//
-	//       policies := convertPolicies(update.Policies)
-	//       callback(policies)
-	//
-	//       // Update cache
-	//       c.mu.Lock()
-	//       c.policyCache = policies
-	//       c.policyCacheTime = time.Now()
-	//       c.mu.Unlock()
-	//   }
+	if factory != nil {
+		return c.subscribeViaStream(ctx, factory, callback)
+	}
 
-	log.Info("Policy update subscription started (stub - polling fallback)")
+	return c.subscribeViaPoll(ctx, callback)
+}
 
-	// Fallback: poll for updates periodically
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+// subscribeViaStream consumes a gRPC PolicyStream, invoking callback on each update.
+func (c *HubAPIClient) subscribeViaStream(ctx context.Context, factory PolicyStreamFactory, callback PolicyUpdateCallback) error {
+	stream, err := factory(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to open policy stream: %w", err)
+	}
 
 	for {
+		// Honour context cancellation between Recv calls.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.stopCh:
 			return nil
-		case <-ticker.C:
-			policies, err := c.FetchPolicies(ctx)
-			if err != nil {
-				log.Warnf("Policy poll failed: %v", err)
-				continue
+		default:
+		}
+
+		update, recvErr := stream.Recv()
+		if recvErr == io.EOF {
+			log.Info("Policy stream closed by server (EOF)")
+			return nil
+		}
+		if recvErr != nil {
+			// Check if the error is due to context cancellation.
+			if ctx.Err() != nil {
+				return ctx.Err()
 			}
-			if callback != nil {
-				callback(policies)
-			}
+			log.Warnf("Policy stream error: %v", recvErr)
+			return fmt.Errorf("policy stream error: %w", recvErr)
+		}
+
+		policies := update.Policies
+
+		// Update cache.
+		c.mu.Lock()
+		c.policyCache = policies
+		c.policyCacheTime = time.Now()
+		c.mu.Unlock()
+
+		if callback != nil {
+			callback(policies)
 		}
 	}
+}
+
+// subscribeViaPoll polls REST periodically when no gRPC stream factory is available.
+func (c *HubAPIClient) subscribeViaPoll(ctx context.Context, callback PolicyUpdateCallback) error {
+	log.Info("Policy update subscription started (stub - polling fallback)")
+	return c.subscribeViaPollFast(ctx, callback, 30*time.Second)
 }
 
 // RegisterController registers this hub-policy instance with hub-api.
@@ -444,6 +483,66 @@ func (c *HubAPIClient) Close() error {
 
 	log.Info("HubAPIClient closed")
 	return nil
+}
+
+// subscribeViaPollFast is like subscribeViaPoll but uses the provided interval
+// instead of the hard-coded 30-second interval. It exists to allow tests to
+// exercise the ticker path without waiting 30 seconds.
+func (c *HubAPIClient) subscribeViaPollFast(ctx context.Context, callback PolicyUpdateCallback, interval time.Duration) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.stopCh:
+			return nil
+		case <-ticker.C:
+			policies, err := c.FetchPolicies(ctx)
+			if err != nil {
+				log.Warnf("Policy poll failed: %v", err)
+				continue
+			}
+			if callback != nil {
+				callback(policies)
+			}
+		}
+	}
+}
+
+// reconnectLoopFast is like reconnectLoop but uses the provided interval so
+// tests can drive it quickly without waiting reconnectInterval (10 s).
+func (c *HubAPIClient) reconnectLoopFast(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			c.mu.Lock()
+			if c.grpcAvailable {
+				c.mu.Unlock()
+				return
+			}
+
+			conn, err := c.dial()
+
+			if err != nil {
+				c.mu.Unlock()
+				log.Debugf("gRPC reconnection to %s failed: %v", c.grpcAddr, err)
+				continue
+			}
+
+			c.grpcConn = conn
+			c.grpcAvailable = true
+			c.mu.Unlock()
+			log.Infof("Re-established gRPC connection to hub-api at %s", c.grpcAddr)
+			return
+		}
+	}
 }
 
 // jsonReader wraps a byte slice to implement io.Reader.

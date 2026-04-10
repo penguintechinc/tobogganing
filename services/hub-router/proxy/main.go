@@ -179,31 +179,34 @@ func (s *ProxyServer) Initialize() error {
         log.Info("WireGuard-aware routing enabled")
     }
 
-    // Initialize auth provider - supports JWT, OAuth2, or SAML2
-    authType := viper.GetString("auth.type")
-    switch authType {
-    case "jwt":
-        s.authProvider, err = auth.NewJWTProvider(
-            viper.GetString("auth.manager_url"),
-            viper.GetString("auth.jwt_public_key_path"),
-        )
-    case "oauth2":
-        s.authProvider, err = auth.NewOAuth2Provider(
-            viper.GetString("auth.oauth2.issuer"),
-            viper.GetString("auth.oauth2.client_id"),
-            viper.GetString("auth.oauth2.client_secret"),
-        )
-    case "saml2":
-        s.authProvider, err = auth.NewSAML2Provider(
-            viper.GetString("auth.saml2.idp_metadata_url"),
-            viper.GetString("auth.saml2.sp_entity_id"),
-        )
-    default:
-        return fmt.Errorf("unsupported auth type: %s", authType)
-    }
+    // Initialize auth provider - supports JWT, OAuth2, or SAML2.
+    // Skip if already set (allows tests to inject a mock provider).
+    if s.authProvider == nil {
+        authType := viper.GetString("auth.type")
+        switch authType {
+        case "jwt":
+            s.authProvider, err = auth.NewJWTProvider(
+                viper.GetString("auth.manager_url"),
+                viper.GetString("auth.jwt_public_key_path"),
+            )
+        case "oauth2":
+            s.authProvider, err = auth.NewOAuth2Provider(
+                viper.GetString("auth.oauth2.issuer"),
+                viper.GetString("auth.oauth2.client_id"),
+                viper.GetString("auth.oauth2.client_secret"),
+            )
+        case "saml2":
+            s.authProvider, err = auth.NewSAML2Provider(
+                viper.GetString("auth.saml2.idp_metadata_url"),
+                viper.GetString("auth.saml2.sp_entity_id"),
+            )
+        default:
+            return fmt.Errorf("unsupported auth type: %s", authType)
+        }
 
-    if err != nil {
-        return fmt.Errorf("failed to initialize auth provider: %w", err)
+        if err != nil {
+            return fmt.Errorf("failed to initialize auth provider: %w", err)
+        }
     }
 
     // Initialize go-aaa OIDC relying party for gin middleware token validation.
@@ -391,7 +394,7 @@ func (s *ProxyServer) Initialize() error {
                     log.Infof("Dynamic port manager started with %d listeners", s.portManager.GetListenerCount())
                     
                     // Start periodic config refresh
-                    go s.refreshPortConfig(configClient)
+                    go s.refreshPortConfig(context.Background(), configClient)
                 }
             }
         }
@@ -445,12 +448,12 @@ func (s *ProxyServer) setupRoutes() {
         authGroup.POST("/login", s.authProvider.LoginHandler())
         authGroup.GET("/callback", s.authProvider.CallbackHandler())
         authGroup.POST("/logout", s.authProvider.LogoutHandler())
-        authGroup.GET("/userinfo", middleware.NewAuthMiddleware(s.oidcRP), s.userInfoHandler)
+        authGroup.GET("/userinfo", middleware.NewAuthMiddleware(oidcRPOrNil(s.oidcRP)), s.userInfoHandler)
     }
 
     // Proxy endpoints (require authentication)
     proxyGroup := s.router.Group("/proxy")
-    proxyGroup.Use(middleware.NewAuthMiddleware(s.oidcRP))
+    proxyGroup.Use(middleware.NewAuthMiddleware(oidcRPOrNil(s.oidcRP)))
     {
         proxyGroup.Any("/*path", s.proxyHandler)
     }
@@ -1026,34 +1029,40 @@ func (u *UDPProxy) extractTargetFromUDPPacket(data []byte) string {
     return ""
 }
 
-// refreshPortConfig periodically fetches updated port configuration from the Manager
-func (s *ProxyServer) refreshPortConfig(configClient *ports.ConfigClient) {
+// refreshPortConfig periodically fetches updated port configuration from the Manager.
+// The loop exits when ctx is cancelled, enabling clean shutdown and test control.
+func (s *ProxyServer) refreshPortConfig(ctx context.Context, configClient *ports.ConfigClient) {
 	refreshInterval, err := time.ParseDuration(viper.GetString("ports.refresh_interval"))
 	if err != nil {
 		refreshInterval = 60 * time.Second
 	}
-	
+
 	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
-	
-	for range ticker.C {
-		config, err := configClient.FetchConfig()
-		if err != nil {
-			log.Errorf("Failed to refresh port config: %v", err)
-			continue
-		}
-		
-		// Validate the configuration
-		if err := configClient.ValidateConfig(config); err != nil {
-			log.Errorf("Invalid port config received: %v", err)
-			continue
-		}
-		
-		// Update port manager configuration
-		if err := s.updatePortConfiguration(config); err != nil {
-			log.Errorf("Failed to update port configuration: %v", err)
-		} else {
-			log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			config, err := configClient.FetchConfig()
+			if err != nil {
+				log.Errorf("Failed to refresh port config: %v", err)
+				continue
+			}
+
+			// Validate the configuration
+			if err := configClient.ValidateConfig(config); err != nil {
+				log.Errorf("Invalid port config received: %v", err)
+				continue
+			}
+
+			// Update port manager configuration
+			if err := s.updatePortConfiguration(config); err != nil {
+				log.Errorf("Failed to update port configuration: %v", err)
+			} else {
+				log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
+			}
 		}
 	}
 }
@@ -1427,4 +1436,15 @@ func (s *ProxyServer) handleZitiConnection(conn net.Conn) {
 	// Bidirectional proxy
 	go s.proxyTCPData(conn, targetConn, "ziti-client->target")
 	s.proxyTCPData(targetConn, conn, "target->ziti-client")
+}
+
+// oidcRPOrNil converts a *authn.OIDCRelyingParty to a middleware.TokenValidator interface,
+// returning nil (not a typed-nil interface value) when the pointer is nil. This prevents
+// the common Go pitfall where a nil concrete pointer becomes a non-nil interface value,
+// which would cause the dev-mode nil check in NewAuthMiddleware to fail.
+func oidcRPOrNil(rp *authn.OIDCRelyingParty) middleware.TokenValidator {
+	if rp == nil {
+		return nil
+	}
+	return rp
 }

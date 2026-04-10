@@ -28,6 +28,10 @@ import (
 
 var log = logger.Get() //nolint:gochecknoglobals
 
+// schedulerSleepDuration is the interval between scheduler checks.
+// It is a package-level variable so tests can shorten it without changing production behaviour.
+var schedulerSleepDuration = 1 * time.Minute //nolint:gochecknoglobals
+
 // Manager handles configuration updates and scheduling
 type Manager struct {
 	config           *Config
@@ -170,7 +174,7 @@ func (cm *Manager) runScheduler() {
 			}
 			
 			// Sleep for a short interval before checking again
-			time.Sleep(1 * time.Minute)
+			time.Sleep(schedulerSleepDuration)
 		}
 	}
 }

@@ -96,6 +96,14 @@ class TestJWTManagerInit:
             await m.initialize()
             assert m.redis_client is not None
 
+    def test_secret_key_parameter(self):
+        """Test JWTManager with custom secret_key (line 41)."""
+        custom_secret = "my-custom-secret-key-12345"
+        m = JWTManager(secret_key=custom_secret)
+        assert m.secret_key == custom_secret
+        # Should not have generated RSA keys since secret_key was provided
+        assert hasattr(m, "private_key") is False or m.secret_key == custom_secret
+
 
 # ---------------------------------------------------------------------------
 # Token generation

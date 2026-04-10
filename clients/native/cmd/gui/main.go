@@ -35,9 +35,10 @@ const (
 )
 
 var (
-    version   = "1.1.0"
-    buildTime = "unknown"
-    gitCommit = "unknown"
+    version     = "1.1.0"
+    buildTime   = "unknown"
+    gitCommit   = "unknown"
+    currentGOOS = runtime.GOOS // overridable in tests
 )
 
 func main() {
@@ -224,7 +225,7 @@ func runGUI(cmd *cobra.Command, args []string) error {
 
 func runServiceInstall(cmd *cobra.Command, args []string) error {
     // Implementation depends on platform
-    switch runtime.GOOS {
+    switch currentGOOS {
     case osWindows:
         return installWindowsService()
     case osDarwin:
@@ -237,7 +238,7 @@ func runServiceInstall(cmd *cobra.Command, args []string) error {
 }
 
 func runServiceUninstall(cmd *cobra.Command, args []string) error {
-    switch runtime.GOOS {
+    switch currentGOOS {
     case osWindows:
         return uninstallWindowsService()
     case osDarwin:
@@ -250,7 +251,7 @@ func runServiceUninstall(cmd *cobra.Command, args []string) error {
 }
 
 func runServiceStart(cmd *cobra.Command, args []string) error {
-    switch runtime.GOOS {
+    switch currentGOOS {
     case osWindows:
         return startWindowsService()
     case osDarwin:
@@ -263,7 +264,7 @@ func runServiceStart(cmd *cobra.Command, args []string) error {
 }
 
 func runServiceStop(cmd *cobra.Command, args []string) error {
-    switch runtime.GOOS {
+    switch currentGOOS {
     case osWindows:
         return stopWindowsService()
     case osDarwin:

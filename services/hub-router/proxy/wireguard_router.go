@@ -16,11 +16,29 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// wgShowFn is the function used to query WireGuard peer info.
+// Overridable in tests to avoid requiring the wg binary or root privileges.
+var wgShowFn = func(iface string) ([]byte, error) {
+	return exec.Command("wg", "show", iface, "allowed-ips").Output()
+}
+
+// iptablesMarkFn is the function used to mark traffic via iptables.
+// Overridable in tests to avoid requiring root privileges.
+var iptablesMarkFn = func(sourceAddr string) error {
+	return exec.Command("iptables", "-t", "mangle", "-A", "OUTPUT",
+		"-s", sourceAddr, "-j", "MARK", "--set-mark", "100").Run()
+}
+
+// dialPeerFn dials a WireGuard peer. Overridable in tests.
+var dialPeerFn = func(targetIP string) (net.Conn, error) {
+	return net.Dial("tcp", targetIP+":0") // Port will be determined by the actual service
+}
+
 // WireGuardRouter handles routing decisions for authenticated traffic
 type WireGuardRouter struct {
-	wgNetwork     *net.IPNet  // WireGuard network CIDR (e.g., 10.200.0.0/16)
-	wgInterface   string      // WireGuard interface name (e.g., wg0)
-	headendIP     net.IP      // Headend's IP in WireGuard network
+	wgNetwork   *net.IPNet // WireGuard network CIDR (e.g., 10.200.0.0/16)
+	wgInterface string     // WireGuard interface name (e.g., wg0)
+	headendIP   net.IP     // Headend's IP in WireGuard network
 }
 
 // NewWireGuardRouter creates a new WireGuard-aware router
@@ -119,8 +137,7 @@ func (wr *WireGuardRouter) routeToInternet(targetHost string, sourceConn net.Con
 // isPeerConfigured checks if the target IP is a configured WireGuard peer
 func (wr *WireGuardRouter) isPeerConfigured(targetIP string) bool {
 	// Check WireGuard peer list to see if this IP is configured
-	cmd := exec.Command("wg", "show", wr.wgInterface, "allowed-ips")
-	output, err := cmd.Output()
+	output, err := wgShowFn(wr.wgInterface)
 	if err != nil {
 		log.Errorf("Failed to check WireGuard peers: %v", err)
 		return false
@@ -141,7 +158,7 @@ func (wr *WireGuardRouter) isPeerConfigured(targetIP string) bool {
 func (wr *WireGuardRouter) dialPeer(targetIP string) (net.Conn, error) {
 	// For peer-to-peer connections, we dial directly to the peer's IP
 	// The traffic will be routed through the WireGuard interface
-	return net.Dial("tcp", targetIP+":0") // Port will be determined by the actual service
+	return dialPeerFn(targetIP)
 }
 
 // markTrafficAuthenticated marks packets as authenticated for iptables processing
@@ -165,10 +182,7 @@ func (wr *WireGuardRouter) markTrafficAuthenticated(conn net.Conn) error {
 		// Use iptables to mark packets from this connection
 		// This is a simplified approach - in production, would use netlink sockets
 		sourceAddr := conn.RemoteAddr().String()
-		cmd := exec.Command("iptables", "-t", "mangle", "-A", "OUTPUT", 
-			"-s", sourceAddr, "-j", "MARK", "--set-mark", "100")
-		
-		if err := cmd.Run(); err != nil {
+		if err := iptablesMarkFn(sourceAddr); err != nil {
 			return fmt.Errorf("failed to mark traffic: %w", err)
 		}
 	}
@@ -213,8 +227,7 @@ func (wr *WireGuardRouter) IsWireGuardDestination(host string) bool {
 
 // GetWireGuardPeers returns list of configured WireGuard peers
 func (wr *WireGuardRouter) GetWireGuardPeers() ([]string, error) {
-	cmd := exec.Command("wg", "show", wr.wgInterface, "allowed-ips")
-	output, err := cmd.Output()
+	output, err := wgShowFn(wr.wgInterface)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get WireGuard peers: %w", err)
 	}
