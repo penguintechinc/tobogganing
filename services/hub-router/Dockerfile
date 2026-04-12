@@ -57,6 +57,10 @@ RUN addgroup --system wireguard && adduser --system --ingroup wireguard wireguar
 # Set ownership
 RUN chown -R wireguard:wireguard /etc/wireguard /certs
 
+# ROOT EXCEPTION (approved): WireGuard VPN tunnel management and iptables/ip6tables
+# manipulation require NET_ADMIN and NET_RAW capabilities.
+# K8s manifest must set: capabilities.add: [NET_ADMIN, NET_RAW]
+
 # Expose ports
 # 51820: WireGuard VPN
 # 8443: HTTPS proxy
