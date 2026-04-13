@@ -6,13 +6,13 @@ uvicorn[standard]>=0.24.0
 uvloop>=0.21.0
 
 # Async and HTTP
-aiohttp==3.9.1
+aiohttp==3.13.3
 aiofiles==23.2.1
 httpx>=0.27.0
 
 # Authentication and security
 bcrypt>=4.1.2
-cryptography>=41.0.7
+cryptography==44.0.1
 pyjwt>=2.12.0
 
 # Database
@@ -46,7 +46,7 @@ penguin-utils @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9
 penguin-licensing @ git+https://github.com/penguintechinc/penguin-libs.git@36861ceb9e3a39e1f6c6024a09ea8da205e3cfa2#subdirectory=packages/python-licensing
 
 # Utilities
-dnspython==2.4.2
+dnspython==2.6.1
 python-dotenv>=1.0.0
 
 # Backup and storage
