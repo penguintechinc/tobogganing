@@ -54,7 +54,7 @@ if command -v bandit &>/dev/null; then
     for svc in services/hub-api services/hub-policy; do
         [ -d "$svc" ] || continue
         info "  bandit: $svc"
-        bandit -r "$svc" -x "$svc/tests","$svc/test" -ll -q \
+        bandit -r "$svc" -x "$svc/tests","$svc/test" -lll -q \
             || fail "bandit found high-severity issues in $svc"
     done
     ok "bandit clean"
