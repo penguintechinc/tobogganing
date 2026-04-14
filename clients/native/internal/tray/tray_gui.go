@@ -252,8 +252,8 @@ func (t *TrayManager) getIconData(state string) []byte {
 		iconFile = fmt.Sprintf("icon-%s.png", state) // PNG for Linux
 	}
 
-	iconPath := filepath.Join(iconDir, iconFile) // #nosec G304
-	if data, err := os.ReadFile(iconPath); err == nil {
+	iconPath := filepath.Join(iconDir, iconFile)
+	if data, err := os.ReadFile(iconPath); err == nil { // #nosec G304 -- path from fixed iconDir + validated iconFile
 		return data
 	}
 

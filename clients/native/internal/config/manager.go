@@ -185,7 +185,7 @@ func (cm *Manager) scheduleNextUpdate() {
 	minMinutes := 45
 	maxMinutes := 60
 
-	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1)
+	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1) // #nosec G404 -- scheduling jitter, not crypto
 	nextUpdateTime := time.Now().Add(time.Duration(randomMinutes) * time.Minute)
 	
 	cm.updateMutex.Lock()
@@ -202,7 +202,7 @@ func (cm *Manager) scheduleRetryUpdate() {
 	minMinutes := 5
 	maxMinutes := 10
 
-	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1)
+	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1) // #nosec G404 -- scheduling jitter, not crypto
 	nextUpdateTime := time.Now().Add(time.Duration(randomMinutes) * time.Minute)
 	
 	cm.updateMutex.Lock()
