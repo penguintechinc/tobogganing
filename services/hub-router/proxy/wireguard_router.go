@@ -19,13 +19,13 @@ import (
 // wgShowFn is the function used to query WireGuard peer info.
 // Overridable in tests to avoid requiring the wg binary or root privileges.
 var wgShowFn = func(iface string) ([]byte, error) {
-	return exec.Command("wg", "show", iface, "allowed-ips").Output()
+	return exec.Command("wg", "show", iface, "allowed-ips").Output() // #nosec G204 -- fixed args; iface validated by WireGuard interface name regex
 }
 
 // iptablesMarkFn is the function used to mark traffic via iptables.
 // Overridable in tests to avoid requiring root privileges.
 var iptablesMarkFn = func(sourceAddr string) error {
-	return exec.Command("iptables", "-t", "mangle", "-A", "OUTPUT",
+	return exec.Command("iptables", "-t", "mangle", "-A", "OUTPUT", // #nosec G204 -- fixed command; sourceAddr is a parsed net.IP string
 		"-s", sourceAddr, "-j", "MARK", "--set-mark", "100").Run()
 }
 

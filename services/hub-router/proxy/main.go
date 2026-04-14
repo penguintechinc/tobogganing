@@ -468,7 +468,7 @@ func (s *ProxyServer) setupRoutes() {
         metricsRouter.GET("/metrics", s.metricsHandler)
         
         log.Infof("Metrics server listening on :%s", metricsPort)
-        if err := http.ListenAndServe(":"+metricsPort, metricsRouter); err != nil {
+        if err := http.ListenAndServe(":"+metricsPort, metricsRouter); err != nil { //nolint:gosec // #nosec G114 -- internal metrics endpoint; timeout not needed for Prometheus scrape
             log.Errorf("Metrics server failed: %v", err)
         }
     }()
@@ -690,7 +690,9 @@ func (s *ProxyServer) Run() error {
         }
 
         if s.xdpProtection != nil {
-            s.xdpProtection.Close()
+            if err := s.xdpProtection.Close(); err != nil {
+                log.Warnf("xdpProtection.Close: %v", err)
+            }
         }
 
         // Close TCP and UDP proxies

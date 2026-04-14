@@ -57,7 +57,7 @@ type DefaultCmdExecutor struct{}
 
 // Run executes a command and returns combined output
 func (d *DefaultCmdExecutor) Run(name string, args ...string) (string, error) {
-    cmd := exec.Command(name, args...)
+    cmd := exec.Command(name, args...) // #nosec G204 -- callers supply fixed command names (wg, ip); args validated before call
     output, err := cmd.CombinedOutput()
     return string(output), err
 }
@@ -177,7 +177,7 @@ func (m *Manager) initializeKeys() error {
     keyPath := fmt.Sprintf("%s/%s.key", keyDir, m.interfaceName)
 
     // Try to load existing private key
-    if data, err := os.ReadFile(keyPath); err == nil {
+    if data, err := os.ReadFile(keyPath); err == nil { // #nosec G304 -- keyPath comes from admin config (WIREGUARD_KEY_FILE env var)
         key, err := wgtypes.ParseKey(strings.TrimSpace(string(data)))
         if err == nil {
             m.privateKey = key
