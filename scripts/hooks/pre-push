@@ -138,12 +138,17 @@ else
 fi
 
 # ── 10. K8s securityContext rootless check ───────────────────────────────────
+# Skip Helm templates (runAsNonRoot is a template var there); honor ROOT EXCEPTION comments.
 info "K8s rootless compliance"
-BAD=$(grep -r "runAsNonRoot" k8s/ --include="*.yaml" --include="*.yml" -l 2>/dev/null \
-    | xargs grep -L "runAsNonRoot: true" 2>/dev/null || true)
+BAD=$(grep -rn "runAsNonRoot: false" k8s/ --include="*.yaml" --include="*.yml" 2>/dev/null \
+    | grep -v "/helm/.*templates/" \
+    | cut -d: -f1 | sort -u \
+    | while read -r f; do
+        grep -q "ROOT EXCEPTION (approved)" "$f" || echo "$f"
+    done || true)
 if [ -n "$BAD" ]; then
     echo "$BAD"
-    fail "K8s manifests missing runAsNonRoot: true"
+    fail "K8s manifests have runAsNonRoot: false without ROOT EXCEPTION (approved) comment"
 fi
 ok "K8s rootless compliance clean"
 

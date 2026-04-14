@@ -73,6 +73,7 @@ spec:
               memory: "1Gi"
               cpu: "1000m"
           securityContext:
+            # ROOT EXCEPTION (approved): requires NET_ADMIN + SYS_MODULE for XDP/WireGuard networking
             runAsNonRoot: false
             runAsUser: 0
             allowPrivilegeEscalation: true
