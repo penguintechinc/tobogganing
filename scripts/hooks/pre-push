@@ -88,7 +88,9 @@ if command -v pip-audit &>/dev/null; then
     find . -name "requirements.txt" -not -path "*/.git/*" -not -path "*/node_modules/*" \
         | while read -r req; do
             info "  pip-audit: $req"
-            pip-audit -r "$req" -q || fail "pip-audit found vulnerabilities in $req"
+            # Strip VCS (git+https://) lines — pip-audit cannot hash them
+            grep -v "@ git+https://" "$req" | pip-audit -r /dev/stdin \
+                || fail "pip-audit found vulnerabilities in $req"
         done
     ok "pip-audit clean"
 else
