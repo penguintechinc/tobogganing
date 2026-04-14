@@ -86,7 +86,7 @@ fi
 info "Python dependency audit (pip-audit)"
 if command -v pip-audit &>/dev/null; then
     find . -name "requirements.txt" -not -path "*/.git/*" -not -path "*/node_modules/*" \
-        -not -path "*/.claude/worktrees/*" \
+        -not -path "*worktrees*" \
         | while read -r req; do
             info "  pip-audit: $req"
             # Strip VCS (git+https://) lines — pip-audit cannot hash them
