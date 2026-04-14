@@ -468,7 +468,7 @@ func (s *ProxyServer) setupRoutes() {
         metricsRouter.GET("/metrics", s.metricsHandler)
         
         log.Infof("Metrics server listening on :%s", metricsPort)
-        if err := http.ListenAndServe(":"+metricsPort, metricsRouter); err != nil { //nolint:gosec // #nosec G114 -- internal metrics endpoint; timeout not needed for Prometheus scrape
+        if err := http.ListenAndServe(":"+metricsPort, metricsRouter); err != nil { // #nosec G114 -- internal metrics endpoint; timeout not needed for Prometheus scrape
             log.Errorf("Metrics server failed: %v", err)
         }
     }()
