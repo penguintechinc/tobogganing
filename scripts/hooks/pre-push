@@ -116,6 +116,7 @@ if command -v trivy &>/dev/null; then
     trivy fs . --exit-code 1 --severity HIGH,CRITICAL --quiet \
         --skip-dirs node_modules --skip-dirs .git \
         --skip-dirs .claude --skip-dirs .worktrees \
+        --skip-dirs clients/mobile/node_modules \
         || fail "trivy found HIGH/CRITICAL vulnerabilities"
     ok "trivy clean"
 else
