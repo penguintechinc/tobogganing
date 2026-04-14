@@ -8,6 +8,7 @@
 .PHONY: docker-build docker-push dev-up dev-down dev-logs dev-restart
 .PHONY: deploy-alpha deploy-beta deploy-prod deploy-terraform
 .PHONY: helm-lint helm-template seed-mock-data
+.PHONY: install-hooks pre-commit-check pre-push-check
 
 VERSION := $(shell cat .version)
 
@@ -32,6 +33,7 @@ setup: ## Install all dependencies
 	@cd services/hub-webui && npm ci
 	@cd clients/native && go mod download
 	@echo "Dependencies installed"
+	@$(MAKE) install-hooks
 
 clean: ## Clean all build artifacts
 	@echo "Cleaning build artifacts..."
@@ -325,12 +327,21 @@ test-security: ## Run security tests (gosec, bandit, npm audit, trivy)
 	@echo "-- gitleaks --" && gitleaks detect --source . --no-git 2>/dev/null || true
 	@echo "Security scans complete"
 
-pre-commit: ## Run pre-commit checks (lint + security + test)
-	@echo "=== Pre-commit checks ==="
-	@$(MAKE) lint
-	@$(MAKE) test-security
-	@$(MAKE) test
-	@echo "=== Pre-commit complete ==="
+install-hooks: ## Install pre-commit and pre-push git hooks from scripts/hooks/
+	@echo "Installing git hooks..."
+	@ln -sf "$(PWD)/scripts/hooks/pre-commit" "$(PWD)/.git/hooks/pre-commit"
+	@ln -sf "$(PWD)/scripts/hooks/pre-push"   "$(PWD)/.git/hooks/pre-push"
+	@chmod +x scripts/hooks/pre-commit scripts/hooks/pre-push
+	@echo "✓ pre-commit → .git/hooks/pre-commit"
+	@echo "✓ pre-push   → .git/hooks/pre-push"
+
+pre-commit-check: ## Run pre-commit checks manually (same as git pre-commit hook)
+	@scripts/hooks/pre-commit
+
+pre-push-check: ## Run pre-push checks manually (same as git pre-push hook)
+	@scripts/hooks/pre-push
+
+pre-commit: pre-commit-check ## Alias for pre-commit-check
 
 deploy-dev: ## Deploy to dev environment (alias to deploy-alpha)
 	@$(MAKE) deploy-alpha

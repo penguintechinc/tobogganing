@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# pre-push hook — heavy security scans before pushing
+# Install: make install-hooks
+set -euo pipefail
+
+BOLD='\033[1m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; NC='\033[0m'
+fail() { echo -e "${RED}✗ pre-push: $1${NC}" >&2; exit 1; }
+info() { echo -e "${YELLOW}▶ $1${NC}"; }
+ok()   { echo -e "${GREEN}✓ $1${NC}"; }
+skip() { echo "  $1 not found, skipping"; }
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+echo -e "\n${BOLD}Running pre-push security scans...${NC}"
+
+# ── 1. Full secrets scan ─────────────────────────────────────────────────────
+info "Secrets scan (gitleaks)"
+if command -v gitleaks &>/dev/null; then
+    gitleaks detect --source . --no-banner --exit-code 1 \
+        || fail "gitleaks found secrets — remove before pushing"
+    ok "gitleaks clean"
+else
+    skip "gitleaks (brew install gitleaks)"
+fi
+
+# ── 2. SAST — semgrep ────────────────────────────────────────────────────────
+info "SAST (semgrep)"
+if command -v semgrep &>/dev/null; then
+    semgrep scan --config=auto --quiet --error \
+        --exclude='node_modules' --exclude='.git' --exclude='vendor' \
+        || fail "semgrep found issues"
+    ok "semgrep clean"
+else
+    skip "semgrep (pip install semgrep)"
+fi
+
+# ── 3. Go vulnerability check ────────────────────────────────────────────────
+info "Go vuln check (govulncheck)"
+if command -v govulncheck &>/dev/null; then
+    for mod in services/hub-router services/hub-policy clients/native; do
+        [ -f "$mod/go.mod" ] || continue
+        info "  govulncheck: $mod"
+        (cd "$mod" && govulncheck ./...) || fail "govulncheck found vulnerabilities in $mod"
+    done
+    ok "govulncheck clean"
+else
+    skip "govulncheck (go install golang.org/x/vuln/cmd/govulncheck@latest)"
+fi
+
+# ── 4. Python SAST — bandit ──────────────────────────────────────────────────
+info "Python SAST (bandit)"
+if command -v bandit &>/dev/null; then
+    for svc in services/hub-api services/hub-policy; do
+        [ -d "$svc" ] || continue
+        info "  bandit: $svc"
+        bandit -r "$svc" -x "$svc/tests","$svc/test" -ll -q \
+            || fail "bandit found high-severity issues in $svc"
+    done
+    ok "bandit clean"
+else
+    skip "bandit (pip install bandit)"
+fi
+
+# ── 5. Go SAST — gosec ───────────────────────────────────────────────────────
+info "Go SAST (gosec)"
+if command -v gosec &>/dev/null; then
+    for mod in services/hub-router services/hub-policy clients/native; do
+        [ -f "$mod/go.mod" ] || continue
+        info "  gosec: $mod"
+        (cd "$mod" && gosec -quiet ./...) || fail "gosec found issues in $mod"
+    done
+    ok "gosec clean"
+else
+    skip "gosec (go install github.com/securego/gosec/v2/cmd/gosec@latest)"
+fi
+
+# ── 6. Python dependency audit — pip-audit ───────────────────────────────────
+info "Python dependency audit (pip-audit)"
+if command -v pip-audit &>/dev/null; then
+    find . -name "requirements.txt" -not -path "*/.git/*" -not -path "*/node_modules/*" \
+        | while read -r req; do
+            info "  pip-audit: $req"
+            pip-audit -r "$req" -q || fail "pip-audit found vulnerabilities in $req"
+        done
+    ok "pip-audit clean"
+else
+    skip "pip-audit (pip install pip-audit)"
+fi
+
+# ── 7. Node.js dependency audit ──────────────────────────────────────────────
+info "Node.js dependency audit (npm audit)"
+find . -name "package.json" -not -path "*/.git/*" -not -path "*/node_modules/*" \
+    -not -path "*/\.*" | while read -r pkg; do
+    dir=$(dirname "$pkg")
+    [ -f "$dir/package-lock.json" ] || continue
+    info "  npm audit: $dir"
+    (cd "$dir" && npm audit --audit-level=high) \
+        || fail "npm audit found high+ vulnerabilities in $dir"
+done
+ok "npm audit clean"
+
+# ── 8. Filesystem vulnerability scan — trivy ─────────────────────────────────
+info "Filesystem scan (trivy)"
+if command -v trivy &>/dev/null; then
+    trivy fs . --exit-code 1 --severity HIGH,CRITICAL --quiet \
+        --skip-dirs node_modules --skip-dirs .git \
+        || fail "trivy found HIGH/CRITICAL vulnerabilities"
+    ok "trivy clean"
+else
+    skip "trivy (brew install aquasecurity/trivy/trivy)"
+fi
+
+# ── 9. IaC misconfiguration — checkov ────────────────────────────────────────
+info "IaC scan (checkov)"
+if command -v checkov &>/dev/null; then
+    checkov -d k8s/ --quiet --compact \
+        --skip-check CKV_K8S_8,CKV_K8S_9 \
+        || fail "checkov found IaC misconfigurations"
+    ok "checkov clean"
+else
+    skip "checkov (pip install checkov)"
+fi
+
+# ── 10. K8s securityContext rootless check ───────────────────────────────────
+info "K8s rootless compliance"
+BAD=$(grep -r "runAsNonRoot" k8s/ --include="*.yaml" --include="*.yml" -l 2>/dev/null \
+    | xargs grep -L "runAsNonRoot: true" 2>/dev/null || true)
+if [ -n "$BAD" ]; then
+    echo "$BAD"
+    fail "K8s manifests missing runAsNonRoot: true"
+fi
+ok "K8s rootless compliance clean"
+
+echo -e "\n${BOLD}${GREEN}pre-push passed${NC}\n"
