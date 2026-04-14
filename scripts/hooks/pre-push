@@ -101,7 +101,7 @@ fi
 # ── 7. Node.js dependency audit ──────────────────────────────────────────────
 info "Node.js dependency audit (npm audit)"
 find . -name "package.json" -not -path "*/.git/*" -not -path "*/node_modules/*" \
-    -not -path "*/\.*" | while read -r pkg; do
+    -not -path "*/\.*" -not -path "*worktrees*" | while read -r pkg; do
     dir=$(dirname "$pkg")
     [ -f "$dir/package-lock.json" ] || continue
     info "  npm audit: $dir"
@@ -115,6 +115,7 @@ info "Filesystem scan (trivy)"
 if command -v trivy &>/dev/null; then
     trivy fs . --exit-code 1 --severity HIGH,CRITICAL --quiet \
         --skip-dirs node_modules --skip-dirs .git \
+        --skip-dirs .claude --skip-dirs .worktrees \
         || fail "trivy found HIGH/CRITICAL vulnerabilities"
     ok "trivy clean"
 else
