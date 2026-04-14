@@ -2,6 +2,8 @@ module github.com/tobogganing/hub-router
 
 go 1.25.0
 
+toolchain go1.25.9
+
 require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/gin-gonic/gin v1.9.1

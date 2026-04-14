@@ -2,6 +2,8 @@ module github.com/tobogganing/clients/native
 
 go 1.25.0
 
+toolchain go1.25.9
+
 require (
 	fyne.io/fyne/v2 v2.4.3
 	github.com/getlantern/systray v1.2.2

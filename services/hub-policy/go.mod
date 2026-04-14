@@ -2,6 +2,8 @@ module github.com/tobogganing/hub-policy
 
 go 1.25.0
 
+toolchain go1.25.9
+
 require (
 	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/grpc v1.75.0
