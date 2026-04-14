@@ -1,94 +1,79 @@
+version: "2"
 run:
-  timeout: 10m
   issues-exit-code: 1
   tests: true
-
+linters:
+  enable:
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godox
+    - lll
+    - misspell
+    - nakedret
+    - prealloc
+    - whitespace
+  disable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: log
+              desc: use structured logging with logrus instead
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+    gocognit:
+      min-complexity: 20
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocyclo:
+      min-complexity: 15
+    govet:
+      disable:
+        - fieldalignment
+        - shadow
+      enable-all: true
+    lll:
+      line-length: 120
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - gochecknoglobals
+          - gochecknoinits
+        path: _test\.go
+      - linters:
+          - funlen
+        path: cmd/.*\.go
+      - linters:
+          - gochecknoglobals
+        path: cmd/.*\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-use-default: false
-  exclude-rules:
-    # Skip systray related linting errors when CGO is disabled
-    - text: "could not import github.com/getlantern/systray"
-      linters:
-        - typecheck
-    - text: "Package ayatana-appindicator3-0.1 was not found"
-      linters:
-        - typecheck
-    # Skip unused imports in build-tag specific files
-    - path: "_test\\.go"
-      linters:
-        - gochecknoglobals
-        - gochecknoinits
-    # Allow long functions in main and setup code
-    - path: "cmd/.*\\.go"
-      linters:
-        - funlen
-    # Allow globals in main package
-    - path: "cmd/.*\\.go"
-      linters:
-        - gochecknoglobals
-
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-      - shadow
-
-  gofmt:
-    simplify: true
-
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-
-  misspell:
-    locale: US
-
-  lll:
-    line-length: 120
-
-  gocyclo:
-    min-complexity: 15
-
-  gocognit:
-    min-complexity: 20
-
-  depguard:
-    rules:
-      main:
-        deny:
-          - pkg: "log"
-            desc: "use structured logging with logrus instead"
-
-  errcheck:
-    check-type-assertions: true
-    check-blank: false
-
-linters:
-  enable:
-    - govet
-    - errcheck
-    - staticcheck
-    - unused
-    - ineffassign
-    - misspell
-    - goconst
-    - gocyclo
-    - gocognit
-    - lll
-    - nakedret
-    - prealloc
-    - gocritic
-    - gochecknoinits
-    - gochecknoglobals
-    - godox
-    - funlen
-    - whitespace
-
-  disable:
-    - depguard # Can be too restrictive for cross-platform code
-
 severity:
-  default-severity: error
+  default: error
+formatters:
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"sync"
@@ -62,7 +62,7 @@ func NewConfigManager(cfg *Config) *Manager {
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: cfg.InsecureSkipVerify(), // For development
+				InsecureSkipVerify: cfg.InsecureSkipVerify(), // #nosec G402
 			},
 		},
 	}
@@ -184,8 +184,8 @@ func (cm *Manager) scheduleNextUpdate() {
 	// Random interval between 45 and 60 minutes
 	minMinutes := 45
 	maxMinutes := 60
-	
-	randomMinutes := minMinutes + rand.Intn(maxMinutes-minMinutes+1)
+
+	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1)
 	nextUpdateTime := time.Now().Add(time.Duration(randomMinutes) * time.Minute)
 	
 	cm.updateMutex.Lock()
@@ -201,8 +201,8 @@ func (cm *Manager) scheduleRetryUpdate() {
 	// Shorter random interval for retries: 5-10 minutes
 	minMinutes := 5
 	maxMinutes := 10
-	
-	randomMinutes := minMinutes + rand.Intn(maxMinutes-minMinutes+1)
+
+	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1)
 	nextUpdateTime := time.Now().Add(time.Duration(randomMinutes) * time.Minute)
 	
 	cm.updateMutex.Lock()

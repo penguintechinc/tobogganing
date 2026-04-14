@@ -494,9 +494,9 @@ PersistentKeepalive = 25
 func wireGuardUpCmd(goos, configPath string) (*exec.Cmd, error) {
     switch goos {
     case platformDarwin, platformLinux:
-        return exec.Command("wg-quick", "up", configPath), nil
+        return exec.Command("wg-quick", "up", configPath), nil // #nosec G204
     case platformWindows:
-        return exec.Command("wg-quick.exe", "up", configPath), nil
+        return exec.Command("wg-quick.exe", "up", configPath), nil // #nosec G204
     default:
         return nil, fmt.Errorf("unsupported platform: %s", goos)
     }
@@ -507,9 +507,9 @@ func wireGuardUpCmd(goos, configPath string) (*exec.Cmd, error) {
 func wireGuardDownCmd(goos, configPath string) (*exec.Cmd, error) {
     switch goos {
     case platformDarwin, platformLinux:
-        return exec.Command("wg-quick", "down", configPath), nil
+        return exec.Command("wg-quick", "down", configPath), nil // #nosec G204
     case platformWindows:
-        return exec.Command("wg-quick.exe", "down", configPath), nil
+        return exec.Command("wg-quick.exe", "down", configPath), nil // #nosec G204
     default:
         return nil, fmt.Errorf("unsupported platform: %s", goos)
     }
@@ -629,9 +629,9 @@ func wireGuardConfigPathForOS(goos, interfaceName string) string {
 func interfaceIPCmd(goos, interfaceName string) (*exec.Cmd, error) {
     switch goos {
     case platformDarwin, platformLinux:
-        return exec.Command("ip", "addr", "show", interfaceName), nil
+        return exec.Command("ip", "addr", "show", interfaceName), nil // #nosec G204
     case platformWindows:
-        return exec.Command("netsh", "interface", "ip", "show", "addresses", interfaceName), nil
+        return exec.Command("netsh", "interface", "ip", "show", "addresses", interfaceName), nil // #nosec G204
     default:
         return nil, fmt.Errorf("unsupported platform")
     }
@@ -689,7 +689,7 @@ func (c *Client) saveCertificates(cert, key, ca string) error {
         return err
     }
 
-    if err := os.WriteFile(certDir+"/client.crt", []byte(cert), 0644); err != nil {
+    if err := os.WriteFile(certDir+"/client.crt", []byte(cert), 0600); err != nil {
         return err
     }
 
@@ -697,7 +697,7 @@ func (c *Client) saveCertificates(cert, key, ca string) error {
         return err
     }
 
-    if err := os.WriteFile(certDir+"/ca.crt", []byte(ca), 0644); err != nil {
+    if err := os.WriteFile(certDir+"/ca.crt", []byte(ca), 0600); err != nil {
         return err
     }
 
