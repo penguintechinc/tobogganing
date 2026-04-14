@@ -22,7 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -117,7 +117,7 @@ func (m *Manager) Start() error {
 	
 	// Start periodic refresh with randomized interval (30-90 seconds)
 	// This prevents thundering herd when multiple headends start simultaneously
-	refreshInterval := time.Duration(30+rand.Intn(61)) * time.Second
+	refreshInterval := time.Duration(30+rand.IntN(61)) * time.Second // #nosec G404 -- non-cryptographic randomization for interval jitter is acceptable
 	log.Infof("Setting randomized refresh interval to %v", refreshInterval)
 	
 	m.refreshTicker = time.NewTicker(refreshInterval)
@@ -145,7 +145,7 @@ func (m *Manager) refreshLoop() {
 				log.Errorf("Failed to refresh rules: %v", err)
 			} else {
 				// Randomize next refresh interval to prevent synchronization
-				nextInterval := time.Duration(30+rand.Intn(61)) * time.Second
+				nextInterval := time.Duration(30+rand.IntN(61)) * time.Second // #nosec G404 -- non-cryptographic randomization for interval jitter is acceptable
 				m.refreshTicker.Reset(nextInterval)
 				log.Debugf("Next refresh scheduled in %v", nextInterval)
 			}

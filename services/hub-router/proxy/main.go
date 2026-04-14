@@ -420,7 +420,7 @@ func (s *ProxyServer) Initialize() error {
     if err != nil {
         return fmt.Errorf("invalid PROXY_EGRESS_URL: %w", err)
     }
-    s.egressProxy = httputil.NewSingleHostReverseProxy(parsed)
+    s.egressProxy = httputil.NewSingleHostReverseProxy(parsed) // #nosec G704 -- URL from EGRESS_PROXY_URL env var (admin config)
     log.Infof("Reverse proxy to proxy-egress initialized (URL: %s)", egressURL)
 
     // Setup HTTP routes

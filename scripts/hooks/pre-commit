@@ -33,16 +33,10 @@ if [ -n "$STAGED_GO" ]; then
     if ! command -v golangci-lint &>/dev/null; then
         echo "  golangci-lint not found, skipping"
     else
-        # Find unique Go module roots for staged files
-        GO_MODS=$(echo "$STAGED_GO" | while read -r f; do
-            dir=$(dirname "$f")
-            while [ "$dir" != "." ] && [ "$dir" != "/" ]; do
-                [ -f "$dir/go.mod" ] && echo "$dir" && break
-                dir=$(dirname "$dir")
-            done
-            [ -f "go.mod" ] && echo "."
-        done | sort -u)
-        for mod in $GO_MODS; do
+        # Lint only modules that contain staged Go files
+        for mod in services/hub-router services/hub-policy clients/native; do
+            [ -f "$mod/go.mod" ] || continue
+            echo "$STAGED_GO" | grep -q "^$mod/" || continue
             info "  golangci-lint: $mod"
             (cd "$mod" && golangci-lint run --new-from-rev=HEAD --timeout=60s) \
                 || fail "golangci-lint failed in $mod"

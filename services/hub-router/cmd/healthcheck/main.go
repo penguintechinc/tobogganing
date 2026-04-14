@@ -24,7 +24,7 @@ func healthCheckHTTP(url string) error {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(url)
+	resp, err := client.Get(url) // #nosec G704 -- URL is this service's own health endpoint
 	if err != nil {
 		return fmt.Errorf("HTTP request error: %w", err)
 	}
