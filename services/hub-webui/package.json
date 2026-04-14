@@ -18,7 +18,7 @@
     "@penguintechinc/react-aaa": "file:/home/penguin/code/penguin-libs/packages/react-aaa",
     "@penguintechinc/react-libs": "file:/home/penguin/code/penguin-libs/packages/react-libs",
     "@tanstack/react-query": "5.17.0",
-    "axios": "^1.14.0",
+    "axios": "1.15.0",
     "axios-mock-adapter": "1.22.0",
     "clsx": "2.1.0",
     "lucide-react": "0.312.0",
