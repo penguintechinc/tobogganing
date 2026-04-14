@@ -24,7 +24,7 @@ if command -v gitleaks &>/dev/null; then
         || fail "gitleaks found secrets in staged files — remove before committing"
     ok "gitleaks clean"
 else
-    echo "  gitleaks not found, skipping (run: brew install gitleaks)"
+    echo "  gitleaks not found, skipping (run: sudo apt-get install -y gitleaks)"
 fi
 
 # ── 2. Go linting ────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ if [ -n "$STAGED_DOCKER" ]; then
         echo "$STAGED_DOCKER" | xargs hadolint || fail "hadolint failed"
         ok "hadolint clean"
     else
-        echo "  hadolint not found, skipping (run: brew install hadolint)"
+        echo "  hadolint not found, skipping (run: sudo apt-get install -y hadolint)"
     fi
 fi
 
@@ -96,7 +96,7 @@ if [ -n "$STAGED_GHA" ]; then
         echo "$STAGED_GHA" | xargs zizmor || fail "zizmor found GHA issues"
         ok "zizmor clean"
     else
-        echo "  zizmor not found, skipping (run: cargo install zizmor)"
+        echo "  zizmor not found, skipping (run: pip3 install zizmor --break-system-packages)"
     fi
 fi
 

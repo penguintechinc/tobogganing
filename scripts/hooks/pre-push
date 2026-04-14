@@ -21,18 +21,18 @@ if command -v gitleaks &>/dev/null; then
         || fail "gitleaks found secrets — remove before pushing"
     ok "gitleaks clean"
 else
-    skip "gitleaks (brew install gitleaks)"
+    skip "gitleaks (sudo apt-get install -y gitleaks)"
 fi
 
 # ── 2. SAST — semgrep ────────────────────────────────────────────────────────
 info "SAST (semgrep)"
 if command -v semgrep &>/dev/null; then
-    semgrep scan --config=auto --quiet --error \
+    semgrep scan --config=auto --quiet --error --jobs 1 \
         --exclude='node_modules' --exclude='.git' --exclude='vendor' \
         || fail "semgrep found issues"
     ok "semgrep clean"
 else
-    skip "semgrep (pip install semgrep)"
+    skip "semgrep (pip3 install semgrep --break-system-packages)"
 fi
 
 # ── 3. Go vulnerability check ────────────────────────────────────────────────
@@ -45,7 +45,7 @@ if command -v govulncheck &>/dev/null; then
     done
     ok "govulncheck clean"
 else
-    skip "govulncheck (go install golang.org/x/vuln/cmd/govulncheck@latest)"
+    skip "govulncheck (go install golang.org/x/vuln/cmd/govulncheck@v1.1.4)"
 fi
 
 # ── 4. Python SAST — bandit ──────────────────────────────────────────────────
@@ -59,7 +59,7 @@ if command -v bandit &>/dev/null; then
     done
     ok "bandit clean"
 else
-    skip "bandit (pip install bandit)"
+    skip "bandit (pip3 install bandit --break-system-packages)"
 fi
 
 # ── 5. Go SAST — gosec ───────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ if command -v gosec &>/dev/null; then
     done
     ok "gosec clean"
 else
-    skip "gosec (go install github.com/securego/gosec/v2/cmd/gosec@latest)"
+    skip "gosec (go install github.com/securego/gosec/v2/cmd/gosec@v2.22.4)"
 fi
 
 # ── 6. Python dependency audit — pip-audit ───────────────────────────────────
@@ -85,7 +85,7 @@ if command -v pip-audit &>/dev/null; then
         done
     ok "pip-audit clean"
 else
-    skip "pip-audit (pip install pip-audit)"
+    skip "pip-audit (pip3 install pip-audit --break-system-packages)"
 fi
 
 # ── 7. Node.js dependency audit ──────────────────────────────────────────────
@@ -108,7 +108,7 @@ if command -v trivy &>/dev/null; then
         || fail "trivy found HIGH/CRITICAL vulnerabilities"
     ok "trivy clean"
 else
-    skip "trivy (brew install aquasecurity/trivy/trivy)"
+    skip "trivy (sudo apt-get install -y trivy)"
 fi
 
 # ── 9. IaC misconfiguration — checkov ────────────────────────────────────────
@@ -119,7 +119,7 @@ if command -v checkov &>/dev/null; then
         || fail "checkov found IaC misconfigurations"
     ok "checkov clean"
 else
-    skip "checkov (pip install checkov)"
+    skip "checkov (pip3 install checkov --break-system-packages)"
 fi
 
 # ── 10. K8s securityContext rootless check ───────────────────────────────────
