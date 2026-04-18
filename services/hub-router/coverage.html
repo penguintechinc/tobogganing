@@ -1,0 +1,501 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>wireguard: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/tobogganing/hub-router/wireguard/manager.go (42.6%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Package wireguard implements WireGuard VPN management for the Tobogganing headend.
+//
+// The WireGuard manager provides:
+// - VPN interface creation and lifecycle management
+// - Peer configuration and key management
+// - Dynamic peer addition and removal
+// - Integration with Manager service for configuration sync
+// - Real-time monitoring of tunnel status and metrics
+// - Support for multiple concurrent tunnels
+// - Automatic peer cleanup and garbage collection
+//
+// The manager coordinates with the Manager service to maintain up-to-date
+// peer configurations and handles the underlying WireGuard interface
+// operations for secure tunnel termination.
+package wireguard
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net"
+    "net/http"
+    "os"
+    "os/exec"
+    "strconv"
+    "strings"
+    "time"
+    
+    log "github.com/sirupsen/logrus"
+    "golang.zx2c4.com/wireguard/wgctrl"
+    "golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+)
+
+// Config represents the WireGuard manager configuration
+type Config struct {
+    InterfaceName string
+    ListenPort    int
+    PrivateKey    string
+    Network       string
+    ManagerURL    string
+}
+
+// WireGuardManager alias for Manager for backward compatibility
+type WireGuardManager = Manager
+
+// PeerConfig alias for wgtypes.PeerConfig for backward compatibility  
+type PeerConfig = wgtypes.PeerConfig
+
+// CmdExecutor is an interface for executing system commands (allows testing with mocks)
+type CmdExecutor interface {
+    Run(name string, args ...string) (string, error)
+}
+
+// DefaultCmdExecutor executes real system commands
+type DefaultCmdExecutor struct{}
+
+// Run executes a command and returns combined output
+func (d *DefaultCmdExecutor) Run(name string, args ...string) (string, error) <span class="cov8" title="1">{
+    cmd := exec.Command(name, args...)
+    output, err := cmd.CombinedOutput()
+    return string(output), err
+}</span>
+
+// Manager handles WireGuard interface configuration and peer management
+type Manager struct {
+    interfaceName string
+    managerURL    string
+    client        *wgctrl.Client
+    httpClient    *http.Client
+    privateKey    wgtypes.Key
+    publicKey     wgtypes.Key
+    listenPort    int
+    network       string
+    cmdExecutor   CmdExecutor
+}
+
+// Peer represents a WireGuard peer configuration
+type Peer struct {
+    NodeID      string `json:"node_id"`
+    NodeType    string `json:"node_type"`
+    PublicKey   string `json:"public_key"`
+    AllowedIPs  string `json:"allowed_ips"`
+    Endpoint    string `json:"endpoint,omitempty"`
+}
+
+// NewManager creates a new WireGuard manager from a Config
+func NewManager(config *Config) (*Manager, error) <span class="cov8" title="1">{
+    return NewManagerWithParams(config.InterfaceName, config.ManagerURL, config.ListenPort, config.Network)
+}</span>
+
+// NewManagerWithParams creates a new WireGuard manager with explicit parameters
+func NewManagerWithParams(interfaceName, managerURL string, listenPort int, network string) (*Manager, error) <span class="cov8" title="1">{
+    client, err := wgctrl.New()
+    if err != nil </span><span class="cov0" title="0">{
+        return nil, fmt.Errorf("failed to create WireGuard client: %w", err)
+    }</span>
+    
+    <span class="cov8" title="1">manager := &amp;Manager{
+        interfaceName: interfaceName,
+        managerURL:    managerURL,
+        client:        client,
+        httpClient: &amp;http.Client{
+            Timeout: 30 * time.Second,
+        },
+        listenPort: listenPort,
+        network:    network,
+        cmdExecutor: &amp;DefaultCmdExecutor{},
+    }
+    
+    // Generate or load WireGuard keys
+    if err := manager.initializeKeys(); err != nil </span><span class="cov8" title="1">{
+        return nil, fmt.Errorf("failed to initialize WireGuard keys: %w", err)
+    }</span>
+    
+    <span class="cov0" title="0">return manager, nil</span>
+}
+
+func (m *Manager) initializeKeys() error <span class="cov8" title="1">{
+    keyPath := fmt.Sprintf("/etc/wireguard/%s.key", m.interfaceName)
+    
+    // Try to load existing private key
+    if data, err := os.ReadFile(keyPath); err == nil </span><span class="cov0" title="0">{
+        key, err := wgtypes.ParseKey(strings.TrimSpace(string(data)))
+        if err == nil </span><span class="cov0" title="0">{
+            m.privateKey = key
+            m.publicKey = key.PublicKey()
+            log.Infof("Loaded existing WireGuard key for interface %s", m.interfaceName)
+            return nil
+        }</span>
+    }
+    
+    // Generate new private key
+    <span class="cov8" title="1">privateKey, err := wgtypes.GeneratePrivateKey()
+    if err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to generate private key: %w", err)
+    }</span>
+    
+    <span class="cov8" title="1">m.privateKey = privateKey
+    m.publicKey = privateKey.PublicKey()
+    
+    // Save private key
+    if err := os.MkdirAll("/etc/wireguard", 0700); err != nil </span><span class="cov8" title="1">{
+        return fmt.Errorf("failed to create /etc/wireguard directory: %w", err)
+    }</span>
+    
+    <span class="cov0" title="0">if err := os.WriteFile(keyPath, []byte(privateKey.String()), 0600); err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to save private key: %w", err)
+    }</span>
+    
+    <span class="cov0" title="0">log.Infof("Generated new WireGuard key for interface %s", m.interfaceName)
+    return nil</span>
+}
+
+// Initialize sets up the WireGuard interface
+func (m *Manager) Initialize() error <span class="cov0" title="0">{
+    // Create WireGuard interface if it doesn't exist
+    if err := m.createInterface(); err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to create WireGuard interface: %w", err)
+    }</span>
+    
+    // Configure the interface
+    <span class="cov0" title="0">if err := m.configureInterface(); err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to configure WireGuard interface: %w", err)
+    }</span>
+    
+    // Fetch and configure peers from manager
+    <span class="cov0" title="0">if err := m.syncPeers(); err != nil </span><span class="cov0" title="0">{
+        log.Warnf("Failed to sync peers: %v", err)
+    }</span>
+    
+    <span class="cov0" title="0">log.Infof("WireGuard interface %s initialized successfully", m.interfaceName)
+    return nil</span>
+}
+
+func (m *Manager) createInterface() error <span class="cov0" title="0">{
+    // Check if interface already exists
+    _, err := m.client.Device(m.interfaceName)
+    if err == nil </span><span class="cov0" title="0">{
+        return nil // Interface already exists
+    }</span>
+
+    // Create interface using ip link
+    <span class="cov0" title="0">output, err := m.cmdExecutor.Run("ip", "link", "add", "dev", m.interfaceName, "type", "wireguard")
+    if err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to create interface: %v, output: %s", err, output)
+    }</span>
+
+    <span class="cov0" title="0">log.Infof("Created WireGuard interface: %s", m.interfaceName)
+    return nil</span>
+}
+
+func (m *Manager) configureInterface() error <span class="cov0" title="0">{
+    // Set IP address - headend gets the first IP
+    // Parse network to get first IP
+    // For simplicity, assuming 10.200.0.1 for headend
+    headendIP := "10.200.0.1/16"
+
+    output, err := m.cmdExecutor.Run("ip", "addr", "add", headendIP, "dev", m.interfaceName)
+    if err != nil </span><span class="cov0" title="0">{
+        // Ignore if address already exists
+        if !strings.Contains(output, "File exists") </span><span class="cov0" title="0">{
+            return fmt.Errorf("failed to set IP address: %v, output: %s", err, output)
+        }</span>
+    }
+
+    // Bring interface up
+    <span class="cov0" title="0">output, err = m.cmdExecutor.Run("ip", "link", "set", "up", "dev", m.interfaceName)
+    if err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to bring interface up: %v, output: %s", err, output)
+    }</span>
+
+    // Configure WireGuard
+    <span class="cov0" title="0">config := wgtypes.Config{
+        PrivateKey: &amp;m.privateKey,
+        ListenPort: &amp;m.listenPort,
+    }
+
+    if err := m.client.ConfigureDevice(m.interfaceName, config); err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to configure WireGuard device: %w", err)
+    }</span>
+
+    <span class="cov0" title="0">log.Infof("Configured WireGuard interface %s with IP %s", m.interfaceName, headendIP)
+    return nil</span>
+}
+
+// syncPeers fetches peer configurations from the manager and applies them
+func (m *Manager) syncPeers() error <span class="cov8" title="1">{
+    peers, err := m.fetchPeersFromManager()
+    if err != nil </span><span class="cov8" title="1">{
+        return fmt.Errorf("failed to fetch peers from manager: %w", err)
+    }</span>
+    
+    // Convert peers to WireGuard peer configs
+    <span class="cov0" title="0">var wgPeers []wgtypes.PeerConfig
+    
+    for _, peer := range peers </span><span class="cov0" title="0">{
+        publicKey, err := wgtypes.ParseKey(peer.PublicKey)
+        if err != nil </span><span class="cov0" title="0">{
+            log.Errorf("Invalid public key for peer %s: %v", peer.NodeID, err)
+            continue</span>
+        }
+        
+        // Parse allowed IPs
+        <span class="cov0" title="0">allowedIPs, err := m.parseAllowedIPs(peer.AllowedIPs)
+        if err != nil </span><span class="cov0" title="0">{
+            log.Errorf("Invalid allowed IPs for peer %s: %v", peer.NodeID, err)
+            continue</span>
+        }
+        
+        <span class="cov0" title="0">peerConfig := wgtypes.PeerConfig{
+            PublicKey:  publicKey,
+            AllowedIPs: allowedIPs,
+            ReplaceAllowedIPs: true,
+        }
+        
+        // Set endpoint if provided
+        if peer.Endpoint != "" </span><span class="cov0" title="0">{
+            // Parse endpoint manually since wgtypes.ParseEndpoint was removed
+            parts := strings.Split(peer.Endpoint, ":")
+            if len(parts) == 2 </span><span class="cov0" title="0">{
+                host := parts[0]
+                port, err := strconv.Atoi(parts[1])
+                if err != nil </span><span class="cov0" title="0">{
+                    log.Errorf("Invalid endpoint port for peer %s: %v", peer.NodeID, err)
+                }</span> else<span class="cov0" title="0"> {
+                    ip := net.ParseIP(host)
+                    if ip != nil </span><span class="cov0" title="0">{
+                        endpoint := &amp;net.UDPAddr{
+                            IP:   ip,
+                            Port: port,
+                        }
+                        peerConfig.Endpoint = endpoint
+                    }</span> else<span class="cov0" title="0"> {
+                        log.Errorf("Invalid endpoint IP for peer %s: %s", peer.NodeID, host)
+                    }</span>
+                }
+            } else<span class="cov0" title="0"> {
+                log.Errorf("Invalid endpoint format for peer %s: %s", peer.NodeID, peer.Endpoint)
+            }</span>
+        }
+        
+        <span class="cov0" title="0">wgPeers = append(wgPeers, peerConfig)</span>
+    }
+    
+    // Apply peer configuration
+    <span class="cov0" title="0">config := wgtypes.Config{
+        Peers: wgPeers,
+        ReplacePeers: true,
+    }
+    
+    if err := m.client.ConfigureDevice(m.interfaceName, config); err != nil </span><span class="cov0" title="0">{
+        return fmt.Errorf("failed to configure peers: %w", err)
+    }</span>
+    
+    <span class="cov0" title="0">log.Infof("Synchronized %d WireGuard peers", len(wgPeers))
+    return nil</span>
+}
+
+func (m *Manager) fetchPeersFromManager() ([]Peer, error) <span class="cov8" title="1">{
+    url := m.managerURL + "/api/v1/wireguard/peers"
+    
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil </span><span class="cov0" title="0">{
+        return nil, fmt.Errorf("failed to create request: %w", err)
+    }</span>
+    
+    // Add authentication header (would be cluster API key in practice)
+    <span class="cov8" title="1">req.Header.Set("Authorization", "Bearer "+os.Getenv("CLUSTER_API_KEY"))
+    
+    resp, err := m.httpClient.Do(req)
+    if err != nil </span><span class="cov8" title="1">{
+        return nil, fmt.Errorf("failed to fetch peers: %w", err)
+    }</span>
+    <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{
+        if err := resp.Body.Close(); err != nil </span><span class="cov0" title="0">{
+            log.Debugf("Error closing response body: %v", err)
+        }</span>
+    }()
+    
+    <span class="cov8" title="1">if resp.StatusCode != http.StatusOK </span><span class="cov8" title="1">{
+        return nil, fmt.Errorf("manager returned status %d", resp.StatusCode)
+    }</span>
+    
+    <span class="cov8" title="1">body, err := io.ReadAll(resp.Body)
+    if err != nil </span><span class="cov0" title="0">{
+        return nil, fmt.Errorf("failed to read response: %w", err)
+    }</span>
+    
+    <span class="cov8" title="1">var response struct {
+        Peers []Peer `json:"peers"`
+        Total int    `json:"total"`
+    }
+    
+    if err := json.Unmarshal(body, &amp;response); err != nil </span><span class="cov8" title="1">{
+        return nil, fmt.Errorf("failed to parse response: %w", err)
+    }</span>
+    
+    <span class="cov8" title="1">return response.Peers, nil</span>
+}
+
+func (m *Manager) parseAllowedIPs(allowedIPsStr string) ([]net.IPNet, error) <span class="cov8" title="1">{
+    var allowedIPs []net.IPNet
+    
+    for _, ipStr := range strings.Split(allowedIPsStr, ",") </span><span class="cov8" title="1">{
+        ipStr = strings.TrimSpace(ipStr)
+        if ipStr == "" </span><span class="cov8" title="1">{
+            continue</span>
+        }
+        
+        // Parse using standard net package since wgtypes.ParseIPNet was removed
+        <span class="cov8" title="1">_, ipNet, err := net.ParseCIDR(ipStr)
+        if err != nil </span><span class="cov8" title="1">{
+            return nil, fmt.Errorf("invalid IP network %s: %w", ipStr, err)
+        }</span>
+        
+        <span class="cov8" title="1">allowedIPs = append(allowedIPs, *ipNet)</span>
+    }
+    
+    <span class="cov8" title="1">return allowedIPs, nil</span>
+}
+
+// StartPeriodicSync starts a background goroutine to periodically sync peers
+func (m *Manager) StartPeriodicSync(ctx context.Context) <span class="cov8" title="1">{
+    go func() </span><span class="cov8" title="1">{
+        ticker := time.NewTicker(5 * time.Minute)
+        defer ticker.Stop()
+        
+        for </span><span class="cov8" title="1">{
+            select </span>{
+            case &lt;-ctx.Done():<span class="cov8" title="1">
+                log.Info("Stopping WireGuard peer sync")
+                return</span>
+            case &lt;-ticker.C:<span class="cov0" title="0">
+                if err := m.syncPeers(); err != nil </span><span class="cov0" title="0">{
+                    log.Errorf("Failed to sync WireGuard peers: %v", err)
+                }</span>
+            }
+        }
+    }()
+}
+
+// GetStats returns WireGuard interface statistics
+func (m *Manager) GetStats() (*wgtypes.Device, error) <span class="cov8" title="1">{
+    return m.client.Device(m.interfaceName)
+}</span>
+
+// Close closes the WireGuard client
+func (m *Manager) Close() error <span class="cov8" title="1">{
+    if m.client != nil </span><span class="cov0" title="0">{
+        return m.client.Close()
+    }</span>
+    <span class="cov8" title="1">return nil</span>
+}
+
+// GetPublicKey returns the headend's public key
+func (m *Manager) GetPublicKey() string <span class="cov8" title="1">{
+    return m.publicKey.String()
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
