@@ -73,32 +73,3 @@ docker compose -f ~/.claude/mcp/mem0/docker-compose.yml down      # stop
 ```
 
 **Qdrant dashboard:** http://localhost:6333/dashboard
-
----
-
-## ⚠️ ADDITIONAL CRITICAL RULES
-
-The following rules **add to** the critical rules in root `CLAUDE.md`. See root for base git, code quality, and standards references.
-
-**Response Style:**
-- **Be concise** — lead with the answer, skip preamble, no trailing summaries. See [`.claude/rules/general.md`](.claude/rules/general.md) for the full brevity standard. Applies to all responses, skills, and rule files.
-
-**Git Branch Rules:**
-- **NEVER edit code directly on `main`** — always work on a feature branch
-- **CHECK current branch before any code change**: if on `main`, create and switch to a feature branch first (`git checkout -b feature/<name>`)
-
-**Code Quality (additions):**
-- **NEVER ignore pre-existing issues** — if you encounter existing bugs, failing tests, lint errors, TODOs marked as broken, or code that violates standards while working on an unrelated task, **fix them or explicitly flag them to the user**. Do not silently work around them or pretend they are not there. Leaving known issues in place is not acceptable
-
----
-
-## Version Increment Rule
-
-**Only increment Major/Minor/Patch when the current version already has a published git tag and/or GitHub release.** If no tag/release exists for the current version yet, update only the build epoch.
-
-**Rationale:** Incrementing a version before the current one ships creates gaps in the published sequence (e.g., `v1.2.1` → `v1.2.4` with no `v1.2.2` or `v1.2.3` ever released). Consumers, changelogs, and package managers see these gaps as missing releases, which is confusing and looks like a mistake.
-
-**Decision flow:**
-1. Check if the current `.version` is already tagged: `git tag --list "$(cat .version | cut -d. -f1-3)*"`
-2. If **no tag exists** → only update the build epoch: `./scripts/version/update-version.sh`
-3. If **a tag already exists** → safe to increment: `./scripts/version/update-version.sh patch|minor|major`
