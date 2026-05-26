@@ -16,30 +16,30 @@ jobs:
   pre-release-tests:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
     - name: Set up Python 3.13
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
       with:
         python-version: 3.13
-    
+
     - name: Set up Go 1.24
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
       with:
         go-version: 1.24
-    
+
     - name: Install Python dependencies
       run: |
         cd services/hub-api
         python3 -m pip install --upgrade pip
         pip3 install -r requirements.txt
         pip3 install pytest pytest-asyncio pytest-cov
-    
+
     - name: Install Go dependencies
       run: |
         cd services/hub-router && go mod download
         cd clients/native && go mod download
-    
+
     - name: Run Python tests
       run: |
         cd services/hub-api
@@ -61,42 +61,113 @@ jobs:
         echo "Total coverage: ${total}%"
         awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
 
-  # Build release Docker images
-  build-release-images:
+  # Build Docker images per platform
+  build-platform-images:
     needs: [pre-release-tests]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
-    
+
     strategy:
       matrix:
         component: [manager, headend, client]
-    
+        platform: [linux/amd64, linux/arm64]
+
     steps:
     - name: Checkout repository
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
-    
+      uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4
+
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-    
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4
+
     - name: Log in to Container Registry
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    
+
     - name: Read version from .version file
       id: version
       run: |
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
-    
+
+    - name: Extract platform tuple
+      id: platform
+      run: |
+        PLATFORM="${{ matrix.platform }}"
+        OS="${PLATFORM%/*}"
+        ARCH="${PLATFORM#*/}"
+        echo "os=${OS}" >> $GITHUB_OUTPUT
+        echo "arch=${ARCH}" >> $GITHUB_OUTPUT
+
     - name: Compute image tags
+      id: tags
+      run: |
+        EPOCH=$(date +%s)
+        VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+        REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
+        IMAGE="${REGISTRY}/tobogganing-${{ matrix.component }}"
+        REF="${{ github.ref_name }}"
+        ARCH="${{ steps.platform.outputs.arch }}"
+
+        if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          TAGS="${IMAGE}:${REF}-${ARCH}"
+        elif [[ "${REF}" == "main" ]]; then
+          TAGS="${IMAGE}:gamma-${EPOCH}-${ARCH},${IMAGE}:${VERSION}-gamma-${ARCH}"
+        elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
+          TAGS="${IMAGE}:beta-${EPOCH}-${ARCH},${IMAGE}:${VERSION}-beta-${ARCH}"
+        else
+          TAGS="${IMAGE}:alpha-${EPOCH}-${ARCH}"
+        fi
+        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7
+      with:
+        context: ${{ matrix.component == 'manager' && './services/hub-api' || matrix.component == 'headend' && './services/hub-router' || './clients/docker' }}
+        platforms: ${{ matrix.platform }}
+        push: true
+        tags: ${{ steps.tags.outputs.tags }}
+        cache-from: type=gha,scope=${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+        cache-to: type=gha,scope=${{ matrix.component }}-${{ steps.platform.outputs.arch }},mode=max
+        build-args: |
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_TIME=${{ github.run_id }}
+          GIT_COMMIT=${{ github.sha }}
+
+  # Merge platform-specific manifests into final multi-arch image
+  merge-manifests:
+    needs: [build-platform-images]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        component: [manager, headend, client]
+
+    steps:
+    - name: Log in to Container Registry
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Read version from .version file
+      id: version
+      run: |
+        VERSION=$(cat .version)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Compute manifest tags
       id: tags
       run: |
         EPOCH=$(date +%s)
@@ -106,60 +177,32 @@ jobs:
         REF="${{ github.ref_name }}"
 
         if [[ "${{ github.ref_type }}" == "tag" ]]; then
-          TAGS="${IMAGE}:${REF}"
+          FINAL_TAG="${IMAGE}:${REF}"
+          SOURCE_TAGS="${IMAGE}:${REF}-amd64 ${IMAGE}:${REF}-arm64"
         elif [[ "${REF}" == "main" ]]; then
-          TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
+          FINAL_TAG="${IMAGE}:gamma-${EPOCH} ${IMAGE}:${VERSION}-gamma"
+          SOURCE_TAGS="${IMAGE}:gamma-${EPOCH}-amd64 ${IMAGE}:gamma-${EPOCH}-arm64 ${IMAGE}:${VERSION}-gamma-amd64 ${IMAGE}:${VERSION}-gamma-arm64"
         elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
-          TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+          FINAL_TAG="${IMAGE}:beta-${EPOCH} ${IMAGE}:${VERSION}-beta"
+          SOURCE_TAGS="${IMAGE}:beta-${EPOCH}-amd64 ${IMAGE}:beta-${EPOCH}-arm64 ${IMAGE}:${VERSION}-beta-amd64 ${IMAGE}:${VERSION}-beta-arm64"
         else
-          TAGS="${IMAGE}:alpha-${EPOCH}"
+          FINAL_TAG="${IMAGE}:alpha-${EPOCH}"
+          SOURCE_TAGS="${IMAGE}:alpha-${EPOCH}-amd64 ${IMAGE}:alpha-${EPOCH}-arm64"
         fi
-        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-    
-    - name: Build and push Docker image - Manager
-      if: matrix.component == 'manager'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./services/hub-api
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.version.outputs.version }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
-    
-    - name: Build and push Docker image - Headend
-      if: matrix.component == 'headend'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./services/hub-router
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.version.outputs.version }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
-    
-    - name: Build and push Docker image - Client
-      if: matrix.component == 'client'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./clients/docker
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.version.outputs.version }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
+        echo "final_tag=${FINAL_TAG}" >> $GITHUB_OUTPUT
+        echo "source_tags=${SOURCE_TAGS}" >> $GITHUB_OUTPUT
+
+    - name: Create and push manifest
+      run: |
+        FINAL_TAGS=(${{ steps.tags.outputs.final_tag }})
+        SOURCE_TAGS=(${{ steps.tags.outputs.source_tags }})
+
+        for final_tag in "${FINAL_TAGS[@]}"; do
+          echo "Creating manifest for: ${final_tag}"
+          docker buildx imagetools create -t "${final_tag}" \
+            "${SOURCE_TAGS[0]}" \
+            "${SOURCE_TAGS[1]}"
+        done
 
   # Build native client binaries for all platforms
   build-native-clients:
@@ -191,22 +234,22 @@ jobs:
             goos: darwin
             goarch: arm64
             binary: tobogganing-client-darwin-arm64
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
     - name: Set up Go
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
       with:
         go-version: 1.24
-    
+
     - name: Read version from .version file
       id: version
       shell: bash
       run: |
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
-    
+
     - name: Build binary
       env:
         GOOS: ${{ matrix.goos }}
@@ -214,30 +257,30 @@ jobs:
         CGO_ENABLED: 0
       run: |
         cd clients/native
-        
+
         if [ "${{ runner.os }}" = "Windows" ]; then
           BUILD_TIME=$(powershell -Command "Get-Date -UFormat '%Y-%m-%d_%H:%M:%S'")
         else
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
         fi
-        
+
         VERSION="${{ steps.version.outputs.version }}"
         GIT_COMMIT="${{ github.sha }}"
-        
+
         mkdir -p build
-        
+
         # Use consistent naming pattern: tobogganing-client-{os}-{arch}-{version}
         VERSIONED_BINARY="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
           VERSIONED_BINARY="${VERSIONED_BINARY}.exe"
         fi
-        
+
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
           -o build/${VERSIONED_BINARY} ./cmd/headless
       shell: bash
-    
+
     - name: Upload binary artifact
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
       with:
         name: tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
@@ -249,32 +292,32 @@ jobs:
     runs-on: macos-latest
     steps:
     - name: Download macOS binaries
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
       with:
         name: tobogganing-client-darwin-amd64
         path: ./amd64
-    
+
     - name: Download macOS ARM64 binary
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
       with:
         name: tobogganing-client-darwin-arm64
         path: ./arm64
-    
+
     - name: Read version from .version file
       id: version
       run: |
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
-    
+
     - name: Create universal binary
       run: |
         mkdir -p build
         VERSION="${{ steps.version.outputs.version }}"
-        
+
         # Find the actual binary files (they have version in the name now)
         AMD64_BINARY=$(find ./amd64 -name "tobogganing-client-darwin-amd64-*" | head -1)
         ARM64_BINARY=$(find ./arm64 -name "tobogganing-client-darwin-arm64-*" | head -1)
-        
+
         if [ -n "$AMD64_BINARY" ] && [ -n "$ARM64_BINARY" ]; then
           lipo -create -output "build/tobogganing-client-darwin-universal-${VERSION}" \
             "$AMD64_BINARY" \
@@ -285,9 +328,9 @@ jobs:
           ls -la ./arm64/
           exit 1
         fi
-    
+
     - name: Upload universal binary
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
       with:
         name: tobogganing-client-darwin-universal
         path: build/*
@@ -295,81 +338,108 @@ jobs:
 
   # Create release packages
   create-release:
-    needs: [build-release-images, build-native-clients, create-macos-universal]
+    needs: [merge-manifests, build-native-clients, create-macos-universal]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
     - name: Read version from .version file
       id: version
       run: |
         VERSION=$(cat .version)
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
-    
+
     - name: Download all artifacts
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
       with:
         path: ./artifacts
-    
+
     - name: Create release packages
       run: |
         mkdir -p release-packages
         VERSION="${{ steps.version.outputs.version }}"
-        
+
         # Linux AMD64 package
         mkdir -p linux-amd64
         cp artifacts/tobogganing-client-linux-amd64/tobogganing-client-linux-amd64-${VERSION} linux-amd64/tobogganing-client
         chmod +x linux-amd64/tobogganing-client
         tar -czf release-packages/tobogganing-client-linux-amd64-${VERSION}.tar.gz -C linux-amd64 .
-        
-        # Linux ARM64 package  
+
+        # Linux ARM64 package
         mkdir -p linux-arm64
         cp artifacts/tobogganing-client-linux-arm64/tobogganing-client-linux-arm64-${VERSION} linux-arm64/tobogganing-client
         chmod +x linux-arm64/tobogganing-client
         tar -czf release-packages/tobogganing-client-linux-arm64-${VERSION}.tar.gz -C linux-arm64 .
-        
+
         # Windows package
         mkdir -p windows
         cp artifacts/tobogganing-client-windows-amd64/tobogganing-client-windows-amd64-${VERSION}.exe windows/tobogganing-client.exe
         cd windows && zip -r ../release-packages/tobogganing-client-windows-amd64-${VERSION}.zip . && cd ..
-        
+
         # macOS Universal package
         mkdir -p macos
         cp artifacts/tobogganing-client-darwin-universal/tobogganing-client-darwin-universal-${VERSION} macos/tobogganing-client
         chmod +x macos/tobogganing-client
         tar -czf release-packages/tobogganing-client-darwin-universal-${VERSION}.tar.gz -C macos .
-        
+
         # Create checksums
         cd release-packages
         sha256sum * > checksums.txt
         cd ..
-    
+
     - name: Create example configuration files
-      env:
-        VERSION_TAG: ${{ steps.version.outputs.version }}
       run: |
         mkdir -p release-packages/examples
-        python3 -c "import os; v=os.environ['VERSION_TAG']; os.makedirs('release-packages/examples', exist_ok=True); open('release-packages/examples/client-config.yaml', 'w').write('# Tobogganing Native Client Configuration\nmanager_url: https://your-manager.example.com:8000\napi_key: your-api-key-here\nclient_name: my-workstation\nclient_type: client_native\nauto_connect: true\nreconnect_interval: 30\nlog_level: info\nheadless: false\nservice_mode: false\ndns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\nauth_refresh_threshold: 300\n'); open('release-packages/examples/docker-compose.yml', 'w').write(f'# Tobogganing Self-Hosted Deployment\nversion: 3.8\nservices:\n  redis:\n    image: redis:7-bookworm\n  manager:\n    image: ghcr.io/your-org/tobogganing/manager:{v}\n  headend:\n    image: ghcr.io/your-org/tobogganing/headend:{v}\n'); open('release-packages/examples/install.sh', 'w').write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')"
+        python3 << 'EOF'
+        import os
+        v = os.environ.get('VERSION_TAG')
+        os.makedirs('release-packages/examples', exist_ok=True)
+        with open('release-packages/examples/client-config.yaml', 'w') as f:
+            f.write('# Tobogganing Native Client Configuration\nmanager_url: https://your-manager.example.com:8000\napi_key: your-api-key-here\nclient_name: my-workstation\nclient_type: client_native\nauto_connect: true\nreconnect_interval: 30\nlog_level: info\nheadless: false\nservice_mode: false\ndns_servers:\n  - 10.200.0.1\n  - 1.1.1.1\n  - 8.8.8.8\nauth_refresh_threshold: 300\n')
+        with open('release-packages/examples/docker-compose.yml', 'w') as f:
+            f.write(f'# Tobogganing Self-Hosted Deployment\nversion: 3.8\nservices:\n  redis:\n    image: redis:7-bookworm\n  manager:\n    image: ghcr.io/your-org/tobogganing/manager:{v}\n  headend:\n    image: ghcr.io/your-org/tobogganing/headend:{v}\n')
+        with open('release-packages/examples/install.sh', 'w') as f:
+            f.write('#!/bin/bash\nset -e\necho Install from https://github.com/penguintechinc/tobogganing\n')
+        EOF
         chmod +x release-packages/examples/install.sh
+      env:
+        VERSION_TAG: ${{ steps.version.outputs.version }}
 
     - name: Generate release notes
-      id: release_notes
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        REPO="${{ github.repository }}"
-        python3 -c "
+        python3 << 'EOF'
         import os
         v = os.environ.get('VERSION', 'unknown')
         r = os.environ.get('REPO', 'penguintechinc/tobogganing')
-        n = f'# Tobogganing Release v{v}\n\n## Features\n- WireGuard VPN termination\n- Multi-protocol proxy\n- Cross-platform clients\n\n## Docker Images\n- Manager: ghcr.io/{r}/tobogganing-manager:{v}\n- Headend: ghcr.io/{r}/tobogganing-headend:{v}\n- Client: ghcr.io/{r}/tobogganing-client:{v}\n\n## Security\n- Zero Trust Network Architecture (ZTNA)\n- Dual authentication: X.509 + JWT\n- All communications secured with mutual TLS\n'
-        open('release-notes.md', 'w').write(n)
-        "
-    
+        notes = f'''# Tobogganing Release v{v}
+
+## Features
+- WireGuard VPN termination
+- Multi-protocol proxy
+- Cross-platform clients
+
+## Docker Images
+- Manager: ghcr.io/{r}/tobogganing-manager:{v}
+- Headend: ghcr.io/{r}/tobogganing-headend:{v}
+- Client: ghcr.io/{r}/tobogganing-client:{v}
+
+## Security
+- Zero Trust Network Architecture (ZTNA)
+- Dual authentication: X.509 + JWT
+- All communications secured with mutual TLS
+'''
+        with open('release-notes.md', 'w') as f:
+            f.write(notes)
+        EOF
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        REPO: ${{ github.repository }}
+
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
+      uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3
       with:
         tag_name: ${{ github.ref_name }}
         name: "Tobogganing v${{ steps.version.outputs.version }}"
@@ -382,21 +452,21 @@ jobs:
 
   # Security scan of release images
   security-scan-release:
-    needs: [build-release-images]
+    needs: [merge-manifests]
     runs-on: ubuntu-24.04
     strategy:
       matrix:
         component: [manager, headend, client]
     steps:
     - name: Run Trivy vulnerability scanner on release images
-      uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
       with:
         image-ref: ${{ env.REGISTRY }}/${{ env[format('IMAGE_NAME_{0}', upper(matrix.component))] }}:${{ github.ref_name }}
         format: 'sarif'
         output: 'trivy-${{ matrix.component }}-results.sarif'
         version: 'v0.69.3'
-    
+
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3  # v3
+      uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225  # v4
       with:
         sarif_file: 'trivy-${{ matrix.component }}-results.sarif'

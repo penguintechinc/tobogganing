@@ -18,167 +18,139 @@ env:
   IMAGE_PREFIX: ${{ github.repository_owner }}/tobogganing
 
 jobs:
-  build-manager:
-    name: Build Manager Docker Image
+  build-platform:
+    name: Build ${{ matrix.service }} - ${{ matrix.platform }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
-    
+
+    strategy:
+      matrix:
+        include:
+          - service: manager
+            context: ./services/hub-api
+            image_name: tobogganing-hub-api
+          - service: headend
+            context: ./services/hub-router
+            image_name: tobogganing-hub-router
+          - service: client
+            context: ./clients/docker
+            image_name: tobogganing-client
+        platform: [linux/amd64, linux/arm64]
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
-      
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-      
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4
+
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Compute image tags
         id: tags
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REPO: ${{ github.repository }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           EPOCH=$(date +%s)
           VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
-          REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
-          IMAGE="${REGISTRY}/tobogganing-hub-api"
-          REF="${{ github.ref_name }}"
+          REGISTRY="ghcr.io/${REPO}"
+          IMAGE="${REGISTRY}/${{ matrix.image_name }}"
+          ARCH_SUFFIX=$(printf "%s" "${PLATFORM}" | sed 's|/|-|g')
 
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAGS="${IMAGE}:${REF}"
-          elif [[ "${REF}" == "main" ]]; then
-            TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
-          elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
-            TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+          if [ "${REF_TYPE}" = "tag" ]; then
+            TAGS="${IMAGE}:${REF_NAME}-${ARCH_SUFFIX}"
+          elif [ "${REF_NAME}" = "main" ]; then
+            TAGS="${IMAGE}:gamma-${EPOCH}-${ARCH_SUFFIX},${IMAGE}:${VERSION}-gamma-${ARCH_SUFFIX}"
+          elif printf "%s" "${REF_NAME}" | grep -qE '^v[0-9]+\.[0-9]+\.x$'; then
+            TAGS="${IMAGE}:beta-${EPOCH}-${ARCH_SUFFIX},${IMAGE}:${VERSION}-beta-${ARCH_SUFFIX}"
           else
-            TAGS="${IMAGE}:alpha-${EPOCH}"
+            TAGS="${IMAGE}:alpha-${EPOCH}-${ARCH_SUFFIX}"
           fi
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          printf "tags=%s\n" "${TAGS}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Manager Docker image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
+      - name: Build and push ${{ matrix.service }} Docker image (${{ matrix.platform }})
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7
         with:
-          context: ./services/hub-api
-          platforms: linux/amd64,linux/arm64
+          context: ${{ matrix.context }}
+          platforms: ${{ matrix.platform }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service }}-${{ matrix.platform }}
+          cache-to: type=gha,scope=${{ matrix.service }}-${{ matrix.platform }},mode=max
 
-  build-headend:
-    name: Build Headend Docker Image
+  merge-manifests:
+    if: github.event_name != 'pull_request'
+    name: Merge Manifests - ${{ matrix.service }}
     runs-on: ubuntu-24.04
+    needs: build-platform
     permissions:
       contents: read
       packages: write
-    
+
+    strategy:
+      matrix:
+        include:
+          - service: manager
+            image_name: tobogganing-hub-api
+          - service: headend
+            image_name: tobogganing-hub-router
+          - service: client
+            image_name: tobogganing-client
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
-      
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-      
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4
+
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Compute image tags
-        id: tags
+
+      - name: Compute final image tags and merge manifests
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REPO: ${{ github.repository }}
         run: |
           EPOCH=$(date +%s)
           VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
-          REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
-          IMAGE="${REGISTRY}/tobogganing-hub-router"
-          REF="${{ github.ref_name }}"
+          REGISTRY="ghcr.io/${REPO}"
+          IMAGE="${REGISTRY}/${{ matrix.image_name }}"
 
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAGS="${IMAGE}:${REF}"
-          elif [[ "${REF}" == "main" ]]; then
-            TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
-          elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
-            TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+          if [ "${REF_TYPE}" = "tag" ]; then
+            FINAL_TAGS="${IMAGE}:${REF_NAME},${IMAGE}:latest"
+            SOURCE_TAG="${REF_NAME}"
+          elif [ "${REF_NAME}" = "main" ]; then
+            FINAL_TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
+            SOURCE_TAG="${VERSION}-gamma"
+          elif printf "%s" "${REF_NAME}" | grep -qE '^v[0-9]+\.[0-9]+\.x$'; then
+            FINAL_TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+            SOURCE_TAG="${VERSION}-beta"
           else
-            TAGS="${IMAGE}:alpha-${EPOCH}"
+            FINAL_TAGS="${IMAGE}:alpha-${EPOCH}"
+            SOURCE_TAG="alpha-${EPOCH}"
           fi
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
-      - name: Build and push Headend Docker image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-        with:
-          context: ./services/hub-router
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  build-docker-client:
-    name: Build Docker Client Image
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-      
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Compute image tags
-        id: tags
-        run: |
-          EPOCH=$(date +%s)
-          VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
-          REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
-          IMAGE="${REGISTRY}/tobogganing-client"
-          REF="${{ github.ref_name }}"
-
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAGS="${IMAGE}:${REF}"
-          elif [[ "${REF}" == "main" ]]; then
-            TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
-          elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
-            TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
-          else
-            TAGS="${IMAGE}:alpha-${EPOCH}"
-          fi
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-
-      - name: Build and push Docker Client image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-        with:
-          context: ./clients/docker
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          docker buildx imagetools create \
+            -t "${FINAL_TAGS}" \
+            "${IMAGE}:${SOURCE_TAG}-linux-amd64" \
+            "${IMAGE}:${SOURCE_TAG}-linux-arm64"

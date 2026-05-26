@@ -24,17 +24,17 @@ jobs:
     strategy:
       matrix:
         python-version: [3.13]
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Cache pip dependencies
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('services/hub-api/requirements.txt') }}
@@ -70,7 +70,7 @@ jobs:
         python3 -m pytest tests/ -v --cov=. --cov-report=xml --cov-fail-under=90
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6
       with:
         file: ./services/hub-api/coverage.xml
         flags: manager
@@ -82,17 +82,17 @@ jobs:
     strategy:
       matrix:
         go-version: [1.24]
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Set up Go ${{ matrix.go-version }}
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
       with:
         go-version: ${{ matrix.go-version }}
 
     - name: Cache Go modules
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('services/hub-router/go.sum') }}
@@ -105,14 +105,14 @@ jobs:
         go mod download
 
     - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+      uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9
       with:
         version: v1.64.8
         working-directory: services/hub-router
         args: --timeout=5m --out-format=colored-line-number
 
     - name: Run gosec (Go security scanner)
-      uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
+      uses: securego/gosec@223e19b8856e00f02cc67804499a83f77e208f3c  # v2.25.0
       with:
         args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router/...'
       continue-on-error: true
@@ -130,7 +130,7 @@ jobs:
         awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6
       with:
         file: ./services/hub-router/coverage.out
         flags: headend
@@ -142,17 +142,17 @@ jobs:
     strategy:
       matrix:
         go-version: [1.24]
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Set up Go ${{ matrix.go-version }}
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
       with:
         go-version: ${{ matrix.go-version }}
 
     - name: Cache Go modules
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
@@ -168,24 +168,24 @@ jobs:
           libgtk-3-dev \
           pkg-config \
           build-essential || true
-        
+
         # Try newer webkit first, fallback to older version
         sudo apt-get install -y libwebkit2gtk-4.1-dev || \
         sudo apt-get install -y libwebkit2gtk-4.0-dev || \
         echo "Warning: webkit2gtk not available, GUI features may be limited"
-    
+
     - name: Install dependencies
       run: |
         cd clients/native
         go mod download
-    
+
     - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
+      uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9
       with:
         version: v1.64.8
         working-directory: clients/native
         args: --build-tags=nogui --timeout=5m --out-format=colored-line-number
-    
+
     - name: Test with go test
       run: |
         cd clients/native
@@ -201,9 +201,9 @@ jobs:
         total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
         echo "Total coverage (kernel-free internal packages): ${total}%"
         awk "BEGIN{if(${total}+0 < 90){print \"Coverage below 90%: ${total}%\"; exit 1}}"
-    
+
     - name: Upload coverage reports
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6
       with:
         file: ./clients/native/coverage.out
         flags: client
@@ -214,21 +214,23 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Check out penguin-libs (local package dependencies)
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       with:
         repository: penguintechinc/penguin-libs
         token: ${{ secrets.GITHUB_TOKEN }}
         path: penguin-libs
 
     - name: Rewrite local package paths for CI environment
+      env:
+        GITHUB_WORKSPACE_VAR: ${{ github.workspace }}
       run: |
-        sed -i "s|file:/home/penguin/code/penguin-libs|file://${GITHUB_WORKSPACE}/penguin-libs|g" services/hub-webui/package.json
+        sed -i "s|file:/home/penguin/code/penguin-libs|file://${GITHUB_WORKSPACE_VAR}/penguin-libs|g" services/hub-webui/package.json
 
     - name: Set up Node.js
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -267,7 +269,7 @@ jobs:
       continue-on-error: true
 
     - name: Upload Playwright report
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
       if: always()
       with:
         name: playwright-report
@@ -275,7 +277,7 @@ jobs:
         retention-days: 7
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6
       with:
         file: ./services/hub-webui/coverage/coverage-final.json
         flags: webui
@@ -289,15 +291,15 @@ jobs:
       security-events: write
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Set up Python for bandit
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
     - name: Set up Go for gosec
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
       with:
         go-version: ${{ env.GO_VERSION }}
 
@@ -308,13 +310,13 @@ jobs:
       continue-on-error: true
 
     - name: Run gosec (Go security scanner)
-      uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
+      uses: securego/gosec@223e19b8856e00f02cc67804499a83f77e208f3c  # v2.25.0
       with:
         args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router/... ./clients/native/...'
       continue-on-error: true
 
     - name: Run Trivy filesystem scanning
-      uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -323,117 +325,153 @@ jobs:
         version: 'v0.69.3'
 
     - name: Upload Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3  # v3
+      uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225  # v4
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
         category: 'trivy'
 
-  # Build and push Docker images
-  build-images:
+  # Build and push Docker images with parallel multi-arch support
+  build-platform:
     needs: [test-manager, test-headend, test-client, test-webui, security-scan]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
-    
+
     strategy:
       matrix:
-        component: [manager, headend, client]
-    
+        include:
+          - service: manager
+            context: ./services/hub-api
+            image_name: tobogganing-hub-api
+          - service: headend
+            context: ./services/hub-router
+            image_name: tobogganing-hub-router
+          - service: client
+            context: ./clients/docker
+            image_name: tobogganing-client
+        platform: [linux/amd64, linux/arm64]
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
-    - name: Read version from .version file
-      id: version
-      run: |
-        VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}-pr${{ github.event.number }}" >> $GITHUB_OUTPUT
-        else
-          echo "tag=tobogganing-${{ matrix.component }}:${VERSION}" >> $GITHUB_OUTPUT
-        fi
-    
-    - name: Compute image tags
-      id: tags
-      run: |
-        EPOCH=$(date +%s)
-        VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
-        REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
-        IMAGE="${REGISTRY}/tobogganing-${{ matrix.component }}"
-        REF="${{ github.ref_name }}"
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
-        if [[ "${{ github.ref_type }}" == "tag" ]]; then
-          TAGS="${IMAGE}:${REF}"
-        elif [[ "${REF}" == "main" ]]; then
-          TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
-        elif [[ "${REF}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
-          TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
-        else
-          TAGS="${IMAGE}:alpha-${EPOCH}"
-        fi
-        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4
 
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Log in to Container Registry
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute image tags
+        id: tags
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REPO: ${{ github.repository }}
+        run: |
+          EPOCH=$(date +%s)
+          VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+          REGISTRY="ghcr.io/${REPO}"
+          IMAGE="${REGISTRY}/${{ matrix.image_name }}"
+          ARCH_SUFFIX=$(echo "${{ matrix.platform }}" | sed 's|/|-|g')
 
-    - name: Build and push Docker image - Manager
-      if: matrix.component == 'manager'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./services/hub-api
-        platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ github.ref_name }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
+          if [[ "${REF_TYPE}" == "tag" ]]; then
+            TAGS="${IMAGE}:${REF_NAME}-${ARCH_SUFFIX}"
+          elif [[ "${REF_NAME}" == "main" ]]; then
+            TAGS="${IMAGE}:gamma-${EPOCH}-${ARCH_SUFFIX},${IMAGE}:${VERSION}-gamma-${ARCH_SUFFIX}"
+          elif [[ "${REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
+            TAGS="${IMAGE}:beta-${EPOCH}-${ARCH_SUFFIX},${IMAGE}:${VERSION}-beta-${ARCH_SUFFIX}"
+          else
+            TAGS="${IMAGE}:alpha-${EPOCH}-${ARCH_SUFFIX}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
-    - name: Build and push Docker image - Headend
-      if: matrix.component == 'headend'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./services/hub-router
-        platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ github.ref_name }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
+      - name: Build and push Docker image - ${{ matrix.service }} (${{ matrix.platform }})
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7
+        with:
+          context: ${{ matrix.context }}
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.service }}-${{ matrix.platform }}
+          cache-to: type=gha,scope=${{ matrix.service }}-${{ matrix.platform }},mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            BUILD_TIME=${{ github.run_id }}
+            GIT_COMMIT=${{ github.sha }}
 
-    - name: Build and push Docker image - Client
-      if: matrix.component == 'client'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./clients/docker
-        platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.tags.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ github.ref_name }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
+  merge-manifests:
+    if: github.event_name != 'pull_request'
+    name: Merge Manifests - ${{ matrix.service }}
+    needs: build-platform
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - service: manager
+            image_name: tobogganing-hub-api
+          - service: headend
+            image_name: tobogganing-hub-router
+          - service: client
+            image_name: tobogganing-client
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute final image tags and merge manifests
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REPO: ${{ github.repository }}
+        run: |
+          EPOCH=$(date +%s)
+          VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+          REGISTRY="ghcr.io/${REPO}"
+          IMAGE="${REGISTRY}/${{ matrix.image_name }}"
+
+          if [[ "${REF_TYPE}" == "tag" ]]; then
+            FINAL_TAGS="${IMAGE}:${REF_NAME},${IMAGE}:latest"
+            SOURCE_TAG="${REF_NAME}"
+          elif [[ "${REF_NAME}" == "main" ]]; then
+            FINAL_TAGS="${IMAGE}:gamma-${EPOCH},${IMAGE}:${VERSION}-gamma"
+            SOURCE_TAG="${VERSION}-gamma"
+          elif [[ "${REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.x$ ]]; then
+            FINAL_TAGS="${IMAGE}:beta-${EPOCH},${IMAGE}:${VERSION}-beta"
+            SOURCE_TAG="${VERSION}-beta"
+          else
+            FINAL_TAGS="${IMAGE}:alpha-${EPOCH}"
+            SOURCE_TAG="alpha-${EPOCH}"
+          fi
+
+          # Create manifest list from arch-specific images
+          docker buildx imagetools create \
+            -t "${FINAL_TAGS}" \
+            "${IMAGE}:${SOURCE_TAG}-linux-amd64" \
+            "${IMAGE}:${SOURCE_TAG}-linux-arm64"
 
   # Build native client binaries
   build-native-client:
@@ -462,24 +500,24 @@ jobs:
             goos: darwin
             goarch: arm64
             binary_suffix: ""
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Read version from .version file
       id: version
       shell: bash
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Set up Go
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
       with:
         go-version: 1.24
 
     - name: Cache Go modules
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
@@ -494,30 +532,33 @@ jobs:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
         CGO_ENABLED: 0
+        VERSION_VAR: ${{ steps.version.outputs.version }}
+        GIT_COMMIT_VAR: ${{ github.sha }}
+        RUN_ID: ${{ github.run_id }}
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_NUMBER: ${{ github.event.number }}
       shell: bash
       run: |
         cd clients/native
-        VERSION="${{ steps.version.outputs.version }}"
         if [ "${{ runner.os }}" = "Windows" ]; then
           BUILD_TIME=$(powershell -Command "Get-Date -UFormat '%Y-%m-%d_%H:%M:%S'")
         else
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
         fi
-        GIT_COMMIT="${{ github.sha }}"
 
         mkdir -p build
 
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}-pr${{ github.event.number }}${{ matrix.binary_suffix }}"
+        if [ "${EVENT_NAME}" = "pull_request" ]; then
+          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION_VAR}-pr${EVENT_NUMBER}${{ matrix.binary_suffix }}"
         else
-          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}${{ matrix.binary_suffix }}"
+          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION_VAR}${{ matrix.binary_suffix }}"
         fi
 
-        go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-          -o build/${BINARY_NAME} ./cmd/headless
+        go build -ldflags="-X main.version=${VERSION_VAR} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT_VAR} -w -s" \
+          -o build/"${BINARY_NAME}" ./cmd/headless
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
       with:
         name: native-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
@@ -526,16 +567,16 @@ jobs:
   # Create release (only on tags)
   create-release:
     if: github.event_name == 'release'
-    needs: [build-images, build-native-client]
+    needs: [build-platform, merge-manifests, build-native-client]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Download all artifacts
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
       with:
         path: ./artifacts
 
@@ -557,7 +598,7 @@ jobs:
         done
 
     - name: Upload release assets
-      uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
+      uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3
       with:
         files: release-packages/*
         generate_release_notes: true
@@ -565,7 +606,7 @@ jobs:
 
   # Integration tests
   integration-test:
-    needs: [build-images]
+    needs: [build-platform, merge-manifests]
     runs-on: ubuntu-24.04
     services:
       redis:
@@ -577,9 +618,9 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-    
+
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
     - name: Set up Docker Compose
       run: |
@@ -592,7 +633,7 @@ jobs:
         # Run basic connectivity tests
         echo "Integration tests would run here..."
         echo "This is a placeholder for actual integration test implementation"
-        
+
         # Run basic connectivity tests
         echo "Integration tests would run here..."
         echo "This is a placeholder for actual integration test implementation"

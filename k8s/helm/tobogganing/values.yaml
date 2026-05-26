@@ -156,7 +156,7 @@ redis:
 
 ## Ingress
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -176,6 +176,14 @@ ingress:
     - secretName: tobogganing-tls
       hosts:
         - tobogganing.penguintech.io
+
+## HTTPRoute (Cilium Gateway API)
+httproute:
+  enabled: false
+  gatewayName: shared
+  gatewayNamespace: gateway
+  host: ""
+  rules: []
 
 ## Autoscaling
 autoscaling:
