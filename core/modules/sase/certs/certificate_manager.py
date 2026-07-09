@@ -27,11 +27,12 @@ logger = structlog.get_logger()
 
 @dataclass(slots=True)
 class WireGuardPeer:
-    """Represents a WireGuard peer."""
+    """Represents a WireGuard peer with tenant isolation."""
 
     node_id: str
     public_key: str
     ip_address: str
+    tenant_id: str = "default"
 
 
 class CertificateManager:
@@ -285,7 +286,9 @@ class CertificateManager:
                 "not_after": None,
             }
 
-    async def generate_wireguard_keys(self, node_id: str, node_type: str) -> Dict[str, str]:
+    async def generate_wireguard_keys(
+        self, node_id: str, node_type: str, tenant_id: str = "default"
+    ) -> Dict[str, str]:
         """
         Generate WireGuard key pair for a node.
 
@@ -295,6 +298,7 @@ class CertificateManager:
         Args:
             node_id: Unique identifier for the node.
             node_type: Type of node (for reference, not used in key generation).
+            tenant_id: Tenant identifier for multi-tenancy isolation.
 
         Returns:
             Dictionary containing:
@@ -324,11 +328,12 @@ class CertificateManager:
             # Allocate IP address
             ip_address = self._allocate_ip(node_id)
 
-            # Store peer information
+            # Store peer information (keyed by node_id for simplicity; tenant in peer)
             self._peers[node_id] = WireGuardPeer(
                 node_id=node_id,
                 public_key=public_key_b64,
                 ip_address=ip_address,
+                tenant_id=tenant_id,
             )
 
             return {
@@ -425,12 +430,17 @@ class CertificateManager:
             logger.error("Failed to generate client certificate", client_id=client_id, error=str(e))
             raise
 
-    async def get_all_wireguard_peers(self) -> List[Dict[str, str]]:
+    async def get_all_wireguard_peers(
+        self, tenant_id: str = "default"
+    ) -> List[Dict[str, str]]:
         """
-        Get all currently-known WireGuard peers.
+        Get WireGuard peers for a specific tenant.
+
+        Args:
+            tenant_id: Tenant identifier to filter peers.
 
         Returns:
-            List of peer dictionaries with node_id, public_key, and ip_address.
+            List of peer dictionaries for the tenant (node_id, public_key, ip_address).
         """
         return [
             {
@@ -439,22 +449,33 @@ class CertificateManager:
                 "ip_address": peer.ip_address,
             }
             for peer in self._peers.values()
+            if peer.tenant_id == tenant_id
         ]
 
-    async def revoke_wireguard_keys(self, node_id: str) -> bool:
+    async def revoke_wireguard_keys(
+        self, node_id: str, tenant_id: str = "default"
+    ) -> bool:
         """
-        Revoke WireGuard keys for a node.
+        Revoke WireGuard keys for a node in a specific tenant.
 
         Args:
             node_id: Node identifier to revoke.
+            tenant_id: Tenant identifier for isolation.
 
         Returns:
-            True if the node existed and was removed, False otherwise.
+            True if the node existed in the tenant and was removed, False otherwise.
         """
         if node_id in self._peers:
-            del self._peers[node_id]
-            logger.info("Revoked WireGuard keys", node_id=node_id)
-            return True
+            peer = self._peers[node_id]
+            # Only allow revocation if the node belongs to the specified tenant
+            if peer.tenant_id == tenant_id:
+                del self._peers[node_id]
+                logger.info(
+                    "Revoked WireGuard keys",
+                    node_id=node_id,
+                    tenant_id=tenant_id,
+                )
+                return True
         return False
 
     async def get_wireguard_config(self, cluster_id: str) -> Dict[str, any]:
