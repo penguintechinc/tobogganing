@@ -200,17 +200,21 @@ class UserManager:
             )
             raise
 
-    async def validate_session(self, token: str) -> User | None:
+    async def validate_session(self, token: str, tenant: str) -> User | None:
         """Validate session and return user if valid.
 
         Args:
             token: Session token to validate.
+            tenant: Tenant ID for scoping (cross-tenant isolation).
 
         Returns:
             User object if session is valid, None otherwise.
         """
         try:
-            rowset = await self.db(self.db.sessions.token == token).select()
+            rowset = await self.db(
+                self.db.sessions.token == token,
+                self.db.sessions.tenant == tenant,
+            ).select()
             session_row = rowset.first()
 
             if not session_row:
@@ -259,17 +263,21 @@ class UserManager:
             )
             return None
 
-    async def logout(self, token: str) -> bool:
+    async def logout(self, token: str, tenant: str) -> bool:
         """Invalidate session (logout).
 
         Args:
             token: Session token to invalidate.
+            tenant: Tenant ID for scoping (cross-tenant isolation).
 
         Returns:
             True if logout successful, False otherwise.
         """
         try:
-            rowset = await self.db(self.db.sessions.token == token).select()
+            rowset = await self.db(
+                self.db.sessions.token == token,
+                self.db.sessions.tenant == tenant,
+            ).select()
             session_row = rowset.first()
 
             if not session_row:

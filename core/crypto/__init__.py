@@ -1,5 +1,4 @@
-"""Cryptographic key providers for RS256 JWT signing."""
-
+"""Cryptographic utilities for core module."""
 from core.crypto.keys import (
     KeyProvider,
     InAppKeyProvider,
@@ -8,6 +7,7 @@ from core.crypto.keys import (
     build_key_provider,
     generate_rsa_key_pair,
 )
+from core.crypto.secrets import decrypt_secret, encrypt_secret
 
 __all__ = [
     "KeyProvider",
@@ -16,4 +16,6 @@ __all__ = [
     "GcpKmsKeyProvider",
     "build_key_provider",
     "generate_rsa_key_pair",
+    "encrypt_secret",
+    "decrypt_secret",
 ]

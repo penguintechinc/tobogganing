@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UUID
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UUID, UniqueConstraint
 from sqlalchemy.sql import func
 
 from core.db.base import Base
@@ -21,8 +21,8 @@ class User(Base):
         default=lambda: str(uuid4()),
         nullable=False,
     )
-    email: Column[str] = Column(String(255), unique=True, nullable=False, index=True)
-    username: Column[str] = Column(String(255), unique=True, nullable=False, index=True)
+    email: Column[str] = Column(String(255), nullable=False, index=True)
+    username: Column[str] = Column(String(255), nullable=False, index=True)
     password_hash: Column[str] = Column(String(255), nullable=False)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
     mfa_enabled: Column[bool] = Column(Boolean, default=False, nullable=False)
@@ -36,6 +36,11 @@ class User(Base):
     )
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "email", name="uq_users_tenant_email"),
+        UniqueConstraint("tenant", "username", name="uq_users_tenant_username"),
     )
 
     def __repr__(self) -> str:
@@ -170,7 +175,7 @@ class VRF(Base):
         nullable=False,
     )
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
-    name: Column[str] = Column(String(255), nullable=False, unique=True, index=True)
+    name: Column[str] = Column(String(255), nullable=False, index=True)
     description: Column[str | None] = Column(Text, nullable=True)
     rd: Column[str] = Column(String(50), nullable=False)  # Route Distinguisher
     rt_import: Column[str | None] = Column(Text, nullable=True)  # JSON array
@@ -185,6 +190,10 @@ class VRF(Base):
     )
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "name", name="uq_vrfs_tenant_name"),
     )
 
     def __repr__(self) -> str:
@@ -220,6 +229,10 @@ class OSPFArea(Base):
     )
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "vrf_id", "area_id", name="uq_ospf_areas_tenant_vrf_area"),
     )
 
     def __repr__(self) -> str:

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from core.auth.jwt import decode_token, encode_access_token
 from core.config import Config
 from core.crypto.keys import KeyProvider
+from core.crypto.secrets import decrypt_secret, encrypt_secret
 
 if TYPE_CHECKING:
     from penguin_dal import DB
@@ -111,8 +112,13 @@ class AuthService:
                     ).hexdigest()
                     return AuthResult(mfa_required=True, mfa_token=mfa_tok)
 
-                # Verify TOTP token
-                totp = pyotp.TOTP(user.mfa_secret)
+                # Decrypt and verify TOTP token
+                try:
+                    decrypted_secret = decrypt_secret(user.mfa_secret)
+                except ValueError as e:
+                    return AuthResult(success=False, error=f"MFA verification error: {e}")
+
+                totp = pyotp.TOTP(decrypted_secret)
                 if not totp.verify(mfa_token):
                     return AuthResult(success=False, error="Invalid MFA token")
 
@@ -234,10 +240,13 @@ class AuthService:
             if not user:
                 return False
 
+            # Encrypt secret before storing
+            encrypted_secret = encrypt_secret(secret)
+
             self.db.users.update(
                 id=user_id,
                 mfa_enabled=True,
-                mfa_secret=secret,
+                mfa_secret=encrypted_secret,
             )
             return True
         except Exception:

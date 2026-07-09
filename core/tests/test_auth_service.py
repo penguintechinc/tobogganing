@@ -378,3 +378,118 @@ class TestAuthServiceDisableMFA:
 
         assert success is True
         mock_db_for_auth.users.update.assert_called()
+
+
+def test_verify_and_enable_mfa_stores_encrypted_secret(
+    mock_db_for_auth: MagicMock, test_config: Config, key_provider: Any
+) -> None:
+    """Test that verify_and_enable_mfa encrypts the secret before storing."""
+    service = AuthService(mock_db_for_auth, test_config, key_provider)
+
+    user_id = "test-user-123"
+    secret = pyotp.random_base32()  # Generate a real TOTP secret
+    totp = pyotp.TOTP(secret)
+    mfa_token = totp.now()
+
+    # Mock user lookup
+    user_row = make_mock_row({"id": user_id})
+    mock_db_for_auth.users.select = MagicMock(return_value=user_row)
+    mock_db_for_auth.users.update = MagicMock(return_value=None)
+
+    result = service.verify_and_enable_mfa(user_id, secret, mfa_token)
+
+    assert result is True
+
+    # Verify that update was called with mfa_enabled=True
+    mock_db_for_auth.users.update.assert_called_once()
+    call_kwargs = mock_db_for_auth.users.update.call_args[1]
+
+    # The stored secret should be encrypted (not plaintext)
+    stored_secret = call_kwargs["mfa_secret"]
+    assert stored_secret != secret, "Secret should be encrypted, not plaintext"
+    assert call_kwargs["mfa_enabled"] is True
+
+
+def test_authenticate_with_mfa_decrypts_secret(
+    mock_db_for_auth: MagicMock, test_config: Config, key_provider: Any
+) -> None:
+    """Test that authenticate decrypts the MFA secret for verification."""
+    from core.crypto.secrets import encrypt_secret
+
+    service = AuthService(mock_db_for_auth, test_config, key_provider)
+
+    # Generate a real TOTP secret and encrypt it
+    plaintext_secret = pyotp.random_base32()
+    encrypted_secret = encrypt_secret(plaintext_secret)
+
+    # Generate a valid MFA token
+    totp = pyotp.TOTP(plaintext_secret)
+    valid_mfa_token = totp.now()
+
+    password = "test-password"
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
+
+    # Mock user with encrypted MFA secret
+    user_row = make_mock_row(
+        {
+            "id": "user-123",
+            "email": "test@example.com",
+            "password_hash": password_hash,
+            "is_active": True,
+            "mfa_enabled": True,
+            "mfa_secret": encrypted_secret,
+            "role": "admin",
+            "tenant": "test-tenant",
+        }
+    )
+
+    mock_db_for_auth.users.select = MagicMock(return_value=user_row)
+    mock_db_for_auth.refresh_tokens = MagicMock()
+
+    result = service.authenticate("test@example.com", password, mfa_token=valid_mfa_token)
+
+    # Should successfully authenticate with valid MFA token
+    assert result.success is True
+    assert result.access_token is not None
+
+
+def test_authenticate_with_mfa_rejects_invalid_token(
+    mock_db_for_auth: MagicMock, test_config: Config, key_provider: Any
+) -> None:
+    """Test that authenticate rejects invalid MFA tokens."""
+    from core.crypto.secrets import encrypt_secret
+
+    service = AuthService(mock_db_for_auth, test_config, key_provider)
+
+    # Encrypt a secret
+    plaintext_secret = pyotp.random_base32()
+    encrypted_secret = encrypt_secret(plaintext_secret)
+
+    password = "test-password"
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
+
+    user_row = make_mock_row(
+        {
+            "id": "user-123",
+            "email": "test@example.com",
+            "password_hash": password_hash,
+            "is_active": True,
+            "mfa_enabled": True,
+            "mfa_secret": encrypted_secret,
+            "role": "admin",
+            "tenant": "test-tenant",
+        }
+    )
+
+    mock_db_for_auth.users.select = MagicMock(return_value=user_row)
+
+    # Attempt auth with invalid MFA token
+    result = service.authenticate("test@example.com", password, mfa_token="000000")
+
+    # Should fail with invalid MFA token
+    assert result.success is False
+    assert "Invalid MFA token" in result.error

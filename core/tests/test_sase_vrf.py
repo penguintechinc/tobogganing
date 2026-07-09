@@ -365,3 +365,105 @@ def test_validate_rd_invalid_format() -> None:
     assert VRFManager._validate_rd("invalid") is False
     assert VRFManager._validate_rd("65001:99999") is False
     assert VRFManager._validate_rd("999999999999:100") is False
+
+
+def test_validate_frr_name_valid() -> None:
+    """Test FRR name validation with valid names."""
+    VRFManager._validate_frr_name("test-vrf")
+    VRFManager._validate_frr_name("vrf_123")
+    VRFManager._validate_frr_name("PROD")
+
+
+def test_validate_frr_name_invalid_newline() -> None:
+    """Test FRR name validation rejects newlines (config injection)."""
+    import pytest
+
+    with pytest.raises(ValueError, match="forbidden characters"):
+        VRFManager._validate_frr_name("test\nvrf")
+
+
+def test_validate_frr_name_invalid_space() -> None:
+    """Test FRR name validation rejects spaces (config injection)."""
+    import pytest
+
+    with pytest.raises(ValueError, match="forbidden characters"):
+        VRFManager._validate_frr_name("test vrf")
+
+
+def test_validate_frr_text_valid() -> None:
+    """Test FRR text validation with valid text."""
+    VRFManager._validate_frr_text("This is a description")
+    VRFManager._validate_frr_text("192.168.1.1")
+
+
+def test_validate_frr_text_invalid_newline() -> None:
+    """Test FRR text validation rejects newlines (config injection)."""
+    import pytest
+
+    with pytest.raises(ValueError, match="forbidden characters"):
+        VRFManager._validate_frr_text("description\nrouter ospf")
+
+
+def test_validate_frr_text_invalid_control_char() -> None:
+    """Test FRR text validation rejects control characters."""
+    import pytest
+
+    with pytest.raises(ValueError, match="forbidden characters"):
+        VRFManager._validate_frr_text("text\x00with\x01control")
+
+
+def test_validate_frr_route_target_valid() -> None:
+    """Test FRR route target validation with valid formats."""
+    VRFManager._validate_frr_route_target("65001:100")
+    VRFManager._validate_frr_route_target("192.168.1.1:100")
+
+
+def test_validate_frr_route_target_invalid() -> None:
+    """Test FRR route target validation with invalid formats."""
+    import pytest
+
+    with pytest.raises(ValueError, match="Invalid route target"):
+        VRFManager._validate_frr_route_target("invalid")
+    
+    with pytest.raises(ValueError, match="Invalid route target"):
+        VRFManager._validate_frr_route_target("65001:100:extra")
+
+
+def test_validate_frr_area_id_valid() -> None:
+    """Test OSPF area ID validation with valid formats."""
+    VRFManager._validate_frr_area_id("0")
+    VRFManager._validate_frr_area_id("0.0.0.0")
+    VRFManager._validate_frr_area_id("1.2.3.4")
+
+
+def test_validate_frr_area_id_invalid() -> None:
+    """Test OSPF area ID validation with invalid formats."""
+    import pytest
+
+    with pytest.raises(ValueError, match="Invalid OSPF area"):
+        VRFManager._validate_frr_area_id("256.1.1.1")
+    
+    with pytest.raises(ValueError, match="Invalid OSPF area"):
+        VRFManager._validate_frr_area_id("invalid")
+
+
+def test_validate_frr_network_valid() -> None:
+    """Test network CIDR validation with valid networks."""
+    VRFManager._validate_frr_network("10.0.0.0/8")
+    VRFManager._validate_frr_network("192.168.0.0/16")
+
+
+def test_validate_frr_network_invalid_newline() -> None:
+    """Test network CIDR validation rejects newlines (config injection)."""
+    import pytest
+
+    with pytest.raises(ValueError, match="forbidden characters"):
+        VRFManager._validate_frr_network("10.0.0.0/8\nrouter ospf")
+
+
+def test_validate_frr_network_invalid_cidr() -> None:
+    """Test network CIDR validation rejects invalid CIDR."""
+    import pytest
+
+    with pytest.raises(ValueError, match="Invalid network CIDR"):
+        VRFManager._validate_frr_network("256.1.1.1/8")

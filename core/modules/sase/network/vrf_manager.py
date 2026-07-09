@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -399,11 +401,21 @@ class VRFManager:
 
         Returns:
             FRR configuration string.
+
+        Raises:
+            ValueError: If any input fails validation (injection attempt).
         """
         try:
             vrf = await self.get_vrf(vrf_id, tenant)
             if not vrf:
                 return ""
+
+            # Validate all user-controlled fields before interpolating into config
+            self._validate_frr_name(vrf.name)
+            self._validate_frr_text(vrf.description or "")
+            self._validate_frr_text(vrf.ospf_router_id or "")
+            for rt in vrf.rt_import + vrf.rt_export:
+                self._validate_frr_route_target(rt)
 
             config_lines = [
                 "! FRR Configuration for VRF: " + vrf.name,
@@ -439,8 +451,11 @@ class VRFManager:
                 ).select()
 
                 for area_row in areas:
+                    # Validate area_id and networks before use
+                    self._validate_frr_area_id(area_row.area_id)
                     networks = json.loads(area_row.networks) if area_row.networks else []
                     for network in networks:
+                        self._validate_frr_network(network)
                         config_lines.append(f" network {network} area {area_row.area_id}")
 
                 config_lines.append(" exit")
@@ -448,11 +463,102 @@ class VRFManager:
 
             return "\n".join(config_lines)
 
+        except ValueError as e:
+            logger.error(
+                "frr_config_validation_error", vrf_id=vrf_id, error=str(e)
+            )
+            raise
         except Exception as e:
             logger.error(
                 "failed_to_generate_frr_config", vrf_id=vrf_id, error=str(e)
             )
             return ""
+
+    @staticmethod
+    def _validate_frr_name(name: str) -> None:
+        """Validate FRR VRF name (alphanumeric, dash, underscore only).
+
+        Args:
+            name: VRF name to validate.
+
+        Raises:
+            ValueError: If name contains invalid characters.
+        """
+        if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+            raise ValueError(f"Invalid VRF name: contains forbidden characters: {name}")
+
+    @staticmethod
+    def _validate_frr_text(text: str) -> None:
+        """Validate FRR text field (reject newlines, control chars).
+
+        Args:
+            text: Text to validate.
+
+        Raises:
+            ValueError: If text contains newlines or control characters.
+        """
+        if "\n" in text or "\r" in text or any(
+            unicodedata.category(c) == "Cc" for c in text
+        ):
+            raise ValueError("FRR text field contains forbidden characters (newline/control)")
+
+    @staticmethod
+    def _validate_frr_route_target(rt: str) -> None:
+        """Validate FRR route target (ASN:value or IP:value).
+
+        Args:
+            rt: Route target string.
+
+        Raises:
+            ValueError: If format is invalid.
+        """
+        if not re.match(r"^([0-9]+|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}):[0-9]+$", rt):
+            raise ValueError(f"Invalid route target format: {rt}")
+
+    @staticmethod
+    def _validate_frr_area_id(area_id: str) -> None:
+        """Validate OSPF area ID (numeric or IP format).
+
+        Args:
+            area_id: Area ID to validate.
+
+        Raises:
+            ValueError: If format is invalid.
+        """
+        # Area ID can be numeric (0-4294967295) or dotted decimal IP format
+        if "." in area_id:
+            # IP format validation
+            try:
+                ipaddress.ip_address(area_id)
+            except ValueError:
+                raise ValueError(f"Invalid OSPF area ID (IP format): {area_id}")
+        else:
+            # Numeric format validation
+            try:
+                num = int(area_id)
+                if not (0 <= num <= 4294967295):
+                    raise ValueError(f"Invalid OSPF area ID: {area_id} (out of range)")
+            except ValueError:
+                raise ValueError(f"Invalid OSPF area ID: {area_id}")
+
+    @staticmethod
+    def _validate_frr_network(network: str) -> None:
+        """Validate network CIDR (reject control chars, newlines).
+
+        Args:
+            network: Network CIDR to validate.
+
+        Raises:
+            ValueError: If invalid or contains forbidden characters.
+        """
+        if "\n" in network or "\r" in network or any(
+            unicodedata.category(c) == "Cc" for c in network
+        ):
+            raise ValueError("Network contains forbidden characters")
+        try:
+            ipaddress.ip_network(network, strict=False)
+        except ValueError as e:
+            raise ValueError(f"Invalid network CIDR: {network}: {e}")
 
     @staticmethod
     def _validate_rd(rd: str) -> bool:
