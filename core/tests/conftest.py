@@ -162,3 +162,49 @@ def client(app: Quart) -> Any:
         Async test client.
     """
     return app.test_client()
+
+
+@pytest.fixture
+def test_db_session() -> Any:
+    """Provide a SQLAlchemy session for database tests.
+
+    Creates an in-memory SQLite database with all migrations applied.
+
+    Yields:
+        SQLAlchemy session for database operations.
+    """
+    import tempfile
+    from pathlib import Path
+
+    import sqlalchemy as sa
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+    from sqlalchemy.orm import sessionmaker
+
+    # Create a temporary SQLite database
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        db_uri = f"sqlite:///{db_path}"
+
+        # Create an Alembic config pointing to the temp DB
+        alembic_ini_path = Path(__file__).parent.parent / "alembic.ini"
+        alembic_cfg = AlembicConfig(str(alembic_ini_path))
+        alembic_cfg.set_main_option("sqlalchemy.url", db_uri)
+
+        # Set the script location to the migrations directory
+        migrations_dir = Path(__file__).parent.parent / "migrations"
+        alembic_cfg.set_main_option("script_location", str(migrations_dir))
+
+        # Run migrations to create schema
+        command.upgrade(alembic_cfg, "head")
+
+        # Create engine and session
+        engine = sa.create_engine(db_uri)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+
+        yield session
+
+        # Cleanup
+        session.close()
+        engine.dispose()

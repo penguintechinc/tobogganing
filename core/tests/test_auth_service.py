@@ -208,6 +208,8 @@ class TestAuthServiceAuthenticate:
         key_provider: InAppKeyProvider,
     ) -> None:
         """Test authentication with MFA enabled and valid TOTP token."""
+        from core.crypto.secrets import encrypt_secret
+
         password = "password123"
         password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -216,6 +218,9 @@ class TestAuthServiceAuthenticate:
         totp = pyotp.TOTP(secret)
         current_token = totp.now()
 
+        # Encrypt the secret as it would be stored in the database
+        encrypted_secret = encrypt_secret(secret)
+
         user = make_mock_row({
             "id": "user123",
             "email": "test@example.com",
@@ -223,7 +228,7 @@ class TestAuthServiceAuthenticate:
             "password_hash": password_hash,
             "is_active": True,
             "mfa_enabled": True,
-            "mfa_secret": secret,
+            "mfa_secret": encrypted_secret,
             "tenant": "tenant1",
             "role": "admin",
             "teams": ["team1"],
@@ -442,11 +447,13 @@ def test_authenticate_with_mfa_decrypts_secret(
             "mfa_secret": encrypted_secret,
             "role": "admin",
             "tenant": "test-tenant",
+            "teams": ["team1"],
         }
     )
 
-    mock_db_for_auth.users.select = MagicMock(return_value=user_row)
-    mock_db_for_auth.refresh_tokens = MagicMock()
+    users_rowset = make_mock_rowset([user_row])
+    mock_db_for_auth.users.select = MagicMock(return_value=users_rowset)
+    mock_db_for_auth.refresh_tokens.insert = MagicMock(return_value=1)
 
     result = service.authenticate("test@example.com", password, mfa_token=valid_mfa_token)
 
@@ -482,10 +489,12 @@ def test_authenticate_with_mfa_rejects_invalid_token(
             "mfa_secret": encrypted_secret,
             "role": "admin",
             "tenant": "test-tenant",
+            "teams": ["team1"],
         }
     )
 
-    mock_db_for_auth.users.select = MagicMock(return_value=user_row)
+    users_rowset = make_mock_rowset([user_row])
+    mock_db_for_auth.users.select = MagicMock(return_value=users_rowset)
 
     # Attempt auth with invalid MFA token
     result = service.authenticate("test@example.com", password, mfa_token="000000")

@@ -18,53 +18,110 @@ depends_on = None
 
 def upgrade() -> None:
     """Add per-tenant uniqueness constraints to users, vrfs, and ospf_areas."""
-    # Drop old global unique indexes on users table
-    op.drop_index("ix_users_email", table_name="users", if_exists=True)
-    op.drop_index("ix_users_username", table_name="users", if_exists=True)
+    # SQLite requires batch mode for constraint changes
+    with op.batch_alter_table("users", schema=None) as batch_op:
+        # Drop old global unique constraints on users table
+        try:
+            batch_op.drop_constraint("uq_users_email", type_="unique")
+        except Exception:
+            pass
+        try:
+            batch_op.drop_constraint("uq_users_username", type_="unique")
+        except Exception:
+            pass
 
-    # Add new per-tenant unique constraints on users
-    op.create_unique_constraint(
-        "uq_users_tenant_email", "users", ["tenant", "email"]
-    )
-    op.create_unique_constraint(
-        "uq_users_tenant_username", "users", ["tenant", "username"]
-    )
+        # Drop old indexes (will be recreated as non-unique)
+        try:
+            batch_op.drop_index("ix_users_email")
+        except Exception:
+            pass
+        try:
+            batch_op.drop_index("ix_users_username")
+        except Exception:
+            pass
 
-    # Recreate indexes (non-unique)
-    op.create_index("ix_users_email", "users", ["email"], unique=False)
-    op.create_index("ix_users_username", "users", ["username"], unique=False)
+        # Add new per-tenant unique constraints on users
+        batch_op.create_unique_constraint(
+            "uq_users_tenant_email", ["tenant", "email"]
+        )
+        batch_op.create_unique_constraint(
+            "uq_users_tenant_username", ["tenant", "username"]
+        )
 
-    # Drop old global unique index on vrfs table
-    op.drop_index("ix_vrfs_name", table_name="vrfs", if_exists=True)
+        # Recreate indexes (non-unique)
+        batch_op.create_index("ix_users_email", ["email"], unique=False)
+        batch_op.create_index("ix_users_username", ["username"], unique=False)
 
-    # Add per-tenant unique constraint on vrfs
-    op.create_unique_constraint(
-        "uq_vrfs_tenant_name", "vrfs", ["tenant", "name"]
-    )
+    with op.batch_alter_table("vrfs", schema=None) as batch_op:
+        # Drop old global unique constraint on vrfs table
+        try:
+            batch_op.drop_constraint("uq_vrfs_name", type_="unique")
+        except Exception:
+            pass
 
-    # Recreate index (non-unique)
-    op.create_index("ix_vrfs_name", "vrfs", ["name"], unique=False)
+        # Drop old index (will be recreated as non-unique)
+        try:
+            batch_op.drop_index("ix_vrfs_name")
+        except Exception:
+            pass
 
-    # Add per-tenant uniqueness constraint on ospf_areas
-    op.create_unique_constraint(
-        "uq_ospf_areas_tenant_vrf_area", "ospf_areas", ["tenant", "vrf_id", "area_id"]
-    )
+        # Add per-tenant unique constraint on vrfs
+        batch_op.create_unique_constraint(
+            "uq_vrfs_tenant_name", ["tenant", "name"]
+        )
+
+        # Recreate index (non-unique)
+        batch_op.create_index("ix_vrfs_name", ["name"], unique=False)
+
+    with op.batch_alter_table("ospf_areas", schema=None) as batch_op:
+        # Add per-tenant uniqueness constraint on ospf_areas
+        batch_op.create_unique_constraint(
+            "uq_ospf_areas_tenant_vrf_area", ["tenant", "vrf_id", "area_id"]
+        )
 
 
 def downgrade() -> None:
     """Revert per-tenant uniqueness constraints."""
-    # Drop per-tenant unique constraints
-    op.drop_constraint("uq_ospf_areas_tenant_vrf_area", "ospf_areas", type_="unique")
-    op.drop_constraint("uq_vrfs_tenant_name", "vrfs", type_="unique")
-    op.drop_constraint("uq_users_tenant_email", "users", type_="unique")
-    op.drop_constraint("uq_users_tenant_username", "users", type_="unique")
+    with op.batch_alter_table("ospf_areas", schema=None) as batch_op:
+        # Drop per-tenant uniqueness constraint on ospf_areas
+        try:
+            batch_op.drop_constraint("uq_ospf_areas_tenant_vrf_area", type_="unique")
+        except Exception:
+            pass
 
-    # Restore old global unique indexes on users (if not already present)
-    op.drop_index("ix_users_email", table_name="users", if_exists=True)
-    op.drop_index("ix_users_username", table_name="users", if_exists=True)
-    op.create_unique_constraint("uq_users_email", "users", ["email"])
-    op.create_unique_constraint("uq_users_username", "users", ["username"])
+    with op.batch_alter_table("vrfs", schema=None) as batch_op:
+        # Drop per-tenant unique constraint on vrfs
+        try:
+            batch_op.drop_constraint("uq_vrfs_tenant_name", type_="unique")
+        except Exception:
+            pass
 
-    # Restore old global unique index on vrfs (if not already present)
-    op.drop_index("ix_vrfs_name", table_name="vrfs", if_exists=True)
-    op.create_unique_constraint("uq_vrfs_name", "vrfs", ["name"])
+        # Restore old global unique constraint on vrfs
+        try:
+            batch_op.drop_index("ix_vrfs_name")
+        except Exception:
+            pass
+        batch_op.create_unique_constraint("uq_vrfs_name", ["name"])
+
+    with op.batch_alter_table("users", schema=None) as batch_op:
+        # Drop per-tenant unique constraints on users
+        try:
+            batch_op.drop_constraint("uq_users_tenant_email", type_="unique")
+        except Exception:
+            pass
+        try:
+            batch_op.drop_constraint("uq_users_tenant_username", type_="unique")
+        except Exception:
+            pass
+
+        # Restore old global unique constraints on users
+        try:
+            batch_op.drop_index("ix_users_email")
+        except Exception:
+            pass
+        try:
+            batch_op.drop_index("ix_users_username")
+        except Exception:
+            pass
+        batch_op.create_unique_constraint("uq_users_email", ["email"])
+        batch_op.create_unique_constraint("uq_users_username", ["username"])

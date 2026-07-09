@@ -548,10 +548,20 @@ async def test_validate_session_with_tenant_isolation() -> None:
         }
     )
 
+    # Track which query is being made based on what fields are being accessed
+    call_count = 0
+
     def query_side_effect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
         query_proxy = MagicMock()
-        query_proxy.select = AsyncMock(return_value=make_mock_rowset([session_row]))
-        query_proxy.first = MagicMock(return_value=session_row)
+
+        # First call: sessions query; second call: users query
+        if call_count == 1:
+            query_proxy.select = AsyncMock(return_value=make_mock_rowset([session_row]))
+        else:
+            query_proxy.select = AsyncMock(return_value=make_mock_rowset([user_row]))
+
         return query_proxy
 
     db.side_effect = query_side_effect
@@ -562,6 +572,7 @@ async def test_validate_session_with_tenant_isolation() -> None:
     user = await manager.validate_session("abc123", "tenant-a")
     assert user is not None
     assert user.tenant == "tenant-a"
+    assert user.username == "testuser"
 
     # Verify that the session query was scoped to the correct tenant
     # The mock should have been called with both token and tenant filters
