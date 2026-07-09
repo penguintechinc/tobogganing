@@ -39,6 +39,7 @@ class ModuleRegistry:
         """Apply all registered modules to the Quart application.
 
         Registers blueprints under /api/v{major}/{name} paths and wires health checks.
+        Each blueprint's url_prefix is combined with the module prefix.
 
         Args:
             app: The Quart application instance.
@@ -47,8 +48,10 @@ class ModuleRegistry:
         for module_name, contract in self._modules.items():
             # Register blueprints under versioned API paths
             for blueprint in contract.blueprints:
-                api_prefix = f"/api/v{API_MAJOR}/{module_name}"
-                app.register_blueprint(blueprint, url_prefix=api_prefix)
+                module_prefix = f"/api/v{API_MAJOR}/{module_name}"
+                blueprint_prefix = blueprint.url_prefix or ""
+                combined = module_prefix + blueprint_prefix
+                app.register_blueprint(blueprint, url_prefix=combined)
 
     def declared_flags(self) -> list[str]:
         """Get all declared feature flags from registered modules.
