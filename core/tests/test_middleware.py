@@ -308,6 +308,178 @@ class TestRequireScope:
                 # Should return 403 for missing tenant, not 500
                 assert response[1] == 403
 
+    @pytest.mark.asyncio
+    async def test_require_scope_wildcard_action_satisfies(self, app_with_auth: Quart) -> None:
+        """Test that wildcard action scope (*:action) satisfies specific resource:action."""
+        provider = app_with_auth.config["KEY_PROVIDER"]
+
+        claims = {
+            "sub": "user123",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant1",
+            "scope": "*:read",  # Wildcard action
+        }
+
+        token = encode_access_token(claims, provider, ttl_hours=1)
+
+        @require_scope("clusters:read")  # Specific resource:action
+        async def handler() -> Any:
+            return jsonify({"success": True}), 200
+
+        async with app_with_auth.app_context():
+            async with app_with_auth.test_request_context(
+                "/test",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            ):
+                response = await handler()
+                assert response[1] == 200
+
+    @pytest.mark.asyncio
+    async def test_require_scope_wildcard_action_does_not_satisfy_different_action(
+        self, app_with_auth: Quart
+    ) -> None:
+        """Test that wildcard action (*:read) does NOT satisfy different action (*:write)."""
+        provider = app_with_auth.config["KEY_PROVIDER"]
+
+        claims = {
+            "sub": "user123",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant1",
+            "scope": "*:read",  # Only read action
+        }
+
+        token = encode_access_token(claims, provider, ttl_hours=1)
+
+        @require_scope("clusters:write")  # Requires write action
+        async def handler() -> Any:
+            return jsonify({"success": True}), 200
+
+        async with app_with_auth.app_context():
+            async with app_with_auth.test_request_context(
+                "/test",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            ):
+                response = await handler()
+                assert response[1] == 403
+
+    @pytest.mark.asyncio
+    async def test_require_scope_wildcard_resource_satisfies(self, app_with_auth: Quart) -> None:
+        """Test that wildcard resource scope (resource:*) satisfies specific resource:action."""
+        provider = app_with_auth.config["KEY_PROVIDER"]
+
+        claims = {
+            "sub": "user123",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant1",
+            "scope": "clusters:*",  # Wildcard resource
+        }
+
+        token = encode_access_token(claims, provider, ttl_hours=1)
+
+        @require_scope("clusters:read", "clusters:write")
+        async def handler() -> Any:
+            return jsonify({"success": True}), 200
+
+        async with app_with_auth.app_context():
+            async with app_with_auth.test_request_context(
+                "/test",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            ):
+                response = await handler()
+                assert response[1] == 200
+
+    @pytest.mark.asyncio
+    async def test_require_scope_wildcard_all_satisfies_everything(
+        self, app_with_auth: Quart
+    ) -> None:
+        """Test that wildcard all scope (*:*) satisfies any required scope."""
+        provider = app_with_auth.config["KEY_PROVIDER"]
+
+        claims = {
+            "sub": "user123",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant1",
+            "scope": "*:*",  # Wildcard all
+        }
+
+        token = encode_access_token(claims, provider, ttl_hours=1)
+
+        @require_scope("clusters:read", "pods:write", "nodes:admin")
+        async def handler() -> Any:
+            return jsonify({"success": True}), 200
+
+        async with app_with_auth.app_context():
+            async with app_with_auth.test_request_context(
+                "/test",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            ):
+                response = await handler()
+                assert response[1] == 200
+
+    @pytest.mark.asyncio
+    async def test_require_scope_exact_match_still_works(self, app_with_auth: Quart) -> None:
+        """Test that exact scope match still works (backward compatibility)."""
+        provider = app_with_auth.config["KEY_PROVIDER"]
+
+        claims = {
+            "sub": "user123",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant1",
+            "scope": "clusters:read clusters:write",  # Exact scopes
+        }
+
+        token = encode_access_token(claims, provider, ttl_hours=1)
+
+        @require_scope("clusters:read")
+        async def handler() -> Any:
+            return jsonify({"success": True}), 200
+
+        async with app_with_auth.app_context():
+            async with app_with_auth.test_request_context(
+                "/test",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            ):
+                response = await handler()
+                assert response[1] == 200
+
+    @pytest.mark.asyncio
+    async def test_require_scope_exact_match_missing_fails(self, app_with_auth: Quart) -> None:
+        """Test that missing exact scope match fails."""
+        provider = app_with_auth.config["KEY_PROVIDER"]
+
+        claims = {
+            "sub": "user123",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant1",
+            "scope": "clusters:read",  # Missing clusters:delete
+        }
+
+        token = encode_access_token(claims, provider, ttl_hours=1)
+
+        @require_scope("clusters:delete")
+        async def handler() -> Any:
+            return jsonify({"success": True}), 200
+
+        async with app_with_auth.app_context():
+            async with app_with_auth.test_request_context(
+                "/test",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            ):
+                response = await handler()
+                assert response[1] == 403
+
 
 class TestCurrentClaims:
     """Test the current_claims helper."""

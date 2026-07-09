@@ -10,6 +10,36 @@ from quart import current_app, g, jsonify, request
 from core.auth.jwt import decode_token
 
 
+def _scope_satisfied(required: str, granted: set[str]) -> bool:
+    """Check if a required scope is satisfied by granted scopes.
+
+    Supports exact match and wildcard patterns:
+    - Exact: 'resource:action'
+    - Wildcard resource: 'resource:*'
+    - Wildcard action: '*:action'
+    - Wildcard all: '*:*'
+
+    Args:
+        required: Required scope (e.g., 'clusters:read').
+        granted: Set of granted scopes from token.
+
+    Returns:
+        True if required scope is satisfied, False otherwise.
+    """
+    # Check if exactly present or wildcard all
+    if required in granted or "*:*" in granted:
+        return True
+
+    # Check wildcard patterns (must have ':' separator)
+    if ":" in required:
+        resource, action = required.split(":", 1)
+        # Check *:action or resource:*
+        return f"*:{action}" in granted or f"{resource}:*" in granted
+
+    # Invalid format (no colon)
+    return False
+
+
 def _extract_token_from_header() -> str | None:
     """Extract JWT token from Authorization header.
 
@@ -99,12 +129,18 @@ def require_tenant(func: Callable) -> Callable:
 def require_scope(*required_scopes: str) -> Callable:
     """Decorator to require specific scopes.
 
-    Returns 403 unless token's scope set contains all required scopes.
+    Returns 403 unless token's scope set satisfies all required scopes.
     Checks scopes only, never branches on role names.
+
+    Supports wildcard matching:
+    - Exact match: 'resource:action'
+    - Wildcard resource: 'resource:*'
+    - Wildcard action: '*:action'
+    - Wildcard all: '*:*'
 
     Args:
         required_scopes: Variable number of required scope strings.
-                        Each scope is checked as a substring of token scope.
+                        Each scope is matched with exact or wildcard patterns.
 
     Returns:
         Decorator function.
@@ -135,9 +171,9 @@ def require_scope(*required_scopes: str) -> Callable:
             # Parse token scopes (space-separated)
             token_scopes = set(token_scope.split())
 
-            # Verify all required scopes are present
+            # Verify all required scopes are satisfied
             for required_scope in required_scopes:
-                if required_scope not in token_scopes:
+                if not _scope_satisfied(required_scope, token_scopes):
                     return jsonify({"error": "Forbidden: insufficient privileges"}), 403
 
             # Call the original handler
