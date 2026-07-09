@@ -1,3 +1,3 @@
 """Modules package for Tobogganing Core."""
 
-__all__ = []
+__all__ = ["ping"]
