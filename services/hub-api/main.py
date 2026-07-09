@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import threading
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -9,6 +10,11 @@ import uvloop
 from py4web import action, request, response, abort, redirect, URL
 from py4web.core import app, Fixture
 import structlog
+
+# Add repo root to sys.path to allow imports from shared/
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from database import initialize_database, close_database
 from orchestrator.cluster_manager import ClusterManager

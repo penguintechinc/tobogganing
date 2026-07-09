@@ -336,8 +336,8 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     async def submit_client_metrics(client_id):
         try:
             # Check if metrics feature is licensed
-            from ..licensing import check_feature
-            if not check_feature('client_metrics'):
+            from shared.licensing.entitlements import feature_enabled
+            if not feature_enabled("waddleperf_client", "client_metrics", licensed=True):
                 response.status = 402  # Payment Required
                 return {
                     "error": "Feature not licensed",

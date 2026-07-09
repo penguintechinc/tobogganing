@@ -5,7 +5,7 @@ import pytest
 import asyncio
 from datetime import datetime, timedelta
 
-from manager.certs.certificate_manager import CertificateManager
+from certs.certificate_manager import CertificateManager
 
 
 class TestCertificateManager:
