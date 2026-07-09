@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UUID, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UUID, UniqueConstraint, JSON
 from sqlalchemy.sql import func
 
 from core.db.base import Base
@@ -307,6 +307,78 @@ class PortRange(Base):
         return f"<PortRange(id={self.id}, tenant={self.tenant}, headend_id={self.headend_id})>"
 
 
+class Cluster(Base):
+    """SASE cluster configurations."""
+
+    __tablename__ = "clusters"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    region: Column[str] = Column(String(100), nullable=False, index=True)
+    datacenter: Column[str] = Column(String(100), nullable=False, index=True)
+    headend_url: Column[str] = Column(String(500), nullable=False)
+    status: Column[str] = Column(String(50), default="active", nullable=False)
+    last_heartbeat: Column[datetime] = Column(DateTime, nullable=False)
+    client_count: Column[int] = Column(Integer, default=0, nullable=False)
+    metadata: Column[dict] = Column(JSON, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "id", name="uq_clusters_tenant_id"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<Cluster(id={self.id}, tenant={self.tenant}, region={self.region}, datacenter={self.datacenter})>"
+
+
+class Client(Base):
+    """SASE client configurations."""
+
+    __tablename__ = "clients"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    type: Column[str] = Column(String(50), nullable=False)  # docker, native
+    cluster_id: Column[str] = Column(String(255), nullable=False, index=True)
+    api_key_hash: Column[str] = Column(String(255), nullable=False, unique=True, index=True)
+    public_key: Column[str] = Column(Text, nullable=False)
+    ip_address: Column[str] = Column(String(50), nullable=False)
+    status: Column[str] = Column(String(50), default="pending", nullable=False)
+    metadata: Column[dict] = Column(JSON, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    last_seen: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "id", name="uq_clients_tenant_id"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<Client(id={self.id}, tenant={self.tenant}, type={self.type}, cluster_id={self.cluster_id})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -317,4 +389,6 @@ __all__ = [
     "OSPFArea",
     "OSPFNeighbor",
     "PortRange",
+    "Cluster",
+    "Client",
 ]
