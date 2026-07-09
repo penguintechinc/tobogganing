@@ -14,6 +14,7 @@ package main
 
 import (
     "context"
+    "crypto/subtle"
     "crypto/tls"
     "fmt"
     "net"
@@ -65,7 +66,7 @@ type TCPProxy struct {
     wgRouter        *WireGuardRouter
 }
 
-// UDPProxy handles raw UDP traffic with JWT authentication  
+// UDPProxy handles raw UDP traffic with JWT authentication
 type UDPProxy struct {
     conn            *net.UDPConn
     authProvider    auth.Provider
@@ -73,6 +74,14 @@ type UDPProxy struct {
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
     wgRouter        *WireGuardRouter
+}
+
+// tokensEqual is a constant-time comparison that always denies an empty expected token.
+func tokensEqual(got, expected string) bool {
+	if expected == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
 }
 
 func main() {
@@ -402,40 +411,33 @@ func (s *ProxyServer) healthzHandler(c *gin.Context) {
 func (s *ProxyServer) metricsHandler(c *gin.Context) {
     // Check authentication for metrics endpoint
     authHeader := c.GetHeader("Authorization")
-    
+
     if authHeader == "" {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
         return
     }
-    
+
     if strings.HasPrefix(authHeader, "Bearer ") {
-        // Check for Prometheus scraper token
         token := strings.TrimPrefix(authHeader, "Bearer ")
         expectedToken := viper.GetString("metrics.auth_token")
-        
-        if expectedToken == "" {
-            expectedToken = "prometheus-scraper-token" // Default token
-        }
-        
-        if token == expectedToken {
-            // Serve Prometheus metrics
+        if tokensEqual(token, expectedToken) {
             promhttp.Handler().ServeHTTP(c.Writer, c.Request)
             return
         }
     }
-    
+
     // Try JWT authentication for headend users
     if strings.HasPrefix(authHeader, "Bearer ") {
         token := strings.TrimPrefix(authHeader, "Bearer ")
         user, err := s.authProvider.ValidateToken(token)
-        
+
         if err == nil && user != nil {
             // Valid JWT token - allow access
             promhttp.Handler().ServeHTTP(c.Writer, c.Request)
             return
         }
     }
-    
+
     c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authentication"})
 }
 
@@ -532,6 +534,7 @@ func (s *ProxyServer) getOrCreateProxy(targetHost string) *httputil.ReverseProxy
     // Configure proxy
     proxy.Transport = &http.Transport{
         TLSClientConfig: &tls.Config{
+            MinVersion:         tls.VersionTLS12,
             InsecureSkipVerify: viper.GetBool("proxy.skip_tls_verify"),
         },
         MaxIdleConns:        100,
