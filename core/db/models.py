@@ -326,6 +326,7 @@ class Cluster(Base):
     status: Column[str] = Column(String(50), default="active", nullable=False)
     last_heartbeat: Column[datetime] = Column(DateTime, nullable=False)
     client_count: Column[int] = Column(Integer, default=0, nullable=False)
+    api_key_hash: Column[str | None] = Column(String(255), nullable=True, index=True)
     cluster_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
     created_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), nullable=False

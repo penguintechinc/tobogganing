@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -53,15 +56,18 @@ class ClusterManager:
         """Shutdown the ClusterManager."""
         logger.info("ClusterManager shutdown complete")
 
-    async def register_cluster(self, cluster_data: dict) -> Cluster:
-        """Register a new cluster.
+    async def register_cluster(self, cluster_data: dict) -> tuple[Cluster, str]:
+        """Register a new cluster and generate per-cluster API key.
 
         Args:
             cluster_data: Cluster data dictionary
 
         Returns:
-            Registered Cluster object
+            Tuple of (Cluster object, unencrypted API key)
         """
+        api_key = secrets.token_urlsafe(32)
+        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
         async with self._lock:
             cluster_obj = await asyncio.to_thread(
                 self.db.clusters.create,
@@ -74,6 +80,7 @@ class ClusterManager:
                 last_heartbeat=datetime.now(timezone.utc),
                 client_count=0,
                 tenant=self.tenant_id,
+                api_key_hash=api_key_hash,
                 metadata=cluster_data.get("metadata", {}),
             )
 
@@ -83,6 +90,64 @@ class ClusterManager:
                 region=cluster_obj.region,
                 datacenter=cluster_obj.datacenter,
                 tenant=self.tenant_id,
+            )
+
+            return (
+                Cluster(
+                    id=cluster_obj.id,
+                    name=cluster_obj.name,
+                    region=cluster_obj.region,
+                    datacenter=cluster_obj.datacenter,
+                    headend_url=cluster_obj.headend_url,
+                    status=cluster_obj.status,
+                    last_heartbeat=cluster_obj.last_heartbeat,
+                    client_count=cluster_obj.client_count,
+                    tenant=cluster_obj.tenant,
+                    metadata=cluster_obj.metadata,
+                ),
+                api_key,
+            )
+
+    async def authenticate_cluster(
+        self, api_key: str
+    ) -> Cluster | None:
+        """Authenticate a cluster by API key.
+
+        Args:
+            api_key: Unencrypted API key
+
+        Returns:
+            Cluster if authenticated, None otherwise
+        """
+        try:
+            api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+            # Look up by hash globally (key IS the identity)
+            cluster_obj = await asyncio.to_thread(
+                self.db.clusters.select,
+                api_key_hash=api_key_hash,
+            )
+
+            if not cluster_obj:
+                logger.warning(
+                    "Cluster authentication rejected: key not found",
+                    hash_prefix=api_key_hash[:8],
+                )
+                return None
+
+            # Use constant-time comparison for stored hash
+            if not hmac.compare_digest(cluster_obj.api_key_hash, api_key_hash):
+                logger.warning(
+                    "Cluster authentication rejected: hash mismatch",
+                    cluster_id=cluster_obj.id,
+                    tenant=cluster_obj.tenant,
+                )
+                return None
+
+            # Update last_heartbeat on successful auth
+            await asyncio.to_thread(
+                cluster_obj.update,
+                last_heartbeat=datetime.now(timezone.utc),
             )
 
             return Cluster(
@@ -97,6 +162,12 @@ class ClusterManager:
                 tenant=cluster_obj.tenant,
                 metadata=cluster_obj.metadata,
             )
+        except Exception as e:
+            logger.error(
+                "Cluster authentication error (fail closed)",
+                error=str(e),
+            )
+            return None
 
     async def update_heartbeat(
         self, cluster_id: str, client_count: int | None = None
