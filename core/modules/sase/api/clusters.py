@@ -114,8 +114,8 @@ async def register_cluster() -> tuple[dict[str, Any], int]:
                 402,
             )
 
-        # Register cluster
-        cluster_obj = await mgr.register_cluster(
+        # Register cluster and get per-cluster API key
+        cluster_obj, api_key = await mgr.register_cluster(
             {
                 "id": cluster_id,
                 "name": data["name"],
@@ -137,6 +137,7 @@ async def register_cluster() -> tuple[dict[str, Any], int]:
         return (
             {
                 "cluster_id": cluster_obj.id,
+                "api_key": api_key,
                 "status": "registered",
                 "meta": {
                     "version": 1,
@@ -155,7 +156,7 @@ async def register_cluster() -> tuple[dict[str, Any], int]:
 async def cluster_heartbeat(cluster_id: str) -> tuple[dict[str, Any], int]:
     """Update cluster heartbeat with client count.
 
-    Requires ENROLLMENT_BOOTSTRAP_TOKEN for Phase-0 enrollment.
+    Requires per-cluster API key authentication.
 
     Args:
         cluster_id: Cluster identifier.
@@ -164,25 +165,39 @@ async def cluster_heartbeat(cluster_id: str) -> tuple[dict[str, Any], int]:
         JSON response with status.
     """
     try:
-        # Phase-0: Verify bootstrap token
+        # Extract and authenticate using per-cluster API key
         token = _extract_bearer_token()
-        if not _verify_bootstrap_token(token):
-            return {"error": "Unauthorized: enrollment token required"}, 401
+        if not token:
+            return {"error": "Unauthorized: API key required"}, 401
+
+        db = get_db()
+
+        # Create a temporary manager to authenticate (key IS the identity)
+        mgr = ClusterManager(db, "")  # tenant will come from authenticated cluster
+        await mgr.initialize()
+
+        cluster = await mgr.authenticate_cluster(token)
+        if not cluster:
+            return {"error": "Authentication failed"}, 401
+
+        # Verify cluster_id matches authenticated cluster
+        if str(cluster.id) != str(cluster_id):
+            logger.warning(
+                "Cluster heartbeat rejected: id mismatch",
+                authenticated_cluster_id=cluster.id,
+                requested_cluster_id=cluster_id,
+                tenant=cluster.tenant,
+            )
+            return {"error": "Cluster ID mismatch"}, 403
 
         data = await request.get_json()
         client_count = data.get("client_count", 0)
 
-        db = get_db()
-        # Tenant from server config, never the request body (see register_cluster).
-        enrollment_tenant = current_app.config.get("ENROLLMENT_TENANT", "default")
-        if data.get("tenant") not in (None, enrollment_tenant):
-            return {"error": "tenant mismatch"}, 403
-        tenant_id = enrollment_tenant
+        # Create manager scoped to cluster's tenant
+        mgr_tenant = ClusterManager(db, cluster.tenant)
+        await mgr_tenant.initialize()
 
-        mgr = ClusterManager(db, tenant_id)
-        await mgr.initialize()
-
-        success = await mgr.update_heartbeat(cluster_id, client_count)
+        success = await mgr_tenant.update_heartbeat(cluster_id, client_count)
 
         if not success:
             return {"error": "Cluster not found"}, 404
@@ -191,7 +206,7 @@ async def cluster_heartbeat(cluster_id: str) -> tuple[dict[str, Any], int]:
             "cluster_heartbeat_updated",
             cluster_id=cluster_id,
             client_count=client_count,
-            tenant=tenant_id,
+            tenant=cluster.tenant,
         )
 
         return (
@@ -273,7 +288,7 @@ async def list_clusters() -> tuple[dict[str, Any], int]:
 async def get_headend_config(cluster_id: str) -> tuple[dict[str, Any], int]:
     """Get complete headend configuration for a cluster.
 
-    Requires cluster API key authentication.
+    Requires per-cluster API key authentication.
 
     Args:
         cluster_id: Cluster identifier.
@@ -282,26 +297,30 @@ async def get_headend_config(cluster_id: str) -> tuple[dict[str, Any], int]:
         JSON response with headend configuration.
     """
     try:
-        # Authenticate using API key (cluster bootstrap token)
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return {"error": "Invalid authorization header"}, 401
-
-        api_key = auth_header[7:]
-
-        # For Phase-0, we verify bootstrap token again
-        if not _verify_bootstrap_token(api_key):
-            return {"error": "Authentication failed"}, 401
+        # Extract and authenticate using per-cluster API key
+        token = _extract_bearer_token()
+        if not token:
+            return {"error": "Unauthorized: API key required"}, 401
 
         db = get_db()
-        tenant_id = "default"  # Phase-0 uses default tenant
 
-        mgr = ClusterManager(db, tenant_id)
+        # Create a temporary manager to authenticate (key IS the identity)
+        mgr = ClusterManager(db, "")  # tenant will come from authenticated cluster
         await mgr.initialize()
 
-        cluster = await mgr.get_cluster(cluster_id)
-        if not cluster or cluster.id != cluster_id:
-            return {"error": "Cluster not found"}, 404
+        cluster = await mgr.authenticate_cluster(token)
+        if not cluster:
+            return {"error": "Authentication failed"}, 401
+
+        # Verify cluster_id matches authenticated cluster
+        if str(cluster.id) != str(cluster_id):
+            logger.warning(
+                "Headend config rejected: id mismatch",
+                authenticated_cluster_id=cluster.id,
+                requested_cluster_id=cluster_id,
+                tenant=cluster.tenant,
+            )
+            return {"error": "Cluster ID mismatch"}, 403
 
         # Build headend configuration
         config = {
@@ -340,7 +359,7 @@ async def get_headend_config(cluster_id: str) -> tuple[dict[str, Any], int]:
         logger.info(
             "headend_config_provided",
             cluster_id=cluster_id,
-            tenant=tenant_id,
+            tenant=cluster.tenant,
         )
 
         return (

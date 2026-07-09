@@ -63,10 +63,13 @@ async def test_cluster_manager_initialize(cluster_manager):
 
 @pytest.mark.asyncio
 async def test_cluster_manager_register_cluster(cluster_manager, mock_db, mock_cluster_obj):
-    """Test registering a cluster."""
+    """Test registering a cluster and receiving per-cluster API key.
+
+    Regression: gh-HIGH-AUTH-FINDING-1 (bootstrap token must be enrollment-only)
+    """
     mock_db.clusters.create = lambda *a, **kw: mock_cluster_obj
 
-    result = await cluster_manager.register_cluster(
+    cluster, api_key = await cluster_manager.register_cluster(
         {
             "id": "cluster-1",
             "name": "Main",
@@ -77,9 +80,11 @@ async def test_cluster_manager_register_cluster(cluster_manager, mock_db, mock_c
         }
     )
 
-    assert isinstance(result, Cluster)
-    assert result.id == "cluster-1"
-    assert result.name == "Main"
+    assert isinstance(cluster, Cluster)
+    assert cluster.id == "cluster-1"
+    assert cluster.name == "Main"
+    assert isinstance(api_key, str)
+    assert len(api_key) > 0  # API key should be non-empty
 
 
 @pytest.mark.asyncio
