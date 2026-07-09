@@ -47,10 +47,12 @@ async def lifespan(app):
     cluster_manager = ClusterManager()
     client_registry = ClientRegistry()
     cert_manager = CertificateManager()
+    from auth.keys import build_key_provider
     jwt_manager = JWTManager(
         redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
         token_expiry_hours=int(os.getenv("TOKEN_EXPIRY_HOURS", "24")),
-        refresh_expiry_days=int(os.getenv("REFRESH_EXPIRY_DAYS", "7"))
+        refresh_expiry_days=int(os.getenv("REFRESH_EXPIRY_DAYS", "7")),
+        key_provider=build_key_provider(),
     )
     user_manager = UserManager()
     

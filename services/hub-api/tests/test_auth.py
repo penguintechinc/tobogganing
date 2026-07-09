@@ -6,7 +6,7 @@ import asyncio
 from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
 
-from manager.auth.jwt_manager import JWTManager
+from auth.jwt_manager import JWTManager
 
 
 class TestJWTManager:
