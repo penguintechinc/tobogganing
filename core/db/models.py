@@ -326,7 +326,7 @@ class Cluster(Base):
     status: Column[str] = Column(String(50), default="active", nullable=False)
     last_heartbeat: Column[datetime] = Column(DateTime, nullable=False)
     client_count: Column[int] = Column(Integer, default=0, nullable=False)
-    metadata: Column[dict] = Column(JSON, nullable=True)
+    cluster_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
     created_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), nullable=False
     )
@@ -362,7 +362,7 @@ class Client(Base):
     public_key: Column[str] = Column(Text, nullable=False)
     ip_address: Column[str] = Column(String(50), nullable=False)
     status: Column[str] = Column(String(50), default="pending", nullable=False)
-    metadata: Column[dict] = Column(JSON, nullable=True)
+    client_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
     created_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), nullable=False
     )

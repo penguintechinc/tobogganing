@@ -32,7 +32,7 @@ class SecurityScan(Base):
     started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     triggered_by = Column(String(64), nullable=True)
-    metadata = Column(JSON, nullable=True)
+    scan_metadata = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Relationship to findings
@@ -67,7 +67,7 @@ class SecurityFinding(Base):
     false_positive = Column(Boolean, default=False)
     first_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
-    metadata = Column(JSON, nullable=True)
+    finding_metadata = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Relationship to scan
