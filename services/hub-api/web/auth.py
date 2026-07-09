@@ -3,9 +3,13 @@ Web Authentication Decorators and Helpers for py4web
 """
 
 import functools
+import asyncio
+import structlog
 from typing import Optional
 from py4web import request, response, redirect, URL, abort
 from auth.user_manager import UserManager, User, UserRole
+
+logger = structlog.get_logger()
 
 # Global user manager instance
 user_manager = UserManager()
@@ -15,18 +19,20 @@ def get_current_user() -> Optional[User]:
     session_id = request.get_cookie("sasewaddle_session")
     if not session_id:
         return None
-    
-    # This would normally be async, but py4web decorators need sync
-    # In production, consider using async/await patterns
-    import asyncio
+
+    # Safe async-to-sync bridge with proper exception handling
     try:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(user_manager.validate_session(session_id))
-    except:
-        # Create new event loop if none exists
+        return asyncio.run(user_manager.validate_session(session_id))
+    except RuntimeError:
+        # Already inside a running loop (async server): run on a private loop.
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(user_manager.validate_session(session_id))
+        try:
+            return loop.run_until_complete(user_manager.validate_session(session_id))
+        finally:
+            loop.close()
+    except Exception as exc:  # noqa: BLE001 - log and fail closed
+        logger.warning("session validation failed", error=str(exc))
+        return None
 
 def require_auth(f):
     """Decorator to require authentication"""
