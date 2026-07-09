@@ -96,41 +96,56 @@ def parse_spamhaus_drop(content: str) -> List[str]:
 async def fetch_blackweb_domains(
     session: aiohttp.ClientSession, url: str
 ) -> List[str]:
-    """Fetch and parse Blackweb domains feed."""
+    """Fetch and parse Blackweb domains feed.
+
+    Raises:
+        Exception: On network error or non-200 response (fail-open).
+    """
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             if resp.status == 200:
                 content = await resp.text()
                 return parse_blackweb_domains(content)
+            raise RuntimeError(f"HTTP {resp.status} from Blackweb domains feed")
     except Exception as e:
         logger.error(f"Failed to fetch Blackweb domains: {e}")
-    return []
+        raise
 
 
 async def fetch_blackweb_ips(session: aiohttp.ClientSession, url: str) -> List[str]:
-    """Fetch and parse Blackweb IPs feed."""
+    """Fetch and parse Blackweb IPs feed.
+
+    Raises:
+        Exception: On network error or non-200 response (fail-open).
+    """
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             if resp.status == 200:
                 content = await resp.text()
                 return parse_blackweb_ips(content)
+            raise RuntimeError(f"HTTP {resp.status} from Blackweb IPs feed")
     except Exception as e:
         logger.error(f"Failed to fetch Blackweb IPs: {e}")
-    return []
+        raise
 
 
 async def fetch_spamhaus_drop(
     session: aiohttp.ClientSession, url: str
 ) -> List[str]:
-    """Fetch and parse Spamhaus DROP feed."""
+    """Fetch and parse Spamhaus DROP feed.
+
+    Raises:
+        Exception: On network error or non-200 response (fail-open).
+    """
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             if resp.status == 200:
                 content = await resp.text()
                 return parse_spamhaus_drop(content)
+            raise RuntimeError(f"HTTP {resp.status} from Spamhaus DROP feed")
     except Exception as e:
         logger.error(f"Failed to fetch Spamhaus DROP: {e}")
-    return []
+        raise
 
 
 async def query_dnsbl(ip_addr: str, dnsbl_providers: List[str]) -> List[str]:

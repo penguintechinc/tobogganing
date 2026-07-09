@@ -159,7 +159,10 @@ class SecurityFeedsManager:
                 stats = await self._update_dnsbl_feed(tenant_id)
 
             duration = int((datetime.utcnow() - start_time).total_seconds())
-            await self.db(self.db.feed_updates.id == update_id).async_update(
+            await self.db(
+                (self.db.feed_updates.id == update_id)
+                & (self.db.feed_updates.tenant_id == tenant_id)
+            ).async_update(
                 status="completed",
                 indicators_added=stats["added"],
                 indicators_updated=stats["updated"],
@@ -181,7 +184,10 @@ class SecurityFeedsManager:
         except Exception as e:
             duration = int((datetime.utcnow() - start_time).total_seconds())
             try:
-                await self.db(self.db.feed_updates.id == update_id).async_update(
+                await self.db(
+                    (self.db.feed_updates.id == update_id)
+                    & (self.db.feed_updates.tenant_id == tenant_id)
+                ).async_update(
                     status="failed",
                     error_message=str(e),
                     duration_seconds=duration,
@@ -201,61 +207,97 @@ class SecurityFeedsManager:
         return stats
 
     async def _update_blackweb_feed(self, tenant_id: str) -> Dict[str, int]:
-        """Update Blackweb threat feed."""
+        """Update Blackweb threat feed.
+
+        On feed fetch failure, logs the skip and preserves existing indicators
+        (fail-open behavior).
+        """
         stats = {"added": 0, "updated": 0, "removed": 0, "errors": 0}
         config = self.feed_configs[FeedSource.BLACKWEB]
         session = await self._get_session()
 
-        domains = await fetch_blackweb_domains(session, config["domains_url"])
-        for domain in domains:
-            indicator = build_threat_indicator(
-                indicator_type="domain",
-                value=domain,
-                threat_types=[ThreatType.BLACKLISTED_DOMAIN],
-                source=FeedSource.BLACKWEB,
-                confidence=config["confidence"],
-                ttl=config["update_interval"],
-                metadata={"category": "blacklisted"},
+        try:
+            domains = await fetch_blackweb_domains(session, config["domains_url"])
+            for domain in domains:
+                indicator = build_threat_indicator(
+                    indicator_type="domain",
+                    value=domain,
+                    threat_types=[ThreatType.BLACKLISTED_DOMAIN],
+                    source=FeedSource.BLACKWEB,
+                    confidence=config["confidence"],
+                    ttl=config["update_interval"],
+                    metadata={"category": "blacklisted"},
+                )
+                if await self._store_indicator(tenant_id, indicator):
+                    stats["added"] += 1
+        except Exception as e:
+            slog.warning(
+                "blackweb_domains_skipped",
+                reason=str(e),
+                tenant_id=tenant_id,
+                note="Existing indicators preserved",
             )
-            if await self._store_indicator(tenant_id, indicator):
-                stats["added"] += 1
+            stats["errors"] += 1
 
-        ips = await fetch_blackweb_ips(session, config["ips_url"])
-        for ip in ips:
-            indicator = build_threat_indicator(
-                indicator_type="ip",
-                value=ip,
-                threat_types=[ThreatType.BLACKLISTED_IP],
-                source=FeedSource.BLACKWEB,
-                confidence=config["confidence"],
-                ttl=config["update_interval"],
-                metadata={"category": "blacklisted"},
+        try:
+            ips = await fetch_blackweb_ips(session, config["ips_url"])
+            for ip in ips:
+                indicator = build_threat_indicator(
+                    indicator_type="ip",
+                    value=ip,
+                    threat_types=[ThreatType.BLACKLISTED_IP],
+                    source=FeedSource.BLACKWEB,
+                    confidence=config["confidence"],
+                    ttl=config["update_interval"],
+                    metadata={"category": "blacklisted"},
+                )
+                if await self._store_indicator(tenant_id, indicator):
+                    stats["added"] += 1
+        except Exception as e:
+            slog.warning(
+                "blackweb_ips_skipped",
+                reason=str(e),
+                tenant_id=tenant_id,
+                note="Existing indicators preserved",
             )
-            if await self._store_indicator(tenant_id, indicator):
-                stats["added"] += 1
+            stats["errors"] += 1
 
         return stats
 
     async def _update_spamhaus_feed(self, tenant_id: str) -> Dict[str, int]:
-        """Update Spamhaus threat feed."""
+        """Update Spamhaus threat feed.
+
+        On feed fetch failure, logs the skip and preserves existing indicators
+        (fail-open behavior).
+        """
         stats = {"added": 0, "updated": 0, "removed": 0, "errors": 0}
         config = self.feed_configs[FeedSource.SPAMHAUS]
         session = await self._get_session()
 
         for list_type, url in [("DROP", config["drop_url"]), ("EDROP", config["edrop_url"])]:
-            networks = await fetch_spamhaus_drop(session, url)
-            for network in networks:
-                indicator = build_threat_indicator(
-                    indicator_type="ip",
-                    value=network,
-                    threat_types=[ThreatType.SPAM_DOMAIN, ThreatType.REPUTATION_IP],
-                    source=FeedSource.SPAMHAUS,
-                    confidence=config["confidence"],
-                    ttl=config["update_interval"],
-                    metadata={"list": list_type},
+            try:
+                networks = await fetch_spamhaus_drop(session, url)
+                for network in networks:
+                    indicator = build_threat_indicator(
+                        indicator_type="ip",
+                        value=network,
+                        threat_types=[ThreatType.SPAM_DOMAIN, ThreatType.REPUTATION_IP],
+                        source=FeedSource.SPAMHAUS,
+                        confidence=config["confidence"],
+                        ttl=config["update_interval"],
+                        metadata={"list": list_type},
+                    )
+                    if await self._store_indicator(tenant_id, indicator):
+                        stats["added"] += 1
+            except Exception as e:
+                slog.warning(
+                    "spamhaus_feed_skipped",
+                    list_type=list_type,
+                    reason=str(e),
+                    tenant_id=tenant_id,
+                    note="Existing indicators preserved",
                 )
-                if await self._store_indicator(tenant_id, indicator):
-                    stats["added"] += 1
+                stats["errors"] += 1
 
         return stats
 

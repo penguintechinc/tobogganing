@@ -292,3 +292,27 @@ class TestFeedUpdate:
 
         # Verify db was called
         assert mock_db.called
+
+    @pytest.mark.asyncio
+    async def test_feed_fetch_failure_preserves_indicators(
+        self, mock_db: MagicMock
+    ) -> None:
+        """Test that feed fetch failure preserves existing indicators (fail-open).
+
+        When a feed fetch fails with an exception, the manager catches it,
+        logs the skip with reason, and does NOT clear existing indicators.
+        """
+        manager = SecurityFeedsManager(mock_db)
+
+        with patch(
+            "core.modules.sase.security.feeds.manager.fetch_blackweb_domains",
+            side_effect=RuntimeError("Network timeout"),
+        ):
+            with patch(
+                "core.modules.sase.security.feeds.manager.fetch_blackweb_ips",
+                side_effect=RuntimeError("Network timeout"),
+            ):
+                stats = await manager._update_blackweb_feed("tenant-1")
+
+        assert stats["errors"] == 2
+        assert stats["added"] == 0
