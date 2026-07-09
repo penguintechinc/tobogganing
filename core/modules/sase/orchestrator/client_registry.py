@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import secrets
 import structlog
 from dataclasses import dataclass
@@ -122,40 +123,66 @@ class ClientRegistry:
             api_key: Unencrypted API key
 
         Returns:
-            Client if authenticated, None otherwise
+            Client if authenticated and active, None otherwise
         """
-        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        try:
+            api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
-        client_obj = await asyncio.to_thread(
-            self.db.clients.select,
-            api_key_hash=api_key_hash,
-            tenant=self.tenant_id,
-        )
+            client_obj = await asyncio.to_thread(
+                self.db.clients.select,
+                api_key_hash=api_key_hash,
+                tenant=self.tenant_id,
+            )
 
-        if not client_obj:
+            if not client_obj:
+                return None
+
+            # CRITICAL: Reject non-active clients (revoked, disabled, pending)
+            if client_obj.status != "active":
+                logger.warning(
+                    "Authentication rejected: inactive client",
+                    client_id=client_obj.id,
+                    status=client_obj.status,
+                    tenant=self.tenant_id,
+                )
+                return None
+
+            # Use constant-time comparison for stored hash
+            if not hmac.compare_digest(client_obj.api_key_hash, api_key_hash):
+                logger.warning(
+                    "Authentication rejected: hash mismatch",
+                    client_id=client_obj.id,
+                    tenant=self.tenant_id,
+                )
+                return None
+
+            # Update last_seen (DO NOT update status; client must already be active)
+            await asyncio.to_thread(
+                client_obj.update,
+                last_seen=datetime.now(timezone.utc),
+            )
+
+            return Client(
+                id=client_obj.id,
+                name=client_obj.name,
+                type=client_obj.type,
+                cluster_id=client_obj.cluster_id,
+                api_key_hash=client_obj.api_key_hash,
+                public_key=client_obj.public_key,
+                ip_address=client_obj.ip_address,
+                status=client_obj.status,
+                created_at=client_obj.created_at,
+                last_seen=client_obj.last_seen,
+                tenant=client_obj.tenant,
+                metadata=client_obj.metadata,
+            )
+        except Exception as e:
+            logger.error(
+                "Authentication error (fail closed)",
+                error=str(e),
+                tenant=self.tenant_id,
+            )
             return None
-
-        # Update last_seen and status
-        await asyncio.to_thread(
-            client_obj.update,
-            last_seen=datetime.now(timezone.utc),
-            status="active",
-        )
-
-        return Client(
-            id=client_obj.id,
-            name=client_obj.name,
-            type=client_obj.type,
-            cluster_id=client_obj.cluster_id,
-            api_key_hash=client_obj.api_key_hash,
-            public_key=client_obj.public_key,
-            ip_address=client_obj.ip_address,
-            status=client_obj.status,
-            created_at=client_obj.created_at,
-            last_seen=client_obj.last_seen,
-            tenant=client_obj.tenant,
-            metadata=client_obj.metadata,
-        )
 
     async def update_client_status(
         self, client_id: str, status: str, metadata: dict | None = None
@@ -168,28 +195,37 @@ class ClientRegistry:
             metadata: Optional metadata to merge
 
         Returns:
-            True if successful, False if client not found
+            True if successful, False if client not found or on error
         """
         async with self._lock:
-            client_obj = await asyncio.to_thread(
-                self.db.clients.select,
-                id=client_id,
-                tenant=self.tenant_id,
-            )
-            if not client_obj:
+            try:
+                client_obj = await asyncio.to_thread(
+                    self.db.clients.select,
+                    id=client_id,
+                    tenant=self.tenant_id,
+                )
+                if not client_obj:
+                    return False
+
+                update_data = {
+                    "status": status,
+                    "last_seen": datetime.now(timezone.utc),
+                }
+                if metadata:
+                    existing_metadata = client_obj.metadata or {}
+                    existing_metadata.update(metadata)
+                    update_data["metadata"] = existing_metadata
+
+                await asyncio.to_thread(client_obj.update, **update_data)
+                return True
+            except Exception as e:
+                logger.error(
+                    "Failed to update client status (fail closed)",
+                    client_id=client_id,
+                    error=str(e),
+                    tenant=self.tenant_id,
+                )
                 return False
-
-            update_data = {
-                "status": status,
-                "last_seen": datetime.now(timezone.utc),
-            }
-            if metadata:
-                existing_metadata = client_obj.metadata or {}
-                existing_metadata.update(metadata)
-                update_data["metadata"] = existing_metadata
-
-            await asyncio.to_thread(client_obj.update, **update_data)
-            return True
 
     async def get_client(self, client_id: str) -> Client | None:
         """Get a client by ID.
@@ -325,20 +361,29 @@ class ClientRegistry:
             client_id: Client identifier
 
         Returns:
-            True if successful, False if not found
+            True if successful, False if not found or on error
         """
         async with self._lock:
-            client_obj = await asyncio.to_thread(
-                self.db.clients.select,
-                id=client_id,
-                tenant=self.tenant_id,
-            )
-            if not client_obj:
-                return False
+            try:
+                client_obj = await asyncio.to_thread(
+                    self.db.clients.select,
+                    id=client_id,
+                    tenant=self.tenant_id,
+                )
+                if not client_obj:
+                    return False
 
-            await asyncio.to_thread(client_obj.delete)
-            logger.info("Removed client", client_id=client_id, tenant=self.tenant_id)
-            return True
+                await asyncio.to_thread(client_obj.delete)
+                logger.info("Removed client", client_id=client_id, tenant=self.tenant_id)
+                return True
+            except Exception as e:
+                logger.error(
+                    "Failed to remove client (fail closed)",
+                    client_id=client_id,
+                    error=str(e),
+                    tenant=self.tenant_id,
+                )
+                return False
 
     async def cleanup_expired(self) -> None:
         """Cleanup expired clients (background task)."""

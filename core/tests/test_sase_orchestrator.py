@@ -1,9 +1,11 @@
 """Tests for SASE orchestrator module."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from core.modules.sase.orchestrator.cluster_manager import ClusterManager, Cluster
 from core.modules.sase.orchestrator.client_registry import ClientRegistry, Client
@@ -202,17 +204,19 @@ async def test_client_registry_register_client(client_registry, mock_db):
 
 @pytest.mark.asyncio
 async def test_client_registry_authenticate_client(client_registry, mock_db):
-    """Test authenticating a client."""
+    """Test authenticating an active client."""
+    api_key = "test-key"
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
     mock_obj = MagicMock(
         id="client-1", name="Test", type="docker", cluster_id="c1",
-        api_key_hash="hash123", public_key="pk1", ip_address="192.168.1.1",
-        status="pending", created_at=datetime.now(timezone.utc),
+        api_key_hash=api_key_hash, public_key="pk1", ip_address="192.168.1.1",
+        status="active", created_at=datetime.now(timezone.utc),
         last_seen=datetime.now(timezone.utc), tenant="test-tenant", metadata={}
     )
     mock_obj.update = lambda **kw: None
     mock_db.clients.select = lambda *a, **kw: mock_obj
 
-    result = await client_registry.authenticate_client("test-key")
+    result = await client_registry.authenticate_client(api_key)
 
     assert isinstance(result, Client)
     assert result.id == "client-1"
@@ -276,3 +280,154 @@ async def test_client_registry_get_client_count(client_registry, mock_db):
     result = await client_registry.get_client_count()
 
     assert result == 2
+
+
+# Security Tests
+
+
+@pytest.mark.asyncio
+async def test_authenticate_client_cross_tenant_rejected(mock_db):
+    """Regression: gh-001 - cross-tenant auth must be rejected."""
+    # Client in tenant-A tries to use key, but registry is for tenant-B
+    registry_b = ClientRegistry(db=mock_db, tenant_id="tenant-b")
+
+    mock_obj = MagicMock(
+        id="client-1", name="Test", type="docker", cluster_id="c1",
+        api_key_hash="hash123", public_key="pk1", ip_address="192.168.1.1",
+        status="active", created_at=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc), tenant="tenant-a", metadata={}
+    )
+
+    # DB returns the object with tenant-a, even though we're looking in tenant-b
+    # (In real DB, this wouldn't happen due to tenant column constraint)
+    mock_db.clients.select = lambda **kw: mock_obj if kw.get("tenant") == "tenant-a" else None
+
+    result = await registry_b.authenticate_client("test-key")
+
+    # Must be rejected because registry is scoped to tenant-b
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_authenticate_client_revoked_status_rejected(client_registry, mock_db):
+    """Regression: gh-002 - revoked clients cannot authenticate."""
+    mock_obj = MagicMock(
+        id="client-1", name="Test", type="docker", cluster_id="c1",
+        api_key_hash=hashlib.sha256(b"test-key").hexdigest(),
+        public_key="pk1", ip_address="192.168.1.1",
+        status="revoked",  # CRITICAL: revoked status
+        created_at=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc), tenant="test-tenant", metadata={}
+    )
+    mock_db.clients.select = lambda **kw: mock_obj
+
+    result = await client_registry.authenticate_client("test-key")
+
+    # Must be rejected (status != 'active')
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_authenticate_client_disabled_status_rejected(client_registry, mock_db):
+    """Regression: gh-002 - disabled clients cannot authenticate."""
+    mock_obj = MagicMock(
+        id="client-1", name="Test", type="docker", cluster_id="c1",
+        api_key_hash=hashlib.sha256(b"test-key").hexdigest(),
+        public_key="pk1", ip_address="192.168.1.1",
+        status="disabled",  # CRITICAL: disabled status
+        created_at=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc), tenant="test-tenant", metadata={}
+    )
+    mock_db.clients.select = lambda **kw: mock_obj
+
+    result = await client_registry.authenticate_client("test-key")
+
+    # Must be rejected (status != 'active')
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_authenticate_client_pending_status_rejected(client_registry, mock_db):
+    """Regression: gh-002 - pending clients cannot authenticate."""
+    mock_obj = MagicMock(
+        id="client-1", name="Test", type="docker", cluster_id="c1",
+        api_key_hash=hashlib.sha256(b"test-key").hexdigest(),
+        public_key="pk1", ip_address="192.168.1.1",
+        status="pending",  # CRITICAL: pending status
+        created_at=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc), tenant="test-tenant", metadata={}
+    )
+    mock_db.clients.select = lambda **kw: mock_obj
+
+    result = await client_registry.authenticate_client("test-key")
+
+    # Must be rejected (status != 'active')
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_authenticate_client_constant_time_compare(client_registry, mock_db):
+    """Regression: gh-003 - authenticate uses constant-time comparison."""
+    api_key = "test-key-12345"
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+    mock_obj = MagicMock(
+        id="client-1", name="Test", type="docker", cluster_id="c1",
+        api_key_hash=api_key_hash,
+        public_key="pk1", ip_address="192.168.1.1",
+        status="active",
+        created_at=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc), tenant="test-tenant", metadata={}
+    )
+    mock_obj.update = lambda **kw: None
+    mock_db.clients.select = lambda **kw: mock_obj
+
+    # Verify hmac.compare_digest is used in authentication
+    with patch('core.modules.sase.orchestrator.client_registry.hmac.compare_digest',
+               wraps=hmac.compare_digest) as mock_compare:
+        result = await client_registry.authenticate_client(api_key)
+
+        # Verify constant-time compare was called
+        assert mock_compare.called
+        assert result is not None
+        assert result.id == "client-1"
+
+
+@pytest.mark.asyncio
+async def test_authenticate_client_exception_returns_none(client_registry, mock_db):
+    """Regression: gh-004 - auth exceptions fail closed (return None)."""
+    mock_db.clients.select = lambda **kw: None  # Simulate DB error on next call
+
+    # Simulate a DB error
+    mock_db.clients.select = MagicMock(side_effect=Exception("DB connection lost"))
+
+    result = await client_registry.authenticate_client("test-key")
+
+    # Must fail closed (return None, not raise)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_remove_client_exception_returns_false(client_registry, mock_db):
+    """Regression: gh-005 - remove_client exception fails closed."""
+    mock_obj = MagicMock()
+    mock_obj.delete = MagicMock(side_effect=Exception("DB error"))
+    mock_db.clients.select = lambda **kw: mock_obj
+
+    result = await client_registry.remove_client("client-1")
+
+    # Must fail closed (return False, not raise)
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_update_client_status_exception_returns_false(client_registry, mock_db):
+    """Regression: gh-006 - update_client_status exception fails closed."""
+    mock_obj = MagicMock()
+    mock_obj.update = MagicMock(side_effect=Exception("DB error"))
+    mock_db.clients.select = lambda **kw: mock_obj
+
+    result = await client_registry.update_client_status("client-1", "active")
+
+    # Must fail closed (return False, not raise)
+    assert result is False
