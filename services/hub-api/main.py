@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import threading
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -9,6 +10,11 @@ import uvloop
 from py4web import action, request, response, abort, redirect, URL
 from py4web.core import app, Fixture
 import structlog
+
+# Add repo root to sys.path to allow imports from shared/
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from database import initialize_database, close_database
 from orchestrator.cluster_manager import ClusterManager
@@ -47,10 +53,12 @@ async def lifespan(app):
     cluster_manager = ClusterManager()
     client_registry = ClientRegistry()
     cert_manager = CertificateManager()
+    from auth.keys import build_key_provider
     jwt_manager = JWTManager(
         redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
         token_expiry_hours=int(os.getenv("TOKEN_EXPIRY_HOURS", "24")),
-        refresh_expiry_days=int(os.getenv("REFRESH_EXPIRY_DAYS", "7"))
+        refresh_expiry_days=int(os.getenv("REFRESH_EXPIRY_DAYS", "7")),
+        key_provider=build_key_provider(),
     )
     user_manager = UserManager()
     

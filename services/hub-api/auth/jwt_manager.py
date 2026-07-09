@@ -8,9 +8,6 @@ import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Any, List
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
 import redis.asyncio as redis
 import structlog
 import uuid
@@ -29,41 +26,17 @@ class JWTManager:
         redis_url: str = "redis://localhost:6379",
         token_expiry_hours: int = 24,
         refresh_expiry_days: int = 7,
-        secret_key: Optional[str] = None
+        key_provider: Optional["KeyProvider"] = None,
     ):
         self.redis_url = redis_url
         self.token_expiry = timedelta(hours=token_expiry_hours)
         self.refresh_expiry = timedelta(days=refresh_expiry_days)
         self.redis_pool = None
-        
-        # Generate RSA key pair for JWT signing
-        if secret_key:
-            self.secret_key = secret_key
-        else:
-            self._generate_rsa_keys()
-    
-    def _generate_rsa_keys(self):
-        """Generate RSA private/public key pair for JWT signing"""
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
-        
-        self.private_key = private_key
-        self.public_key = private_key.public_key()
-        
-        # Serialize for storage/transmission
-        self.private_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-        
-        self.public_pem = self.public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
+
+        from auth.keys import InAppKeyProvider, KeyProvider  # noqa: F401
+        provider = key_provider or InAppKeyProvider()
+        self.private_pem = provider.private_pem
+        self.public_pem = provider.public_pem
     
     async def initialize(self):
         """Initialize Redis connection pool"""

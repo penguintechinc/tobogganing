@@ -1,105 +1,54 @@
-"""PostHog feature flags integration for PenguinTech products."""
+"""Unified feature gate: PostHog flag AND (optional) license entitlement."""
 from __future__ import annotations
-
-import logging
 import os
-from typing import Optional
+import logging
+from typing import Dict
 
 logger = logging.getLogger(__name__)
+_cache: Dict[str, bool] = {}
+_posthog = None
 
-# PostHog client instance cache
-_posthog_client: Optional[object] = None
 
-
-def _get_posthog_client() -> Optional[object]:
-    """Lazy-load and cache the PostHog client."""
-    global _posthog_client
-
-    if _posthog_client is not None:
-        return _posthog_client
-
-    try:
-        import posthog
-
-        api_key = os.getenv("POSTHOG_KEY", "")
-        api_host = os.getenv("POSTHOG_HOST", "https://license.penguintech.io")
-
-        if api_key:
-            posthog.api_key = api_key
-            posthog.personal_api_key = api_key
-
-            # Configure the host if it's not the default
-            if api_host and api_host != "https://posthog.com":
-                posthog.api_host = api_host
-
-            _posthog_client = posthog
-            return posthog
-        else:
-            logger.warning("POSTHOG_KEY not configured, feature flags disabled")
+def _client():
+    global _posthog
+    if _posthog is None:
+        key = os.getenv("POSTHOG_KEY")
+        if not key:
             return None
-    except ImportError:
-        logger.warning("posthog not installed, feature flags disabled")
-        return None
+        import posthog
+        posthog.project_api_key = key
+        posthog.host = os.getenv("POSTHOG_HOST", "https://license.penguintech.io")
+        _posthog = posthog
+    return _posthog
 
 
-# Feature flag cache: {flag_key: {distinct_id: cached_result}}
-_flag_cache: dict[str, dict[str, bool]] = {}
-
-
-def feature_enabled(
-    module: str,
-    feature: str,
-    distinct_id: str = "system",
-    licensed: bool = False,
-) -> bool:
-    """
-    Check if a feature flag is enabled via PostHog.
-
-    Falls back to cached value on PostHog error; defaults to OFF for unknown flags.
-
-    Args:
-        module: Module name (e.g., "ping")
-        feature: Feature name (e.g., "enabled")
-        distinct_id: Distinct ID for flag evaluation (default: "system")
-        licensed: Whether the feature requires a license entitlement
-                 (if True and license is missing, returns False)
-
-    Returns:
-        True if the feature flag is enabled, False otherwise.
-    """
-    flag_key = f"tobogganing.{module}.{feature}"
-
-    # Check cache first
-    if flag_key in _flag_cache:
-        if distinct_id in _flag_cache[flag_key]:
-            return _flag_cache[flag_key][distinct_id]
-
-    # Try to evaluate the flag via PostHog
+def _flag_on(key: str, distinct_id: str) -> bool:
+    client = _client()
+    if client is None:
+        return _cache.get(key, False)  # no flags configured → default OFF
     try:
-        client = _get_posthog_client()
-        if client is None:
-            # PostHog not configured; default to OFF
-            # Cache the result
-            if flag_key not in _flag_cache:
-                _flag_cache[flag_key] = {}
-            _flag_cache[flag_key][distinct_id] = False
-            return False
+        result = bool(client.feature_enabled(key, distinct_id))
+        _cache[key] = result
+        return result
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("posthog flag lookup failed for %s: %s", key, exc)
+        return _cache.get(key, False)
 
-        # Evaluate the feature flag
-        is_enabled = client.feature_enabled(flag_key, distinct_id, only_evaluate=True)
 
-        # Cache the result
-        if flag_key not in _flag_cache:
-            _flag_cache[flag_key] = {}
-        _flag_cache[flag_key][distinct_id] = is_enabled
-
-        return is_enabled
-    except Exception as e:
-        logger.error(f"PostHog flag evaluation failed for {flag_key}: {e}")
-
-        # Graceful degradation: use cached value if available
-        if flag_key in _flag_cache and distinct_id in _flag_cache[flag_key]:
-            return _flag_cache[flag_key][distinct_id]
-
-        # Default to OFF for unknown flags
+def _licensed(feature: str) -> bool:
+    try:
+        from shared.licensing.python_client import check_feature
+        return bool(check_feature(feature))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("license check failed for %s: %s", feature, exc)
         return False
+
+
+def feature_enabled(module: str, feature: str, distinct_id: str = "system",
+                    licensed: bool = False) -> bool:
+    key = f"tobogganing.{module}.{feature}"
+    if not _flag_on(key, distinct_id):
+        return False
+    if licensed and not _licensed(feature):
+        return False
+    return True

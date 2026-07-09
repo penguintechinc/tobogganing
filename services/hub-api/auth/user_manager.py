@@ -3,7 +3,7 @@ User Management System for SASEWaddle Manager
 Supports role-based access control with admin and reporter roles
 """
 
-import hashlib
+import os
 import secrets
 import sqlite3
 import time
@@ -99,16 +99,21 @@ class UserManager:
         # Generate secure password and hash it
         password = secrets.token_urlsafe(16)
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        
+
         cursor.execute("""
             INSERT INTO users (id, username, email, password_hash, role)
             VALUES (?, ?, ?, ?, ?)
         """, (admin_id, "admin", "admin@sasewaddle.local", password_hash, "admin"))
-        
-        logger.warning("Created default admin user", 
-                      username="admin", 
-                      password=password,
-                      message="SAVE THIS PASSWORD - it will not be shown again!")
+
+        logger.warning(
+            "Created default admin user; retrieve the generated password from the "
+            "ADMIN_BOOTSTRAP_PASSWORD_FILE path or reset it via the CLI",
+            username="admin",
+        )
+        bootstrap_path = os.getenv("ADMIN_BOOTSTRAP_PASSWORD_FILE")
+        if bootstrap_path:
+            with open(os.open(bootstrap_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as fh:
+                fh.write(password)
     
     async def authenticate(self, username: str, password: str) -> Optional[User]:
         """Authenticate user with username/password"""

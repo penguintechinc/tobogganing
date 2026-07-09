@@ -89,12 +89,12 @@ jobs:
       if: ${{ matrix.enabled == 'false' }}
       run: echo "Skipping ${{ matrix.goos }}-${{ matrix.goarch }} build" && exit 0
     
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       if: ${{ matrix.enabled != 'false' }}
     
     - name: Set up Go
       if: ${{ matrix.enabled != 'false' }}
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4  # v4
       with:
         go-version: ${{ env.GO_VERSION }}
     
@@ -114,7 +114,7 @@ jobs:
     
     - name: Cache Go modules
       if: ${{ matrix.enabled != 'false' }}
-      uses: actions/cache@v3
+      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
@@ -205,7 +205,7 @@ jobs:
     
     - name: Upload artifacts
       if: ${{ matrix.enabled != 'false' && github.event.inputs.upload_artifacts == 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: go-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
@@ -216,10 +216,10 @@ jobs:
     if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4  # v4
       with:
         go-version: ${{ env.GO_VERSION }}
     
@@ -235,7 +235,7 @@ jobs:
         echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
     
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-headend-${{ hashFiles('headend/go.sum') }}
@@ -267,7 +267,7 @@ jobs:
     
     - name: Upload headend proxy artifacts
       if: ${{ github.event.inputs.upload_artifacts == 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: headend-proxy-builds
         path: headend/build/*
@@ -279,7 +279,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Trigger mobile build workflow
-      uses: actions/github-script@v7
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
       with:
         script: |
           const platforms = '${{ github.event.inputs.platforms }}' === 'all' ? 'all' : 
@@ -310,7 +310,7 @@ jobs:
         component: [manager, headend, client]
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Read version from .version file
       id: version
@@ -324,13 +324,13 @@ jobs:
         echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
     
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
     
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
     
     - name: Log in to Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -350,7 +350,7 @@ jobs:
     
     - name: Build and push Docker image - Manager
       if: matrix.component == 'manager'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./manager
         platforms: linux/amd64,linux/arm64
@@ -366,7 +366,7 @@ jobs:
     
     - name: Build and push Docker image - Headend
       if: matrix.component == 'headend'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./headend
         platforms: linux/amd64,linux/arm64
@@ -382,7 +382,7 @@ jobs:
     
     - name: Build and push Docker image - Client
       if: matrix.component == 'client'
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
         context: ./clients/docker
         platforms: linux/amd64,linux/arm64
@@ -401,10 +401,10 @@ jobs:
     if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'website' }}
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -449,7 +449,7 @@ jobs:
     
     - name: Upload website build
       if: ${{ github.event.inputs.upload_artifacts == 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: website-build
         path: website/.next/
@@ -463,7 +463,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
     
     - name: Read version from .version file
       id: version
@@ -473,7 +473,7 @@ jobs:
     
     - name: Download all Go client artifacts
       if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         pattern: go-client-*
         path: ./artifacts
@@ -481,7 +481,7 @@ jobs:
     
     - name: Download headend proxy artifacts
       if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         name: headend-proxy-builds
         path: ./artifacts/headend
@@ -521,7 +521,7 @@ jobs:
         cd ..
     
     - name: Create draft release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
       with:
         tag_name: v${{ steps.version.outputs.version }}-draft
         name: "Tobogganing v${{ steps.version.outputs.version }} (Draft)"
