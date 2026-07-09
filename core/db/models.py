@@ -27,6 +27,7 @@ class User(Base):
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
     mfa_enabled: Column[bool] = Column(Boolean, default=False, nullable=False)
     mfa_secret: Column[str | None] = Column(String(255), nullable=True)
+    role: Column[str | None] = Column(String(50), default="reporter", nullable=True)
     tenant: Column[str] = Column(
         String(255), nullable=False, index=True
     )  # MANDATORY tenant column
@@ -90,6 +91,32 @@ class PasswordResetToken(Base):
     def __repr__(self) -> str:
         """Return string representation."""
         return f"<PasswordResetToken(id={self.id}, user_id={self.user_id})>"
+
+
+class Session(Base):
+    """User sessions for SASE auth."""
+
+    __tablename__ = "sessions"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    user_id: Column[str] = Column(
+        UUID(as_uuid=False), nullable=False, index=True
+    )  # FK to users.id
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    token: Column[str] = Column(Text, nullable=False, unique=True, index=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    expires_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<Session(id={self.id}, user_id={self.user_id}, tenant={self.tenant})>"
 
 
 class FirewallRule(Base):
@@ -271,6 +298,7 @@ __all__ = [
     "User",
     "RefreshToken",
     "PasswordResetToken",
+    "Session",
     "FirewallRule",
     "VRF",
     "OSPFArea",
