@@ -3,6 +3,7 @@ import json
 import structlog
 from typing import Optional
 import uuid
+from auth.http_auth import extract_bearer_token
 
 logger = structlog.get_logger()
 
@@ -154,12 +155,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     async def get_client_config(client_id):
         try:
             # Authenticate using API key
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
+            api_key = extract_bearer_token(request.headers)
+            if api_key is None:
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
-            api_key = auth_header[7:]
+
             client = await client_registry.authenticate_client(api_key)
             
             if not client or client.id != client_id:
@@ -195,16 +195,13 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     async def update_tunnel_config(client_id):
         try:
             # Authenticate using API key or admin token
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
+            token = extract_bearer_token(request.headers)
+            if token is None:
                 response.status = 401
                 return {"error": "Invalid authorization header"}
             
-            # Check if this is an admin JWT or client API key
-            token = auth_header[7:]
-            
             # Try JWT first (for admin access)
-            user_info = jwt_manager.validate_token(token)
+            user_info = await jwt_manager.validate_token(token)
             if user_info and user_info.get('role') == 'admin':
                 # Admin can update any client
                 pass
@@ -286,12 +283,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     async def rotate_client_key(client_id):
         try:
             # Authenticate using current API key
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
+            api_key = extract_bearer_token(request.headers)
+            if api_key is None:
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
-            api_key = auth_header[7:]
+
             client = await client_registry.authenticate_client(api_key)
             
             if not client or client.id != client_id:
@@ -328,14 +324,13 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
                 }
             
             # Authenticate using API key
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
+            api_key = extract_bearer_token(request.headers)
+            if api_key is None:
                 response.status = 401
                 return {"error": "Invalid authorization header"}
-            
-            api_key = auth_header[7:]
+
             client = await client_registry.authenticate_client(api_key)
-            
+
             if not client or client.id != client_id:
                 response.status = 401
                 return {"error": "Unauthorized"}
@@ -385,7 +380,7 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
             
             # Validate headend authentication
             # For now, we'll use JWT validation
-            user_info = jwt_manager.validate_token(token)
+            user_info = await jwt_manager.validate_token(token)
             if not user_info:
                 response.status = 401
                 return {"error": "Unauthorized"}
