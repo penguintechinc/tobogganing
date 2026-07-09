@@ -85,6 +85,11 @@ def mock_db() -> MagicMock:
         table_mock.id = make_comparable_field("id")
         setattr(db, table_name, table_mock)
 
+    # Mock connection for health checks
+    connection_mock = MagicMock()
+    connection_mock.execute = MagicMock(return_value=MagicMock())
+    db.connection = connection_mock
+
     return db
 
 
@@ -122,16 +127,25 @@ def app(mock_db: MagicMock) -> Quart:
     Returns:
         Configured Quart test application.
     """
-    from unittest.mock import patch
+    from unittest.mock import patch, MagicMock
 
     from core.app import create_app
+    import core.db
 
-    with patch("core.db.init_dal"), patch(
-        "core.db.get_db", return_value=mock_db
+    # Patch init_dal and get_db
+    with patch("core.db.init_dal"), patch.object(
+        core.db, "get_db", return_value=mock_db
     ):
         test_app = create_app()
         test_app.config["TESTING"] = True
         test_app.db = mock_db  # type: ignore[attr-defined]
+
+        # Apply the patch to the app's context
+        test_app.g = MagicMock()  # type: ignore[attr-defined]
+
+        # Replace the get_db reference in the app module
+        import core.app as app_module
+        app_module.get_db = lambda: mock_db  # type: ignore[assignment]
 
     return test_app
 

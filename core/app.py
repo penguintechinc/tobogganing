@@ -5,6 +5,7 @@ import asyncio
 import logging
 from typing import Optional
 
+import sqlalchemy as sa
 from quart import Quart, jsonify
 from quart_cors import cors
 
@@ -64,13 +65,24 @@ def create_app(config: Config | None = None) -> Quart:
 
     # Health check endpoint
     @app.route("/health", methods=["GET"])
-    async def health_check() -> tuple[dict[str, str], int]:
-        """Health check endpoint.
+    async def health_check() -> tuple[dict[str, str | int], int]:
+        """Health check endpoint with database check.
 
         Returns:
-            JSON response with health status.
+            JSON response with health status and status code.
+            200 if healthy, 503 if database check fails.
         """
-        return {"status": "healthy"}, 200
+        try:
+            db = get_db()
+            if db is not None and hasattr(db, "connection"):
+                # Try to execute a simple query to check DB connectivity
+                def check_db() -> None:
+                    db.connection.execute(sa.text("SELECT 1"))
+                await asyncio.to_thread(check_db)
+            return {"status": "healthy"}, 200
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+            return {"status": "unhealthy", "error": "database"}, 503
 
     # Error handlers
     @app.errorhandler(404)
