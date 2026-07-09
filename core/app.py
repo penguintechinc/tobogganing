@@ -11,6 +11,7 @@ from quart_cors import cors
 
 from core.config import Config, build_db_uri
 from core.db import init_dal, get_db
+from core.registry import ModuleContext, ModuleRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,33 @@ def create_app(config: Config | None = None) -> Quart:
     # Store config for later access
     app.config_obj = config  # type: ignore[attr-defined]
 
+    # Initialize module registry
+    registry = ModuleRegistry()
+    app.registry = registry  # type: ignore[attr-defined]
+
+    # Import and register modules from core.modules
+    import core.modules
+    for module_name in core.modules.__all__:
+        # Dynamically import the module and call its module() factory
+        module_path = f"core.modules.{module_name}"
+        try:
+            module_pkg = __import__(module_path, fromlist=["module"])
+            if hasattr(module_pkg, "module"):
+                contract = module_pkg.module()
+                registry.register(contract)
+                logger.info(f"Registered module: {module_name}")
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Failed to register module {module_name}: {e}")
+
     @app.before_serving
     async def setup_services() -> None:
         """Initialize services after DB connection is ready."""
         if get_db is not None:
             db = get_db()
             app.db = db  # type: ignore[attr-defined]
+            # Apply registry to app with the module context
+            ctx = ModuleContext(config=config, db=db, key_provider=None)
+            registry.apply_to(app, ctx)
             logger.info("Services initialized on app startup")
 
     # Health check endpoint
