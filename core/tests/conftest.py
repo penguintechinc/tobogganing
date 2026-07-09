@@ -1,6 +1,7 @@
 """Shared pytest fixtures for core tests."""
 from __future__ import annotations
 
+import os
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -208,3 +209,101 @@ def test_db_session() -> Any:
         # Cleanup
         session.close()
         engine.dispose()
+
+
+# SASE Module Test Fixtures
+
+
+@pytest.fixture
+def app_with_sase(app: Quart, mock_db: MagicMock) -> Quart:
+    """Create a test app with SASE module registered.
+
+    Args:
+        app: Base test app fixture.
+        mock_db: Mock database fixture.
+
+    Returns:
+        Quart app with SASE module and auth configured.
+    """
+    from core.auth.jwt import encode_access_token
+    from core.crypto import InAppKeyProvider, generate_rsa_key_pair
+    from core.registry import ModuleContext
+
+    # Set up key provider for token generation in tests
+    private_pem, public_pem = generate_rsa_key_pair()
+    provider = InAppKeyProvider(private_pem, public_pem)
+    app.config["KEY_PROVIDER"] = provider
+
+    # Register SASE module via registry (combines module prefix + blueprint prefix)
+    from core.modules.sase import module as sase_module
+
+    sase_contract = sase_module()
+    app.registry.register(sase_contract)
+
+    # Apply registry to wire blueprints
+    ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
+    app.registry.apply_to(app, ctx)
+
+    return app
+
+
+@pytest.fixture
+def valid_tenant_token(app_with_sase: Quart) -> str:
+    """Generate a valid tenant JWT token.
+
+    Args:
+        app_with_sase: App with key provider.
+
+    Returns:
+        Encoded JWT token with tenant claim.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_sase.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "clusters:read clients:read",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest.fixture
+def valid_write_token(app_with_sase: Quart) -> str:
+    """Generate a valid JWT token with write scopes.
+
+    Args:
+        app_with_sase: App with key provider.
+
+    Returns:
+        Encoded JWT token with write scopes.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_sase.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "*:*",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest.fixture
+def bootstrap_token() -> str:
+    """Get bootstrap/enrollment token.
+
+    Returns:
+        Bootstrap token matching env var.
+    """
+    return os.getenv("ENROLLMENT_BOOTSTRAP_TOKEN", "test-bootstrap-token")
