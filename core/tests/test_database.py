@@ -27,9 +27,9 @@ def test_alembic_0001_core_baseline_creates_users_table_with_tenant() -> None:
         alembic_cfg = AlembicConfig(str(alembic_ini_path))
         alembic_cfg.set_main_option("sqlalchemy.url", db_uri)
 
-        # Set the script location to the alembic directory
-        alembic_dir = Path(__file__).parent.parent / "alembic"
-        alembic_cfg.set_main_option("script_location", str(alembic_dir))
+        # Set the script location to the migrations directory
+        migrations_dir = Path(__file__).parent.parent / "migrations"
+        alembic_cfg.set_main_option("script_location", str(migrations_dir))
 
         # Run the migration
         command.upgrade(alembic_cfg, "head")
