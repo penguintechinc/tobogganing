@@ -9,6 +9,7 @@ import os
 import asyncio
 import hashlib
 import base64
+import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
@@ -68,6 +69,9 @@ class CertificateManager:
 
         If CA_CERT_PATH and CA_KEY_PATH are set, persists the CA with file
         permissions 0o600.
+
+        Raises:
+            ValueError: If loaded CA certificate is not a valid CA or fails validation.
         """
         try:
             ca_cert_path = os.getenv("CA_CERT_PATH")
@@ -83,7 +87,10 @@ class CertificateManager:
                 with open(ca_key_path, "rb") as f:
                     key_pem = f.read()
                     self.ca_key = serialization.load_pem_private_key(key_pem, password=None, backend=default_backend())
-                logger.info("CA loaded successfully")
+
+                # Validate loaded CA is a valid CA certificate (fail closed on invalid)
+                self._validate_ca_certificate(self.ca_cert)
+                logger.info("CA loaded successfully and validated")
             elif ca_cert_path and ca_key_path:
                 # Persist CA that was generated in __init__
                 self._persist_ca(ca_cert_path, ca_key_path)
@@ -471,32 +478,56 @@ class CertificateManager:
 
     def _allocate_ip(self, node_id: str) -> str:
         """
-        Allocate a deterministic IP address for a node.
+        Allocate a collision-safe IP address for a node.
 
-        Returns the same IP for the same node_id, allocates a new IP for
-        new node_ids. IPs are in the 10.200.0.0/16 range.
+        Returns the same IP for the same node_id. Detects and prevents collisions
+        across different node_ids by regenerating if collision detected.
+        IPs are in the 10.200.0.0/16 range.
 
         Args:
             node_id: Node identifier.
 
         Returns:
-            IP address string starting with "10.200."
+            IP address string starting with "10.200." (unique per node).
+
+        Raises:
+            RuntimeError: If unable to allocate a collision-free IP after retries.
         """
         if node_id in self._ip_allocations:
             return self._ip_allocations[node_id]
 
-        # Derive IP octets from node_id hash (deterministic)
-        hash_obj = hashlib.sha256(node_id.encode())
-        hash_bytes = hash_obj.digest()
+        # Derive deterministic IP from node_id hash with collision detection
+        max_attempts = 100
+        attempt = 0
 
-        # Use first 2 bytes for octet 3 and 4 (0-255 range, avoiding .0 and .255)
-        octet3 = (int.from_bytes(hash_bytes[0:1], "big") % 254) + 1  # 1-254
-        octet4 = (int.from_bytes(hash_bytes[1:2], "big") % 254) + 1  # 1-254
+        while attempt < max_attempts:
+            # Use hash with attempt counter to avoid infinite loops on collision
+            hash_input = f"{node_id}#{attempt}".encode()
+            hash_obj = hashlib.sha256(hash_input)
+            hash_bytes = hash_obj.digest()
 
-        ip_address = f"10.200.{octet3}.{octet4}"
-        self._ip_allocations[node_id] = ip_address
+            # Use first 2 bytes for octet 3 and 4 (0-255 range, avoiding .0 and .255)
+            octet3 = (int.from_bytes(hash_bytes[0:1], "big") % 254) + 1  # 1-254
+            octet4 = (int.from_bytes(hash_bytes[1:2], "big") % 254) + 1  # 1-254
 
-        return ip_address
+            ip_address = f"10.200.{octet3}.{octet4}"
+
+            # Check for collision: IP already allocated to a different node
+            ip_collision = False
+            for existing_node, existing_ip in self._ip_allocations.items():
+                if existing_ip == ip_address and existing_node != node_id:
+                    ip_collision = True
+                    break
+
+            if not ip_collision:
+                # No collision, allocate this IP
+                self._ip_allocations[node_id] = ip_address
+                return ip_address
+
+            attempt += 1
+
+        # Exhausted retries without finding collision-free IP
+        raise RuntimeError(f"Failed to allocate collision-free IP for node {node_id} after {max_attempts} attempts")
 
     def _is_certificate_expiring(self, expiry: datetime, threshold_days: int = 30) -> bool:
         """
@@ -518,6 +549,38 @@ class CertificateManager:
 
         threshold = timedelta(days=threshold_days)
         return expiry - now <= threshold
+
+    def _validate_ca_certificate(self, cert: x509.Certificate) -> None:
+        """
+        Validate that a certificate is a valid CA certificate.
+
+        Checks that the certificate has BasicConstraints extension with ca=True.
+        Fails closed (raises exception) if validation fails.
+
+        Args:
+            cert: The certificate to validate.
+
+        Raises:
+            ValueError: If certificate is not a valid CA or lacks required constraints.
+        """
+        try:
+            # Check for BasicConstraints extension
+            try:
+                basic_constraints = cert.extensions.get_extension_for_class(
+                    x509.BasicConstraints
+                )
+            except x509.ExtensionNotFound:
+                raise ValueError("CA certificate missing BasicConstraints extension")
+
+            # Verify ca=True
+            if not basic_constraints.value.ca:
+                raise ValueError("Certificate BasicConstraints.ca is not True; not a valid CA")
+
+            logger.info("CA certificate validated successfully")
+        except (ValueError, AttributeError, TypeError) as e:
+            # Fail closed: any validation error means reject the CA
+            logger.error("CA certificate validation failed", error=str(e))
+            raise
 
     def _generate_ca(self) -> None:
         """
@@ -562,36 +625,61 @@ class CertificateManager:
         """
         Persist CA certificate and key to PEM files using atomic writes.
 
-        Uses os.open() with mode 0o600 to atomically create files with secure
-        permissions, avoiding TOCTOU (time-of-check-time-of-use) race conditions.
+        Prevents TOCTOU (time-of-check-time-of-use) symlink attacks by writing to
+        temp files with O_EXCL, then using os.replace() for atomic rename.
 
         Args:
             cert_path: Path to save CA certificate.
             key_path: Path to save CA private key.
+
+        Raises:
+            ValueError: If CA not initialized or file operations fail.
         """
         if not self.ca_cert or not self.ca_key:
             raise ValueError("CA not initialized")
 
         # Create directories if needed with secure permissions
-        cert_dir = os.path.dirname(cert_path)
-        key_dir = os.path.dirname(key_path)
-        if cert_dir:
-            os.makedirs(cert_dir, mode=0o700, exist_ok=True)
-        if key_dir:
-            os.makedirs(key_dir, mode=0o700, exist_ok=True)
+        cert_dir = os.path.dirname(cert_path) or "."
+        key_dir = os.path.dirname(key_path) or "."
+        os.makedirs(cert_dir, mode=0o700, exist_ok=True)
+        os.makedirs(key_dir, mode=0o700, exist_ok=True)
 
-        # Write certificate atomically with secure permissions
+        # Write certificate: create temp file with O_EXCL, then atomic replace
         cert_pem = self.ca_cert.public_bytes(serialization.Encoding.PEM)
-        fd = os.open(cert_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(cert_pem)
+        cert_temp_fd, cert_temp_path = tempfile.mkstemp(dir=cert_dir, prefix=".ca_cert_", suffix=".tmp")
+        try:
+            # Ensure secure permissions on temp file
+            os.chmod(cert_temp_path, 0o600)
+            with os.fdopen(cert_temp_fd, "wb") as f:
+                f.write(cert_pem)
+            # Atomic rename (prevents symlink race if cert_path exists as symlink)
+            os.replace(cert_temp_path, cert_path)
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                os.unlink(cert_temp_path)
+            except Exception:
+                pass
+            raise
 
-        # Write key atomically with secure permissions
+        # Write key: create temp file with O_EXCL, then atomic replace
         key_pem = self.ca_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption(),
         )
-        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(key_pem)
+        key_temp_fd, key_temp_path = tempfile.mkstemp(dir=key_dir, prefix=".ca_key_", suffix=".tmp")
+        try:
+            # Ensure secure permissions on temp file
+            os.chmod(key_temp_path, 0o600)
+            with os.fdopen(key_temp_fd, "wb") as f:
+                f.write(key_pem)
+            # Atomic rename (prevents symlink race if key_path exists as symlink)
+            os.replace(key_temp_path, key_path)
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                os.unlink(key_temp_path)
+            except Exception:
+                pass
+            raise
