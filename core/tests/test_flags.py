@@ -23,12 +23,10 @@ def test_feature_enabled_off() -> None:
     """Test that feature_enabled returns False when flag is off."""
     # Clear cache first
     import shared.licensing.entitlements
-    shared.licensing.entitlements._flag_cache.clear()
+    shared.licensing.entitlements._cache.clear()
 
-    with patch("shared.licensing.entitlements._get_posthog_client") as mock_client:
-        client_mock = MagicMock()
-        client_mock.feature_enabled.return_value = False
-        mock_client.return_value = client_mock
+    with patch("shared.licensing.entitlements._flag_on") as mock_flag_on:
+        mock_flag_on.return_value = False
 
         result = feature_enabled("test", "feature1", distinct_id="user1")
         assert result is False
@@ -38,12 +36,10 @@ def test_feature_enabled_on() -> None:
     """Test that feature_enabled returns True when flag is on."""
     # Clear cache first
     import shared.licensing.entitlements
-    shared.licensing.entitlements._flag_cache.clear()
+    shared.licensing.entitlements._cache.clear()
 
-    with patch("shared.licensing.entitlements._get_posthog_client") as mock_client:
-        client_mock = MagicMock()
-        client_mock.feature_enabled.return_value = True
-        mock_client.return_value = client_mock
+    with patch("shared.licensing.entitlements._flag_on") as mock_flag_on:
+        mock_flag_on.return_value = True
 
         result = feature_enabled("test", "feature1", distinct_id="user1")
         assert result is True
@@ -53,9 +49,9 @@ def test_feature_enabled_no_posthog() -> None:
     """Test that feature_enabled defaults to False when PostHog is not configured."""
     # Clear cache first
     import shared.licensing.entitlements
-    shared.licensing.entitlements._flag_cache.clear()
+    shared.licensing.entitlements._cache.clear()
 
-    with patch("shared.licensing.entitlements._get_posthog_client") as mock_client:
+    with patch("shared.licensing.entitlements._client") as mock_client:
         mock_client.return_value = None
 
         result = feature_enabled("test", "feature1")
@@ -66,13 +62,15 @@ def test_feature_enabled_posthog_error() -> None:
     """Test that feature_enabled falls back to cache on PostHog error."""
     # Clear cache first
     import shared.licensing.entitlements
-    shared.licensing.entitlements._flag_cache.clear()
+    shared.licensing.entitlements._cache.clear()
 
-    with patch("shared.licensing.entitlements._get_posthog_client") as mock_client:
+    client_mock = MagicMock()
+    client_mock.feature_enabled.return_value = True
+
+    with patch("shared.licensing.entitlements._client") as mock_client_func:
+        mock_client_func.return_value = client_mock
+
         # First call succeeds
-        client_mock = MagicMock()
-        client_mock.feature_enabled.return_value = True
-        mock_client.return_value = client_mock
         result1 = feature_enabled("test", "feature2", distinct_id="user1")
         assert result1 is True
 
