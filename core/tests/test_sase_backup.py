@@ -8,6 +8,7 @@ import pytest
 
 from core.modules.sase.backup import BackupManager, S3Config, S3Manager
 from core.modules.sase.backup.crypto import decrypt_file, encrypt_file
+from core.modules.sase.backup.manager import _validate_backup_name, _validate_path_in_directory
 
 
 def _create_backup_mock_db() -> MagicMock:
@@ -27,6 +28,92 @@ def _create_backup_mock_db() -> MagicMock:
     db.rollback = MagicMock()
 
     return db
+
+
+class TestBackupNameValidation:
+    """Test backup name validation against path traversal."""
+
+    def test_valid_backup_names(self) -> None:
+        """Test that valid names are accepted."""
+        valid_names = [
+            "backup_001",
+            "sasewaddle_backup_20260101_000000",
+            "backup.tar.gz",
+            "my-backup-1",
+            "test_backup_v2.0",
+        ]
+        for name in valid_names:
+            _validate_backup_name(name)  # Should not raise
+
+    def test_reject_path_traversal_dots(self) -> None:
+        """Test that '..' is rejected."""
+        with pytest.raises(ValueError, match="cannot contain"):
+            _validate_backup_name("../etc/passwd")
+
+    def test_reject_absolute_path(self) -> None:
+        """Test that absolute paths are rejected."""
+        with pytest.raises(ValueError, match="cannot.*start with"):
+            _validate_backup_name("/etc/passwd")
+
+    def test_reject_empty_name(self) -> None:
+        """Test that empty name is rejected."""
+        with pytest.raises(ValueError):
+            _validate_backup_name("")
+
+    def test_reject_invalid_characters(self) -> None:
+        """Test that invalid characters are rejected."""
+        invalid_names = [
+            "backup;rm rf /",
+            "backup $(whoami)",
+            "backup`id`",
+            "backup|cat /etc/passwd",
+        ]
+        for name in invalid_names:
+            with pytest.raises(ValueError, match="alphanumeric"):
+                _validate_backup_name(name)
+
+    def test_reject_excessive_length(self) -> None:
+        """Test that excessively long names are rejected."""
+        long_name = "a" * 300
+        with pytest.raises(ValueError):
+            _validate_backup_name(long_name)
+
+
+class TestPathTraversalPrevention:
+    """Test path traversal prevention."""
+
+    def test_validate_path_in_directory_ok(self, tmp_path: Path) -> None:
+        """Test valid path within directory."""
+        base = tmp_path / "backups"
+        base.mkdir()
+        test_file = base / "backup.json"
+        test_file.write_text("test")
+
+        result = _validate_path_in_directory(test_file, base)
+        assert result == test_file.resolve()
+
+    def test_validate_path_escapes_directory(self, tmp_path: Path) -> None:
+        """Test that path outside directory is rejected."""
+        base = tmp_path / "backups"
+        base.mkdir()
+        outside = tmp_path / "escape.txt"
+        outside.write_text("escaped")
+
+        with pytest.raises(ValueError, match="escapes backup directory"):
+            _validate_path_in_directory(outside, base)
+
+    def test_validate_rejects_symlink_escape(self, tmp_path: Path) -> None:
+        """Test that symlinks pointing outside are rejected."""
+        base = tmp_path / "backups"
+        base.mkdir()
+        outside = tmp_path / "outside.txt"
+        outside.write_text("secret")
+
+        symlink = base / "link_to_outside"
+        symlink.symlink_to(outside)
+
+        with pytest.raises(ValueError, match="Symlinks not allowed"):
+            _validate_path_in_directory(symlink, base)
 
 
 class TestEncryption:
@@ -101,6 +188,26 @@ class TestEncryption:
 
         assert decrypted1.read_bytes() == test_data
         assert decrypted2.read_bytes() == test_data
+
+    def test_encrypt_kdf_parameters_match(self, tmp_path: Path) -> None:
+        """Test that KDF parameters are consistent between encrypt/decrypt."""
+        from core.modules.sase.backup.crypto import SCRYPT_N, SCRYPT_R, SCRYPT_P
+
+        # Verify upgraded parameters per OWASP
+        assert SCRYPT_N == 2**17, "KDF n parameter should be 2^17 (131072)"
+        assert SCRYPT_R == 8, "KDF r parameter should be 8"
+        assert SCRYPT_P == 1, "KDF p parameter should be 1"
+
+        # Verify roundtrip still works with new params
+        test_data = b"Sensitive backup data"
+        test_file = tmp_path / "test_kdf.txt"
+        test_file.write_bytes(test_data)
+
+        key = "strong_password_123"
+        encrypted = encrypt_file(test_file, key)
+        decrypted = decrypt_file(encrypted, key)
+
+        assert decrypted.read_bytes() == test_data
 
 
 class TestS3Config:
@@ -242,6 +349,200 @@ class TestBackupManagerLocal:
             # Verify it's gone
             backups = manager.list_backups(include_s3=False)
             assert len(backups) == 0
+
+    def test_create_backup_rejects_path_traversal(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that create_backup rejects path traversal attempts."""
+        backup_dir = tmp_path / "backups"
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            with pytest.raises(ValueError, match="cannot contain"):
+                manager.create_backup(backup_name="../etc/passwd", compress=False)
+
+            with pytest.raises(ValueError, match="start with"):
+                manager.create_backup(backup_name="/etc/passwd", compress=False)
+
+    def test_delete_backup_rejects_path_traversal(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that delete_backup rejects path traversal attempts."""
+        backup_dir = tmp_path / "backups"
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            with pytest.raises(ValueError, match="cannot contain"):
+                manager.delete_backup("../etc/passwd")
+
+            with pytest.raises(ValueError, match="start with"):
+                manager.delete_backup("/etc/passwd")
+
+    def test_delete_backup_confined_to_backup_dir(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that delete_backup only deletes within backup directory."""
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+
+        # Create a file outside the backup directory
+        outside_file = tmp_path / "outside.txt"
+        outside_file.write_text("should not be deleted")
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            # Try to delete a name that doesn't exist in backup_dir
+            # (should not escape and delete outside_file)
+            deleted = manager.delete_backup("outside")
+            assert deleted is False
+            assert outside_file.exists()
+
+
+class TestTenantIsolation:
+    """Test multi-tenant backup isolation."""
+
+    @pytest.fixture
+    def backup_mock_db(self) -> MagicMock:
+        """Create mock DAL for backup tests."""
+        db = MagicMock()
+        db.tables = ["users"]
+
+        users_table = MagicMock()
+        users_table.fields = ["id", "name"]
+
+        query_proxy = MagicMock()
+        query_proxy.select.return_value = []
+        db.return_value = query_proxy
+        db.__call__ = MagicMock(return_value=query_proxy)
+        db.__getitem__.return_value = users_table
+        db.commit = MagicMock()
+        db.rollback = MagicMock()
+
+        return db
+
+    def test_create_backup_with_tenant_id(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that backups are isolated per tenant."""
+        backup_dir = tmp_path / "backups"
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            # Create backups for two tenants
+            result1 = manager.create_backup(
+                backup_name="tenant_backup_1",
+                compress=False,
+                tenant_id="tenant_a",
+            )
+            result2 = manager.create_backup(
+                backup_name="tenant_backup_2",
+                compress=False,
+                tenant_id="tenant_b",
+            )
+
+            # Verify they're in different directories
+            file1 = Path(result1["file_path"])
+            file2 = Path(result2["file_path"])
+
+            assert "tenant_a" in str(file1)
+            assert "tenant_b" in str(file2)
+            assert file1.parent != file2.parent
+
+    def test_list_backups_filtered_by_tenant(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that list_backups respects tenant filter."""
+        backup_dir = tmp_path / "backups"
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            # Create backups for multiple tenants
+            manager.create_backup(backup_name="backup1", tenant_id="tenant_a")
+            manager.create_backup(backup_name="backup2", tenant_id="tenant_b")
+
+            # List all backups
+            all_backups = manager.list_backups(include_s3=False)
+            assert len(all_backups) == 2
+
+            # List backups for tenant_a only
+            tenant_a_backups = manager.list_backups(include_s3=False, tenant_id="tenant_a")
+            assert len(tenant_a_backups) == 1
+            assert tenant_a_backups[0]["backup_name"] == "backup1"
+            assert tenant_a_backups[0].get("tenant_id") == "tenant_a"
+
+            # List backups for tenant_b only
+            tenant_b_backups = manager.list_backups(include_s3=False, tenant_id="tenant_b")
+            assert len(tenant_b_backups) == 1
+            assert tenant_b_backups[0]["backup_name"] == "backup2"
+            assert tenant_b_backups[0].get("tenant_id") == "tenant_b"
+
+    def test_delete_backup_respects_tenant_boundary(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that delete_backup respects tenant boundaries."""
+        backup_dir = tmp_path / "backups"
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            # Create backups for two tenants
+            manager.create_backup(backup_name="backup1", tenant_id="tenant_a")
+            manager.create_backup(backup_name="backup2", tenant_id="tenant_b")
+
+            # Delete tenant_a backup with tenant_a context
+            deleted = manager.delete_backup("backup1", tenant_id="tenant_a")
+            assert deleted is True
+
+            # Verify tenant_a backup is gone
+            tenant_a_backups = manager.list_backups(include_s3=False, tenant_id="tenant_a")
+            assert len(tenant_a_backups) == 0
+
+            # Verify tenant_b backup still exists
+            tenant_b_backups = manager.list_backups(include_s3=False, tenant_id="tenant_b")
+            assert len(tenant_b_backups) == 1
+
+    def test_restore_backup_respects_tenant(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
+        """Test that restore_backup validates tenant boundaries."""
+        backup_dir = tmp_path / "backups"
+
+        # Create backup data
+        backup_data = {
+            "metadata": {
+                "version": "1.0",
+                "created_at": "2026-01-01T00:00:00",
+                "db_uri": "postgresql://localhost/testdb",
+                "tables": [{"name": "users", "row_count": 0}],
+            },
+            "data": {"users": []},
+        }
+
+        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
+            manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
+
+            # Create backup in tenant_a directory
+            tenant_dir = backup_dir / "tenant_a"
+            tenant_dir.mkdir(parents=True)
+            backup_file = tenant_dir / "backup_test.json"
+            backup_file.write_text(json.dumps(backup_data))
+
+            # Create metadata
+            meta_file = backup_file.with_suffix(".meta")
+            meta_file.write_text(json.dumps({"backup_name": "backup_test"}))
+
+            # Mock checksum
+            with patch.object(manager, "_calculate_checksum", return_value="abc123"):
+                # Restore with matching tenant should work
+                result = manager.restore_backup(
+                    str(backup_file), tenant_id="tenant_a", verify_checksum=False
+                )
+                assert result is not None
 
 
 class TestS3Manager:

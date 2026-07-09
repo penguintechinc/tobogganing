@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,64 @@ from .crypto import decrypt_file, encrypt_file
 from .s3 import S3Config, S3Manager
 
 logger = logging.getLogger(__name__)
+
+# Strict allowlist pattern for backup names: alphanumeric, dots, hyphens, underscores
+VALID_BACKUP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_backup_name(backup_name: str) -> None:
+    """
+    Validate backup name against path traversal and injection attacks.
+
+    Args:
+        backup_name: Backup name to validate
+
+    Raises:
+        ValueError: If name is invalid or contains suspicious patterns
+    """
+    if not backup_name or len(backup_name) > 255:
+        raise ValueError("Backup name must be 1-255 characters")
+
+    if ".." in backup_name or backup_name.startswith("/"):
+        raise ValueError("Backup name cannot contain '..' or start with '/'")
+
+    if not VALID_BACKUP_NAME_PATTERN.match(backup_name):
+        raise ValueError(
+            "Backup name must contain only alphanumeric, dots, hyphens, underscores"
+        )
+
+
+def _validate_path_in_directory(file_path: Path, base_dir: Path) -> Path:
+    """
+    Validate that a path resolves within a base directory.
+
+    Args:
+        file_path: Path to validate
+        base_dir: Base directory that file_path must be within
+
+    Returns:
+        Resolved file path
+
+    Raises:
+        ValueError: If file_path is outside base_dir or is a symlink
+    """
+    # Reject symlinks first (prevent escape via symlinks)
+    if file_path.is_symlink():
+        raise ValueError("Symlinks not allowed in backup operations")
+
+    try:
+        # Resolve paths to absolute
+        resolved_file = file_path.resolve()
+        resolved_base = base_dir.resolve()
+
+        # Check if file is within base directory
+        resolved_file.relative_to(resolved_base)
+
+        return resolved_file
+    except ValueError as e:
+        if "is not in the subpath of" in str(e):
+            raise ValueError(f"Path escapes backup directory: {file_path}") from e
+        raise
 
 
 class BackupManager:
@@ -47,6 +106,7 @@ class BackupManager:
         encrypt: bool = False,
         encryption_key: Optional[str] = None,
         upload_to_s3: Optional[bool] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a full database backup.
@@ -57,14 +117,21 @@ class BackupManager:
             encrypt: Whether to encrypt backup
             encryption_key: Encryption key (required if encrypt=True)
             upload_to_s3: Override S3 upload setting
+            tenant_id: Tenant ID for multi-tenant isolation (scopes backup)
 
         Returns:
             Backup metadata dict
+
+        Raises:
+            ValueError: If backup_name is invalid or tenant is unauthorized
         """
         try:
             if not backup_name:
                 timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 backup_name = f"sasewaddle_backup_{timestamp}"
+            else:
+                # Validate backup name to prevent path traversal
+                _validate_backup_name(backup_name)
 
             ext = ".json"
             if compress:
@@ -72,7 +139,16 @@ class BackupManager:
             if encrypt:
                 ext += ".enc"
 
-            backup_file = self.backup_dir / f"{backup_name}{ext}"
+            # Build path with tenant isolation if provided
+            if tenant_id:
+                _validate_backup_name(tenant_id)  # Validate tenant_id too
+                backup_file = self.backup_dir / tenant_id / f"{backup_name}{ext}"
+                backup_file.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                backup_file = self.backup_dir / f"{backup_name}{ext}"
+
+            # Validate path is within backup directory
+            _validate_path_in_directory(backup_file, self.backup_dir)
 
             # Export all tables
             backup_data: Dict[str, Any] = {
@@ -172,6 +248,7 @@ class BackupManager:
         decryption_key: Optional[str] = None,
         verify_checksum: bool = True,
         from_s3: bool = False,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Restore database from backup.
@@ -182,9 +259,13 @@ class BackupManager:
             decryption_key: Decryption key (required if decrypt=True)
             verify_checksum: Whether to verify integrity
             from_s3: Whether to download from S3 first
+            tenant_id: Tenant ID for multi-tenant isolation (validates authorization)
 
         Returns:
             Restore statistics dict
+
+        Raises:
+            ValueError: If path escapes backup directory or tenant is unauthorized
         """
         try:
             # Handle S3 download
@@ -194,6 +275,16 @@ class BackupManager:
                 backup_file = Path(backup_path)
                 if not backup_file.exists():
                     raise FileNotFoundError(f"Backup not found: {backup_file}")
+
+                # Validate path is within backup directory
+                _validate_path_in_directory(backup_file, self.backup_dir)
+
+                # If tenant_id provided, verify backup belongs to that tenant
+                if tenant_id:
+                    _validate_backup_name(tenant_id)
+                    tenant_dir = self.backup_dir / tenant_id
+                    if tenant_dir.exists():
+                        _validate_path_in_directory(backup_file, tenant_dir)
 
             # Load and verify metadata
             metadata_file = backup_file.with_suffix(".meta")
@@ -277,24 +368,40 @@ class BackupManager:
             logger.error(f"Restore failed: {e}")
             raise
 
-    def list_backups(self, include_s3: bool = True) -> List[Dict[str, Any]]:
+    def list_backups(
+        self, include_s3: bool = True, tenant_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         List all backups.
 
         Args:
             include_s3: Whether to include S3 backups
+            tenant_id: Optional tenant ID to filter backups to single tenant
 
         Returns:
             List of backup metadata dicts
+
+        Raises:
+            ValueError: If tenant_id is invalid
         """
         backups: List[Dict[str, Any]] = []
 
+        if tenant_id:
+            _validate_backup_name(tenant_id)
+            backup_search_dir = self.backup_dir / tenant_id
+        else:
+            backup_search_dir = self.backup_dir
+
         # Local backups
-        for meta_file in self.backup_dir.glob("*.meta"):
+        for meta_file in backup_search_dir.glob("**/*.meta"):
             try:
+                # Validate meta file is within the search directory
+                _validate_path_in_directory(meta_file, backup_search_dir)
                 with open(meta_file, "r") as f:
                     metadata = json.load(f)
                     metadata["storage_location"] = "local"
+                    if tenant_id:
+                        metadata["tenant_id"] = tenant_id
                     backups.append(metadata)
             except Exception as e:
                 logger.warning(f"Could not read {meta_file}: {e}")
@@ -333,29 +440,74 @@ class BackupManager:
 
         return unique_backups
 
-    def delete_backup(self, backup_name: str, from_s3: bool = False) -> bool:
+    def delete_backup(
+        self, backup_name: str, from_s3: bool = False, tenant_id: Optional[str] = None
+    ) -> bool:
         """
         Delete a backup.
 
         Args:
-            backup_name: Backup name
+            backup_name: Backup name (must match strict validation)
             from_s3: Whether to delete from S3
+            tenant_id: Optional tenant ID for multi-tenant isolation
 
         Returns:
             True if deleted
+
+        Raises:
+            ValueError: If backup_name or tenant_id is invalid or path escapes directory
         """
+        # Validate input to prevent path traversal
+        _validate_backup_name(backup_name)
+
         if from_s3 and self.s3_manager:
             return self.s3_manager.delete_backup(backup_name)
 
+        if tenant_id:
+            _validate_backup_name(tenant_id)
+            delete_dir = self.backup_dir / tenant_id
+        else:
+            delete_dir = self.backup_dir
+
         deleted = False
-        for file_pattern in [f"{backup_name}*", f"*{backup_name}*"]:
-            for backup_file in self.backup_dir.glob(file_pattern):
+        # Delete backup files that match the backup name with allowed extensions
+        # and any associated .meta files
+        extensions = ["", ".json", ".json.gz", ".json.gz.enc"]
+        for ext in extensions:
+            backup_file = delete_dir / f"{backup_name}{ext}"
+
+            if backup_file.exists():
                 try:
+                    _validate_path_in_directory(backup_file, delete_dir)
+                    if backup_file.is_symlink():
+                        logger.warning(f"Skipping symlink: {backup_file}")
+                        continue
                     backup_file.unlink()
                     logger.info(f"Deleted: {backup_file}")
                     deleted = True
+
+                    # Delete associated .meta file
+                    meta_file = backup_file.parent / f"{backup_file.name}.meta"
+                    if meta_file.exists():
+                        _validate_path_in_directory(meta_file, delete_dir)
+                        if not meta_file.is_symlink():
+                            meta_file.unlink()
+                            logger.info(f"Deleted: {meta_file}")
+                except ValueError as e:
+                    logger.error(f"Delete failed (path validation): {backup_file}: {e}")
                 except Exception as e:
                     logger.error(f"Delete failed: {backup_file}: {e}")
+
+        # Also clean up any orphaned .meta files matching this backup name
+        try:
+            for meta_file in delete_dir.glob(f"{backup_name}*.meta"):
+                _validate_path_in_directory(meta_file, delete_dir)
+                if not meta_file.is_symlink() and meta_file.exists():
+                    meta_file.unlink()
+                    logger.info(f"Deleted orphaned metadata: {meta_file}")
+                    deleted = True
+        except Exception as e:
+            logger.error(f"Failed to clean up metadata files: {e}")
 
         return deleted
 

@@ -16,10 +16,18 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Scrypt KDF parameters per OWASP recommendation
+# n=2**17 (131072): CPU cost factor; r=8, p=1 are standard
+# Memory usage ~128MB per derivation; acceptable for backup tool
+# These must match between encrypt and decrypt operations
+SCRYPT_N = 2**17
+SCRYPT_R = 8
+SCRYPT_P = 1
+
 
 def _derive_key(password: str, salt: Optional[bytes] = None) -> tuple[bytes, bytes]:
     """
-    Derive a Fernet key from a password using scrypt.
+    Derive a Fernet key from a password using scrypt KDF.
 
     Args:
         password: Encryption password
@@ -27,6 +35,9 @@ def _derive_key(password: str, salt: Optional[bytes] = None) -> tuple[bytes, byt
 
     Returns:
         Tuple of (key, salt) where key is Fernet-compatible
+
+    Raises:
+        ImportError: If cryptography library is not available
     """
     if not CRYPTO_AVAILABLE:
         raise ImportError("cryptography library required for encryption")
@@ -34,8 +45,10 @@ def _derive_key(password: str, salt: Optional[bytes] = None) -> tuple[bytes, byt
     if salt is None:
         salt = os.urandom(16)
 
-    # Scrypt-based key derivation with work factor
-    kdf = Scrypt(salt=salt, length=32, n=2**15, r=8, p=1)
+    # Scrypt-based key derivation with OWASP-aligned parameters
+    # n=2**17: CPU cost; higher is slower but stronger against brute-force
+    # r=8, p=1: Memory and parallelization factors (standard values)
+    kdf = Scrypt(salt=salt, length=32, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P)
     derived = kdf.derive(password.encode())
 
     # Fernet requires base64-encoded 32 bytes
