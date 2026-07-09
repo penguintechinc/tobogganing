@@ -1,6 +1,7 @@
 """Tests for feature flags and tier entitlements."""
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -151,7 +152,7 @@ async def test_require_feature_flag_off(app: Quart) -> None:
         mock_flag.return_value = False
 
         @require_feature("test", "feature")
-        async def handler() -> tuple[dict, int]:
+        async def handler() -> tuple[dict[str, Any], int]:
             return {"status": "ok"}, 200
 
         # Call within app context
@@ -173,7 +174,7 @@ async def test_require_feature_flag_on(app: Quart) -> None:
         mock_flag.return_value = True
 
         @require_feature("test", "feature")
-        async def handler() -> tuple[dict, int]:
+        async def handler() -> tuple[dict[str, Any], int]:
             return {"status": "ok"}, 200
 
         # Call within app context
@@ -198,7 +199,7 @@ async def test_require_feature_professional_not_licensed(app: Quart) -> None:
             mock_licensed.return_value = False
 
             @require_feature("test", "pro_feature")
-            async def handler() -> tuple[dict, int]:
+            async def handler() -> tuple[dict[str, Any], int]:
                 return {"status": "ok"}, 200
 
             # Call within app context
@@ -224,7 +225,7 @@ async def test_require_feature_professional_licensed(app: Quart) -> None:
             mock_licensed.return_value = True
 
             @require_feature("test", "pro_feature")
-            async def handler() -> tuple[dict, int]:
+            async def handler() -> tuple[dict[str, Any], int]:
                 return {"status": "ok"}, 200
 
             # Call within app context

@@ -92,7 +92,7 @@ async def _validate_and_store_token() -> bool:
     return claims is not None
 
 
-def require_tenant(func: Callable) -> Callable:
+def require_tenant(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to require a valid tenant claim.
 
     Runs first, before any scope checks. Returns 403 if tenant claim is missing
@@ -126,7 +126,7 @@ def require_tenant(func: Callable) -> Callable:
     return wrapper
 
 
-def require_scope(*required_scopes: str) -> Callable:
+def require_scope(*required_scopes: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to require specific scopes.
 
     Returns 403 unless token's scope set satisfies all required scopes.
@@ -146,7 +146,7 @@ def require_scope(*required_scopes: str) -> Callable:
         Decorator function.
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Validate token and extract claims (tenant-first runs here implicitly)

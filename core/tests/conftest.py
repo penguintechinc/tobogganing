@@ -1,13 +1,14 @@
 """Shared pytest fixtures for core tests."""
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from quart import Quart
 
 
-def make_mock_row(data: dict) -> MagicMock:
+def make_mock_row(data: dict[str, Any]) -> MagicMock:
     """Create a mock row object that behaves like a penguin-dal row.
 
     Args:
@@ -23,7 +24,7 @@ def make_mock_row(data: dict) -> MagicMock:
     return row
 
 
-def make_mock_rowset(rows: list) -> MagicMock:
+def make_mock_rowset(rows: list[Any]) -> MagicMock:
     """Create a mock rowset that supports .first() and iteration.
 
     Args:
@@ -151,7 +152,7 @@ def app(mock_db: MagicMock) -> Quart:
 
 
 @pytest.fixture
-def client(app: Quart):
+def client(app: Quart) -> Any:
     """Quart async test client.
 
     Args:

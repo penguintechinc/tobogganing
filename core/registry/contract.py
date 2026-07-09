@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from quart import Blueprint
 
@@ -43,4 +43,4 @@ class ModuleContract:
     flags: list[str] = field(default_factory=list)
     entitlements: list[Entitlement] = field(default_factory=list)
     migrations: list[str] = field(default_factory=list)
-    health: Optional[Callable] = None
+    health: Optional[Callable[..., Any]] = None

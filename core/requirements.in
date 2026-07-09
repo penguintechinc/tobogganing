@@ -1,0 +1,24 @@
+# Production dependencies
+quart==0.20.0
+quart-cors==0.7.0
+hypercorn==0.17.3
+penguin-dal[quart]>=0.1.0
+SQLAlchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+asyncpg==0.30.0
+aiomysql==0.2.0
+PyJWT==2.10.1
+bcrypt==4.2.1
+pyotp==2.9.0
+qrcode==8.0
+posthog==3.7.0
+penguin-aaa>=0.1.0
+penguin-licensing>=0.1.0
+python-dotenv==1.0.1
+structlog==24.4.0
+
+# Test dependencies
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0

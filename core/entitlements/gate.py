@@ -55,7 +55,7 @@ def _is_licensed_for_tier(tier: str) -> bool:
     return False
 
 
-def require_feature(module: str, feature: str) -> Callable:
+def require_feature(module: str, feature: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to gate a route handler behind a feature flag and tier entitlement.
 
@@ -70,7 +70,7 @@ def require_feature(module: str, feature: str) -> Callable:
         Decorated function that returns 402 if feature unavailable
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Check if the feature flag is enabled
