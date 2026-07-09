@@ -24,6 +24,9 @@ certs/
 certificates/
 secrets/
 .secrets
+# ...but the SASE certs source package is code, not TLS material — keep it tracked
+!core/modules/sase/certs/
+!core/modules/sase/certs/**
 
 # Configuration files with sensitive data
 config.yaml
