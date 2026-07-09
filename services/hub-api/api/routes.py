@@ -13,6 +13,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     @action.uses("json")
     async def register_cluster():
         try:
+            from auth.http_auth import verify_bootstrap_token
+            if not verify_bootstrap_token(extract_bearer_token(request.headers)):
+                response.status = 401
+                return {"error": "Unauthorized: enrollment token required"}
+
             data = await request.json()
             
             # Validate required fields
@@ -53,6 +58,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     @action.uses("json")
     async def cluster_heartbeat(cluster_id):
         try:
+            from auth.http_auth import verify_bootstrap_token
+            if not verify_bootstrap_token(extract_bearer_token(request.headers)):
+                response.status = 401
+                return {"error": "Unauthorized: enrollment token required"}
+
             data = await request.json()
             client_count = data.get('client_count', 0)
             
@@ -72,6 +82,12 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     @action.uses("json")
     async def list_clusters():
         try:
+            token = extract_bearer_token(request.headers)
+            claims = await jwt_manager.validate_token(token) if token else None
+            if not claims or claims.get("role") != "admin":
+                response.status = 401
+                return {"error": "Unauthorized"}
+
             clusters = await cluster_manager.get_all_clusters()
             return {
                 "clusters": [
@@ -95,6 +111,11 @@ def setup_routes(app, cluster_manager, client_registry, cert_manager, jwt_manage
     @action.uses("json")
     async def register_client():
         try:
+            from auth.http_auth import verify_bootstrap_token
+            if not verify_bootstrap_token(extract_bearer_token(request.headers)):
+                response.status = 401
+                return {"error": "Unauthorized: enrollment token required"}
+
             data = await request.json()
             
             # Validate required fields
