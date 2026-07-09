@@ -190,8 +190,9 @@ class CertificateManager:
         """
         Validate an X.509 certificate.
 
-        Verifies that the certificate was signed by the CA and extracts the
-        node_id and node_type from the subject.
+        Verifies that the certificate was signed by the CA, checks the validity
+        window (not_before/not_after), and verifies the issuer matches the CA.
+        Extracts the node_id and node_type from the subject.
 
         Args:
             cert_pem: PEM-encoded certificate string.
@@ -201,8 +202,8 @@ class CertificateManager:
             - valid: Boolean indicating certificate validity
             - node_id: Node identifier from certificate CN
             - node_type: Node type from certificate OU
-            - not_before: Certificate validity start time
-            - not_after: Certificate validity end time
+            - not_before: Certificate validity start time (timezone-aware UTC)
+            - not_after: Certificate validity end time (timezone-aware UTC)
         """
         try:
             # Load certificate
@@ -226,6 +227,30 @@ class CertificateManager:
                     "not_after": None,
                 }
 
+            # Verify issuer matches CA subject
+            if certificate.issuer != self.ca_cert.subject:
+                return {
+                    "valid": False,
+                    "node_id": None,
+                    "node_type": None,
+                    "not_before": None,
+                    "not_after": None,
+                }
+
+            # Check validity window with timezone-aware UTC
+            not_before = certificate.not_valid_before_utc
+            not_after = certificate.not_valid_after_utc
+            now = datetime.now(timezone.utc)
+
+            if now < not_before or now > not_after:
+                return {
+                    "valid": False,
+                    "node_id": None,
+                    "node_type": None,
+                    "not_before": not_before,
+                    "not_after": not_after,
+                }
+
             # Extract node_id (CN) and node_type (OU) from subject
             node_id = None
             node_type = None
@@ -240,8 +265,8 @@ class CertificateManager:
                 "valid": True,
                 "node_id": node_id,
                 "node_type": node_type,
-                "not_before": certificate.not_valid_before,
-                "not_after": certificate.not_valid_after,
+                "not_before": not_before,
+                "not_after": not_after,
             }
         except Exception as e:
             logger.error("Failed to validate certificate", error=str(e))
@@ -535,7 +560,10 @@ class CertificateManager:
 
     def _persist_ca(self, cert_path: str, key_path: str) -> None:
         """
-        Persist CA certificate and key to PEM files.
+        Persist CA certificate and key to PEM files using atomic writes.
+
+        Uses os.open() with mode 0o600 to atomically create files with secure
+        permissions, avoiding TOCTOU (time-of-check-time-of-use) race conditions.
 
         Args:
             cert_path: Path to save CA certificate.
@@ -544,22 +572,26 @@ class CertificateManager:
         if not self.ca_cert or not self.ca_key:
             raise ValueError("CA not initialized")
 
-        # Create directories if needed
-        os.makedirs(os.path.dirname(cert_path), exist_ok=True)
-        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+        # Create directories if needed with secure permissions
+        cert_dir = os.path.dirname(cert_path)
+        key_dir = os.path.dirname(key_path)
+        if cert_dir:
+            os.makedirs(cert_dir, mode=0o700, exist_ok=True)
+        if key_dir:
+            os.makedirs(key_dir, mode=0o700, exist_ok=True)
 
-        # Write certificate
+        # Write certificate atomically with secure permissions
         cert_pem = self.ca_cert.public_bytes(serialization.Encoding.PEM)
-        with open(cert_path, "wb") as f:
+        fd = os.open(cert_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
             f.write(cert_pem)
-        os.chmod(cert_path, 0o600)
 
-        # Write key
+        # Write key atomically with secure permissions
         key_pem = self.ca_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption(),
         )
-        with open(key_path, "wb") as f:
+        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
             f.write(key_pem)
-        os.chmod(key_path, 0o600)
