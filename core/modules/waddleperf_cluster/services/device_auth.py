@@ -1,7 +1,6 @@
 """Global device authentication without tenant trust."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import structlog
@@ -26,15 +25,16 @@ async def authenticate_device_global(
         Tuple of (device_row, device_tenant) if authenticated and not revoked,
         None otherwise
     """
+    if not api_key or not api_key.strip():
+        logger.warning("device_auth_empty_key")
+        return None
+
     try:
         api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
-        # Query device_api_keys globally (no tenant filter)
-        # Note: penguin-dal select() without tenant filter searches all rows
-        key_obj = await asyncio.to_thread(
-            db.device_api_keys.select,
-            api_key_hash=api_key_hash,
-        )
+        # Query device_api_keys globally (no tenant filter in condition)
+        key_rowset = await db(db.device_api_keys.api_key_hash == api_key_hash).select()
+        key_obj = key_rowset.first()
 
         if not key_obj:
             logger.warning(
@@ -52,12 +52,20 @@ async def authenticate_device_global(
             )
             return None
 
+        # Constant-time comparison
+        if not hmac.compare_digest(key_obj.api_key_hash, api_key_hash):
+            logger.warning(
+                "device_auth_hash_mismatch",
+                device_id=key_obj.device_id,
+                tenant=key_obj.tenant,
+            )
+            return None
+
         # Fetch the device record to verify it's not deleted/suspended
-        device = await asyncio.to_thread(
-            db.devices.select,
-            id=key_obj.device_id,
-            tenant=key_obj.tenant,
-        )
+        device_rowset = await db(
+            (db.devices.id == key_obj.device_id) & (db.devices.tenant == key_obj.tenant)
+        ).select()
+        device = device_rowset.first()
 
         if not device:
             logger.warning(

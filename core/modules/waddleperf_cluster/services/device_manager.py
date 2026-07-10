@@ -1,7 +1,6 @@
 """Device management using penguin-dal."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import secrets
@@ -9,6 +8,7 @@ import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 logger = structlog.get_logger()
 
@@ -43,7 +43,6 @@ class DeviceManager:
         """
         self.db = db
         self.tenant_id = tenant_id
-        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Initialize the DeviceManager."""
@@ -69,9 +68,43 @@ class DeviceManager:
         api_key = secrets.token_urlsafe(32)
         api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
-        async with self._lock:
-            device_obj = await asyncio.to_thread(
-                self.db.devices.create,
+        device_id = str(uuid4())
+        now = datetime.now(timezone.utc)
+
+        await self.db.devices.async_insert(
+            id=device_id,
+            tenant=self.tenant_id,
+            org_unit_id=device_info.get("org_unit_id"),
+            name=device_info.get("name"),
+            serial=device_info.get("serial"),
+            hostname=device_info.get("hostname"),
+            os=device_info.get("os"),
+            status="online",
+            metadata=device_info.get("device_metadata"),
+            created_at=now,
+            updated_at=now,
+        )
+
+        # Create API key record
+        key_id = str(uuid4())
+        await self.db.device_api_keys.async_insert(
+            id=key_id,
+            tenant=self.tenant_id,
+            device_id=device_id,
+            api_key_hash=api_key_hash,
+            created_at=now,
+        )
+
+        logger.info(
+            "device_registered",
+            device_id=device_id,
+            serial=device_info.get("serial"),
+            tenant=self.tenant_id,
+        )
+
+        return (
+            Device(
+                id=device_id,
                 tenant=self.tenant_id,
                 org_unit_id=device_info.get("org_unit_id"),
                 name=device_info.get("name"),
@@ -79,41 +112,13 @@ class DeviceManager:
                 hostname=device_info.get("hostname"),
                 os=device_info.get("os"),
                 status="online",
-                device_metadata=device_info.get("device_metadata", {}),
-            )
-
-            # Create API key record
-            await asyncio.to_thread(
-                self.db.device_api_keys.create,
-                tenant=self.tenant_id,
-                device_id=device_obj.id,
-                api_key_hash=api_key_hash,
-            )
-
-            logger.info(
-                "device_registered",
-                device_id=device_obj.id,
-                serial=device_obj.serial,
-                tenant=self.tenant_id,
-            )
-
-            return (
-                Device(
-                    id=device_obj.id,
-                    tenant=device_obj.tenant,
-                    org_unit_id=device_obj.org_unit_id,
-                    name=device_obj.name,
-                    serial=device_obj.serial,
-                    hostname=device_obj.hostname,
-                    os=device_obj.os,
-                    status=device_obj.status,
-                    last_heartbeat=device_obj.last_heartbeat,
-                    device_metadata=device_obj.device_metadata,
-                    created_at=device_obj.created_at,
-                    updated_at=device_obj.updated_at,
-                ),
-                api_key,
-            )
+                last_heartbeat=None,
+                device_metadata=device_info.get("device_metadata"),
+                created_at=now,
+                updated_at=now,
+            ),
+            api_key,
+        )
 
     async def authenticate_device(self, api_key: str) -> Device | None:
         """Authenticate a device by API key.
@@ -124,15 +129,21 @@ class DeviceManager:
         Returns:
             Device if authenticated and not revoked, None otherwise
         """
+        if not api_key or not api_key.strip():
+            logger.warning(
+                "authentication_rejected_empty_key",
+                tenant=self.tenant_id,
+            )
+            return None
+
         try:
             api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
             # Query device_api_keys for this hash
-            key_obj = await asyncio.to_thread(
-                self.db.device_api_keys.select,
-                tenant=self.tenant_id,
-                api_key_hash=api_key_hash,
-            )
+            key_rowset = await self.db(
+                (self.db.device_api_keys.api_key_hash == api_key_hash) & (self.db.device_api_keys.tenant == self.tenant_id)
+            ).select()
+            key_obj = key_rowset.first()
 
             if not key_obj:
                 return None
@@ -156,11 +167,10 @@ class DeviceManager:
                 return None
 
             # Get device record
-            device_obj = await asyncio.to_thread(
-                self.db.devices.select,
-                id=key_obj.device_id,
-                tenant=self.tenant_id,
-            )
+            device_rowset = await self.db(
+                (self.db.devices.id == key_obj.device_id) & (self.db.devices.tenant == self.tenant_id)
+            ).select()
+            device_obj = device_rowset.first()
 
             if not device_obj:
                 return None
@@ -175,7 +185,7 @@ class DeviceManager:
                 os=device_obj.os,
                 status=device_obj.status,
                 last_heartbeat=device_obj.last_heartbeat,
-                device_metadata=device_obj.device_metadata,
+                device_metadata=device_obj.metadata,
                 created_at=device_obj.created_at,
                 updated_at=device_obj.updated_at,
             )
@@ -196,11 +206,11 @@ class DeviceManager:
         Returns:
             Device or None if not found
         """
-        device_obj = await asyncio.to_thread(
-            self.db.devices.select,
-            id=device_id,
-            tenant=self.tenant_id,
-        )
+        device_rowset = await self.db(
+            (self.db.devices.id == device_id) & (self.db.devices.tenant == self.tenant_id)
+        ).select()
+        device_obj = device_rowset.first()
+
         if not device_obj:
             return None
 
@@ -214,7 +224,7 @@ class DeviceManager:
             os=device_obj.os,
             status=device_obj.status,
             last_heartbeat=device_obj.last_heartbeat,
-            device_metadata=device_obj.device_metadata,
+            device_metadata=device_obj.metadata,
             created_at=device_obj.created_at,
             updated_at=device_obj.updated_at,
         )
@@ -233,18 +243,13 @@ class DeviceManager:
             List of Device objects
         """
         if org_unit_id is not None:
-            devices = await asyncio.to_thread(
-                self.db.devices.select_list,
-                tenant=self.tenant_id,
-                org_unit_id=org_unit_id,
-                limitby=(offset, offset + limit),
-            )
+            devices_rowset = await self.db(
+                (self.db.devices.tenant == self.tenant_id) & (self.db.devices.org_unit_id == org_unit_id)
+            ).select(limitby=(offset, offset + limit))
         else:
-            devices = await asyncio.to_thread(
-                self.db.devices.select_list,
-                tenant=self.tenant_id,
-                limitby=(offset, offset + limit),
-            )
+            devices_rowset = await self.db(
+                self.db.devices.tenant == self.tenant_id
+            ).select(limitby=(offset, offset + limit))
 
         return [
             Device(
@@ -257,11 +262,11 @@ class DeviceManager:
                 os=d.os,
                 status=d.status,
                 last_heartbeat=d.last_heartbeat,
-                device_metadata=d.device_metadata,
+                device_metadata=d.metadata,
                 created_at=d.created_at,
                 updated_at=d.updated_at,
             )
-            for d in devices
+            for d in devices_rowset
         ]
 
     async def update_status(self, device_id: str, status: str) -> Device | None:
@@ -278,21 +283,17 @@ class DeviceManager:
         if not existing:
             return None
 
-        async with self._lock:
-            await asyncio.to_thread(
-                self.db.devices.update,
-                id=device_id,
-                tenant=self.tenant_id,
-                status=status,
-                updated_at=datetime.now(timezone.utc),
-            )
+        now = datetime.now(timezone.utc)
+        await self.db(
+            (self.db.devices.id == device_id) & (self.db.devices.tenant == self.tenant_id)
+        ).update(status=status, updated_at=now)
 
-            logger.info(
-                "device_status_updated",
-                device_id=device_id,
-                status=status,
-                tenant=self.tenant_id,
-            )
+        logger.info(
+            "device_status_updated",
+            device_id=device_id,
+            status=status,
+            tenant=self.tenant_id,
+        )
 
         return await self.get_device(device_id)
 
@@ -309,22 +310,16 @@ class DeviceManager:
         if not existing:
             return None
 
-        async with self._lock:
-            now = datetime.now(timezone.utc)
-            await asyncio.to_thread(
-                self.db.devices.update,
-                id=device_id,
-                tenant=self.tenant_id,
-                last_heartbeat=now,
-                status="online",
-                updated_at=now,
-            )
+        now = datetime.now(timezone.utc)
+        await self.db(
+            (self.db.devices.id == device_id) & (self.db.devices.tenant == self.tenant_id)
+        ).update(last_heartbeat=now, status="online", updated_at=now)
 
-            logger.info(
-                "device_heartbeat",
-                device_id=device_id,
-                tenant=self.tenant_id,
-            )
+        logger.info(
+            "device_heartbeat",
+            device_id=device_id,
+            tenant=self.tenant_id,
+        )
 
         return await self.get_device(device_id)
 
@@ -341,26 +336,21 @@ class DeviceManager:
         if not existing:
             return False
 
-        async with self._lock:
-            # Delete API keys first
-            await asyncio.to_thread(
-                self.db.device_api_keys.delete,
-                device_id=device_id,
-                tenant=self.tenant_id,
-            )
+        # Delete API keys first
+        await self.db(
+            (self.db.device_api_keys.device_id == device_id) & (self.db.device_api_keys.tenant == self.tenant_id)
+        ).delete()
 
-            # Delete device
-            await asyncio.to_thread(
-                self.db.devices.delete,
-                id=device_id,
-                tenant=self.tenant_id,
-            )
+        # Delete device
+        await self.db(
+            (self.db.devices.id == device_id) & (self.db.devices.tenant == self.tenant_id)
+        ).delete()
 
-            logger.info(
-                "device_removed",
-                device_id=device_id,
-                tenant=self.tenant_id,
-            )
+        logger.info(
+            "device_removed",
+            device_id=device_id,
+            tenant=self.tenant_id,
+        )
 
         return True
 
@@ -370,9 +360,8 @@ class DeviceManager:
         Returns:
             Number of active devices
         """
-        devices = await asyncio.to_thread(
-            self.db.devices.select_list,
-            tenant=self.tenant_id,
-            status="online",
-        )
-        return len(devices) if devices else 0
+        count = await self.db(
+            self.db.devices.tenant == self.tenant_id,
+            self.db.devices.status == "online",
+        ).count()
+        return count

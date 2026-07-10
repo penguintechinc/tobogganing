@@ -1,7 +1,6 @@
 """Enrollment secret management using penguin-dal."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import secrets
@@ -9,6 +8,7 @@ import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 logger = structlog.get_logger()
 
@@ -38,7 +38,6 @@ class EnrollmentManager:
         """
         self.db = db
         self.tenant_id = tenant_id
-        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Initialize the EnrollmentManager."""
@@ -68,35 +67,38 @@ class EnrollmentManager:
         raw_secret = secrets.token_urlsafe(32)
         secret_hash = hashlib.sha256(raw_secret.encode()).hexdigest()
 
-        async with self._lock:
-            secret_obj = await asyncio.to_thread(
-                self.db.device_enrollment_secrets.create,
+        secret_id = str(uuid4())
+        now = datetime.now(timezone.utc)
+
+        await self.db.device_enrollment_secrets.async_insert(
+            id=secret_id,
+            tenant=self.tenant_id,
+            org_unit_id=org_unit_id,
+            secret_hash=secret_hash,
+            expires_at=expires_at,
+            created_at=now,
+            created_by=created_by,
+        )
+
+        logger.info(
+            "enrollment_secret_created",
+            secret_id=secret_id,
+            org_unit_id=org_unit_id,
+            tenant=self.tenant_id,
+        )
+
+        return (
+            EnrollmentSecret(
+                id=secret_id,
                 tenant=self.tenant_id,
                 org_unit_id=org_unit_id,
                 secret_hash=secret_hash,
                 expires_at=expires_at,
+                created_at=now,
                 created_by=created_by,
-            )
-
-            logger.info(
-                "enrollment_secret_created",
-                secret_id=secret_obj.id,
-                org_unit_id=org_unit_id,
-                tenant=self.tenant_id,
-            )
-
-            return (
-                EnrollmentSecret(
-                    id=secret_obj.id,
-                    tenant=secret_obj.tenant,
-                    org_unit_id=secret_obj.org_unit_id,
-                    secret_hash=secret_obj.secret_hash,
-                    expires_at=secret_obj.expires_at,
-                    created_at=secret_obj.created_at,
-                    created_by=secret_obj.created_by,
-                ),
-                raw_secret,
-            )
+            ),
+            raw_secret,
+        )
 
     async def get_secret(self, secret_id: str) -> EnrollmentSecret | None:
         """Get an enrollment secret by ID.
@@ -107,11 +109,11 @@ class EnrollmentManager:
         Returns:
             EnrollmentSecret or None if not found
         """
-        secret_obj = await asyncio.to_thread(
-            self.db.device_enrollment_secrets.select,
-            id=secret_id,
-            tenant=self.tenant_id,
-        )
+        secret_rowset = await self.db(
+            (self.db.device_enrollment_secrets.id == secret_id) & (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+        ).select()
+        secret_obj = secret_rowset.first()
+
         if not secret_obj:
             return None
 
@@ -135,11 +137,9 @@ class EnrollmentManager:
         Returns:
             List of EnrollmentSecret objects
         """
-        secrets_list = await asyncio.to_thread(
-            self.db.device_enrollment_secrets.select_list,
-            tenant=self.tenant_id,
-            limitby=(offset, offset + limit),
-        )
+        secrets_rowset = await self.db(
+            self.db.device_enrollment_secrets.tenant == self.tenant_id,
+        ).select(limitby=(offset, offset + limit))
 
         return [
             EnrollmentSecret(
@@ -151,7 +151,7 @@ class EnrollmentManager:
                 created_at=s.created_at,
                 created_by=s.created_by,
             )
-            for s in (secrets_list if secrets_list else [])
+            for s in secrets_rowset
         ]
 
     async def delete_secret(self, secret_id: str) -> bool:
@@ -167,18 +167,15 @@ class EnrollmentManager:
         if not existing:
             return False
 
-        async with self._lock:
-            await asyncio.to_thread(
-                self.db.device_enrollment_secrets.delete,
-                id=secret_id,
-                tenant=self.tenant_id,
-            )
+        await self.db(
+            (self.db.device_enrollment_secrets.id == secret_id) & (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+        ).delete()
 
-            logger.info(
-                "enrollment_secret_deleted",
-                secret_id=secret_id,
-                tenant=self.tenant_id,
-            )
+        logger.info(
+            "enrollment_secret_deleted",
+            secret_id=secret_id,
+            tenant=self.tenant_id,
+        )
 
         return True
 
@@ -195,11 +192,10 @@ class EnrollmentManager:
             secret_hash = hashlib.sha256(raw_secret.encode()).hexdigest()
 
             # Query for this secret
-            secret_obj = await asyncio.to_thread(
-                self.db.device_enrollment_secrets.select,
-                tenant=self.tenant_id,
-                secret_hash=secret_hash,
-            )
+            secret_rowset = await self.db(
+            (self.db.device_enrollment_secrets.tenant == self.tenant_id) & (self.db.device_enrollment_secrets.secret_hash == secret_hash)
+        ).select()
+            secret_obj = secret_rowset.first()
 
             if not secret_obj:
                 logger.warning(

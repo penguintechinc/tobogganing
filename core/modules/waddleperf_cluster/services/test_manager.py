@@ -1,10 +1,10 @@
 """Performance test result management using penguin-dal."""
 from __future__ import annotations
 
-import asyncio
 import structlog
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import uuid4
 
 logger = structlog.get_logger()
 
@@ -39,7 +39,6 @@ class TestManager:
         """
         self.db = db
         self.tenant = tenant
-        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Initialize the TestManager."""
@@ -62,43 +61,46 @@ class TestManager:
         Returns:
             PerfTestResult object
         """
-        async with self._lock:
-            test_obj = await asyncio.to_thread(
-                self.db.perf_test_results.create,
-                tenant=self.tenant,
-                device_id=data.get("device_id"),
-                test_type=data.get("test_type"),
-                status=data.get("status", "pending"),
-                target=data.get("target"),
-                started_at=data.get("started_at"),
-                completed_at=data.get("completed_at"),
-                latency_ms=data.get("latency_ms"),
-                throughput=data.get("throughput"),
-                test_output=data.get("test_output"),
-            )
+        test_id = str(uuid4())
+        now = datetime.now()
 
-            logger.info(
-                "created_test",
-                test_id=test_obj.id,
-                device_id=test_obj.device_id,
-                test_type=test_obj.test_type,
-                tenant=self.tenant,
-            )
+        await self.db.perf_test_results.async_insert(
+            id=test_id,
+            tenant=self.tenant,
+            device_id=data.get("device_id"),
+            test_type=data.get("test_type"),
+            status=data.get("status", "pending"),
+            target=data.get("target"),
+            started_at=data.get("started_at"),
+            completed_at=data.get("completed_at"),
+            latency_ms=data.get("latency_ms"),
+            throughput=data.get("throughput"),
+            test_output=data.get("test_output"),
+            created_at=now,
+        )
 
-            return PerfTestResult(
-                id=test_obj.id,
-                tenant=test_obj.tenant,
-                device_id=test_obj.device_id,
-                test_type=test_obj.test_type,
-                status=test_obj.status,
-                target=test_obj.target,
-                started_at=test_obj.started_at,
-                completed_at=test_obj.completed_at,
-                latency_ms=test_obj.latency_ms,
-                throughput=test_obj.throughput,
-                test_output=test_obj.test_output,
-                created_at=test_obj.created_at,
-            )
+        logger.info(
+            "created_test",
+            test_id=test_id,
+            device_id=data.get("device_id"),
+            test_type=data.get("test_type"),
+            tenant=self.tenant,
+        )
+
+        return PerfTestResult(
+            id=test_id,
+            tenant=self.tenant,
+            device_id=data.get("device_id"),
+            test_type=data.get("test_type"),
+            status=data.get("status", "pending"),
+            target=data.get("target"),
+            started_at=data.get("started_at"),
+            completed_at=data.get("completed_at"),
+            latency_ms=data.get("latency_ms"),
+            throughput=data.get("throughput"),
+            test_output=data.get("test_output"),
+            created_at=now,
+        )
 
     async def record_result(self, test_id: str, data: dict) -> PerfTestResult | None:
         """Record test result details (latency, throughput, output).
@@ -114,26 +116,22 @@ class TestManager:
         if not existing:
             return None
 
-        async with self._lock:
-            update_data = {
-                k: v
-                for k, v in data.items()
-                if k in ["status", "latency_ms", "throughput", "test_output", "completed_at"]
-            }
+        update_data = {
+            k: v
+            for k, v in data.items()
+            if k in ["status", "latency_ms", "throughput", "test_output", "completed_at"]
+        }
 
-            await asyncio.to_thread(
-                self.db.perf_test_results.update,
-                id=test_id,
-                tenant=self.tenant,
-                **update_data,
-            )
+        await self.db(
+            (self.db.perf_test_results.id == test_id) & (self.db.perf_test_results.tenant == self.tenant)
+        ).update(**update_data)
 
-            logger.info(
-                "recorded_result",
-                test_id=test_id,
-                status=update_data.get("status"),
-                tenant=self.tenant,
-            )
+        logger.info(
+            "recorded_result",
+            test_id=test_id,
+            status=update_data.get("status"),
+            tenant=self.tenant,
+        )
 
         return await self.get_test(test_id)
 
@@ -146,11 +144,11 @@ class TestManager:
         Returns:
             PerfTestResult or None if not found
         """
-        test_obj = await asyncio.to_thread(
-            self.db.perf_test_results.select,
-            id=test_id,
-            tenant=self.tenant,
-        )
+        test_rowset = await self.db(
+            (self.db.perf_test_results.id == test_id) & (self.db.perf_test_results.tenant == self.tenant)
+        ).select()
+        test_obj = test_rowset.first()
+
         if not test_obj:
             return None
 
@@ -189,19 +187,20 @@ class TestManager:
         Returns:
             List of PerfTestResult objects
         """
-        kwargs = {"tenant": self.tenant, "limitby": (offset, offset + limit)}
+        conditions = [self.db.perf_test_results.tenant == self.tenant]
 
         if device_id:
-            kwargs["device_id"] = device_id
+            conditions.append(self.db.perf_test_results.device_id == device_id)
         if test_type:
-            kwargs["test_type"] = test_type
+            conditions.append(self.db.perf_test_results.test_type == test_type)
         if status:
-            kwargs["status"] = status
+            conditions.append(self.db.perf_test_results.status == status)
 
-        results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            **kwargs,
-        )
+        query = conditions[0]
+        for cond in conditions[1:]:
+            query = query & cond
+
+        results_rowset = await self.db(query).select(limitby=(offset, offset + limit))
 
         return [
             PerfTestResult(
@@ -218,7 +217,7 @@ class TestManager:
                 test_output=r.test_output,
                 created_at=r.created_at,
             )
-            for r in results
+            for r in results_rowset
         ]
 
     async def list_tests(
@@ -235,11 +234,9 @@ class TestManager:
         Returns:
             List of PerfTestResult objects
         """
-        results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            tenant=self.tenant,
-            limitby=(offset, offset + limit),
-        )
+        results_rowset = await self.db(
+            self.db.perf_test_results.tenant == self.tenant,
+        ).select(limitby=(offset, offset + limit))
 
         return [
             PerfTestResult(
@@ -256,7 +253,7 @@ class TestManager:
                 test_output=r.test_output,
                 created_at=r.created_at,
             )
-            for r in results
+            for r in results_rowset
         ]
 
     async def delete_test(self, test_id: str) -> bool:
@@ -272,17 +269,14 @@ class TestManager:
         if not existing:
             return False
 
-        async with self._lock:
-            await asyncio.to_thread(
-                self.db.perf_test_results.delete,
-                id=test_id,
-                tenant=self.tenant,
-            )
+        await self.db(
+            (self.db.perf_test_results.id == test_id) & (self.db.perf_test_results.tenant == self.tenant)
+        ).delete()
 
-            logger.info(
-                "deleted_test",
-                test_id=test_id,
-                tenant=self.tenant,
-            )
+        logger.info(
+            "deleted_test",
+            test_id=test_id,
+            tenant=self.tenant,
+        )
 
         return True
