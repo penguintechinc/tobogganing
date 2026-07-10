@@ -18,6 +18,7 @@ from core.auth.middleware import current_claims, require_tenant
 from core.db import get_db
 from core.entitlements.gate import require_feature
 from core.flags import feature_enabled
+from core.modules.waddleperf_cluster.services.device_manager import DeviceManager
 from core.modules.waddleperf_cluster.services.engine_client import EngineClient, EngineError
 from core.modules.waddleperf_cluster.services.test_manager import TestManager
 
@@ -227,6 +228,18 @@ async def live_test_stream() -> None:
                     await ws.send(error_msg.to_json())
                     continue
 
+                # Verify the device belongs to the caller's tenant (prevent
+                # device spoofing — a tenant user must not run/record tests
+                # for an arbitrary or unregistered device_id).
+                if not await DeviceManager(get_db(), tenant).get_device(device_id):
+                    await ws.send(
+                        StreamMessage(
+                            event="error",
+                            data={"message": "Unknown device for tenant"},
+                        ).to_json()
+                    )
+                    continue
+
                 # Prepare device headers
                 device_headers = {
                     "X-Device-ID": device_id,
@@ -382,6 +395,10 @@ async def run_test_sync() -> tuple[dict[str, Any], int]:
                 },
                 400,
             )
+
+        # Verify the device belongs to the caller's tenant (prevent spoofing).
+        if not await DeviceManager(get_db(), tenant).get_device(device_id):
+            return {"error": "Unknown device for tenant"}, 404
 
         # Prepare device headers
         device_headers = {
