@@ -1,6 +1,7 @@
 """Shared pytest fixtures for core tests."""
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -299,6 +300,9 @@ def valid_write_token(app_with_sase: Quart) -> str:
     return token
 
 
+# Removed pytest_collection_modifyitems - using canonical fixtures instead with real auth
+
+
 @pytest.fixture
 def bootstrap_token() -> str:
     """Get bootstrap/enrollment token.
@@ -307,3 +311,132 @@ def bootstrap_token() -> str:
         Bootstrap token matching env var.
     """
     return os.getenv("ENROLLMENT_BOOTSTRAP_TOKEN", "test-bootstrap-token")
+
+
+# WaddlePerf Cluster Module Test Fixtures
+
+
+@pytest.fixture
+def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
+    """Create a test app with WaddlePerf Cluster module registered with REAL auth.
+
+    Uses real auth middleware and decorators. Feature flags are enabled via
+    monkeypatching the flag server to always return True for wpc features.
+
+    Args:
+        app: Base test app fixture.
+        mock_db: Mock database fixture.
+        monkeypatch: Pytest monkeypatch fixture for enabling flags.
+
+    Returns:
+        Quart app with WaddlePerf Cluster module and real auth working.
+    """
+    from core.auth.jwt import encode_access_token
+    from core.crypto import InAppKeyProvider, generate_rsa_key_pair
+    from core.registry import ModuleContext
+
+    # Set up key provider for token generation in tests
+    private_pem, public_pem = generate_rsa_key_pair()
+    provider = InAppKeyProvider(private_pem, public_pem)
+    app.config["KEY_PROVIDER"] = provider
+
+    # Enable all wpc feature flags for tests (bypass flag server)
+    import shared.licensing.entitlements
+    original_flag_on = shared.licensing.entitlements._flag_on
+
+    def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
+        if flag_key.startswith("tobogganing.waddleperf_cluster."):
+            return True
+        return original_flag_on(flag_key, distinct_id)
+
+    monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
+
+    # Register WaddlePerf Cluster module via registry (REAL auth, no monkeypatch)
+    from core.modules.waddleperf_cluster import module as wpc_module
+
+    wpc_contract = wpc_module()
+    app.registry.register(wpc_contract)
+
+    # Apply registry to wire blueprints
+    ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
+    app.registry.apply_to(app, ctx)
+
+    return app
+
+
+@pytest.fixture
+def wpc_tenant_token(app_with_wpc: Quart) -> str:
+    """Generate a valid tenant JWT token for WPC module with minimal scopes.
+
+    Args:
+        app_with_wpc: App with key provider.
+
+    Returns:
+        Encoded JWT token with tenant claim.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_wpc.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "org_units:read devices:read tests:read stats:read",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest.fixture
+def wpc_write_token(app_with_wpc: Quart) -> str:
+    """Generate a JWT token with full write scopes for WPC testing.
+
+    Args:
+        app_with_wpc: App with key provider.
+
+    Returns:
+        Encoded JWT token with write scopes.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_wpc.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "*:*",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest.fixture
+def wpc_readonly_token(app_with_wpc: Quart) -> str:
+    """Generate a JWT token with read-only scope for WPC testing.
+
+    Args:
+        app_with_wpc: App with key provider.
+
+    Returns:
+        Encoded JWT token with read-only scope.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_wpc.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "org_units:read devices:read tests:read stats:read",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token

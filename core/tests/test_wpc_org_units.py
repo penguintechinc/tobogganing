@@ -39,126 +39,51 @@ def make_mock_ou(
     return row
 
 
-@pytest.fixture(autouse=True)
-def enable_org_units_feature(monkeypatch: Any) -> None:
-    """Enable org_units feature flag for all tests.
+# Use canonical fixtures from conftest.py:
+# - app_with_wpc: real auth, flags enabled
+# - wpc_tenant_token: minimal scopes
+# - wpc_write_token: full write access
+# - wpc_readonly_token: read-only access
+
+
+# Aliases for backward compatibility with this test file
+@pytest.fixture
+def valid_tenant_token(wpc_tenant_token: str) -> str:
+    """Alias to canonical wpc_tenant_token fixture.
 
     Args:
-        monkeypatch: pytest monkeypatch fixture.
+        wpc_tenant_token: Token from canonical fixture.
+
+    Returns:
+        JWT token with tenant/read scopes.
     """
-    from core.entitlements import gate
-    monkeypatch.setattr(gate, "feature_enabled", lambda *args, **kwargs: True)
+    return wpc_tenant_token
 
 
 @pytest.fixture
-def app_with_wpc(app: Quart, mock_db: MagicMock) -> Quart:
-    """Create a test app with WaddlePerf cluster module registered.
+def valid_write_token(wpc_write_token: str) -> str:
+    """Alias to canonical wpc_write_token fixture.
 
     Args:
-        app: Base test app fixture.
-        mock_db: Mock database fixture.
+        wpc_write_token: Token from canonical fixture.
 
     Returns:
-        Quart app with WaddlePerf cluster module and auth configured.
+        JWT token with full write scopes.
     """
-    from core.auth.jwt import encode_access_token
-    from core.crypto import InAppKeyProvider, generate_rsa_key_pair
-    from core.registry import ModuleContext
-
-    # Set up key provider for token generation in tests
-    private_pem, public_pem = generate_rsa_key_pair()
-    provider = InAppKeyProvider(private_pem, public_pem)
-    app.config["KEY_PROVIDER"] = provider
-
-    # Register WaddlePerf cluster module via registry
-    from core.modules.waddleperf_cluster import module as wpc_module
-
-    wpc_contract = wpc_module()
-    app.registry.register(wpc_contract)
-
-    # Apply registry to wire blueprints
-    ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
-    app.registry.apply_to(app, ctx)
-
-    return app
+    return wpc_write_token
 
 
 @pytest.fixture
-def valid_tenant_token(app_with_wpc: Quart) -> str:
-    """Generate a valid tenant JWT token with org_units:read scope.
+def read_only_token(wpc_readonly_token: str) -> str:
+    """Alias to canonical wpc_readonly_token fixture.
 
     Args:
-        app_with_wpc: App with key provider.
+        wpc_readonly_token: Token from canonical fixture.
 
     Returns:
-        Encoded JWT token with tenant claim.
+        JWT token with read-only scope.
     """
-    from core.auth.jwt import encode_access_token
-
-    provider = app_with_wpc.config["KEY_PROVIDER"]
-
-    claims = {
-        "sub": "test-user",
-        "iss": "test-app",
-        "aud": "test-app",
-        "tenant": "test-tenant",
-        "scope": "org_units:read org_units:write",
-    }
-
-    token = encode_access_token(claims, provider, ttl_hours=1)
-    return token
-
-
-@pytest.fixture
-def valid_write_token(app_with_wpc: Quart) -> str:
-    """Generate a valid JWT token with write scopes.
-
-    Args:
-        app_with_wpc: App with key provider.
-
-    Returns:
-        Encoded JWT token with write scopes.
-    """
-    from core.auth.jwt import encode_access_token
-
-    provider = app_with_wpc.config["KEY_PROVIDER"]
-
-    claims = {
-        "sub": "test-user",
-        "iss": "test-app",
-        "aud": "test-app",
-        "tenant": "test-tenant",
-        "scope": "*:*",
-    }
-
-    token = encode_access_token(claims, provider, ttl_hours=1)
-    return token
-
-
-@pytest.fixture
-def read_only_token(app_with_wpc: Quart) -> str:
-    """Generate a JWT token with read-only scope.
-
-    Args:
-        app_with_wpc: App with key provider.
-
-    Returns:
-        Encoded JWT token with read-only scope.
-    """
-    from core.auth.jwt import encode_access_token
-
-    provider = app_with_wpc.config["KEY_PROVIDER"]
-
-    claims = {
-        "sub": "test-user",
-        "iss": "test-app",
-        "aud": "test-app",
-        "tenant": "test-tenant",
-        "scope": "org_units:read",
-    }
-
-    token = encode_access_token(claims, provider, ttl_hours=1)
-    return token
+    return wpc_readonly_token
 
 
 @pytest.mark.asyncio
