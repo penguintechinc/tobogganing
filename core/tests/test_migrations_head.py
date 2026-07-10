@@ -14,6 +14,13 @@ from core.db.models import (
     PortRange,
     Cluster,
     Client,
+    OrgUnit,
+    Device,
+    DeviceApiKey,
+    DeviceEnrollmentSecret,
+    PerfTestResult,
+    ClientConfig,
+    ServerKey,
 )
 from core.modules.sase.security.scanner.models import (
     SecurityScan,
@@ -32,7 +39,7 @@ from core.modules.sase.security.feeds.models import (
 
 
 def test_alembic_migrations_cover_all_tables() -> None:
-    """Verify all Base.metadata tables are covered by migrations 0001-0008.
+    """Verify all Base.metadata tables are covered by migrations 0001-0012.
 
     Migration 0001: users, refresh_tokens, password_reset_tokens
     Migration 0002: firewall_rules
@@ -44,6 +51,10 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0008: security_scans, security_findings, scan_schedules,
                     security_events, rate_limit_rules, threat_indicators,
                     feed_updates, threat_detections
+    Migration 0009: cluster api_key_hash
+    Migration 0010: org_units
+    Migration 0011: devices, device_api_keys, device_enrollment_secrets
+    Migration 0012: perf_test_results, client_configs, server_keys
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -75,8 +86,19 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "threat_detections",
     }
 
+    # Tables created by migrations 0010-0012 (WaddlePerf cluster tables)
+    created_by_wpc_migrations = {
+        "org_units",
+        "devices",
+        "device_api_keys",
+        "device_enrollment_secrets",
+        "perf_test_results",
+        "client_configs",
+        "server_keys",
+    }
+
     # All tables covered by migrations
-    all_migration_tables = created_by_existing_migrations | created_by_migration_0008
+    all_migration_tables = created_by_existing_migrations | created_by_migration_0008 | created_by_wpc_migrations
 
     # Verify coverage
     missing_tables = expected_tables - all_migration_tables
@@ -104,6 +126,13 @@ def test_base_metadata_models_imported() -> None:
         PortRange,
         Cluster,
         Client,
+        OrgUnit,
+        Device,
+        DeviceApiKey,
+        DeviceEnrollmentSecret,
+        PerfTestResult,
+        ClientConfig,
+        ServerKey,
         SecurityScan,
         SecurityFinding,
         ScanSchedule,

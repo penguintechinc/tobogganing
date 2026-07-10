@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UUID, UniqueConstraint, JSON
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, UUID, UniqueConstraint, JSON
 from sqlalchemy.sql import func
 
 from core.db.base import Base
@@ -380,6 +380,201 @@ class Client(Base):
         return f"<Client(id={self.id}, tenant={self.tenant}, type={self.type}, cluster_id={self.cluster_id})>"
 
 
+class OrgUnit(Base):
+    """Organizational units (teams/departments) with hierarchy support."""
+
+    __tablename__ = "org_units"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    parent_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
+    description: Column[str | None] = Column(Text, nullable=True)
+    is_active: Column[bool] = Column(Boolean, default=True, nullable=False, index=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "name", name="uq_org_units_tenant_name"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<OrgUnit(id={self.id}, tenant={self.tenant}, name={self.name})>"
+
+
+class Device(Base):
+    """Devices enrolled and managed by WaddlePerf cluster."""
+
+    __tablename__ = "devices"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    org_unit_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
+    user_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    serial: Column[str] = Column(String(255), nullable=False)
+    hostname: Column[str | None] = Column(String(255), nullable=True)
+    os: Column[str | None] = Column(String(100), nullable=True)
+    status: Column[str] = Column(String(50), default="offline", nullable=False, index=True)
+    last_heartbeat: Column[datetime | None] = Column(DateTime, nullable=True)
+    device_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "serial", name="uq_devices_tenant_serial"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<Device(id={self.id}, tenant={self.tenant}, serial={self.serial})>"
+
+
+class DeviceApiKey(Base):
+    """API keys for device authentication."""
+
+    __tablename__ = "device_api_keys"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    device_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)
+    api_key_hash: Column[str] = Column(String(255), nullable=False, index=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    revoked_at: Column[datetime | None] = Column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DeviceApiKey(id={self.id}, tenant={self.tenant}, device_id={self.device_id})>"
+
+
+class DeviceEnrollmentSecret(Base):
+    """Enrollment secrets for secure device onboarding."""
+
+    __tablename__ = "device_enrollment_secrets"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    org_unit_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
+    secret_hash: Column[str] = Column(String(255), nullable=False, index=True)
+    expires_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    created_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DeviceEnrollmentSecret(id={self.id}, tenant={self.tenant})>"
+
+
+class PerfTestResult(Base):
+    """Performance test results from WaddlePerf devices."""
+
+    __tablename__ = "perf_test_results"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    device_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)
+    test_type: Column[str] = Column(String(50), nullable=False, index=True)
+    status: Column[str] = Column(String(50), default="pending", nullable=False)
+    target: Column[str | None] = Column(String(255), nullable=True)
+    started_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    completed_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    latency_ms: Column[float | None] = Column(Float, nullable=True)
+    throughput: Column[float | None] = Column(Float, nullable=True)
+    test_output: Column[str | None] = Column(Text, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<PerfTestResult(id={self.id}, tenant={self.tenant}, device_id={self.device_id})>"
+
+
+class ClientConfig(Base):
+    """Client configurations for WaddlePerf devices."""
+
+    __tablename__ = "client_configs"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    org_unit_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
+    config: Column[dict] = Column(JSON, nullable=True)
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    updated_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<ClientConfig(id={self.id}, tenant={self.tenant})>"
+
+
+class ServerKey(Base):
+    """Server keys for service-to-service authentication."""
+
+    __tablename__ = "server_keys"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    key_id: Column[str] = Column(String(255), nullable=False, index=True)
+    public_key: Column[str] = Column(Text, nullable=False)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<ServerKey(id={self.id}, tenant={self.tenant}, key_id={self.key_id})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -392,4 +587,11 @@ __all__ = [
     "PortRange",
     "Cluster",
     "Client",
+    "OrgUnit",
+    "Device",
+    "DeviceApiKey",
+    "DeviceEnrollmentSecret",
+    "PerfTestResult",
+    "ClientConfig",
+    "ServerKey",
 ]
