@@ -22,6 +22,9 @@ from core.db.models import (
     ClientConfig,
     ServerKey,
     TestSchedule,
+    C2CEndpoint,
+    C2CMatrixRun,
+    C2CPairResult,
 )
 from core.modules.sase.security.scanner.models import (
     SecurityScan,
@@ -40,7 +43,7 @@ from core.modules.sase.security.feeds.models import (
 
 
 def test_alembic_migrations_cover_all_tables() -> None:
-    """Verify all Base.metadata tables are covered by migrations 0001-0013.
+    """Verify all Base.metadata tables are covered by migrations 0001-0015.
 
     Migration 0001: users, refresh_tokens, password_reset_tokens
     Migration 0002: firewall_rules
@@ -57,6 +60,8 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0011: devices, device_api_keys, device_enrollment_secrets
     Migration 0012: perf_test_results, client_configs, server_keys
     Migration 0013: test_schedules
+    Migration 0014: c2c_endpoints
+    Migration 0015: c2c_matrix_runs, c2c_pair_results
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -88,7 +93,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "threat_detections",
     }
 
-    # Tables created by migrations 0010-0013 (WaddlePerf cluster tables)
+    # Tables created by migrations 0010-0015 (WaddlePerf cluster tables + C2C)
     created_by_wpc_migrations = {
         "org_units",
         "devices",
@@ -98,6 +103,9 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "client_configs",
         "server_keys",
         "test_schedules",
+        "c2c_endpoints",
+        "c2c_matrix_runs",
+        "c2c_pair_results",
     }
 
     # All tables covered by migrations
@@ -137,6 +145,9 @@ def test_base_metadata_models_imported() -> None:
         ClientConfig,
         ServerKey,
         TestSchedule,
+        C2CEndpoint,
+        C2CMatrixRun,
+        C2CPairResult,
         SecurityScan,
         SecurityFinding,
         ScanSchedule,
