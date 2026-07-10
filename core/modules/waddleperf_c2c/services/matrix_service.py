@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import structlog
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -11,17 +11,17 @@ logger = structlog.get_logger()
 class MatrixService:
     """Aggregates and visualizes cluster-to-cluster test results matrices."""
 
-    def __init__(self, db: object, tenant: str) -> None:
+    def __init__(self, db: Any, tenant: str) -> None:
         """Initialize MatrixService.
 
         Args:
-            db: penguin-dal DAL instance
+            db: penguin-dal AsyncDB instance
             tenant: Tenant identifier for scoping queries
         """
         self.db = db
         self.tenant = tenant
 
-    def latest_matrix(self, test_type: str) -> dict[str, object]:
+    async def latest_matrix(self, test_type: str) -> dict[str, object]:
         """Build the latest NxN region matrix for a test type.
 
         Selects the most recent c2c_pair_results per (source_region, dest_region)
@@ -35,18 +35,16 @@ class MatrixService:
             {source, dest, status, latency_ms, measured_at})
         """
         # Get all pair results for this test_type and tenant
-        results = self.db.c2c_pair_results.select(
-            tenant=self.tenant, test_type=test_type
-        )
+        rowset = await self.db(
+            (self.db.c2c_pair_results.tenant == self.tenant)
+            & (self.db.c2c_pair_results.test_type == test_type)
+        ).select()
 
-        if not results:
-            results = []
-        elif not isinstance(results, list):
-            results = [results]
+        results = list(rowset) if rowset else []
 
         # Build region set and map (source_region, dest_region) -> latest result
         regions_set: set[str] = set()
-        latest_per_pair: dict[tuple[str, str], object] = {}
+        latest_per_pair: dict[tuple[str, str], Any] = {}
 
         for result in results:
             regions_set.add(result.source_region)
@@ -81,7 +79,7 @@ class MatrixService:
             "cells": cells,
         }
 
-    def run_matrix(self, run_id: str) -> dict[str, object]:
+    async def run_matrix(self, run_id: str) -> dict[str, object]:
         """Build the region grid for one run's pair results.
 
         Args:
@@ -92,14 +90,12 @@ class MatrixService:
             cells (list of {source, dest, test_type, status, latency_ms, measured_at})
         """
         # Get all pair results for this run and tenant
-        results = self.db.c2c_pair_results.select(
-            tenant=self.tenant, run_id=run_id
-        )
+        rowset = await self.db(
+            (self.db.c2c_pair_results.tenant == self.tenant)
+            & (self.db.c2c_pair_results.run_id == run_id)
+        ).select()
 
-        if not results:
-            results = []
-        elif not isinstance(results, list):
-            results = [results]
+        results = list(rowset) if rowset else []
 
         # Build region set, test_type set, and cells
         regions_set: set[str] = set()
@@ -132,7 +128,7 @@ class MatrixService:
             "cells": cells,
         }
 
-    def trends(
+    async def trends(
         self,
         source_region: str,
         dest_region: str,
@@ -153,17 +149,14 @@ class MatrixService:
             List of dicts (oldest to newest) with keys: measured_at, latency_ms, status
         """
         # Get all pair results for this region pair and test_type
-        results = self.db.c2c_pair_results.select(
-            tenant=self.tenant,
-            source_region=source_region,
-            dest_region=dest_region,
-            test_type=test_type,
-        )
+        rowset = await self.db(
+            (self.db.c2c_pair_results.tenant == self.tenant)
+            & (self.db.c2c_pair_results.source_region == source_region)
+            & (self.db.c2c_pair_results.dest_region == dest_region)
+            & (self.db.c2c_pair_results.test_type == test_type)
+        ).select()
 
-        if not results:
-            results = []
-        elif not isinstance(results, list):
-            results = [results]
+        results = list(rowset) if rowset else []
 
         # Sort by measured_at oldest to newest
         sorted_results = sorted(

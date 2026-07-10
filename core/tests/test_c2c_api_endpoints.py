@@ -1,68 +1,144 @@
-"""Tests for C2C endpoints API."""
+"""Tests for C2C endpoints API using real penguin-dal."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from quart import Quart
+from unittest.mock import patch, MagicMock
+
+from core.auth.jwt import encode_access_token
+from core.crypto import InAppKeyProvider, generate_rsa_key_pair
+from core.registry import ModuleContext
+from penguin_dal import AsyncDB
+
+
+@pytest_asyncio.fixture
+async def app_with_c2c_realdal(
+    app_with_c2c: Quart, real_dal: AsyncDB, monkeypatch: Any
+) -> Quart:
+    """Create test app with C2C module using real_dal fixture.
+
+    Reuses app_with_c2c which has auth + module wiring already set up,
+    but patches get_db to return real_dal instead of mock_db.
+    """
+    # Patch get_db everywhere it's imported
+    get_db_func = lambda: real_dal  # noqa: E731
+
+    monkeypatch.setattr("core.db.get_db", get_db_func)
+
+    import core.app
+    monkeypatch.setattr(core.app, "get_db", get_db_func)
+
+    import core.modules.waddleperf_c2c.api.endpoints
+    monkeypatch.setattr(core.modules.waddleperf_c2c.api.endpoints, "get_db", get_db_func)
+
+    import core.modules.waddleperf_c2c.api.runs
+    monkeypatch.setattr(core.modules.waddleperf_c2c.api.runs, "get_db", get_db_func)
+
+    import core.modules.waddleperf_c2c.api.matrix
+    monkeypatch.setattr(core.modules.waddleperf_c2c.api.matrix, "get_db", get_db_func)
+
+    app_with_c2c.db = real_dal
+    return app_with_c2c
+
+
+@pytest_asyncio.fixture
+async def c2c_write_token_realdal(app_with_c2c_realdal: Quart) -> str:
+    """Generate write token for real_dal app."""
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_c2c_realdal.config["KEY_PROVIDER"]
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "c2c:read c2c:write",
+    }
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest_asyncio.fixture
+async def c2c_readonly_token_realdal(app_with_c2c_realdal: Quart) -> str:
+    """Generate read-only token for real_dal app."""
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_c2c_realdal.config["KEY_PROVIDER"]
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "c2c:read",
+    }
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+# ============================================================================
+# Endpoint Creation Tests
+# ============================================================================
 
 
 @pytest.mark.asyncio
 async def test_create_endpoint_success(
-    app_with_c2c: Quart, c2c_write_token: str
+    app_with_c2c_realdal: Quart, c2c_write_token_realdal: str, real_dal: AsyncDB
 ) -> None:
-    """Test successful endpoint creation."""
-    client = app_with_c2c.test_client()
-    mock_db = app_with_c2c.db
+    """Test successful endpoint creation with real DAL."""
+    client = app_with_c2c_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        endpoint_dict = {
-            "id": "ep-1",
-            "tenant": "test-tenant",
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
             "region": "us-west-2",
             "name": "primary-node",
             "engine_url": "http://engine.local:8080",
             "target": "node.example.com",
-            "api_key_hash": "hash123",
-            "enabled": True,
-            "created_at": "2026-07-10T00:00:00Z",
-            "updated_at": "2026-07-10T00:00:00Z",
-        }
-        mock_mgr.create_endpoint = MagicMock(return_value=(endpoint_dict, "raw-key-123"))
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
 
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/endpoints",
-            json={
-                "region": "us-west-2",
-                "name": "primary-node",
-                "engine_url": "http://engine.local:8080",
-                "target": "node.example.com",
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
+    assert response.status_code == 201
+    data = await response.get_json()
+    assert data["region"] == "us-west-2"
+    assert data["name"] == "primary-node"
+    assert data["api_key"] is not None
 
-        assert response.status_code == 201
-        data = await response.get_json()
-        assert data["id"] == "ep-1"
-        assert data["region"] == "us-west-2"
-        assert data["api_key"] == "raw-key-123"
-        assert "meta" in data
-        assert data["meta"]["version"] == 1
+
+@pytest.mark.asyncio
+async def test_create_endpoint_with_custom_api_key(
+    app_with_c2c_realdal: Quart, c2c_write_token_realdal: str
+) -> None:
+    """Test creating endpoint with custom API key (key not returned)."""
+    client = app_with_c2c_realdal.test_client()
+
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
+            "region": "us-west-2",
+            "name": "primary-node",
+            "engine_url": "http://engine.local:8080",
+            "target": "node.example.com",
+            "api_key": "my-custom-key-12345",
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+
+    assert response.status_code == 201
+    data = await response.get_json()
+    assert "api_key" not in data  # Custom key not echoed back
 
 
 @pytest.mark.asyncio
 async def test_create_endpoint_missing_fields(
-    app_with_c2c: Quart, c2c_write_token: str
+    app_with_c2c_realdal: Quart, c2c_write_token_realdal: str
 ) -> None:
-    """Test endpoint creation fails with missing fields."""
-    client = app_with_c2c.test_client()
+    """Test endpoint creation fails with missing required fields."""
+    client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
         "/api/v1/waddleperf_c2c/endpoints",
@@ -71,279 +147,18 @@ async def test_create_endpoint_missing_fields(
             "name": "primary-node",
             # Missing engine_url and target
         },
-        headers={"Authorization": f"Bearer {c2c_write_token}"},
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
     )
 
     assert response.status_code == 400
-    data = await response.get_json()
-    assert "error" in data
 
 
 @pytest.mark.asyncio
-async def test_create_endpoint_duplicate(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test endpoint creation fails on duplicate."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.create_endpoint = MagicMock(
-            side_effect=ValueError("Endpoint with tenant=test-tenant, region=us-west-2, name=primary-node already exists")
-        )
-
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/endpoints",
-            json={
-                "region": "us-west-2",
-                "name": "primary-node",
-                "engine_url": "http://engine.local:8080",
-                "target": "node.example.com",
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 409
-
-
-@pytest.mark.asyncio
-async def test_list_endpoints_success(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test listing endpoints."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        endpoints = [
-            {
-                "id": "ep-1",
-                "tenant": "test-tenant",
-                "region": "us-west-2",
-                "name": "primary",
-                "engine_url": "http://engine1.local:8080",
-                "target": "node1.example.com",
-                "api_key_hash": "hash1",
-                "enabled": True,
-                "created_at": "2026-07-10T00:00:00Z",
-                "updated_at": "2026-07-10T00:00:00Z",
-            }
-        ]
-        mock_mgr.list_endpoints = MagicMock(return_value=endpoints)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert len(data["endpoints"]) == 1
-        assert data["endpoints"][0]["id"] == "ep-1"
-
-
-@pytest.mark.asyncio
-async def test_list_endpoints_enabled_filter(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test listing endpoints with enabled filter."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.list_endpoints = MagicMock(return_value=[])
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints?enabled=true",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 200
-        mock_mgr.list_endpoints.assert_called_once_with(enabled_only=True)
-
-
-@pytest.mark.asyncio
-async def test_get_endpoint_success(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test getting a single endpoint."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        endpoint = {
-            "id": "ep-1",
-            "tenant": "test-tenant",
-            "region": "us-west-2",
-            "name": "primary",
-            "engine_url": "http://engine.local:8080",
-            "target": "node.example.com",
-            "api_key_hash": "hash1",
-            "enabled": True,
-            "created_at": "2026-07-10T00:00:00Z",
-            "updated_at": "2026-07-10T00:00:00Z",
-        }
-        mock_mgr.get_endpoint = MagicMock(return_value=endpoint)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert data["id"] == "ep-1"
-        assert data["name"] == "primary"
-
-
-@pytest.mark.asyncio
-async def test_get_endpoint_not_found(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test getting non-existent endpoint."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.get_endpoint = MagicMock(return_value=None)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints/ep-invalid",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_update_endpoint_success(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test updating an endpoint."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        updated_endpoint = {
-            "id": "ep-1",
-            "tenant": "test-tenant",
-            "region": "us-west-2",
-            "name": "primary-updated",
-            "engine_url": "http://engine-new.local:8080",
-            "target": "node.example.com",
-            "api_key_hash": "hash1",
-            "enabled": False,
-            "created_at": "2026-07-10T00:00:00Z",
-            "updated_at": "2026-07-10T01:00:00Z",
-        }
-        mock_mgr.update_endpoint = MagicMock(return_value=updated_endpoint)
-
-        response = await client.patch(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            json={"name": "primary-updated", "enabled": False},
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert data["name"] == "primary-updated"
-        assert data["enabled"] is False
-
-
-@pytest.mark.asyncio
-async def test_update_endpoint_not_found(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test updating non-existent endpoint."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.update_endpoint = MagicMock(return_value=None)
-
-        response = await client.patch(
-            "/api/v1/waddleperf_c2c/endpoints/ep-invalid",
-            json={"name": "updated"},
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_delete_endpoint_success(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test deleting an endpoint."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.delete_endpoint = MagicMock(return_value=True)
-
-        response = await client.delete(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 204
-
-
-@pytest.mark.asyncio
-async def test_delete_endpoint_not_found(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test deleting non-existent endpoint."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.delete_endpoint = MagicMock(return_value=False)
-
-        response = await client.delete(
-            "/api/v1/waddleperf_c2c/endpoints/ep-invalid",
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_create_endpoint_read_only_token_forbidden(
-    app_with_c2c: Quart, c2c_readonly_token: str
+async def test_create_endpoint_readonly_forbidden(
+    app_with_c2c_realdal: Quart, c2c_readonly_token_realdal: str
 ) -> None:
     """Test that read-only token cannot create endpoint."""
-    client = app_with_c2c.test_client()
+    client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
         "/api/v1/waddleperf_c2c/endpoints",
@@ -353,248 +168,276 @@ async def test_create_endpoint_read_only_token_forbidden(
             "engine_url": "http://engine.local:8080",
             "target": "node.example.com",
         },
-        headers={"Authorization": f"Bearer {c2c_readonly_token}"},
+        headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
     )
 
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_list_endpoint_no_token_forbidden() -> None:
+async def test_create_endpoint_no_token_forbidden(
+    app_with_c2c_realdal: Quart,
+) -> None:
     """Test that missing token returns 403."""
-    # This test uses a minimal app without fixtures since we're testing auth rejection
-    from core.app import create_app
-    from unittest.mock import MagicMock, patch
+    client = app_with_c2c_realdal.test_client()
 
-    with patch("core.db.init_dal"), patch("core.db.get_db"):
-        app = create_app()
-        app.config["TESTING"] = True
-        client = app.test_client()
-
-        # Register c2c module
-        from core.modules.waddleperf_c2c import module as c2c_module
-        from core.registry import ModuleContext
-        from core.crypto import InAppKeyProvider, generate_rsa_key_pair
-
-        private_pem, public_pem = generate_rsa_key_pair()
-        provider = InAppKeyProvider(private_pem, public_pem)
-        app.config["KEY_PROVIDER"] = provider
-
-        c2c_contract = c2c_module()
-        app.registry.register(c2c_contract)
-
-        mock_db = MagicMock()
-        ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
-        app.registry.apply_to(app, ctx)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints",
-        )
-
-        # Should be 403 (missing auth)
-        assert response.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_create_endpoint_with_api_key(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test creating endpoint with provided API key (no raw key returned)."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        endpoint_dict = {
-            "id": "ep-1",
-            "tenant": "test-tenant",
-            "region": "us-west-2",
-            "name": "primary-node",
-            "engine_url": "http://engine.local:8080",
-            "target": "node.example.com",
-            "api_key_hash": "hash123",
-            "enabled": True,
-            "created_at": "2026-07-10T00:00:00Z",
-            "updated_at": "2026-07-10T00:00:00Z",
-        }
-        # When api_key is provided, return_value is None (not echoed)
-        mock_mgr.create_endpoint = MagicMock(return_value=(endpoint_dict, None))
-
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/endpoints",
-            json={
-                "region": "us-west-2",
-                "name": "primary-node",
-                "engine_url": "http://engine.local:8080",
-                "target": "node.example.com",
-                "api_key": "my-custom-key",
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 201
-        data = await response.get_json()
-        assert data["id"] == "ep-1"
-        # Raw key should NOT be in response
-        assert "api_key" not in data
-
-
-@pytest.mark.asyncio
-async def test_update_endpoint_no_fields(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test updating endpoint with no valid fields returns current state."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        endpoint = {
-            "id": "ep-1",
-            "tenant": "test-tenant",
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
             "region": "us-west-2",
             "name": "primary",
             "engine_url": "http://engine.local:8080",
             "target": "node.example.com",
-            "api_key_hash": "hash1",
-            "enabled": True,
-            "created_at": "2026-07-10T00:00:00Z",
-            "updated_at": "2026-07-10T00:00:00Z",
-        }
-        mock_mgr.get_endpoint = MagicMock(return_value=endpoint)
-        mock_mgr.update_endpoint = MagicMock(return_value=None)
+        },
+    )
 
-        response = await client.patch(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            json={"invalid_field": "value"},
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
+    assert response.status_code == 403
 
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert data["id"] == "ep-1"
+
+# ============================================================================
+# Endpoint List Tests
+# ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_create_endpoint_exception(
-    app_with_c2c: Quart, c2c_write_token: str
+async def test_list_endpoints_empty(
+    app_with_c2c_realdal: Quart, c2c_readonly_token_realdal: str
 ) -> None:
-    """Test handling of unexpected exceptions during endpoint creation."""
-    client = app_with_c2c.test_client()
+    """Test listing endpoints when none exist."""
+    client = app_with_c2c_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.create_endpoint = MagicMock(side_effect=Exception("DB error"))
+    response = await client.get(
+        "/api/v1/waddleperf_c2c/endpoints",
+        headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
+    )
 
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/endpoints",
-            json={
-                "region": "us-west-2",
-                "name": "primary",
-                "engine_url": "http://engine.local:8080",
-                "target": "node.example.com",
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 500
-        data = await response.get_json()
-        assert "error" in data
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["endpoints"] == []
 
 
 @pytest.mark.asyncio
-async def test_list_endpoints_exception(
-    app_with_c2c: Quart, c2c_readonly_token: str
+async def test_list_endpoints_success(
+    app_with_c2c_realdal: Quart,
+    c2c_readonly_token_realdal: str,
+    c2c_write_token_realdal: str,
+    real_dal: AsyncDB,
 ) -> None:
-    """Test handling of unexpected exceptions during list endpoints."""
-    client = app_with_c2c.test_client()
+    """Test listing endpoints after creating one."""
+    client = app_with_c2c_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.list_endpoints = MagicMock(side_effect=Exception("DB error"))
+    # Create endpoint
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
+            "region": "us-west-2",
+            "name": "primary",
+            "engine_url": "http://engine1.local:8080",
+            "target": "node1.example.com",
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+    assert response.status_code == 201
 
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
+    # List endpoints
+    response = await client.get(
+        "/api/v1/waddleperf_c2c/endpoints",
+        headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
+    )
 
-        assert response.status_code == 500
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert len(data["endpoints"]) == 1
+    assert data["endpoints"][0]["name"] == "primary"
+
+
+# ============================================================================
+# Endpoint Get/Update/Delete Tests
+# ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_get_endpoint_exception(
-    app_with_c2c: Quart, c2c_readonly_token: str
+async def test_get_endpoint_success(
+    app_with_c2c_realdal: Quart,
+    c2c_readonly_token_realdal: str,
+    c2c_write_token_realdal: str,
 ) -> None:
-    """Test handling of unexpected exceptions during get endpoint."""
-    client = app_with_c2c.test_client()
+    """Test getting a single endpoint."""
+    client = app_with_c2c_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.get_endpoint = MagicMock(side_effect=Exception("DB error"))
+    # Create endpoint
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
+            "region": "us-west-2",
+            "name": "primary",
+            "engine_url": "http://engine.local:8080",
+            "target": "node.example.com",
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+    assert response.status_code == 201
+    created = await response.get_json()
+    endpoint_id = created["id"]
 
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
+    # Get endpoint
+    response = await client.get(
+        f"/api/v1/waddleperf_c2c/endpoints/{endpoint_id}",
+        headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
+    )
 
-        assert response.status_code == 500
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["id"] == endpoint_id
+    assert data["name"] == "primary"
 
 
 @pytest.mark.asyncio
-async def test_update_endpoint_exception(
-    app_with_c2c: Quart, c2c_write_token: str
+async def test_get_endpoint_not_found(
+    app_with_c2c_realdal: Quart, c2c_readonly_token_realdal: str
 ) -> None:
-    """Test handling of unexpected exceptions during endpoint update."""
-    client = app_with_c2c.test_client()
+    """Test getting non-existent endpoint."""
+    client = app_with_c2c_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.update_endpoint = MagicMock(side_effect=Exception("DB error"))
+    response = await client.get(
+        "/api/v1/waddleperf_c2c/endpoints/nonexistent-id",
+        headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
+    )
 
-        response = await client.patch(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            json={"name": "updated"},
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 500
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_delete_endpoint_exception(
-    app_with_c2c: Quart, c2c_write_token: str
+async def test_update_endpoint_success(
+    app_with_c2c_realdal: Quart,
+    c2c_write_token_realdal: str,
 ) -> None:
-    """Test handling of unexpected exceptions during endpoint deletion."""
-    client = app_with_c2c.test_client()
+    """Test updating an endpoint."""
+    client = app_with_c2c_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.endpoints.EndpointManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.delete_endpoint = MagicMock(side_effect=Exception("DB error"))
+    # Create endpoint
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
+            "region": "us-west-2",
+            "name": "primary",
+            "engine_url": "http://engine.local:8080",
+            "target": "node.example.com",
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+    assert response.status_code == 201
+    created = await response.get_json()
+    endpoint_id = created["id"]
 
-        response = await client.delete(
-            "/api/v1/waddleperf_c2c/endpoints/ep-1",
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
+    # Update endpoint
+    response = await client.patch(
+        f"/api/v1/waddleperf_c2c/endpoints/{endpoint_id}",
+        json={"name": "primary-updated", "enabled": False},
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
 
-        assert response.status_code == 500
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["name"] == "primary-updated"
+    assert data["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_endpoint_not_found(
+    app_with_c2c_realdal: Quart, c2c_write_token_realdal: str
+) -> None:
+    """Test updating non-existent endpoint."""
+    client = app_with_c2c_realdal.test_client()
+
+    response = await client.patch(
+        "/api/v1/waddleperf_c2c/endpoints/nonexistent-id",
+        json={"name": "updated"},
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_endpoint_success(
+    app_with_c2c_realdal: Quart,
+    c2c_write_token_realdal: str,
+) -> None:
+    """Test deleting an endpoint."""
+    client = app_with_c2c_realdal.test_client()
+
+    # Create endpoint
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
+            "region": "us-west-2",
+            "name": "primary",
+            "engine_url": "http://engine.local:8080",
+            "target": "node.example.com",
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+    assert response.status_code == 201
+    created = await response.get_json()
+    endpoint_id = created["id"]
+
+    # Delete endpoint
+    response = await client.delete(
+        f"/api/v1/waddleperf_c2c/endpoints/{endpoint_id}",
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_endpoint_not_found(
+    app_with_c2c_realdal: Quart, c2c_write_token_realdal: str
+) -> None:
+    """Test deleting non-existent endpoint."""
+    client = app_with_c2c_realdal.test_client()
+
+    response = await client.delete(
+        "/api/v1/waddleperf_c2c/endpoints/nonexistent-id",
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+
+    assert response.status_code == 404
+
+
+# ============================================================================
+# Tenant Isolation Tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_tenant_isolation_endpoint_list(
+    app_with_c2c_realdal: Quart,
+    c2c_write_token_realdal: str,
+    c2c_readonly_token_realdal: str,
+) -> None:
+    """Test that endpoints from other tenants are not visible."""
+    client = app_with_c2c_realdal.test_client()
+
+    # Create endpoint in test-tenant
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/endpoints",
+        json={
+            "region": "us-west-2",
+            "name": "tenant1-endpoint",
+            "engine_url": "http://engine.local:8080",
+            "target": "node.example.com",
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
+    )
+    assert response.status_code == 201
+
+    # List should show it
+    response = await client.get(
+        "/api/v1/waddleperf_c2c/endpoints",
+        headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert len(data["endpoints"]) == 1

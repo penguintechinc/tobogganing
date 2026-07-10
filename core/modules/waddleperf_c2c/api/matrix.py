@@ -11,6 +11,7 @@ from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db
 from core.entitlements.gate import require_feature
 from core.modules.waddleperf_c2c.services.matrix_service import MatrixService
+from core.modules.waddleperf_c2c.services.run_manager import RunManager
 
 logger = structlog.get_logger()
 
@@ -47,7 +48,7 @@ async def get_latest_matrix() -> tuple[dict[str, Any], int]:
             }, 400
 
         service = MatrixService(db, tenant)
-        matrix = service.latest_matrix(test_type)
+        matrix = await service.latest_matrix(test_type)
 
         regions: Any = matrix.get("regions", [])
         cells: Any = matrix.get("cells", [])
@@ -96,18 +97,20 @@ async def get_run_matrix(run_id: str) -> tuple[dict[str, Any], int]:
         tenant = claims["tenant"]
         db = get_db()
 
-        service = MatrixService(db, tenant)
-        matrix = service.run_matrix(run_id)
+        # Verify run exists via RunManager (finding #5)
+        run_manager = RunManager(db, tenant)
+        run = await run_manager.get_run(run_id)
 
-        # run_matrix always returns data, but verify the run exists by checking
-        # if we got any cells. If no cells and no test_types, likely run doesn't exist.
-        if not matrix.get("test_types") and not matrix.get("cells"):
+        if not run:
             logger.info(
                 "run_matrix_not_found",
                 run_id=run_id,
                 tenant=tenant,
             )
             return {"error": "Run not found"}, 404
+
+        service = MatrixService(db, tenant)
+        matrix = await service.run_matrix(run_id)
 
         run_regions: Any = matrix.get("regions", [])
         run_cells: Any = matrix.get("cells", [])
@@ -177,7 +180,7 @@ async def get_trends() -> tuple[dict[str, Any], int]:
             window = 20
 
         service = MatrixService(db, tenant)
-        trends = service.trends(
+        trends = await service.trends(
             source_region=source,
             dest_region=dest,
             test_type=test_type,
