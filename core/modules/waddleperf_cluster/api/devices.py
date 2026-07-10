@@ -11,6 +11,7 @@ from quart import Blueprint, current_app, jsonify, request
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db
 from core.entitlements.gate import require_feature
+from core.modules.waddleperf_cluster.services.device_auth import authenticate_device_global
 from core.modules.waddleperf_cluster.services.device_manager import DeviceManager
 
 logger = structlog.get_logger()
@@ -171,26 +172,21 @@ async def device_heartbeat(device_id: str) -> tuple[dict[str, Any], int]:
         JSON response with status.
     """
     try:
-        # Authenticate using API key
+        # Authenticate using API key (globally, no tenant trust)
         api_key = _extract_bearer_token()
         if not api_key:
             return {"error": "Invalid authorization header"}, 401
 
         db = get_db()
 
-        # Get tenant from request headers (fallback to path device_id lookup)
-        # In production, tenant would come from JWT or device record
-        tenant_id = request.headers.get("X-Tenant-ID", "default")
-
-        device_manager = DeviceManager(db, tenant_id)
-        await device_manager.initialize()
-
-        device = await device_manager.authenticate_device(api_key)
-
-        if not device:
+        # Authenticate device globally; get back device record and its tenant
+        auth_result = await authenticate_device_global(db, api_key)
+        if not auth_result:
             return {"error": "Unauthorized"}, 401
 
-        # Verify device_id matches authenticated device
+        device, tenant_id = auth_result
+
+        # Verify device_id matches authenticated device (IDOR protection)
         if device.id != device_id:
             logger.warning(
                 "heartbeat_id_mismatch",
@@ -201,6 +197,8 @@ async def device_heartbeat(device_id: str) -> tuple[dict[str, Any], int]:
             return {"error": "Forbidden"}, 403
 
         # Record heartbeat
+        device_manager = DeviceManager(db, tenant_id)
+        await device_manager.initialize()
         updated = await device_manager.heartbeat(device_id)
 
         if not updated:
@@ -243,23 +241,21 @@ async def get_device_config(device_id: str) -> tuple[dict[str, Any], int]:
         JSON response with device configuration.
     """
     try:
-        # Authenticate using API key
+        # Authenticate using API key (globally, no tenant trust)
         api_key = _extract_bearer_token()
         if not api_key:
             return {"error": "Invalid authorization header"}, 401
 
         db = get_db()
-        tenant_id = request.headers.get("X-Tenant-ID", "default")
 
-        device_manager = DeviceManager(db, tenant_id)
-        await device_manager.initialize()
-
-        device = await device_manager.authenticate_device(api_key)
-
-        if not device:
+        # Authenticate device globally; get back device record and its tenant
+        auth_result = await authenticate_device_global(db, api_key)
+        if not auth_result:
             return {"error": "Unauthorized"}, 401
 
-        # Verify device_id matches authenticated device
+        device, tenant_id = auth_result
+
+        # Verify device_id matches authenticated device (IDOR protection)
         if device.id != device_id:
             logger.warning(
                 "config_id_mismatch",
