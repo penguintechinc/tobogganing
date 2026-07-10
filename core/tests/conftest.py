@@ -443,3 +443,117 @@ def wpc_readonly_token(app_with_wpc: Quart) -> str:
 
     token = encode_access_token(claims, provider, ttl_hours=1)
     return token
+
+
+# Cluster-to-Cluster (C2C) Module Test Fixtures
+
+
+@pytest.fixture
+def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
+    """Create a test app with WaddlePerf C2C module registered with REAL auth.
+
+    Uses real auth middleware and decorators. Feature flags are enabled via
+    monkeypatching the flag server to always return True for c2c features.
+
+    Args:
+        app: Base test app fixture.
+        mock_db: Mock database fixture.
+        monkeypatch: Pytest monkeypatch fixture for enabling flags.
+
+    Returns:
+        Quart app with WaddlePerf C2C module and real auth working.
+    """
+    from core.auth.jwt import encode_access_token
+    from core.crypto import InAppKeyProvider, generate_rsa_key_pair
+    from core.registry import ModuleContext
+
+    # Set up key provider for token generation in tests
+    private_pem, public_pem = generate_rsa_key_pair()
+    provider = InAppKeyProvider(private_pem, public_pem)
+    app.config["KEY_PROVIDER"] = provider
+
+    # Enable all c2c feature flags for tests (bypass flag server)
+    import shared.licensing.entitlements
+    original_flag_on = shared.licensing.entitlements._flag_on
+
+    def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
+        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+            return True
+        return original_flag_on(flag_key, distinct_id)
+
+    monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
+
+    # Grant a Professional license for tests: c2c is Professional-tier, so the
+    # tier gate would otherwise return 402. The unlicensed path is asserted
+    # separately in test_c2c_contract.py.
+    import core.entitlements.gate
+
+    monkeypatch.setattr(
+        core.entitlements.gate,
+        "_is_licensed_for_tier",
+        lambda tier: True,
+    )
+
+    # Register WaddlePerf C2C module via registry (REAL auth, no monkeypatch)
+    from core.modules.waddleperf_c2c import module as c2c_module
+
+    c2c_contract = c2c_module()
+    app.registry.register(c2c_contract)
+
+    # Apply registry to wire blueprints
+    ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
+    app.registry.apply_to(app, ctx)
+
+    return app
+
+
+@pytest.fixture
+def c2c_write_token(app_with_c2c: Quart) -> str:
+    """Generate a JWT token with c2c write scopes for testing.
+
+    Args:
+        app_with_c2c: App with key provider.
+
+    Returns:
+        Encoded JWT token with write scopes.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_c2c.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "c2c:read c2c:write",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest.fixture
+def c2c_readonly_token(app_with_c2c: Quart) -> str:
+    """Generate a JWT token with c2c read-only scope for testing.
+
+    Args:
+        app_with_c2c: App with key provider.
+
+    Returns:
+        Encoded JWT token with read-only scope.
+    """
+    from core.auth.jwt import encode_access_token
+
+    provider = app_with_c2c.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "c2c:read",
+    }
+
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token

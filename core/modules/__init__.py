@@ -1,3 +1,9 @@
 """Modules package for Tobogganing Core."""
 
-__all__ = ["ping", "sase", "waddleperf_cluster", "waddleperf_client"]
+__all__ = [
+    "ping",
+    "sase",
+    "waddleperf_cluster",
+    "waddleperf_client",
+    "waddleperf_c2c",
+]
