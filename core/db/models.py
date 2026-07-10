@@ -608,6 +608,106 @@ class TestSchedule(Base):
         return f"<TestSchedule(id={self.id}, tenant={self.tenant}, test_type={self.test_type})>"
 
 
+class C2CEndpoint(Base):
+    """Cluster-to-cluster test endpoints."""
+
+    __tablename__ = "c2c_endpoints"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    region: Column[str] = Column(String(100), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    engine_url: Column[str] = Column(String(500), nullable=False)
+    target: Column[str] = Column(String(500), nullable=False)
+    api_key_hash: Column[str | None] = Column(String(255), nullable=True, index=True)
+    enabled: Column[bool] = Column(Boolean, default=True, nullable=False)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "region", "name", name="uq_c2c_endpoints_tenant_region_name"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<C2CEndpoint(id={self.id}, tenant={self.tenant}, region={self.region}, name={self.name})>"
+
+
+class C2CMatrixRun(Base):
+    """Cluster-to-cluster matrix test runs."""
+
+    __tablename__ = "c2c_matrix_runs"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    status: Column[str] = Column(String(20), default="pending", nullable=False)
+    test_types: Column[dict] = Column(JSON, nullable=True)
+    total_pairs: Column[int] = Column(Integer, default=0, nullable=False)
+    completed_pairs: Column[int] = Column(Integer, default=0, nullable=False)
+    failed_pairs: Column[int] = Column(Integer, default=0, nullable=False)
+    created_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    started_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    completed_at: Column[datetime | None] = Column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<C2CMatrixRun(id={self.id}, tenant={self.tenant}, status={self.status})>"
+
+
+class C2CPairResult(Base):
+    """Cluster-to-cluster pair test results."""
+
+    __tablename__ = "c2c_pair_results"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    run_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)
+    source_endpoint_id: Column[str] = Column(UUID(as_uuid=False), nullable=False)
+    dest_endpoint_id: Column[str] = Column(UUID(as_uuid=False), nullable=False)
+    source_region: Column[str] = Column(String(100), nullable=False)
+    dest_region: Column[str] = Column(String(100), nullable=False)
+    test_type: Column[str] = Column(String(50), nullable=False)
+    status: Column[str] = Column(String(20), nullable=False)
+    latency_ms: Column[float | None] = Column(Float, nullable=True)
+    throughput: Column[float | None] = Column(Float, nullable=True)
+    loss_pct: Column[float | None] = Column(Float, nullable=True)
+    test_output: Column[str | None] = Column(Text, nullable=True)
+    measured_at: Column[datetime | None] = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant", "run_id", "source_endpoint_id", "dest_endpoint_id", "test_type",
+            name="uq_c2c_pair_results_tenant_run_endpoints_type",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<C2CPairResult(id={self.id}, tenant={self.tenant}, run_id={self.run_id})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -628,4 +728,7 @@ __all__ = [
     "ClientConfig",
     "ServerKey",
     "TestSchedule",
+    "C2CEndpoint",
+    "C2CMatrixRun",
+    "C2CPairResult",
 ]
