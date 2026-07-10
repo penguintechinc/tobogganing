@@ -78,15 +78,29 @@ def mock_db() -> MagicMock:
     query_proxy.__and__ = MagicMock(return_value=query_proxy)
     query_proxy.__or__ = MagicMock(return_value=query_proxy)
 
-    # Default table insert returns id=1
+    # Default table insert returns id=1 (or similar)
     for table_name in [
         "users",
         "refresh_tokens",
         "password_reset_tokens",
+        "devices",
+        "device_api_keys",
+        "device_enrollment_secrets",
+        "org_units",
+        "perf_test_results",
+        "test_schedules",
     ]:
         table_mock = MagicMock()
         table_mock.async_insert = AsyncMock(return_value=1)
         table_mock.id = make_comparable_field("id")
+        table_mock.tenant = make_comparable_field("tenant")
+        table_mock.device_id = make_comparable_field("device_id")
+        table_mock.api_key_hash = make_comparable_field("api_key_hash")
+        table_mock.secret_hash = make_comparable_field("secret_hash")
+        table_mock.parent_id = make_comparable_field("parent_id")
+        table_mock.org_unit_id = make_comparable_field("org_unit_id")
+        table_mock.test_type = make_comparable_field("test_type")
+        table_mock.status = make_comparable_field("status")
         setattr(db, table_name, table_mock)
 
     # Mock connection for health checks

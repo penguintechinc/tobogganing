@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import os
-import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Optional
+from uuid import uuid4
 
 import bcrypt
 import pyotp
-from typing import TYPE_CHECKING
+import structlog
 
 from core.auth.jwt import decode_token, encode_access_token
 from core.config import Config
 from core.crypto.keys import KeyProvider
 from core.crypto.secrets import decrypt_secret, encrypt_secret
 
-if TYPE_CHECKING:
-    from penguin_dal import DB
+logger = structlog.get_logger()
 
 
 # Role to scope mapping
@@ -66,7 +66,7 @@ class AuthService:
         self.config = config
         self.key_provider = key_provider
 
-    def authenticate(
+    async def authenticate(
         self,
         email: str,
         password: str,
@@ -87,7 +87,8 @@ class AuthService:
         """
         try:
             # Query user by email
-            user = self.db.users.select(email=email).first()
+            rowset = await self.db(self.db.users.email == email).select()
+            user = rowset.first()
             if not user:
                 return AuthResult(success=False, error="Invalid email or password")
 
@@ -108,7 +109,7 @@ class AuthService:
                     # Generate a temporary MFA token for the client to use
                     # (in a real implementation, this would be a short-lived token)
                     mfa_tok = hashlib.sha256(
-                        (user.id + str(uuid.uuid4())).encode()
+                        (user.id + str(uuid4())).encode()
                     ).hexdigest()
                     return AuthResult(mfa_required=True, mfa_token=mfa_tok)
 
@@ -119,12 +120,12 @@ class AuthService:
                     return AuthResult(success=False, error=f"MFA verification error: {e}")
 
                 totp = pyotp.TOTP(decrypted_secret)
-                if not totp.verify(mfa_token):
+                if not totp.verify(mfa_token, valid_window=1):
                     return AuthResult(success=False, error="Invalid MFA token")
 
             # Generate tokens
             access_token = self._generate_access_token(user)
-            refresh_token = self._generate_and_store_refresh_token(user.id)
+            refresh_token = await self._generate_and_store_refresh_token(user.id)
 
             return AuthResult(
                 success=True,
@@ -132,9 +133,10 @@ class AuthService:
                 refresh_token=refresh_token,
             )
         except Exception as e:
+            logger.error("authentication_error", email=email, error=str(e))
             return AuthResult(success=False, error=f"Authentication failed: {str(e)}")
 
-    def refresh_access_token(self, refresh_token: str) -> AuthResult:
+    async def refresh_access_token(self, refresh_token: str) -> AuthResult:
         """
         Refresh an access token using a refresh token.
 
@@ -146,18 +148,18 @@ class AuthService:
         """
         try:
             # Query refresh token
-            rt_record = self.db.refresh_tokens.select(token=refresh_token).first()
-            if not rt_record or rt_record.revoked:
+            rowset = await self.db(self.db.refresh_tokens.token == refresh_token).select()
+            rt_record = rowset.first()
+            if not rt_record:
                 return AuthResult(success=False, error="Invalid or revoked refresh token")
 
             # Verify expiration
-            import time
-
-            if rt_record.expires_at < int(time.time()):
+            if rt_record.expires_at < datetime.now(timezone.utc):
                 return AuthResult(success=False, error="Refresh token expired")
 
             # Get user
-            user = self.db.users.select(id=rt_record.user_id).first()
+            user_rowset = await self.db(self.db.users.id == rt_record.user_id).select()
+            user = user_rowset.first()
             if not user or not user.is_active:
                 return AuthResult(success=False, error="User not found or inactive")
 
@@ -166,9 +168,10 @@ class AuthService:
 
             return AuthResult(success=True, access_token=access_token)
         except Exception as e:
+            logger.error("token_refresh_error", error=str(e))
             return AuthResult(success=False, error=f"Token refresh failed: {str(e)}")
 
-    def revoke_tokens(self, user_id: str) -> bool:
+    async def revoke_tokens(self, user_id: str) -> bool:
         """
         Revoke all refresh tokens for a user.
 
@@ -179,16 +182,14 @@ class AuthService:
             True if revocation successful, False otherwise.
         """
         try:
-            # Mark all refresh tokens as revoked
-            self.db.refresh_tokens.update(
-                user_id=user_id,
-                revoked=True,
-            )
+            # Delete all refresh tokens for the user
+            await self.db(self.db.refresh_tokens.user_id == user_id).delete()
             return True
-        except Exception:
+        except Exception as e:
+            logger.error("token_revocation_error", user_id=user_id, error=str(e))
             return False
 
-    def setup_mfa(self, user_id: str) -> tuple[str, list[str]]:
+    async def setup_mfa(self, user_id: str) -> tuple[str, list[str]]:
         """
         Set up TOTP MFA for a user.
 
@@ -199,8 +200,12 @@ class AuthService:
 
         Returns:
             Tuple of (secret, backup_codes).
+
+        Raises:
+            ValueError: If user not found.
         """
-        user = self.db.users.select(id=user_id).first()
+        rowset = await self.db(self.db.users.id == user_id).select()
+        user = rowset.first()
         if not user:
             raise ValueError("User not found")
 
@@ -208,11 +213,13 @@ class AuthService:
         secret = pyotp.random_base32()
 
         # Generate backup codes (in a real implementation, these would be hashed)
-        backup_codes = [hashlib.sha256(f"{secret}:{i}".encode()).hexdigest()[:8] for i in range(10)]
+        backup_codes = [
+            hashlib.sha256(f"{secret}:{i}".encode()).hexdigest()[:8] for i in range(10)
+        ]
 
         return secret, backup_codes
 
-    def verify_and_enable_mfa(
+    async def verify_and_enable_mfa(
         self,
         user_id: str,
         secret: str,
@@ -230,29 +237,30 @@ class AuthService:
             True if MFA enabled successfully, False otherwise.
         """
         try:
-            # Verify the token
+            # Verify the token with valid_window=1 to handle 30s window boundaries
             totp = pyotp.TOTP(secret)
-            if not totp.verify(mfa_token):
+            if not totp.verify(mfa_token, valid_window=1):
                 return False
 
             # Update user record
-            user = self.db.users.select(id=user_id).first()
+            rowset = await self.db(self.db.users.id == user_id).select()
+            user = rowset.first()
             if not user:
                 return False
 
             # Encrypt secret before storing
             encrypted_secret = encrypt_secret(secret)
 
-            self.db.users.update(
-                id=user_id,
+            await self.db(self.db.users.id == user_id).update(
                 mfa_enabled=True,
                 mfa_secret=encrypted_secret,
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.error("mfa_enable_error", user_id=user_id, error=str(e))
             return False
 
-    def disable_mfa(self, user_id: str) -> bool:
+    async def disable_mfa(self, user_id: str) -> bool:
         """
         Disable MFA for a user.
 
@@ -263,16 +271,16 @@ class AuthService:
             True if MFA disabled successfully, False otherwise.
         """
         try:
-            self.db.users.update(
-                id=user_id,
+            await self.db(self.db.users.id == user_id).update(
                 mfa_enabled=False,
                 mfa_secret=None,
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.error("mfa_disable_error", user_id=user_id, error=str(e))
             return False
 
-    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+    async def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
         """
         Retrieve a user by ID.
 
@@ -283,7 +291,8 @@ class AuthService:
             User record as dict, or None if not found.
         """
         try:
-            user = self.db.users.select(id=user_id).first()
+            rowset = await self.db(self.db.users.id == user_id).select()
+            user = rowset.first()
             if not user:
                 return None
             return {
@@ -296,7 +305,8 @@ class AuthService:
                 "role": user.role,
                 "teams": getattr(user, "teams", []),
             }
-        except Exception:
+        except Exception as e:
+            logger.error("get_user_error", user_id=user_id, error=str(e))
             return None
 
     def _generate_access_token(self, user: Any) -> str:
@@ -333,7 +343,7 @@ class AuthService:
             ttl_hours=self.config.jwt_expiration_hours,
         )
 
-    def _generate_and_store_refresh_token(self, user_id: str) -> str:
+    async def _generate_and_store_refresh_token(self, user_id: str) -> str:
         """
         Generate and store a refresh token.
 
@@ -343,20 +353,21 @@ class AuthService:
         Returns:
             The refresh token string.
         """
-        import time
+        from datetime import timedelta
 
         refresh_token = hashlib.sha256(
             (user_id + os.urandom(32).hex()).encode()
         ).hexdigest()
 
         # Store in database (expires in 30 days)
-        expires_at = int(time.time()) + (30 * 24 * 3600)
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(days=30)
 
-        self.db.refresh_tokens.insert(
+        await self.db.refresh_tokens.async_insert(
             user_id=user_id,
             token=refresh_token,
             expires_at=expires_at,
-            revoked=False,
+            created_at=now,
         )
 
         return refresh_token
