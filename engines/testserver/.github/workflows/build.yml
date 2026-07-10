@@ -1,0 +1,81 @@
+name: Build testServer
+
+on:
+  push:
+    branches: [main, 4.x]
+    tags: ['v*']
+    paths:
+      - 'testServer/**'
+      - '.github/workflows/testserver.yml'
+  pull_request:
+    branches: [main, 4.x]
+    paths:
+      - 'testServer/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Go mod download
+        working-directory: ./testServer
+        run: go mod download
+
+      - name: Go fmt
+        working-directory: ./testServer
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Please run 'go fmt ./...'"
+            gofmt -s -l .
+            exit 1
+          fi
+
+      - name: Go vet
+        working-directory: ./testServer
+        run: go vet ./...
+
+      - name: Go build
+        working-directory: ./testServer
+        run: go build -v ./cmd/testserver
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/testserver
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=alpha,enable=${{ github.ref == 'refs/heads/4.x' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./testServer
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
