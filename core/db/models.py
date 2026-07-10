@@ -575,6 +575,39 @@ class ServerKey(Base):
         return f"<ServerKey(id={self.id}, tenant={self.tenant}, key_id={self.key_id})>"
 
 
+class TestSchedule(Base):
+    """Test schedules for WaddlePerf client testing."""
+
+    __tablename__ = "test_schedules"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    org_unit_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
+    test_type: Column[str] = Column(String(50), nullable=False)
+    target: Column[str] = Column(String(255), nullable=False)
+    interval_seconds: Column[int] = Column(Integer, nullable=False)
+    enabled: Column[bool] = Column(Boolean, default=True, nullable=False)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "org_unit_id", "test_type", "target", name="uq_test_schedules_tenant_ou_type_target"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<TestSchedule(id={self.id}, tenant={self.tenant}, test_type={self.test_type})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -594,4 +627,5 @@ __all__ = [
     "PerfTestResult",
     "ClientConfig",
     "ServerKey",
+    "TestSchedule",
 ]

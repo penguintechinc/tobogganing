@@ -345,7 +345,7 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_cluster."):
+        if flag_key.startswith("tobogganing.waddleperf_cluster.") or flag_key.startswith("tobogganing.waddleperf_client."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -353,9 +353,12 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
 
     # Register WaddlePerf Cluster module via registry (REAL auth, no monkeypatch)
     from core.modules.waddleperf_cluster import module as wpc_module
+    from core.modules.waddleperf_client import module as wpcl_module
 
     wpc_contract = wpc_module()
+    wpcl_contract = wpcl_module()
     app.registry.register(wpc_contract)
+    app.registry.register(wpcl_contract)
 
     # Apply registry to wire blueprints
     ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
@@ -435,7 +438,7 @@ def wpc_readonly_token(app_with_wpc: Quart) -> str:
         "iss": "test-app",
         "aud": "test-app",
         "tenant": "test-tenant",
-        "scope": "org_units:read devices:read tests:read stats:read",
+        "scope": "org_units:read devices:read tests:read stats:read schedules:read config:read version:read",
     }
 
     token = encode_access_token(claims, provider, ttl_hours=1)
