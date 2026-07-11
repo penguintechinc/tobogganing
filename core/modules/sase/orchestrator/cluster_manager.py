@@ -1,14 +1,13 @@
 """Cluster management using penguin-dal."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -32,17 +31,16 @@ class Cluster:
 class ClusterManager:
     """Manages cluster registration and health monitoring using penguin-dal."""
 
-    def __init__(self, db: object, tenant_id: str) -> None:
+    def __init__(self, db: Any, tenant_id: str) -> None:
         """Initialize ClusterManager.
 
         Args:
-            db: penguin-dal DAL instance
+            db: penguin-dal AsyncDB instance
             tenant_id: Tenant identifier for scoping queries
         """
         self.db = db
         self.tenant_id = tenant_id
         self.health_check_interval = 30
-        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Initialize the ClusterManager."""
@@ -67,46 +65,45 @@ class ClusterManager:
         """
         api_key = secrets.token_urlsafe(32)
         api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        now = datetime.now(timezone.utc)
 
-        async with self._lock:
-            cluster_obj = await asyncio.to_thread(
-                self.db.clusters.create,
-                id=cluster_data["id"],
-                name=cluster_data["name"],
-                region=cluster_data["region"],
-                datacenter=cluster_data["datacenter"],
-                headend_url=cluster_data["headend_url"],
-                status="active",
-                last_heartbeat=datetime.now(timezone.utc),
-                client_count=0,
-                tenant=self.tenant_id,
-                api_key_hash=api_key_hash,
-                metadata=cluster_data.get("metadata", {}),
-            )
+        await self.db.clusters.async_insert(
+            id=cluster_data["id"],
+            name=cluster_data["name"],
+            region=cluster_data["region"],
+            datacenter=cluster_data["datacenter"],
+            headend_url=cluster_data["headend_url"],
+            status="active",
+            last_heartbeat=now,
+            tenant=self.tenant_id,
+            api_key_hash=api_key_hash,
+            metadata=cluster_data.get("metadata", {}),
+            created_at=now,
+            updated_at=now,
+        )
 
-            logger.info(
-                "Registered cluster",
-                cluster_id=cluster_obj.id,
-                region=cluster_obj.region,
-                datacenter=cluster_obj.datacenter,
-                tenant=self.tenant_id,
-            )
+        cluster_obj = Cluster(
+            id=cluster_data["id"],
+            name=cluster_data["name"],
+            region=cluster_data["region"],
+            datacenter=cluster_data["datacenter"],
+            headend_url=cluster_data["headend_url"],
+            status="active",
+            last_heartbeat=now,
+            client_count=0,
+            tenant=self.tenant_id,
+            metadata=cluster_data.get("metadata", {}),
+        )
 
-            return (
-                Cluster(
-                    id=cluster_obj.id,
-                    name=cluster_obj.name,
-                    region=cluster_obj.region,
-                    datacenter=cluster_obj.datacenter,
-                    headend_url=cluster_obj.headend_url,
-                    status=cluster_obj.status,
-                    last_heartbeat=cluster_obj.last_heartbeat,
-                    client_count=cluster_obj.client_count,
-                    tenant=cluster_obj.tenant,
-                    metadata=cluster_obj.metadata,
-                ),
-                api_key,
-            )
+        logger.info(
+            "Registered cluster",
+            cluster_id=cluster_obj.id,
+            region=cluster_obj.region,
+            datacenter=cluster_obj.datacenter,
+            tenant=self.tenant_id,
+        )
+
+        return (cluster_obj, api_key)
 
     async def authenticate_cluster(
         self, api_key: str
@@ -123,10 +120,8 @@ class ClusterManager:
             api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
             # Look up by hash globally (key IS the identity)
-            cluster_obj = await asyncio.to_thread(
-                self.db.clusters.select,
-                api_key_hash=api_key_hash,
-            )
+            rowset = await self.db(self.db.clusters.api_key_hash == api_key_hash).select()
+            cluster_obj = rowset.first()
 
             if not cluster_obj:
                 logger.warning(
@@ -145,9 +140,8 @@ class ClusterManager:
                 return None
 
             # Update last_heartbeat on successful auth
-            await asyncio.to_thread(
-                cluster_obj.update,
-                last_heartbeat=datetime.now(timezone.utc),
+            await self.db(self.db.clusters.id == cluster_obj.id).update(
+                last_heartbeat=datetime.now(timezone.utc)
             )
 
             return Cluster(
@@ -181,23 +175,21 @@ class ClusterManager:
         Returns:
             True if successful, False if cluster not found
         """
-        async with self._lock:
-            cluster_obj = await asyncio.to_thread(
-                self.db.clusters.select,
-                id=cluster_id,
-                tenant=self.tenant_id,
-            )
-            if not cluster_obj:
-                return False
+        rowset = await self.db(
+            (self.db.clusters.id == cluster_id) & (self.db.clusters.tenant == self.tenant_id)
+        ).select()
+        cluster_obj = rowset.first()
+        if not cluster_obj:
+            return False
 
-            await asyncio.to_thread(
-                cluster_obj.update,
-                last_heartbeat=datetime.now(timezone.utc),
-                status="active",
-                client_count=client_count or cluster_obj.client_count,
-            )
+        new_client_count = client_count if client_count is not None else cluster_obj.client_count
+        await self.db(self.db.clusters.id == cluster_id).update(
+            last_heartbeat=datetime.now(timezone.utc),
+            status="active",
+            client_count=new_client_count,
+        )
 
-            return True
+        return True
 
     async def get_cluster(self, cluster_id: str) -> Cluster | None:
         """Get a cluster by ID.
@@ -208,11 +200,10 @@ class ClusterManager:
         Returns:
             Cluster or None if not found
         """
-        cluster_obj = await asyncio.to_thread(
-            self.db.clusters.select,
-            id=cluster_id,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(
+            (self.db.clusters.id == cluster_id) & (self.db.clusters.tenant == self.tenant_id)
+        ).select()
+        cluster_obj = rowset.first()
         if not cluster_obj:
             return None
 
@@ -235,10 +226,7 @@ class ClusterManager:
         Returns:
             List of Cluster objects
         """
-        clusters = await asyncio.to_thread(
-            self.db.clusters.select_list,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(self.db.clusters.tenant == self.tenant_id).select()
 
         return [
             Cluster(
@@ -253,7 +241,7 @@ class ClusterManager:
                 tenant=c.tenant,
                 metadata=c.metadata,
             )
-            for c in clusters
+            for c in rowset
         ]
 
     async def get_clusters_by_region(self, region: str) -> list[Cluster]:
@@ -265,11 +253,9 @@ class ClusterManager:
         Returns:
             List of Cluster objects
         """
-        clusters = await asyncio.to_thread(
-            self.db.clusters.select_list,
-            region=region,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(
+            (self.db.clusters.region == region) & (self.db.clusters.tenant == self.tenant_id)
+        ).select()
 
         return [
             Cluster(
@@ -284,7 +270,7 @@ class ClusterManager:
                 tenant=c.tenant,
                 metadata=c.metadata,
             )
-            for c in clusters
+            for c in rowset
         ]
 
     async def get_clusters_by_datacenter(self, datacenter: str) -> list[Cluster]:
@@ -296,11 +282,9 @@ class ClusterManager:
         Returns:
             List of Cluster objects
         """
-        clusters = await asyncio.to_thread(
-            self.db.clusters.select_list,
-            datacenter=datacenter,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(
+            (self.db.clusters.datacenter == datacenter) & (self.db.clusters.tenant == self.tenant_id)
+        ).select()
 
         return [
             Cluster(
@@ -315,7 +299,7 @@ class ClusterManager:
                 tenant=c.tenant,
                 metadata=c.metadata,
             )
-            for c in clusters
+            for c in rowset
         ]
 
     async def remove_cluster(self, cluster_id: str) -> bool:
@@ -327,18 +311,16 @@ class ClusterManager:
         Returns:
             True if successful, False if not found
         """
-        async with self._lock:
-            cluster_obj = await asyncio.to_thread(
-                self.db.clusters.select,
-                id=cluster_id,
-                tenant=self.tenant_id,
-            )
-            if not cluster_obj:
-                return False
+        rowset = await self.db(
+            (self.db.clusters.id == cluster_id) & (self.db.clusters.tenant == self.tenant_id)
+        ).select()
+        cluster_obj = rowset.first()
+        if not cluster_obj:
+            return False
 
-            await asyncio.to_thread(cluster_obj.delete)
-            logger.info("Removed cluster", cluster_id=cluster_id, tenant=self.tenant_id)
-            return True
+        await self.db(self.db.clusters.id == cluster_id).delete()
+        logger.info("Removed cluster", cluster_id=cluster_id, tenant=self.tenant_id)
+        return True
 
     async def monitor_health(self) -> None:
         """Monitor cluster health (background task)."""
@@ -354,21 +336,17 @@ class ClusterManager:
         """Check cluster health and mark stale clusters."""
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
 
-        async with self._lock:
-            clusters = await asyncio.to_thread(
-                self.db.clusters.select_list,
-                tenant=self.tenant_id,
-            )
+        rowset = await self.db(self.db.clusters.tenant == self.tenant_id).select()
 
-            for cluster_obj in clusters:
-                if cluster_obj.last_heartbeat < stale_threshold:
-                    if cluster_obj.status == "active":
-                        await asyncio.to_thread(cluster_obj.update, status="stale")
-                        logger.warning(
-                            "Cluster marked as stale",
-                            cluster_id=cluster_obj.id,
-                            tenant=self.tenant_id,
-                        )
+        for cluster_obj in rowset:
+            if cluster_obj.last_heartbeat < stale_threshold:
+                if cluster_obj.status == "active":
+                    await self.db(self.db.clusters.id == cluster_obj.id).update(status="stale")
+                    logger.warning(
+                        "Cluster marked as stale",
+                        cluster_id=cluster_obj.id,
+                        tenant=self.tenant_id,
+                    )
 
     async def get_cluster_count(self) -> int:
         """Get count of clusters for the tenant.
@@ -376,11 +354,8 @@ class ClusterManager:
         Returns:
             Number of clusters
         """
-        clusters = await asyncio.to_thread(
-            self.db.clusters.select_list,
-            tenant=self.tenant_id,
-        )
-        return len(clusters)
+        count = await self.db(self.db.clusters.tenant == self.tenant_id).count()
+        return count
 
     async def is_healthy(self) -> bool:
         """Check if manager is healthy.

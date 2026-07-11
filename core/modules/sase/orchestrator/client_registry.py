@@ -1,14 +1,13 @@
 """Client registry using penguin-dal with hashed API keys."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -34,17 +33,16 @@ class Client:
 class ClientRegistry:
     """Manages client registration and authentication using penguin-dal."""
 
-    def __init__(self, db: object, tenant_id: str) -> None:
+    def __init__(self, db: Any, tenant_id: str) -> None:
         """Initialize ClientRegistry.
 
         Args:
-            db: penguin-dal DAL instance
+            db: penguin-dal AsyncDB instance
             tenant_id: Tenant identifier for scoping queries
         """
         self.db = db
         self.tenant_id = tenant_id
         self.cleanup_interval = 300  # 5 minutes
-        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Initialize the ClientRegistry."""
@@ -71,48 +69,45 @@ class ClientRegistry:
         """
         api_key = secrets.token_urlsafe(32)
         api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        now = datetime.now(timezone.utc)
 
-        async with self._lock:
-            client_obj = await asyncio.to_thread(
-                self.db.clients.create,
-                id=client_data["id"],
-                name=client_data["name"],
-                type=client_data["type"],
-                cluster_id=client_data["cluster_id"],
-                api_key_hash=api_key_hash,
-                public_key=client_data["public_key"],
-                ip_address=client_data.get("ip_address", ""),
-                status="pending",
-                created_at=datetime.now(timezone.utc),
-                last_seen=datetime.now(timezone.utc),
-                tenant=self.tenant_id,
-                metadata=client_data.get("metadata", {}),
-            )
+        await self.db.clients.async_insert(
+            id=client_data["id"],
+            name=client_data["name"],
+            type=client_data["type"],
+            cluster_id=client_data["cluster_id"],
+            api_key_hash=api_key_hash,
+            public_key=client_data["public_key"],
+            ip_address=client_data.get("ip_address", ""),
+            created_at=now,
+            last_seen=now,
+            tenant=self.tenant_id,
+            metadata=client_data.get("metadata", {}),
+        )
 
-            logger.info(
-                "Registered client",
-                client_id=client_obj.id,
-                type=client_obj.type,
-                tenant=self.tenant_id,
-            )
+        client_obj = Client(
+            id=client_data["id"],
+            name=client_data["name"],
+            type=client_data["type"],
+            cluster_id=client_data["cluster_id"],
+            api_key_hash=api_key_hash,
+            public_key=client_data["public_key"],
+            ip_address=client_data.get("ip_address", ""),
+            status="pending",
+            created_at=now,
+            last_seen=now,
+            tenant=self.tenant_id,
+            metadata=client_data.get("metadata", {}),
+        )
 
-            return (
-                Client(
-                    id=client_obj.id,
-                    name=client_obj.name,
-                    type=client_obj.type,
-                    cluster_id=client_obj.cluster_id,
-                    api_key_hash=client_obj.api_key_hash,
-                    public_key=client_obj.public_key,
-                    ip_address=client_obj.ip_address,
-                    status=client_obj.status,
-                    created_at=client_obj.created_at,
-                    last_seen=client_obj.last_seen,
-                    tenant=client_obj.tenant,
-                    metadata=client_obj.metadata,
-                ),
-                api_key,
-            )
+        logger.info(
+            "Registered client",
+            client_id=client_obj.id,
+            type=client_obj.type,
+            tenant=self.tenant_id,
+        )
+
+        return (client_obj, api_key)
 
     async def authenticate_client(
         self, api_key: str
@@ -128,11 +123,11 @@ class ClientRegistry:
         try:
             api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
-            client_obj = await asyncio.to_thread(
-                self.db.clients.select,
-                api_key_hash=api_key_hash,
-                tenant=self.tenant_id,
-            )
+            rowset = await self.db(
+                (self.db.clients.api_key_hash == api_key_hash)
+                & (self.db.clients.tenant == self.tenant_id)
+            ).select()
+            client_obj = rowset.first()
 
             if not client_obj:
                 return None
@@ -157,9 +152,8 @@ class ClientRegistry:
                 return None
 
             # Update last_seen (DO NOT update status; client must already be active)
-            await asyncio.to_thread(
-                client_obj.update,
-                last_seen=datetime.now(timezone.utc),
+            await self.db(self.db.clients.id == client_obj.id).update(
+                last_seen=datetime.now(timezone.utc)
             )
 
             return Client(
@@ -197,35 +191,33 @@ class ClientRegistry:
         Returns:
             True if successful, False if client not found or on error
         """
-        async with self._lock:
-            try:
-                client_obj = await asyncio.to_thread(
-                    self.db.clients.select,
-                    id=client_id,
-                    tenant=self.tenant_id,
-                )
-                if not client_obj:
-                    return False
-
-                update_data = {
-                    "status": status,
-                    "last_seen": datetime.now(timezone.utc),
-                }
-                if metadata:
-                    existing_metadata = client_obj.metadata or {}
-                    existing_metadata.update(metadata)
-                    update_data["metadata"] = existing_metadata
-
-                await asyncio.to_thread(client_obj.update, **update_data)
-                return True
-            except Exception as e:
-                logger.error(
-                    "Failed to update client status (fail closed)",
-                    client_id=client_id,
-                    error=str(e),
-                    tenant=self.tenant_id,
-                )
+        try:
+            rowset = await self.db(
+                (self.db.clients.id == client_id) & (self.db.clients.tenant == self.tenant_id)
+            ).select()
+            client_obj = rowset.first()
+            if not client_obj:
                 return False
+
+            update_data = {
+                "status": status,
+                "last_seen": datetime.now(timezone.utc),
+            }
+            if metadata:
+                existing_metadata = client_obj.metadata or {}
+                existing_metadata.update(metadata)
+                update_data["metadata"] = existing_metadata
+
+            await self.db(self.db.clients.id == client_id).update(**update_data)
+            return True
+        except Exception as e:
+            logger.error(
+                "Failed to update client status (fail closed)",
+                client_id=client_id,
+                error=str(e),
+                tenant=self.tenant_id,
+            )
+            return False
 
     async def get_client(self, client_id: str) -> Client | None:
         """Get a client by ID.
@@ -236,11 +228,10 @@ class ClientRegistry:
         Returns:
             Client or None if not found
         """
-        client_obj = await asyncio.to_thread(
-            self.db.clients.select,
-            id=client_id,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(
+            (self.db.clients.id == client_id) & (self.db.clients.tenant == self.tenant_id)
+        ).select()
+        client_obj = rowset.first()
         if not client_obj:
             return None
 
@@ -265,10 +256,7 @@ class ClientRegistry:
         Returns:
             List of Client objects
         """
-        clients = await asyncio.to_thread(
-            self.db.clients.select_list,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(self.db.clients.tenant == self.tenant_id).select()
 
         return [
             Client(
@@ -285,7 +273,7 @@ class ClientRegistry:
                 tenant=c.tenant,
                 metadata=c.metadata,
             )
-            for c in clients
+            for c in rowset
         ]
 
     async def get_clients_by_cluster(self, cluster_id: str) -> list[Client]:
@@ -297,11 +285,9 @@ class ClientRegistry:
         Returns:
             List of Client objects
         """
-        clients = await asyncio.to_thread(
-            self.db.clients.select_list,
-            cluster_id=cluster_id,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(
+            (self.db.clients.cluster_id == cluster_id) & (self.db.clients.tenant == self.tenant_id)
+        ).select()
 
         return [
             Client(
@@ -318,7 +304,7 @@ class ClientRegistry:
                 tenant=c.tenant,
                 metadata=c.metadata,
             )
-            for c in clients
+            for c in rowset
         ]
 
     async def get_clients_by_type(self, client_type: str) -> list[Client]:
@@ -330,11 +316,9 @@ class ClientRegistry:
         Returns:
             List of Client objects
         """
-        clients = await asyncio.to_thread(
-            self.db.clients.select_list,
-            type=client_type,
-            tenant=self.tenant_id,
-        )
+        rowset = await self.db(
+            (self.db.clients.type == client_type) & (self.db.clients.tenant == self.tenant_id)
+        ).select()
 
         return [
             Client(
@@ -351,7 +335,7 @@ class ClientRegistry:
                 tenant=c.tenant,
                 metadata=c.metadata,
             )
-            for c in clients
+            for c in rowset
         ]
 
     async def remove_client(self, client_id: str) -> bool:
@@ -363,27 +347,25 @@ class ClientRegistry:
         Returns:
             True if successful, False if not found or on error
         """
-        async with self._lock:
-            try:
-                client_obj = await asyncio.to_thread(
-                    self.db.clients.select,
-                    id=client_id,
-                    tenant=self.tenant_id,
-                )
-                if not client_obj:
-                    return False
-
-                await asyncio.to_thread(client_obj.delete)
-                logger.info("Removed client", client_id=client_id, tenant=self.tenant_id)
-                return True
-            except Exception as e:
-                logger.error(
-                    "Failed to remove client (fail closed)",
-                    client_id=client_id,
-                    error=str(e),
-                    tenant=self.tenant_id,
-                )
+        try:
+            rowset = await self.db(
+                (self.db.clients.id == client_id) & (self.db.clients.tenant == self.tenant_id)
+            ).select()
+            client_obj = rowset.first()
+            if not client_obj:
                 return False
+
+            await self.db(self.db.clients.id == client_id).delete()
+            logger.info("Removed client", client_id=client_id, tenant=self.tenant_id)
+            return True
+        except Exception as e:
+            logger.error(
+                "Failed to remove client (fail closed)",
+                client_id=client_id,
+                error=str(e),
+                tenant=self.tenant_id,
+            )
+            return False
 
     async def cleanup_expired(self) -> None:
         """Cleanup expired clients (background task)."""
@@ -399,23 +381,19 @@ class ClientRegistry:
         """Clean up stale clients."""
         stale_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
 
-        async with self._lock:
-            clients = await asyncio.to_thread(
-                self.db.clients.select_list,
-                tenant=self.tenant_id,
-            )
+        rowset = await self.db(self.db.clients.tenant == self.tenant_id).select()
 
-            for client_obj in clients:
-                if (
-                    client_obj.last_seen < stale_threshold
-                    and client_obj.status != "active"
-                ):
-                    await asyncio.to_thread(client_obj.delete)
-                    logger.info(
-                        "Cleaned up stale client",
-                        client_id=client_obj.id,
-                        tenant=self.tenant_id,
-                    )
+        for client_obj in rowset:
+            if (
+                client_obj.last_seen < stale_threshold
+                and client_obj.status != "active"
+            ):
+                await self.db(self.db.clients.id == client_obj.id).delete()
+                logger.info(
+                    "Cleaned up stale client",
+                    client_id=client_obj.id,
+                    tenant=self.tenant_id,
+                )
 
     async def get_client_count(self) -> int:
         """Get count of clients for the tenant.
@@ -423,11 +401,8 @@ class ClientRegistry:
         Returns:
             Number of clients
         """
-        clients = await asyncio.to_thread(
-            self.db.clients.select_list,
-            tenant=self.tenant_id,
-        )
-        return len(clients)
+        count = await self.db(self.db.clients.tenant == self.tenant_id).count()
+        return count
 
     async def is_healthy(self) -> bool:
         """Check if registry is healthy.
@@ -453,23 +428,20 @@ class ClientRegistry:
         new_api_key = secrets.token_urlsafe(32)
         new_api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
 
-        async with self._lock:
-            client_obj = await asyncio.to_thread(
-                self.db.clients.select,
-                id=client_id,
-                tenant=self.tenant_id,
-            )
-            if not client_obj:
-                return None
+        rowset = await self.db(
+            (self.db.clients.id == client_id) & (self.db.clients.tenant == self.tenant_id)
+        ).select()
+        client_obj = rowset.first()
+        if not client_obj:
+            return None
 
-            await asyncio.to_thread(
-                client_obj.update,
-                api_key_hash=new_api_key_hash,
-            )
+        await self.db(self.db.clients.id == client_id).update(
+            api_key_hash=new_api_key_hash
+        )
 
-            logger.info(
-                "Rotated API key for client",
-                client_id=client_id,
-                tenant=self.tenant_id,
-            )
-            return new_api_key
+        logger.info(
+            "Rotated API key for client",
+            client_id=client_id,
+            tenant=self.tenant_id,
+        )
+        return new_api_key

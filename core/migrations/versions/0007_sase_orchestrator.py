@@ -21,7 +21,7 @@ def upgrade() -> None:
     # Create clusters table
     op.create_table(
         "clusters",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("region", sa.String(100), nullable=False),
@@ -43,7 +43,7 @@ def upgrade() -> None:
     # Create clients table
     op.create_table(
         "clients",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("type", sa.String(50), nullable=False),
