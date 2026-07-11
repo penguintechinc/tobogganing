@@ -410,3 +410,58 @@ async def test_tenant_backup_restores_only_tenant_columns(
     users_in_backup = backup_data["data"].get("users", [])
     assert len(users_in_backup) == 1
     assert users_in_backup[0]["id"] == "user-a1"
+
+
+@pytest.mark.asyncio
+async def test_tenant_restore_drops_foreign_tenant_rows_in_file(
+    real_dal: Any,
+    backup_manager_and_dir: tuple[BackupManager, Path],
+) -> None:
+    """Row-level fail-closed: a backup that (through tampering, a mis-scoped
+    whole_db backup, or a bad S3 key) contains rows for OTHER tenants must never
+    inject those rows when restored under a single tenant. Only the caller
+    tenant's rows are written; foreign rows are counted and dropped.
+
+    regression: backup restore tenant-isolation fail-open (commit review)
+    """
+    manager, backup_dir = backup_manager_and_dir
+
+    tenant_a = "tenant-a"
+    tenant_b = "tenant-b"
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Hand-craft a backup file that lives UNDER tenant A's directory (so the
+    # fail-closed path check passes) but whose payload contains a tenant B row.
+    poisoned = {
+        "metadata": {"version": "1.0", "scope": f"tenant:{tenant_a}", "tables": []},
+        "data": {
+            "users": [
+                {
+                    "id": "user-a1", "username": "alice", "email": "alice@a.com",
+                    "password_hash": "h1", "tenant": tenant_a,
+                    "created_at": now, "updated_at": now, "is_active": True,
+                },
+                {
+                    # Foreign row — must be dropped, never injected into tenant B.
+                    "id": "user-b-evil", "username": "mallory", "email": "m@b.com",
+                    "password_hash": "h2", "tenant": tenant_b,
+                    "created_at": now, "updated_at": now, "is_active": True,
+                },
+            ]
+        },
+    }
+    tenant_dir = backup_dir / tenant_a
+    tenant_dir.mkdir(parents=True, exist_ok=True)
+    backup_file = tenant_dir / "poisoned.json"
+    backup_file.write_text(json.dumps(poisoned))
+
+    result = await manager.restore_backup(backup_path=str(backup_file), tenant_id=tenant_a)
+
+    # Only tenant A's row was restored; the foreign row was dropped and counted.
+    assert result["total_rows_restored"] == 1
+    assert result["rows_skipped_foreign_tenant"] == 1
+
+    rows = list(await manager.db(manager.db.users.id != None).select())  # noqa: E712
+    ids = {r.id for r in rows}
+    assert "user-a1" in ids
+    assert "user-b-evil" not in ids  # foreign-tenant injection blocked

@@ -337,9 +337,15 @@ class BackupManager:
             ValueError: If path escapes backup directory, tenant is unauthorized, or scope mismatch
         """
         try:
+            # Validate tenant_id format up front (used by both S3 and local paths)
+            if tenant_id:
+                _validate_backup_name(tenant_id)
+
             # Handle S3 download
             if from_s3 and self.s3_manager:
                 backup_file = self.s3_manager.download_backup(backup_path)
+                # S3 restores have no local tenant directory to gate on; ownership
+                # is enforced at the row level below (foreign-tenant rows dropped).
             else:
                 backup_file = Path(backup_path)
                 if not backup_file.exists():
@@ -350,7 +356,6 @@ class BackupManager:
 
                 # FAIL-CLOSED tenant check: if tenant_id is set, backup MUST resolve under tenant dir
                 if tenant_id:
-                    _validate_backup_name(tenant_id)
                     tenant_dir = self.backup_dir / tenant_id
                     # Unconditional check: fail if backup is not under tenant's directory
                     _validate_path_in_directory(backup_file, tenant_dir)
@@ -386,22 +391,25 @@ class BackupManager:
             if "metadata" not in backup_data or "data" not in backup_data:
                 raise ValueError("Invalid backup format")
 
-            # Validate scope matches if tenant_id is set
+            # Scope check (informational only). The backup's declared scope lives
+            # inside the same untrusted file as the data, so it is NOT the security
+            # boundary — row-level tenant enforcement below is. We log a mismatch so
+            # a tenant restoring a whole_db backup is visible in the audit trail.
             if tenant_id:
                 backup_scope = backup_data.get("metadata", {}).get("scope", "")
-                if not backup_scope.startswith(f"tenant:{tenant_id}"):
+                if backup_scope != f"tenant:{tenant_id}":
                     logger.warning(
                         "backup_scope_mismatch",
                         tenant_id=tenant_id,
                         backup_scope=backup_scope,
                     )
-                    # Allow whole_db backups to be restored into tenant scope, but log warning
 
             # Restore
             restore_stats: dict[str, Any] = {
                 "started_at": datetime.now(timezone.utc).isoformat(),
                 "tables_restored": [],
                 "total_rows_restored": 0,
+                "rows_skipped_foreign_tenant": 0,
                 "errors": [],
             }
 
@@ -414,15 +422,23 @@ class BackupManager:
 
                     table = getattr(self.db, table_name)
 
-                    # If tenant-scoped restore, delete only that tenant's rows
                     if tenant_id:
+                        # FAIL-CLOSED: tenant restores touch ONLY tenant-bearing tables.
+                        # A table with no tenant column is shared/global data a tenant
+                        # admin must never overwrite — skip it entirely (no delete, no insert).
                         tenant_column = self._get_tenant_column(table_name)
-                        if tenant_column:
-                            # Delete only this tenant's rows
-                            tenant_field = getattr(table, tenant_column)
-                            await self.db(tenant_field == tenant_id).delete()
-                        # If table has no tenant column, skip delete (don't touch shared data)
+                        if not tenant_column:
+                            logger.debug(
+                                "skipping_shared_table_tenant_restore",
+                                table_name=table_name,
+                                tenant_id=tenant_id,
+                            )
+                            continue
+                        # Delete only this tenant's rows before re-inserting them.
+                        tenant_field = getattr(table, tenant_column)
+                        await self.db(tenant_field == tenant_id).delete()
                     else:
+                        tenant_column = None
                         # Whole-DB restore: delete all rows using first column != None as condition
                         if hasattr(table, "id"):
                             await self.db(table.id != None).delete()  # noqa: E712
@@ -437,6 +453,14 @@ class BackupManager:
 
                     rows_restored = 0
                     for row_data in table_data:
+                        # FAIL-CLOSED row-level ownership: in tenant mode, only insert
+                        # rows whose tenant column matches the caller's tenant. Foreign
+                        # rows in the backup file (whole_db backup, tampered file, wrong
+                        # S3 key) are dropped, never written into another tenant's space.
+                        if tenant_id and str(row_data.get(tenant_column)) != str(tenant_id):
+                            restore_stats["rows_skipped_foreign_tenant"] += 1
+                            continue
+
                         # Convert ISO datetime strings back to datetime objects
                         for field, value in list(row_data.items()):
                             if isinstance(value, str) and field.endswith("_at"):
@@ -545,7 +569,7 @@ class BackupManager:
         return unique_backups
 
     def delete_backup(
-        self, backup_name: str, from_s3: bool = False, tenant_id: Optional[str] = None
+        self, backup_name: str, from_s3: bool = False, tenant_id: str | None = None
     ) -> bool:
         """
         Delete a backup.
