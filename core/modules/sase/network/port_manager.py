@@ -72,9 +72,9 @@ class PortConfigManager:
         """
         try:
             rowset = await self.db(
-                self.db.port_ranges.headend_id == headend_id,
-                self.db.port_ranges.tenant == tenant,
-                self.db.port_ranges.enabled == True,  # noqa: E712
+                (self.db.port_ranges.headend_id == headend_id)
+                & (self.db.port_ranges.tenant == tenant)
+                & (self.db.port_ranges.enabled == True)  # noqa: E712
             ).select(orderby=[self.db.port_ranges.protocol, self.db.port_ranges.start_port])
 
             if not rowset:
@@ -139,10 +139,10 @@ class PortConfigManager:
         """
         try:
             rowset = await self.db(
-                self.db.port_ranges.cluster_id == cluster_id,
-                self.db.port_ranges.tenant == tenant,
-                self.db.port_ranges.enabled == True,  # noqa: E712
-            ).select(distinct=True, orderby=self.db.port_ranges.headend_id)
+                (self.db.port_ranges.cluster_id == cluster_id)
+                & (self.db.port_ranges.tenant == tenant)
+                & (self.db.port_ranges.enabled == True)  # noqa: E712
+            ).select(orderby=self.db.port_ranges.headend_id)
 
             headend_ids = set()
             for row in rowset:
@@ -243,8 +243,8 @@ class PortConfigManager:
         """
         try:
             await self.db(
-                self.db.port_ranges.id == range_id,
-                self.db.port_ranges.tenant == tenant,
+                (self.db.port_ranges.id == range_id)
+                & (self.db.port_ranges.tenant == tenant)
             ).delete()
 
             logger.info("port_range_removed", range_id=range_id, tenant=tenant)
@@ -283,8 +283,8 @@ class PortConfigManager:
             updates["updated_at"] = datetime.utcnow()
 
             await self.db(
-                self.db.port_ranges.id == range_id,
-                self.db.port_ranges.tenant == tenant,
+                (self.db.port_ranges.id == range_id)
+                & (self.db.port_ranges.tenant == tenant)
             ).update(**updates)
 
             logger.info("port_range_updated", range_id=range_id, tenant=tenant)
@@ -305,9 +305,9 @@ class PortConfigManager:
         """
         try:
             rowset = await self.db(
-                self.db.port_ranges.tenant == tenant,
-                self.db.port_ranges.enabled == True,  # noqa: E712
-            ).select(distinct=True, orderby=self.db.port_ranges.headend_id)
+                (self.db.port_ranges.tenant == tenant)
+                & (self.db.port_ranges.enabled == True)  # noqa: E712
+            ).select(orderby=self.db.port_ranges.headend_id)
 
             headend_ids = set()
             for row in rowset:
@@ -436,10 +436,10 @@ class PortConfigManager:
         """
         try:
             rowset = await self.db(
-                self.db.port_ranges.headend_id == headend_id,
-                self.db.port_ranges.tenant == tenant,
-                self.db.port_ranges.protocol == new_range.protocol.value,
-                self.db.port_ranges.enabled == True,  # noqa: E712
+                (self.db.port_ranges.headend_id == headend_id)
+                & (self.db.port_ranges.tenant == tenant)
+                & (self.db.port_ranges.protocol == new_range.protocol.value)
+                & (self.db.port_ranges.enabled == True)  # noqa: E712
             ).select()
 
             for row in rowset:

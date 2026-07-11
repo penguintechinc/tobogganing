@@ -32,7 +32,6 @@ class User:
     tenant: str
     created_at: datetime
     is_active: bool = True
-    last_login: datetime | None = None
     password_hash: str | None = None  # Not included in API responses
 
 
@@ -79,9 +78,9 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                self.db.users.username == username,
-                self.db.users.tenant == tenant,
-                self.db.users.is_active == True,  # noqa: E712
+                (self.db.users.username == username)
+                & (self.db.users.tenant == tenant)
+                & (self.db.users.is_active == True)  # noqa: E712
             ).select()
 
             user_row = rowset.first()
@@ -107,10 +106,7 @@ class UserManager:
                 )
                 return None
 
-            # Update last login (non-blocking)
-            await self.db(self.db.users.id == user_row.id).update(
-                last_login=datetime.utcnow()
-            )
+            # Note: last_login column doesn't exist in schema; skip update
 
             user = User(
                 id=user_row.id,
@@ -120,7 +116,6 @@ class UserManager:
                 tenant=user_row.tenant,
                 created_at=user_row.created_at,
                 is_active=bool(user_row.is_active),
-                last_login=datetime.utcnow(),
                 password_hash=None,
             )
 
@@ -212,8 +207,8 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                self.db.sessions.token == token,
-                self.db.sessions.tenant == tenant,
+                (self.db.sessions.token == token)
+                & (self.db.sessions.tenant == tenant)
             ).select()
             session_row = rowset.first()
 
@@ -232,9 +227,9 @@ class UserManager:
 
             # Fetch user for this session
             user_rowset = await self.db(
-                self.db.users.id == session_row.user_id,
-                self.db.users.tenant == session_row.tenant,
-                self.db.users.is_active == True,  # noqa: E712
+                (self.db.users.id == session_row.user_id)
+                & (self.db.users.tenant == session_row.tenant)
+                & (self.db.users.is_active == True)  # noqa: E712
             ).select()
 
             user_row = user_rowset.first()
@@ -249,7 +244,6 @@ class UserManager:
                 tenant=user_row.tenant,
                 created_at=user_row.created_at,
                 is_active=bool(user_row.is_active),
-                last_login=user_row.last_login,
                 password_hash=None,
             )
 
@@ -275,8 +269,8 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                self.db.sessions.token == token,
-                self.db.sessions.tenant == tenant,
+                (self.db.sessions.token == token)
+                & (self.db.sessions.tenant == tenant)
             ).select()
             session_row = rowset.first()
 
@@ -313,8 +307,8 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                self.db.sessions.expires_at < datetime.utcnow(),
-                self.db.sessions.tenant == tenant,
+                (self.db.sessions.expires_at < datetime.utcnow())
+                & (self.db.sessions.tenant == tenant)
             ).select()
 
             deleted_count = 0
@@ -445,7 +439,6 @@ class UserManager:
                     tenant=row.tenant,
                     created_at=row.created_at,
                     is_active=bool(row.is_active),
-                    last_login=row.last_login,
                 )
                 users.append(user)
 
@@ -472,8 +465,8 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                self.db.users.id == user_id,
-                self.db.users.tenant == tenant,
+                (self.db.users.id == user_id)
+                & (self.db.users.tenant == tenant)
             ).select()
 
             if not rowset.first():
@@ -486,15 +479,15 @@ class UserManager:
                 return False
 
             await self.db(
-                self.db.users.id == user_id,
-                self.db.users.tenant == tenant,
+                (self.db.users.id == user_id)
+                & (self.db.users.tenant == tenant)
             ).update(is_active=is_active)
 
             # Invalidate all sessions if disabling user
             if not is_active:
                 await self.db(
-                    self.db.sessions.user_id == user_id,
-                    self.db.sessions.tenant == tenant,
+                    (self.db.sessions.user_id == user_id)
+                    & (self.db.sessions.tenant == tenant)
                 ).delete()
 
             logger.info(

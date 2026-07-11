@@ -309,7 +309,10 @@ class SecurityScanner:
             scan_duration = int((datetime.utcnow() - scan_start).total_seconds())
 
             try:
-                await self.db(self.db.security_scans.scan_id == scan_id).update(
+                await self.db(
+                    (self.db.security_scans.scan_id == scan_id)
+                    & (self.db.security_scans.tenant_id == (self.tenant_id or "system"))
+                ).update(
                     status="completed",
                     findings_count=len(findings),
                     critical_findings=severity_counts.get("critical", 0),
@@ -334,7 +337,10 @@ class SecurityScanner:
 
             # Update scan record with error
             try:
-                await self.db(self.db.security_scans.scan_id == scan_id).update(
+                await self.db(
+                    (self.db.security_scans.scan_id == scan_id)
+                    & (self.db.security_scans.tenant_id == (self.tenant_id or "system"))
+                ).update(
                     status="failed",
                     error_message=str(e),
                     completed_at=datetime.utcnow(),

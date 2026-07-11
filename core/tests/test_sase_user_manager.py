@@ -92,7 +92,6 @@ async def test_authenticate_success(mock_user_db: MagicMock) -> None:
             "tenant": "test-tenant",
             "is_active": True,
             "created_at": datetime.utcnow(),
-            "last_login": None,
         }
     )
 
@@ -134,7 +133,6 @@ async def test_authenticate_invalid_password(mock_user_db: MagicMock) -> None:
             "tenant": "test-tenant",
             "is_active": True,
             "created_at": datetime.utcnow(),
-            "last_login": None,
         }
     )
 
@@ -227,7 +225,6 @@ async def test_validate_session_valid(mock_user_db: MagicMock) -> None:
             "tenant": tenant,
             "is_active": True,
             "created_at": datetime.utcnow(),
-            "last_login": None,
         }
     )
 
@@ -351,7 +348,6 @@ async def test_list_users(mock_user_db: MagicMock) -> None:
             "tenant": "test-tenant",
             "is_active": True,
             "created_at": datetime.utcnow(),
-            "last_login": None,
         }
     )
 
@@ -364,7 +360,6 @@ async def test_list_users(mock_user_db: MagicMock) -> None:
             "tenant": "test-tenant",
             "is_active": True,
             "created_at": datetime.utcnow(),
-            "last_login": None,
         }
     )
 
@@ -397,7 +392,6 @@ async def test_update_user_status(mock_user_db: MagicMock) -> None:
             "tenant": tenant,
             "is_active": True,
             "created_at": datetime.utcnow(),
-            "last_login": None,
         }
     )
 
@@ -543,7 +537,6 @@ async def test_validate_session_with_tenant_isolation() -> None:
             "tenant": "tenant-a",
             "created_at": datetime.utcnow(),
             "is_active": True,
-            "last_login": None,
             "password_hash": "hash",
         }
     )
