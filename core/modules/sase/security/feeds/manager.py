@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 import aiohttp
@@ -133,7 +133,7 @@ class SecurityFeedsManager:
         Returns:
             Stats dictionary with added/updated/removed/errors counts.
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         stats = {"added": 0, "updated": 0, "removed": 0, "errors": 0}
 
         try:
@@ -147,6 +147,7 @@ class SecurityFeedsManager:
                 update_type="automatic",
                 status="running",
                 started_at=start_time,
+                created_at=start_time,
             )
 
             if source == FeedSource.BLACKWEB:
@@ -158,17 +159,17 @@ class SecurityFeedsManager:
             elif source == FeedSource.DNSBL:
                 stats = await self._update_dnsbl_feed(tenant_id)
 
-            duration = int((datetime.utcnow() - start_time).total_seconds())
+            duration = int((datetime.now(timezone.utc) - start_time).total_seconds())
             await self.db(
                 (self.db.feed_updates.id == update_id)
                 & (self.db.feed_updates.tenant_id == tenant_id)
-            ).async_update(
+            ).update(
                 status="completed",
                 indicators_added=stats["added"],
                 indicators_updated=stats["updated"],
                 indicators_removed=stats["removed"],
                 duration_seconds=duration,
-                completed_at=datetime.utcnow(),
+                completed_at=datetime.now(timezone.utc),
             )
 
             slog.info(
@@ -182,16 +183,16 @@ class SecurityFeedsManager:
             )
 
         except Exception as e:
-            duration = int((datetime.utcnow() - start_time).total_seconds())
+            duration = int((datetime.now(timezone.utc) - start_time).total_seconds())
             try:
                 await self.db(
                     (self.db.feed_updates.id == update_id)
                     & (self.db.feed_updates.tenant_id == tenant_id)
-                ).async_update(
+                ).update(
                     status="failed",
                     error_message=str(e),
                     duration_seconds=duration,
-                    completed_at=datetime.utcnow(),
+                    completed_at=datetime.now(timezone.utc),
                 )
             except Exception:
                 pass
@@ -328,23 +329,24 @@ class SecurityFeedsManager:
                 (self.db.threat_indicators.value == indicator.value)
                 & (self.db.threat_indicators.source == indicator.source.value)
                 & (self.db.threat_indicators.tenant_id == tenant_id)
-            ).async_select()
+            ).select()
 
             if existing:
                 await self.db(
                     (self.db.threat_indicators.value == indicator.value)
                     & (self.db.threat_indicators.tenant_id == tenant_id)
-                ).async_update(
+                ).update(
                     threat_types=json.dumps([t.value for t in indicator.threat_types]),
                     confidence=indicator.confidence,
                     last_seen=indicator.last_seen,
                     ttl=indicator.ttl,
                     metadata=json.dumps(indicator.metadata),
-                    updated_at=datetime.utcnow(),
+                    updated_at=datetime.now(timezone.utc),
                 )
                 return False
 
             indicator_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc)
             await self.db.threat_indicators.async_insert(
                 id=indicator_id,
                 tenant_id=tenant_id,
@@ -357,6 +359,8 @@ class SecurityFeedsManager:
                 last_seen=indicator.last_seen,
                 ttl=indicator.ttl,
                 metadata=json.dumps(indicator.metadata),
+                created_at=now,
+                updated_at=now,
             )
             return True
         except Exception as e:
@@ -394,7 +398,7 @@ class SecurityFeedsManager:
         if indicator_type:
             query &= self.db.threat_indicators.indicator_type == indicator_type
 
-        indicators = await self.db(query).async_select()
+        indicators = await self.db(query).select()
 
         for indicator in indicators:
             threats.append(

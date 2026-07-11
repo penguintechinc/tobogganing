@@ -50,15 +50,15 @@ def mock_db():
     # Mock the call() pattern to return a query-like object
     def query_mock(*args, **kwargs):
         query_obj = MagicMock()
-        query_obj.async_select = AsyncMock(return_value=[])
-        query_obj.async_count = AsyncMock(return_value=0)
-        query_obj.async_update = AsyncMock(side_effect=mock_update)
+        query_obj.select = AsyncMock(return_value=[])
+        query_obj.count = AsyncMock(return_value=0)
+        query_obj.update = AsyncMock(side_effect=mock_update)
         return query_obj
 
     db.side_effect = query_mock
-    db.return_value.async_select = AsyncMock(return_value=[])
-    db.return_value.async_count = AsyncMock(return_value=0)
-    db.return_value.async_update = AsyncMock(side_effect=mock_update)
+    db.return_value.select = AsyncMock(return_value=[])
+    db.return_value.count = AsyncMock(return_value=0)
+    db.return_value.update = AsyncMock(side_effect=mock_update)
 
     return db
 
@@ -147,7 +147,7 @@ class TestSecurityFeedsManager:
     @pytest.mark.asyncio
     async def test_store_indicator_new(self, mock_db: MagicMock) -> None:
         """Test storing a new indicator."""
-        mock_db.return_value.async_select = AsyncMock(return_value=[])
+        mock_db.return_value.select = AsyncMock(return_value=[])
 
         manager = SecurityFeedsManager(mock_db)
         indicator = build_threat_indicator(
@@ -169,7 +169,7 @@ class TestSecurityFeedsManager:
         manager = SecurityFeedsManager(mock_db)
 
         # Setup mock to return empty (no threats found)
-        mock_db.return_value.async_select = AsyncMock(return_value=[])
+        mock_db.return_value.select = AsyncMock(return_value=[])
 
         is_threat, details = await manager.check_threat_indicator(
             "tenant-1", "unknown.com"
@@ -184,7 +184,7 @@ class TestSecurityFeedsManager:
     @pytest.mark.asyncio
     async def test_check_threat_indicator_not_found(self, mock_db: MagicMock) -> None:
         """Test checking for threat indicator (not found)."""
-        mock_db.return_value.async_select = AsyncMock(return_value=[])
+        mock_db.return_value.select = AsyncMock(return_value=[])
 
         manager = SecurityFeedsManager(mock_db)
         is_threat, details = await manager.check_threat_indicator(
@@ -197,7 +197,7 @@ class TestSecurityFeedsManager:
     @pytest.mark.asyncio
     async def test_check_threat_indicator_with_ip(self, mock_db: MagicMock) -> None:
         """Test checking threat indicator with IP address."""
-        mock_db.return_value.async_select = AsyncMock(return_value=[])
+        mock_db.return_value.select = AsyncMock(return_value=[])
 
         manager = SecurityFeedsManager(mock_db)
         is_threat, details = await manager.check_threat_indicator(
@@ -244,7 +244,7 @@ class TestDetectionLogger:
     @pytest.mark.asyncio
     async def test_get_threat_statistics(self, mock_db: MagicMock) -> None:
         """Test getting threat statistics."""
-        mock_db.return_value.async_count = AsyncMock(return_value=5)
+        mock_db.return_value.count = AsyncMock(return_value=5)
 
         logger = DetectionLogger(mock_db)
         stats = await logger.get_threat_statistics("tenant-1", hours_back=24)
@@ -285,7 +285,7 @@ class TestFeedUpdate:
     @pytest.mark.asyncio
     async def test_tenant_scoping(self, mock_db: MagicMock) -> None:
         """Test that operations are tenant-scoped."""
-        mock_db.return_value.async_select = AsyncMock(return_value=[])
+        mock_db.return_value.select = AsyncMock(return_value=[])
 
         manager = SecurityFeedsManager(mock_db)
         await manager.check_threat_indicator("tenant-scoped", "test.com")
