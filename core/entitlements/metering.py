@@ -51,16 +51,11 @@ class UsageReporter:
             # Count distinct active identities (seats) from users table
             seats = 0
             try:
-                # Query users table for active identities
-                # Use asyncio.to_thread since db queries are sync
-                def count_users() -> int:
-                    users_table = self.db.users
-                    # Count total users (both active and inactive for now)
-                    # In Phase 1, we count all users; Phase 3 can add activity filter
-                    result = users_table.select()
-                    return len(result) if hasattr(result, "__len__") else 0
-
-                seats = await asyncio.to_thread(count_users)
+                # Count total users (both active and inactive for now)
+                # In Phase 1, we count all users; Phase 3 can add activity filter
+                # Use a condition that matches all rows (id != "")
+                result = await self.db(self.db.users.id != "").select()
+                seats = len(result) if result else 0
             except Exception as e:
                 logger.error(f"Failed to count users: {e}")
                 seats = 0

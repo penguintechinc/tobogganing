@@ -56,7 +56,7 @@ async def create_run() -> tuple[dict[str, Any], int]:
         manager = RunManager(db, tenant)
 
         try:
-            run, pairs = manager.create_run(
+            run, pairs = await manager.create_run(
                 test_types=test_types,
                 endpoint_ids=endpoint_ids,
                 created_by=user_id,
@@ -67,10 +67,10 @@ async def create_run() -> tuple[dict[str, Any], int]:
 
         # Mark as running and enqueue
         run_id: str = run["id"]  # type: ignore[assignment]
-        manager.mark_running(run_id)
+        await manager.mark_running(run_id)
 
         try:
-            pairs_count = manager.enqueue_run(run_id, pairs)
+            pairs_count = await manager.enqueue_run(run_id, pairs)
         except Exception as e:
             logger.error(
                 "run_enqueue_failed",
@@ -127,7 +127,7 @@ async def list_runs() -> tuple[dict[str, Any], int]:
         db = get_db()
 
         manager = RunManager(db, tenant)
-        runs = manager.list_runs()
+        runs = await manager.list_runs()
 
         logger.info(
             "runs_listed",
@@ -173,7 +173,7 @@ async def get_run(run_id: str) -> tuple[dict[str, Any], int]:
         db = get_db()
 
         manager = RunManager(db, tenant)
-        run = manager.get_run(run_id)
+        run = await manager.get_run(run_id)
 
         if not run:
             logger.info(

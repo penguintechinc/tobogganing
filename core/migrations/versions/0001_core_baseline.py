@@ -21,7 +21,7 @@ def upgrade() -> None:
     # Create users identity table
     op.create_table(
         "users",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("username", sa.String(255), nullable=False),
         sa.Column("password_hash", sa.String(255), nullable=False),
@@ -42,8 +42,8 @@ def upgrade() -> None:
     # Create refresh_tokens table
     op.create_table(
         "refresh_tokens",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("user_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
+        sa.Column("user_id", sa.String(36), nullable=False),
         sa.Column("token", sa.Text(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
@@ -56,8 +56,8 @@ def upgrade() -> None:
     # Create password_reset_tokens table
     op.create_table(
         "password_reset_tokens",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("user_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
+        sa.Column("user_id", sa.String(36), nullable=False),
         sa.Column("token", sa.Text(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),

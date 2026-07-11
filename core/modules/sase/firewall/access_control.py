@@ -121,8 +121,8 @@ class AccessControlManager:
         """
         try:
             await self.db(
-                self.db.firewall_rules.id == rule_id,
-                self.db.firewall_rules.tenant == tenant,
+                (self.db.firewall_rules.id == rule_id)
+                & (self.db.firewall_rules.tenant == tenant)
             ).delete()
 
             logger.info("access_rule_removed", rule_id=rule_id, tenant=tenant)
@@ -144,9 +144,9 @@ class AccessControlManager:
         """
         try:
             rowset = await self.db(
-                self.db.firewall_rules.user_id == user_id,
-                self.db.firewall_rules.tenant == tenant,
-                self.db.firewall_rules.is_active == True,  # noqa: E712
+                (self.db.firewall_rules.user_id == user_id)
+                & (self.db.firewall_rules.tenant == tenant)
+                & (self.db.firewall_rules.is_active == True)  # noqa: E712
             ).select(orderby=self.db.firewall_rules.priority)
 
             rules: list[AccessRule] = []
@@ -259,8 +259,8 @@ class AccessControlManager:
             rule.updated_at = datetime.utcnow()
 
             await self.db(
-                self.db.firewall_rules.id == rule.id,
-                self.db.firewall_rules.tenant == rule.tenant,
+                (self.db.firewall_rules.id == rule.id)
+                & (self.db.firewall_rules.tenant == rule.tenant)
             ).update(
                 rule_type=rule.rule_type.value,
                 access_type=rule.access_type.value,

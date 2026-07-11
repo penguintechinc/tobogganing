@@ -1,12 +1,14 @@
 """Cluster-to-cluster matrix run management using penguin-dal."""
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
+import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Any, Callable
 
 logger = structlog.get_logger()
 
@@ -31,17 +33,17 @@ class MatrixRunRecord:
 class RunManager:
     """Manages cluster-to-cluster matrix test runs using penguin-dal."""
 
-    def __init__(self, db: object, tenant: str) -> None:
+    def __init__(self, db: Any, tenant: str) -> None:
         """Initialize RunManager.
 
         Args:
-            db: penguin-dal DAL instance
+            db: penguin-dal AsyncDB instance
             tenant: Tenant identifier for scoping queries
         """
         self.db = db
         self.tenant = tenant
 
-    def create_run(
+    async def create_run(
         self,
         test_types: list[str],
         endpoint_ids: list[str] | None = None,
@@ -66,14 +68,12 @@ class RunManager:
             ValueError: If fewer than 2 enabled endpoints selected
         """
         # Get enabled endpoints
-        endpoints = self.db.c2c_endpoints.select(
-            tenant=self.tenant, enabled=True
-        )
+        rowset = await self.db(
+            (self.db.c2c_endpoints.tenant == self.tenant)
+            & (self.db.c2c_endpoints.enabled == True)  # noqa: E712
+        ).select()
 
-        if not endpoints:
-            endpoints = []
-        elif not isinstance(endpoints, list):
-            endpoints = [endpoints]
+        endpoints = list(rowset) if rowset else []
 
         # Filter to endpoint_ids if provided
         if endpoint_ids:
@@ -98,7 +98,8 @@ class RunManager:
         total_pairs = len(pairs)
 
         # Create run
-        run = self.db.c2c_matrix_runs.create(
+        run_id = await self.db.c2c_matrix_runs.async_insert(
+            id=secrets.token_urlsafe(16),
             tenant=self.tenant,
             status="pending",
             test_types=json.dumps(test_types),
@@ -106,11 +107,20 @@ class RunManager:
             completed_pairs=0,
             failed_pairs=0,
             created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+            started_at=None,
+            completed_at=None,
         )
+
+        # Re-fetch to get all fields
+        rowset = await self.db(
+            self.db.c2c_matrix_runs.id == run_id,
+        ).select()
+        run = rowset.first()
 
         logger.info(
             "run_created",
-            run_id=run.id,
+            run_id=run_id,
             total_pairs=total_pairs,
             test_types=test_types,
             tenant=self.tenant,
@@ -132,7 +142,7 @@ class RunManager:
 
         return (run_dict, pairs)
 
-    def get_run(self, run_id: str) -> dict[str, object] | None:
+    async def get_run(self, run_id: str) -> dict[str, object] | None:
         """Get a run by ID.
 
         Args:
@@ -141,8 +151,12 @@ class RunManager:
         Returns:
             Run dict or None if not found or belongs to different tenant
         """
-        run = self.db.c2c_matrix_runs.select(id=run_id, tenant=self.tenant)
+        rowset = await self.db(
+            (self.db.c2c_matrix_runs.id == run_id)
+            & (self.db.c2c_matrix_runs.tenant == self.tenant)
+        ).select()
 
+        run = rowset.first()
         if not run:
             return None
 
@@ -160,18 +174,16 @@ class RunManager:
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         }
 
-    def list_runs(self) -> list[dict[str, object]]:
+    async def list_runs(self) -> list[dict[str, object]]:
         """List all runs for this tenant, newest first.
 
         Returns:
             List of run dicts
         """
-        runs = self.db.c2c_matrix_runs.select(tenant=self.tenant)
+        rowset = await self.db(self.db.c2c_matrix_runs.tenant == self.tenant).select()
 
-        if not runs:
+        if not rowset:
             return []
-
-        run_list = runs if isinstance(runs, list) else [runs]
 
         return [
             {
@@ -187,18 +199,19 @@ class RunManager:
                 "started_at": r.started_at.isoformat() if r.started_at else None,
                 "completed_at": r.completed_at.isoformat() if r.completed_at else None,
             }
-            for r in run_list
+            for r in rowset
         ]
 
-    def mark_running(self, run_id: str) -> None:
+    async def mark_running(self, run_id: str) -> None:
         """Mark a run as running.
 
         Args:
             run_id: Run ID
         """
-        self.db.c2c_matrix_runs.update(
-            id=run_id,
-            tenant=self.tenant,
+        await self.db(
+            (self.db.c2c_matrix_runs.id == run_id)
+            & (self.db.c2c_matrix_runs.tenant == self.tenant)
+        ).update(
             status="running",
             started_at=datetime.now(timezone.utc),
         )
@@ -209,15 +222,16 @@ class RunManager:
             tenant=self.tenant,
         )
 
-    def mark_complete(self, run_id: str) -> None:
+    async def mark_complete(self, run_id: str) -> None:
         """Mark a run as completed.
 
         Args:
             run_id: Run ID
         """
-        self.db.c2c_matrix_runs.update(
-            id=run_id,
-            tenant=self.tenant,
+        await self.db(
+            (self.db.c2c_matrix_runs.id == run_id)
+            & (self.db.c2c_matrix_runs.tenant == self.tenant)
+        ).update(
             status="completed",
             completed_at=datetime.now(timezone.utc),
         )
@@ -228,15 +242,16 @@ class RunManager:
             tenant=self.tenant,
         )
 
-    def mark_failed(self, run_id: str) -> None:
+    async def mark_failed(self, run_id: str) -> None:
         """Mark a run as failed.
 
         Args:
             run_id: Run ID
         """
-        self.db.c2c_matrix_runs.update(
-            id=run_id,
-            tenant=self.tenant,
+        await self.db(
+            (self.db.c2c_matrix_runs.id == run_id)
+            & (self.db.c2c_matrix_runs.tenant == self.tenant)
+        ).update(
             status="failed",
             completed_at=datetime.now(timezone.utc),
         )
@@ -247,7 +262,7 @@ class RunManager:
             tenant=self.tenant,
         )
 
-    def record_pair_result(
+    async def record_pair_result(
         self,
         run_id: str,
         source_id: str,
@@ -265,8 +280,9 @@ class RunManager:
 
         If a c2c_pair_results row already exists for (tenant, run_id, source_id,
         dest_id, test_type), return it WITHOUT incrementing counters.
-        Otherwise insert the row, increment completed_pairs (and failed_pairs if
-        status == "failed"), and flip run to "completed" when all pairs done.
+        Otherwise insert the row, atomically increment completed_pairs (and
+        failed_pairs if status == "failed"), and flip run to "completed" when
+        all pairs done.
 
         Args:
             run_id: Run ID
@@ -285,14 +301,15 @@ class RunManager:
             Pair result dict
         """
         # Check for existing result (idempotency)
-        existing = self.db.c2c_pair_results.select(
-            tenant=self.tenant,
-            run_id=run_id,
-            source_endpoint_id=source_id,
-            dest_endpoint_id=dest_id,
-            test_type=test_type,
-        )
+        rowset = await self.db(
+            (self.db.c2c_pair_results.tenant == self.tenant)
+            & (self.db.c2c_pair_results.run_id == run_id)
+            & (self.db.c2c_pair_results.source_endpoint_id == source_id)
+            & (self.db.c2c_pair_results.dest_endpoint_id == dest_id)
+            & (self.db.c2c_pair_results.test_type == test_type)
+        ).select()
 
+        existing = rowset.first()
         if existing:
             return {
                 "id": existing.id,
@@ -312,7 +329,8 @@ class RunManager:
             }
 
         # Create new result
-        pair_result = self.db.c2c_pair_results.create(
+        pair_result_id = await self.db.c2c_pair_results.async_insert(
+            id=secrets.token_urlsafe(16),
             tenant=self.tenant,
             run_id=run_id,
             source_endpoint_id=source_id,
@@ -328,21 +346,32 @@ class RunManager:
             measured_at=datetime.now(timezone.utc),
         )
 
-        # Increment completed_pairs and failed_pairs
-        run = self.db.c2c_matrix_runs.select(id=run_id, tenant=self.tenant)
-        new_completed = run.completed_pairs + 1
-        new_failed = run.failed_pairs + (1 if status == "failed" else 0)
-
-        self.db.c2c_matrix_runs.update(
-            id=run_id,
-            tenant=self.tenant,
-            completed_pairs=new_completed,
-            failed_pairs=new_failed,
+        # Atomically increment completed_pairs (finding #2)
+        await self.db(
+            (self.db.c2c_matrix_runs.id == run_id)
+            & (self.db.c2c_matrix_runs.tenant == self.tenant)
+        ).update(
+            completed_pairs=self.db.c2c_matrix_runs.completed_pairs.column + 1,
         )
 
-        # If all pairs completed, mark run as completed
-        if new_completed >= run.total_pairs:
-            self.mark_complete(run_id)
+        # Atomically increment failed_pairs if status is "failed"
+        if status == "failed":
+            await self.db(
+                (self.db.c2c_matrix_runs.id == run_id)
+                & (self.db.c2c_matrix_runs.tenant == self.tenant)
+            ).update(
+                failed_pairs=self.db.c2c_matrix_runs.failed_pairs.column + 1,
+            )
+
+        # Check if all pairs are completed
+        run_rowset = await self.db(
+            (self.db.c2c_matrix_runs.id == run_id)
+            & (self.db.c2c_matrix_runs.tenant == self.tenant)
+        ).select()
+        run = run_rowset.first()
+
+        if run and run.completed_pairs >= run.total_pairs:
+            await self.mark_complete(run_id)
 
         logger.info(
             "pair_result_recorded",
@@ -353,6 +382,12 @@ class RunManager:
             status=status,
             tenant=self.tenant,
         )
+
+        # Re-fetch to get all fields
+        rowset = await self.db(
+            self.db.c2c_pair_results.id == pair_result_id,
+        ).select()
+        pair_result = rowset.first()
 
         return {
             "id": pair_result.id,
@@ -371,11 +406,11 @@ class RunManager:
             "measured_at": pair_result.measured_at.isoformat() if pair_result.measured_at else None,
         }
 
-    def enqueue_run(
+    async def enqueue_run(
         self,
         run_id: str,
         pairs: list[tuple[str, str, str]],
-        dispatch: Callable[[str, str, str, str, str], object] | None = None,
+        dispatch: Callable[..., Any] | None = None,
     ) -> int:
         """Enqueue a run's pairs for execution.
 

@@ -1,7 +1,6 @@
 """Performance test statistics and aggregation using penguin-dal."""
 from __future__ import annotations
 
-import asyncio
 import structlog
 from datetime import datetime, timedelta
 from typing import Any
@@ -48,32 +47,46 @@ class StatsManager:
         Returns:
             Dictionary with overall statistics
         """
-        # Get all test results for tenant
-        all_results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            tenant=self.tenant,
-        )
+        try:
+            # Parse date filters
+            start_dt: datetime | None = None
+            end_dt: datetime | None = None
 
-        # Filter by date if provided
-        results = []
-        for r in all_results:
             if start_date:
                 try:
-                    start = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                    if r.created_at < start:
-                        continue
+                    start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
             if end_date:
                 try:
-                    end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-                    if r.created_at > end:
-                        continue
+                    end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
-            results.append(r)
+            # Build query with tenant scoping
+            query = self.db.perf_test_results.tenant == self.tenant
+
+            # Add date filters to query
+            if start_dt:
+                query = query & (self.db.perf_test_results.created_at >= start_dt)
+            if end_dt:
+                query = query & (self.db.perf_test_results.created_at <= end_dt)
+
+            # Execute query
+            rowset = await self.db(query).select()
+            results = list(rowset)
+        except Exception as e:
+            logger.error("summary_query_error", error=str(e), tenant=self.tenant)
+            return {
+                "total_tests": 0,
+                "completed_count": 0,
+                "pending_count": 0,
+                "failed_count": 0,
+                "success_rate": 0.0,
+                "avg_latency_ms": 0.0,
+                "avg_throughput": 0.0,
+            }
 
         total = len(results)
 
@@ -129,31 +142,38 @@ class StatsManager:
         Returns:
             List of per-device statistics
         """
-        all_results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            tenant=self.tenant,
-        )
+        try:
+            # Parse date filters
+            start_dt: datetime | None = None
+            end_dt: datetime | None = None
 
-        # Filter by date if provided
-        results = []
-        for r in all_results:
             if start_date:
                 try:
-                    start = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                    if r.created_at < start:
-                        continue
+                    start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
             if end_date:
                 try:
-                    end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-                    if r.created_at > end:
-                        continue
+                    end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
-            results.append(r)
+            # Build query with tenant scoping
+            query = self.db.perf_test_results.tenant == self.tenant
+
+            # Add date filters to query
+            if start_dt:
+                query = query & (self.db.perf_test_results.created_at >= start_dt)
+            if end_dt:
+                query = query & (self.db.perf_test_results.created_at <= end_dt)
+
+            # Execute query
+            rowset = await self.db(query).select()
+            results = list(rowset)
+        except Exception as e:
+            logger.error("by_device_query_error", error=str(e), tenant=self.tenant)
+            return []
 
         # Aggregate by device_id
         device_stats: dict[str, dict[str, Any]] = {}
@@ -223,31 +243,38 @@ class StatsManager:
         Returns:
             List of per-test-type statistics
         """
-        all_results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            tenant=self.tenant,
-        )
+        try:
+            # Parse date filters
+            start_dt: datetime | None = None
+            end_dt: datetime | None = None
 
-        # Filter by date if provided
-        results = []
-        for r in all_results:
             if start_date:
                 try:
-                    start = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                    if r.created_at < start:
-                        continue
+                    start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
             if end_date:
                 try:
-                    end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-                    if r.created_at > end:
-                        continue
+                    end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
-            results.append(r)
+            # Build query with tenant scoping
+            query = self.db.perf_test_results.tenant == self.tenant
+
+            # Add date filters to query
+            if start_dt:
+                query = query & (self.db.perf_test_results.created_at >= start_dt)
+            if end_dt:
+                query = query & (self.db.perf_test_results.created_at <= end_dt)
+
+            # Execute query
+            rowset = await self.db(query).select()
+            results = list(rowset)
+        except Exception as e:
+            logger.error("by_type_query_error", error=str(e), tenant=self.tenant)
+            return []
 
         # Aggregate by test_type
         type_stats: dict[str, dict[str, Any]] = {}
@@ -320,31 +347,43 @@ class StatsManager:
         Returns:
             Dictionary with time-series data
         """
-        all_results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            tenant=self.tenant,
-        )
+        try:
+            # Parse date filters
+            start_dt: datetime | None = None
+            end_dt: datetime | None = None
 
-        # Filter by date if provided
-        results = []
-        for r in all_results:
             if start_date:
                 try:
-                    start = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                    if r.created_at < start:
-                        continue
+                    start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
             if end_date:
                 try:
-                    end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-                    if r.created_at > end:
-                        continue
+                    end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                 except ValueError:
                     pass
 
-            results.append(r)
+            # Build query with tenant scoping
+            query = self.db.perf_test_results.tenant == self.tenant
+
+            # Add date filters to query
+            if start_dt:
+                query = query & (self.db.perf_test_results.created_at >= start_dt)
+            if end_dt:
+                query = query & (self.db.perf_test_results.created_at <= end_dt)
+
+            # Execute query
+            rowset = await self.db(query).select()
+            results = list(rowset)
+        except Exception as e:
+            logger.error("trends_query_error", error=str(e), tenant=self.tenant)
+            return {
+                "timestamps": [],
+                "values": [],
+                "metric": metric,
+                "interval": interval,
+            }
 
         # Aggregate by time interval
         time_buckets: dict[str, dict[str, Any]] = {}
@@ -409,15 +448,23 @@ class StatsManager:
         Returns:
             List of recent test results
         """
-        kwargs = {"tenant": self.tenant, "limitby": (0, limit)}
+        try:
+            # Build query with tenant scoping
+            query = self.db.perf_test_results.tenant == self.tenant
 
-        if device_id:
-            kwargs["device_id"] = device_id
+            # Add device filter if provided
+            if device_id:
+                query = query & (self.db.perf_test_results.device_id == device_id)
 
-        results = await asyncio.to_thread(
-            self.db.perf_test_results.select_list,
-            **kwargs,
-        )
+            # Execute query with limit and order by created_at descending
+            rowset = await self.db(query).select(
+                orderby=self.db.perf_test_results.created_at.column.desc(),
+                limitby=(0, limit),
+            )
+            results = list(rowset)
+        except Exception as e:
+            logger.error("recent_query_error", error=str(e), tenant=self.tenant)
+            return []
 
         return [
             {

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 import uuid
 
@@ -67,6 +67,7 @@ class DetectionLogger:
             detection_id = str(uuid.uuid4())
 
             # Insert via penguin-dal
+            now = datetime.now(timezone.utc)
             await self.db.threat_detections.async_insert(
                 id=detection_id,
                 tenant_id=tenant_id,
@@ -83,6 +84,8 @@ class DetectionLogger:
                         "detection_method": "security_feeds",
                     }
                 ),
+                detected_at=now,
+                created_at=now,
             )
 
             slog.warning(
@@ -112,14 +115,14 @@ class DetectionLogger:
         Returns:
             Statistics dictionary.
         """
-        since = datetime.utcnow() - timedelta(hours=hours_back)
+        since = datetime.now(timezone.utc) - timedelta(hours=hours_back)
 
         try:
             # Total detections
             total_detections = await self.db(
                 (self.db.threat_detections.tenant_id == tenant_id)
                 & (self.db.threat_detections.detected_at >= since)
-            ).async_count()
+            ).count()
 
             # Detections by action (simplified for penguin-dal)
             action_counts = {}
@@ -128,7 +131,7 @@ class DetectionLogger:
                     (self.db.threat_detections.tenant_id == tenant_id)
                     & (self.db.threat_detections.action_taken == action)
                     & (self.db.threat_detections.detected_at >= since)
-                ).async_count()
+                ).count()
                 if count > 0:
                     action_counts[action] = count
 
@@ -136,7 +139,7 @@ class DetectionLogger:
             active_indicators = await self.db(
                 (self.db.threat_indicators.tenant_id == tenant_id)
                 & (self.db.threat_indicators.active == True)
-            ).async_count()
+            ).count()
 
             # Indicators by source
             source_counts = {}
@@ -145,7 +148,7 @@ class DetectionLogger:
                     (self.db.threat_indicators.tenant_id == tenant_id)
                     & (self.db.threat_indicators.source == source)
                     & (self.db.threat_indicators.active == True)
-                ).async_count()
+                ).count()
                 if count > 0:
                     source_counts[source] = count
 
@@ -179,25 +182,26 @@ class DetectionLogger:
         Returns:
             List of top sources with counts.
         """
-        since = datetime.utcnow() - timedelta(hours=hours_back)
+        since = datetime.now(timezone.utc) - timedelta(hours=hours_back)
         top_sources = []
 
         try:
             rows = await self.db(
                 (self.db.threat_detections.tenant_id == tenant_id)
                 & (self.db.threat_detections.detected_at >= since)
-            ).async_select(
-                self.db.threat_detections.source,
-                orderby=~self.db.threat_detections.id.count(),
-                groupby=self.db.threat_detections.source,
-                limitby=(0, limit),
-            )
+            ).select()
 
+            # Aggregate source counts in Python
+            source_counts: Dict[str, int] = {}
             for row in rows:
-                if row.get("source"):
-                    top_sources.append(
-                        {"source": row["source"], "count": row.get("count", 0)}
-                    )
+                source = row.get("source") if hasattr(row, "get") else getattr(row, "source", None)
+                if source:
+                    source_counts[source] = source_counts.get(source, 0) + 1
+
+            # Sort by count descending and take top N
+            sorted_sources = sorted(source_counts.items(), key=lambda x: x[1], reverse=True)
+            for source, count in sorted_sources[:limit]:
+                top_sources.append({"source": source, "count": count})
         except Exception as e:
             logger.debug(f"Failed to get top threat sources: {e}")
 

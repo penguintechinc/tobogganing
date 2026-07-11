@@ -58,10 +58,16 @@ async def create_endpoint() -> tuple[dict[str, Any], int]:
                 "required": ["region", "name", "engine_url", "target"],
             }, 400
 
+        # Reject empty/blank api_key (finding #4)
+        if api_key is not None and not api_key.strip():
+            return {
+                "error": "api_key cannot be empty or blank",
+            }, 400
+
         manager = EndpointManager(db, tenant)
 
         try:
-            endpoint, raw_key = manager.create_endpoint(
+            endpoint, raw_key = await manager.create_endpoint(
                 region=region,
                 name=name,
                 engine_url=engine_url,
@@ -125,7 +131,7 @@ async def list_endpoints() -> tuple[dict[str, Any], int]:
         enabled_only = enabled_param == "true"
 
         manager = EndpointManager(db, tenant)
-        endpoints = manager.list_endpoints(enabled_only=enabled_only)
+        endpoints = await manager.list_endpoints(enabled_only=enabled_only)
 
         logger.info(
             "endpoints_listed",
@@ -172,7 +178,7 @@ async def get_endpoint(endpoint_id: str) -> tuple[dict[str, Any], int]:
         db = get_db()
 
         manager = EndpointManager(db, tenant)
-        endpoint = manager.get_endpoint(endpoint_id)
+        endpoint = await manager.get_endpoint(endpoint_id)
 
         if not endpoint:
             logger.info(
@@ -233,11 +239,11 @@ async def update_endpoint(endpoint_id: str) -> tuple[dict[str, Any], int]:
 
         if not update_data:
             # No valid fields to update; just return current state
-            endpoint = manager.get_endpoint(endpoint_id)
+            endpoint = await manager.get_endpoint(endpoint_id)
             if not endpoint:
                 return {"error": "Endpoint not found"}, 404
         else:
-            endpoint = manager.update_endpoint(endpoint_id, **update_data)
+            endpoint = await manager.update_endpoint(endpoint_id, **update_data)
 
         if not endpoint:
             logger.info(
@@ -291,7 +297,7 @@ async def delete_endpoint(endpoint_id: str) -> tuple[dict[str, Any] | str, int]:
         db = get_db()
 
         manager = EndpointManager(db, tenant)
-        deleted = manager.delete_endpoint(endpoint_id)
+        deleted = await manager.delete_endpoint(endpoint_id)
 
         if not deleted:
             logger.info(

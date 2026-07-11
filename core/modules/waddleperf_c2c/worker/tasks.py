@@ -6,14 +6,14 @@ recording results in the database.
 from __future__ import annotations
 
 import asyncio
-import os
 import structlog
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from core.config import Config, build_db_uri
 from core.modules.waddleperf_c2c.services.endpoint_manager import EndpointManager
 from core.modules.waddleperf_c2c.services.run_manager import RunManager
 from core.modules.waddleperf_cluster.services.engine_client import EngineClient, EngineError
+from penguin_dal import AsyncDB
 
 logger = structlog.get_logger()
 
@@ -43,15 +43,15 @@ def _default_engine_factory(source: dict[str, Any]) -> EngineClient:
     )
 
 
-def _execute_pair(
+async def _execute_pair(
     run_id: str,
     tenant: str,
     source_id: str,
     dest_id: str,
     test_type: str,
     *,
-    db: Optional[object] = None,
-    engine_factory: Optional[EngineFactory] = None,
+    db: Any | None = None,
+    engine_factory: EngineFactory | None = None,
 ) -> dict[str, Any]:
     """Execute a single pair test and record the result. Core logic (testable).
 
@@ -61,7 +61,7 @@ def _execute_pair(
         source_id: Source endpoint ID
         dest_id: Destination endpoint ID
         test_type: Test type (e.g., "http", "tcp", "icmp")
-        db: penguin-dal DAL instance (created fresh if None)
+        db: penguin-dal AsyncDB instance (created fresh if None)
         engine_factory: Callable to create EngineClient (default: _default_engine_factory)
 
     Returns:
@@ -69,16 +69,13 @@ def _execute_pair(
     """
     engine_factory = engine_factory or _default_engine_factory
 
-    # Create fresh DAL if not provided
+    # Create fresh AsyncDB if not provided
     if db is None:
         try:
-            from penguin_dal import DB
-
             cfg = Config()
             db_uri = build_db_uri(cfg)
-            # Convert async URI to sync for Celery worker context
-            db_uri = _convert_uri_to_sync(db_uri)
-            db = DB(db_uri, pool_size=cfg.db_pool_size)
+            db = AsyncDB(uri=db_uri, pool_size=cfg.db_pool_size)
+            await db.reflect()
         except Exception as e:
             logger.error(
                 "failed_to_create_dal",
@@ -91,8 +88,8 @@ def _execute_pair(
     try:
         # Load source and destination endpoints
         endpoint_mgr = EndpointManager(db, tenant)
-        source = endpoint_mgr.get_endpoint(source_id)
-        dest = endpoint_mgr.get_endpoint(dest_id)
+        source = await endpoint_mgr.get_endpoint(source_id)
+        dest = await endpoint_mgr.get_endpoint(dest_id)
 
         # If either endpoint is missing, record failed result
         if not source:
@@ -103,7 +100,7 @@ def _execute_pair(
                 tenant=tenant,
             )
             run_mgr = RunManager(db, tenant)
-            result = run_mgr.record_pair_result(
+            result = await run_mgr.record_pair_result(
                 run_id=run_id,
                 source_id=source_id,
                 dest_id=dest_id,
@@ -127,7 +124,7 @@ def _execute_pair(
             )
             run_mgr = RunManager(db, tenant)
             source_region = str(source.get("region", "unknown"))
-            result = run_mgr.record_pair_result(
+            result = await run_mgr.record_pair_result(
                 run_id=run_id,
                 source_id=source_id,
                 dest_id=dest_id,
@@ -155,7 +152,7 @@ def _execute_pair(
             run_mgr = RunManager(db, tenant)
             source_region = str(source.get("region", "unknown"))
             dest_region = str(dest.get("region", "unknown"))
-            result = run_mgr.record_pair_result(
+            result = await run_mgr.record_pair_result(
                 run_id=run_id,
                 source_id=source_id,
                 dest_id=dest_id,
@@ -172,11 +169,8 @@ def _execute_pair(
 
         # Run the test against the destination target
         try:
-            # asyncio.run can be used here because Celery tasks run in a sync context
             dest_target = str(dest.get("target"))
-            result_data = asyncio.run(
-                engine.run_test(test_type, target=dest_target)
-            )
+            result_data = await engine.run_test(test_type, target=dest_target)
 
             # Extract metrics from engine result
             latency_ms = result_data.get("latency_ms")
@@ -188,7 +182,7 @@ def _execute_pair(
             run_mgr = RunManager(db, tenant)
             source_region = str(source.get("region", "unknown"))
             dest_region = str(dest.get("region", "unknown"))
-            result = run_mgr.record_pair_result(
+            result = await run_mgr.record_pair_result(
                 run_id=run_id,
                 source_id=source_id,
                 dest_id=dest_id,
@@ -226,7 +220,7 @@ def _execute_pair(
             run_mgr = RunManager(db, tenant)
             source_region = str(source.get("region", "unknown"))
             dest_region = str(dest.get("region", "unknown"))
-            result = run_mgr.record_pair_result(
+            result = await run_mgr.record_pair_result(
                 run_id=run_id,
                 source_id=source_id,
                 dest_id=dest_id,
@@ -254,7 +248,7 @@ def _execute_pair(
             run_mgr = RunManager(db, tenant)
             source_region = str(source.get("region", "unknown"))
             dest_region = str(dest.get("region", "unknown"))
-            result = run_mgr.record_pair_result(
+            result = await run_mgr.record_pair_result(
                 run_id=run_id,
                 source_id=source_id,
                 dest_id=dest_id,
@@ -279,23 +273,29 @@ def _execute_pair(
             error=str(e),
             exc_info=True,
         )
+        # Record FAILED pair result for finding #3 (worker fail-stuck)
+        try:
+            run_mgr = RunManager(db, tenant)
+            await run_mgr.record_pair_result(
+                run_id=run_id,
+                source_id=source_id,
+                dest_id=dest_id,
+                source_region="unknown",
+                dest_region="unknown",
+                test_type=test_type,
+                status="failed",
+                latency_ms=None,
+                throughput=None,
+                loss_pct=None,
+                test_output=f"Unhandled error: {str(e)}",
+            )
+        except Exception as record_err:
+            logger.error(
+                "failed_to_record_pair_result",
+                run_id=run_id,
+                error=str(record_err),
+            )
         raise
-
-
-def _convert_uri_to_sync(async_uri: str) -> str:
-    """Convert async database URI to sync driver.
-
-    Args:
-        async_uri: Async database URI (e.g., postgresql+asyncpg://...)
-
-    Returns:
-        Sync database URI (e.g., postgresql+psycopg://...)
-    """
-    # Replace async drivers with sync equivalents
-    uri = async_uri.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    uri = uri.replace("mysql+aiomysql://", "mysql+pymysql://")
-    uri = uri.replace("sqlite+aiosqlite:///", "sqlite:///")
-    return uri
 
 
 # Import Celery app and define task
@@ -317,6 +317,9 @@ try:
     ) -> dict[str, Any]:
         """Celery task to execute a single pair test.
 
+        Builds a fresh AsyncDB per task and runs the async _execute_pair logic
+        via asyncio.run() inside the sync Celery task context.
+
         Args:
             self: Task self (bound task)
             run_id: Matrix run ID
@@ -328,12 +331,14 @@ try:
         Returns:
             Pair result dict
         """
-        return _execute_pair(
-            run_id=run_id,
-            tenant=tenant,
-            source_id=source_id,
-            dest_id=dest_id,
-            test_type=test_type,
+        return asyncio.run(
+            _execute_pair(
+                run_id=run_id,
+                tenant=tenant,
+                source_id=source_id,
+                dest_id=dest_id,
+                test_type=test_type,
+            )
         )
 
 except ImportError:

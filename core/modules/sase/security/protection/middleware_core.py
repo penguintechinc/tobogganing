@@ -50,7 +50,7 @@ class SecurityMiddleware:
             tenant_id=tenant_id,
         )
 
-    def process_request(
+    async def process_request(
         self, request_info: dict[str, Any]
     ) -> tuple[bool, dict[str, Any]]:
         """Process incoming request through security layers.
@@ -66,7 +66,7 @@ class SecurityMiddleware:
         user_agent = request_info.get("user_agent", "")
 
         # Check rate limits
-        allowed, violated_rule, retry_after = self.rate_limiter.is_allowed(
+        allowed, violated_rule, retry_after = await self.rate_limiter.is_allowed(
             ip_address, endpoint, user_agent
         )
 

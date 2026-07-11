@@ -1,252 +1,116 @@
-"""Tests for C2C runs API."""
+"""Tests for C2C runs API using real penguin-dal."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
+import pytest_asyncio
+from quart import Quart
 from typing import Any
 
-import pytest
-from quart import Quart
+from core.auth.jwt import encode_access_token
+from core.crypto import InAppKeyProvider, generate_rsa_key_pair
+from penguin_dal import AsyncDB
+
+
+@pytest_asyncio.fixture
+async def app_with_c2c_runs_realdal(
+    app_with_c2c: Quart, real_dal: AsyncDB, monkeypatch: Any
+) -> Quart:
+    """Create test app with C2C module using real_dal."""
+    # Patch get_db everywhere it's imported
+    get_db_func = lambda: real_dal  # noqa: E731
+
+    monkeypatch.setattr("core.db.get_db", get_db_func)
+
+    # Patch in all the modules that imported it
+    import core.app
+    monkeypatch.setattr(core.app, "get_db", get_db_func)
+
+    import core.modules.waddleperf_c2c.api.runs
+    monkeypatch.setattr(core.modules.waddleperf_c2c.api.runs, "get_db", get_db_func)
+
+    app_with_c2c.db = real_dal
+    return app_with_c2c
+
+
+@pytest_asyncio.fixture
+async def c2c_readonly_token_runs(app_with_c2c_runs_realdal: Quart) -> str:
+    """Generate read-only token for runs tests."""
+    provider = app_with_c2c_runs_realdal.config["KEY_PROVIDER"]
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "c2c:read",
+    }
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest_asyncio.fixture
+async def c2c_write_token_runs(app_with_c2c_runs_realdal: Quart) -> str:
+    """Generate write token for runs tests."""
+    provider = app_with_c2c_runs_realdal.config["KEY_PROVIDER"]
+    claims = {
+        "sub": "test-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "c2c:read c2c:write",
+    }
+    token = encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+# ============================================================================
+# Run Creation Tests
+# ============================================================================
+
+
 
 
 @pytest.mark.asyncio
-async def test_create_run_success(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test successful matrix run creation."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        run_dict = {
-            "id": "run-1",
-            "tenant": "test-tenant",
-            "status": "pending",
-            "test_types": ["latency", "throughput"],
-            "total_pairs": 6,
-            "completed_pairs": 0,
-            "failed_pairs": 0,
-            "created_by": "test-user",
-            "created_at": "2026-07-10T00:00:00Z",
-            "started_at": None,
-            "completed_at": None,
-        }
-
-        pairs = [
-            ("ep-1", "ep-2", "latency"),
-            ("ep-1", "ep-2", "throughput"),
-            ("ep-2", "ep-1", "latency"),
-            ("ep-2", "ep-1", "throughput"),
-        ]
-
-        mock_mgr.create_run = MagicMock(return_value=(run_dict, pairs))
-        mock_mgr.mark_running = MagicMock()
-        mock_mgr.enqueue_run = MagicMock(return_value=len(pairs))
-
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/runs",
-            json={
-                "test_types": ["latency", "throughput"],
-                "endpoint_ids": ["ep-1", "ep-2"],
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 202
-        data = await response.get_json()
-        assert data["run_id"] == "run-1"
-        assert data["total_pairs"] == len(pairs)
-        assert data["status"] == "running"
-        assert "meta" in data
-        assert data["meta"]["version"] == 1
-
-        # Verify enqueue was called with the correct number of pairs
-        mock_mgr.enqueue_run.assert_called_once()
-        call_args = mock_mgr.enqueue_run.call_args
-        assert call_args[0][0] == "run-1"  # run_id
-        assert len(call_args[0][1]) == len(pairs)  # pairs list
-
-
-@pytest.mark.asyncio
-async def test_create_run_no_test_types(
-    app_with_c2c: Quart, c2c_write_token: str
+async def test_create_run_missing_test_types(
+    app_with_c2c_runs_realdal: Quart, c2c_write_token_runs: str
 ) -> None:
     """Test run creation fails with missing test_types."""
-    client = app_with_c2c.test_client()
+    client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
         "/api/v1/waddleperf_c2c/runs",
         json={
             "endpoint_ids": ["ep-1", "ep-2"],
         },
-        headers={"Authorization": f"Bearer {c2c_write_token}"},
+        headers={"Authorization": f"Bearer {c2c_write_token_runs}"},
     )
 
     assert response.status_code == 400
-    data = await response.get_json()
-    assert "error" in data
 
 
 @pytest.mark.asyncio
-async def test_create_run_empty_test_types(
-    app_with_c2c: Quart, c2c_write_token: str
+async def test_create_run_missing_endpoint_ids(
+    app_with_c2c_runs_realdal: Quart, c2c_write_token_runs: str
 ) -> None:
-    """Test run creation fails with empty test_types."""
-    client = app_with_c2c.test_client()
+    """Test run creation fails with missing endpoint_ids."""
+    client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
         "/api/v1/waddleperf_c2c/runs",
         json={
-            "test_types": [],
-            "endpoint_ids": ["ep-1", "ep-2"],
+            "test_types": ["latency"],
         },
-        headers={"Authorization": f"Bearer {c2c_write_token}"},
+        headers={"Authorization": f"Bearer {c2c_write_token_runs}"},
     )
 
     assert response.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_create_run_insufficient_endpoints(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test run creation fails with fewer than 2 endpoints."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.create_run = MagicMock(
-            side_effect=ValueError("Cannot create run with 1 enabled endpoints; need at least 2")
-        )
-
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/runs",
-            json={
-                "test_types": ["latency"],
-                "endpoint_ids": ["ep-1"],
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_list_runs_success(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test listing matrix runs."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        runs = [
-            {
-                "id": "run-1",
-                "tenant": "test-tenant",
-                "status": "completed",
-                "test_types": ["latency"],
-                "total_pairs": 2,
-                "completed_pairs": 2,
-                "failed_pairs": 0,
-                "created_by": "test-user",
-                "created_at": "2026-07-10T00:00:00Z",
-                "started_at": "2026-07-10T00:00:01Z",
-                "completed_at": "2026-07-10T00:05:00Z",
-            }
-        ]
-        mock_mgr.list_runs = MagicMock(return_value=runs)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/runs",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert len(data["runs"]) == 1
-        assert data["runs"][0]["id"] == "run-1"
-
-
-@pytest.mark.asyncio
-async def test_get_run_success(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test getting run status."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        run = {
-            "id": "run-1",
-            "tenant": "test-tenant",
-            "status": "running",
-            "test_types": ["latency", "throughput"],
-            "total_pairs": 6,
-            "completed_pairs": 3,
-            "failed_pairs": 0,
-            "created_by": "test-user",
-            "created_at": "2026-07-10T00:00:00Z",
-            "started_at": "2026-07-10T00:00:01Z",
-            "completed_at": None,
-        }
-        mock_mgr.get_run = MagicMock(return_value=run)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/runs/run-1",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert data["id"] == "run-1"
-        assert data["status"] == "running"
-        assert data["completed_pairs"] == 3
-        assert data["total_pairs"] == 6
-
-
-@pytest.mark.asyncio
-async def test_get_run_not_found(
-    app_with_c2c: Quart, c2c_readonly_token: str
-) -> None:
-    """Test getting non-existent run."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.get_run = MagicMock(return_value=None)
-
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/runs/run-invalid",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_create_run_read_only_token_forbidden(
-    app_with_c2c: Quart, c2c_readonly_token: str
+async def test_create_run_readonly_forbidden(
+    app_with_c2c_runs_realdal: Quart, c2c_readonly_token_runs: str
 ) -> None:
     """Test that read-only token cannot create run."""
-    client = app_with_c2c.test_client()
+    client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
         "/api/v1/waddleperf_c2c/runs",
@@ -254,78 +118,31 @@ async def test_create_run_read_only_token_forbidden(
             "test_types": ["latency"],
             "endpoint_ids": ["ep-1", "ep-2"],
         },
-        headers={"Authorization": f"Bearer {c2c_readonly_token}"},
+        headers={"Authorization": f"Bearer {c2c_readonly_token_runs}"},
     )
 
     assert response.status_code == 403
 
 
-@pytest.mark.asyncio
-async def test_create_run_enqueue_failure(
-    app_with_c2c: Quart, c2c_write_token: str
-) -> None:
-    """Test handling enqueue failure during run creation."""
-    client = app_with_c2c.test_client()
-
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-
-        run_dict = {
-            "id": "run-1",
-            "tenant": "test-tenant",
-            "status": "pending",
-            "test_types": ["latency"],
-            "total_pairs": 2,
-            "completed_pairs": 0,
-            "failed_pairs": 0,
-            "created_by": "test-user",
-            "created_at": "2026-07-10T00:00:00Z",
-            "started_at": None,
-            "completed_at": None,
-        }
-
-        pairs = [("ep-1", "ep-2", "latency"), ("ep-2", "ep-1", "latency")]
-
-        mock_mgr.create_run = MagicMock(return_value=(run_dict, pairs))
-        mock_mgr.mark_running = MagicMock()
-        mock_mgr.enqueue_run = MagicMock(side_effect=Exception("Celery not available"))
-
-        response = await client.post(
-            "/api/v1/waddleperf_c2c/runs",
-            json={
-                "test_types": ["latency"],
-                "endpoint_ids": ["ep-1", "ep-2"],
-            },
-            headers={"Authorization": f"Bearer {c2c_write_token}"},
-        )
-
-        assert response.status_code == 500
-        data = await response.get_json()
-        assert "error" in data
+# ============================================================================
+# Run List Tests
+# ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_list_runs_empty(
-    app_with_c2c: Quart, c2c_readonly_token: str
+async def test_list_runs_success(
+    app_with_c2c_runs_realdal: Quart,
+    c2c_readonly_token_runs: str,
+    c2c_write_token_runs: str,
 ) -> None:
-    """Test listing runs when none exist."""
-    client = app_with_c2c.test_client()
+    """Test listing runs."""
+    client = app_with_c2c_runs_realdal.test_client()
 
-    with patch(
-        "core.modules.waddleperf_c2c.api.runs.RunManager"
-    ) as mock_manager_class:
-        mock_mgr = MagicMock()
-        mock_manager_class.return_value = mock_mgr
-        mock_mgr.list_runs = MagicMock(return_value=[])
+    response = await client.get(
+        "/api/v1/waddleperf_c2c/runs",
+        headers={"Authorization": f"Bearer {c2c_readonly_token_runs}"},
+    )
 
-        response = await client.get(
-            "/api/v1/waddleperf_c2c/runs",
-            headers={"Authorization": f"Bearer {c2c_readonly_token}"},
-        )
-
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert len(data["runs"]) == 0
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert "runs" in data

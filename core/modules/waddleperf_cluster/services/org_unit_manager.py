@@ -1,11 +1,11 @@
 """Organizational unit management using penguin-dal."""
 from __future__ import annotations
 
-import asyncio
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 logger = structlog.get_logger()
 
@@ -36,7 +36,6 @@ class OrgUnitManager:
         """
         self.db = db
         self.tenant_id = tenant_id
-        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Initialize the OrgUnitManager."""
@@ -59,33 +58,37 @@ class OrgUnitManager:
         Returns:
             OrgUnit object
         """
-        async with self._lock:
-            ou_obj = await asyncio.to_thread(
-                self.db.org_units.create,
-                tenant=self.tenant_id,
-                name=data.get("name"),
-                parent_id=data.get("parent_id"),
-                description=data.get("description"),
-                is_active=data.get("is_active", True),
-            )
+        ou_id = str(uuid4())
+        now = datetime.now(timezone.utc)
 
-            logger.info(
-                "created_ou",
-                ou_id=ou_obj.id,
-                name=ou_obj.name,
-                tenant=self.tenant_id,
-            )
+        await self.db.org_units.async_insert(
+            id=ou_id,
+            tenant=self.tenant_id,
+            name=data.get("name"),
+            parent_id=data.get("parent_id"),
+            description=data.get("description"),
+            is_active=data.get("is_active", True),
+            created_at=now,
+            updated_at=now,
+        )
 
-            return OrgUnit(
-                id=ou_obj.id,
-                tenant=ou_obj.tenant,
-                name=ou_obj.name,
-                parent_id=ou_obj.parent_id,
-                description=ou_obj.description,
-                is_active=ou_obj.is_active,
-                created_at=ou_obj.created_at,
-                updated_at=ou_obj.updated_at,
-            )
+        logger.info(
+            "created_ou",
+            ou_id=ou_id,
+            name=data.get("name"),
+            tenant=self.tenant_id,
+        )
+
+        return OrgUnit(
+            id=ou_id,
+            tenant=self.tenant_id,
+            name=data.get("name"),
+            parent_id=data.get("parent_id"),
+            description=data.get("description"),
+            is_active=data.get("is_active", True),
+            created_at=now,
+            updated_at=now,
+        )
 
     async def get_ou(self, ou_id: str) -> OrgUnit | None:
         """Get an organizational unit by ID.
@@ -96,11 +99,11 @@ class OrgUnitManager:
         Returns:
             OrgUnit or None if not found
         """
-        ou_obj = await asyncio.to_thread(
-            self.db.org_units.select,
-            id=ou_id,
-            tenant=self.tenant_id,
-        )
+        ou_rowset = await self.db(
+            (self.db.org_units.id == ou_id) & (self.db.org_units.tenant == self.tenant_id)
+        ).select()
+        ou_obj = ou_rowset.first()
+
         if not ou_obj:
             return None
 
@@ -129,18 +132,13 @@ class OrgUnitManager:
             List of OrgUnit objects
         """
         if parent_id is not None:
-            ous = await asyncio.to_thread(
-                self.db.org_units.select_list,
-                tenant=self.tenant_id,
-                parent_id=parent_id,
-                limitby=(offset, offset + limit),
-            )
+            ous_rowset = await self.db(
+            (self.db.org_units.tenant == self.tenant_id) & (self.db.org_units.parent_id == parent_id)
+        ).select(limitby=(offset, offset + limit))
         else:
-            ous = await asyncio.to_thread(
-                self.db.org_units.select_list,
-                tenant=self.tenant_id,
-                limitby=(offset, offset + limit),
-            )
+            ous_rowset = await self.db(
+                self.db.org_units.tenant == self.tenant_id,
+            ).select(limitby=(offset, offset + limit))
 
         return [
             OrgUnit(
@@ -153,7 +151,7 @@ class OrgUnitManager:
                 created_at=ou.created_at,
                 updated_at=ou.updated_at,
             )
-            for ou in ous
+            for ou in ous_rowset
         ]
 
     async def update_ou(self, ou_id: str, data: dict) -> OrgUnit | None:
@@ -170,22 +168,18 @@ class OrgUnitManager:
         if not existing:
             return None
 
-        async with self._lock:
-            update_data = {k: v for k, v in data.items() if k in ["name", "description", "parent_id", "is_active"]}
-            update_data["updated_at"] = datetime.now(timezone.utc)
+        update_data = {k: v for k, v in data.items() if k in ["name", "description", "parent_id", "is_active"]}
+        update_data["updated_at"] = datetime.now(timezone.utc)
 
-            await asyncio.to_thread(
-                self.db.org_units.update,
-                id=ou_id,
-                tenant=self.tenant_id,
-                **update_data,
-            )
+        await self.db(
+            (self.db.org_units.id == ou_id) & (self.db.org_units.tenant == self.tenant_id)
+        ).update(**update_data)
 
-            logger.info(
-                "updated_ou",
-                ou_id=ou_id,
-                tenant=self.tenant_id,
-            )
+        logger.info(
+            "updated_ou",
+            ou_id=ou_id,
+            tenant=self.tenant_id,
+        )
 
         return await self.get_ou(ou_id)
 
@@ -202,17 +196,14 @@ class OrgUnitManager:
         if not existing:
             return False
 
-        async with self._lock:
-            await asyncio.to_thread(
-                self.db.org_units.delete,
-                id=ou_id,
-                tenant=self.tenant_id,
-            )
+        await self.db(
+            (self.db.org_units.id == ou_id) & (self.db.org_units.tenant == self.tenant_id)
+        ).delete()
 
-            logger.info(
-                "deleted_ou",
-                ou_id=ou_id,
-                tenant=self.tenant_id,
-            )
+        logger.info(
+            "deleted_ou",
+            ou_id=ou_id,
+            tenant=self.tenant_id,
+        )
 
         return True

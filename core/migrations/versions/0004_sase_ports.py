@@ -20,7 +20,7 @@ def upgrade() -> None:
     """Create port_ranges table for SASE module."""
     op.create_table(
         "port_ranges",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
         sa.Column("headend_id", sa.String(255), nullable=False),
         sa.Column("cluster_id", sa.String(255), nullable=False),

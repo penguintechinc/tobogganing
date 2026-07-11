@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 from quart import Quart
 
 
@@ -77,15 +78,29 @@ def mock_db() -> MagicMock:
     query_proxy.__and__ = MagicMock(return_value=query_proxy)
     query_proxy.__or__ = MagicMock(return_value=query_proxy)
 
-    # Default table insert returns id=1
+    # Default table insert returns id=1 (or similar)
     for table_name in [
         "users",
         "refresh_tokens",
         "password_reset_tokens",
+        "devices",
+        "device_api_keys",
+        "device_enrollment_secrets",
+        "org_units",
+        "perf_test_results",
+        "test_schedules",
     ]:
         table_mock = MagicMock()
         table_mock.async_insert = AsyncMock(return_value=1)
         table_mock.id = make_comparable_field("id")
+        table_mock.tenant = make_comparable_field("tenant")
+        table_mock.device_id = make_comparable_field("device_id")
+        table_mock.api_key_hash = make_comparable_field("api_key_hash")
+        table_mock.secret_hash = make_comparable_field("secret_hash")
+        table_mock.parent_id = make_comparable_field("parent_id")
+        table_mock.org_unit_id = make_comparable_field("org_unit_id")
+        table_mock.test_type = make_comparable_field("test_type")
+        table_mock.status = make_comparable_field("status")
         setattr(db, table_name, table_mock)
 
     # Mock connection for health checks
@@ -210,6 +225,48 @@ def test_db_session() -> Any:
         # Cleanup
         session.close()
         engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def real_dal() -> Any:
+    """Provide a real penguin-dal AsyncDB backed by a migrated sqlite database.
+
+    Builds the schema via ``alembic upgrade head`` (the schema authority, exactly
+    as production does), then constructs an ``AsyncDB`` and reflects the tables.
+    This is the anti-mock integration harness: managers exercised through this
+    fixture hit a real database, so a wrong DAL API or schema mismatch fails the
+    test instead of being hidden by a mock.
+
+    Managers must supply all NOT NULL columns explicitly (e.g. created_at /
+    updated_at) — penguin-dal reflection does not apply model-side Python
+    defaults.
+
+    Yields:
+        A reflected AsyncDB instance bound to a temp migrated sqlite DB.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+    from penguin_dal import AsyncDB
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_uri = f"sqlite:///{Path(tmpdir) / 'test.db'}"
+
+        alembic_cfg = AlembicConfig(str(Path(__file__).parent.parent / "alembic.ini"))
+        alembic_cfg.set_main_option("sqlalchemy.url", db_uri)
+        alembic_cfg.set_main_option(
+            "script_location", str(Path(__file__).parent.parent / "migrations")
+        )
+        command.upgrade(alembic_cfg, "head")
+
+        dal = AsyncDB(uri=db_uri)
+        await dal.reflect()
+        try:
+            yield dal
+        finally:
+            await dal.close()
 
 
 # SASE Module Test Fixtures

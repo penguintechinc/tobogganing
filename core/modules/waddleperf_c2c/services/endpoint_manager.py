@@ -7,7 +7,7 @@ import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -31,17 +31,17 @@ class EndpointRecord:
 class EndpointManager:
     """Manages cluster-to-cluster test endpoints using penguin-dal."""
 
-    def __init__(self, db: object, tenant: str) -> None:
+    def __init__(self, db: Any, tenant: str) -> None:
         """Initialize EndpointManager.
 
         Args:
-            db: penguin-dal DAL instance
+            db: penguin-dal AsyncDB instance
             tenant: Tenant identifier for scoping queries
         """
         self.db = db
         self.tenant = tenant
 
-    def list_endpoints(self, enabled_only: bool = False) -> list[dict[str, object]]:
+    async def list_endpoints(self, enabled_only: bool = False) -> list[dict[str, object]]:
         """List all endpoints for this tenant.
 
         Args:
@@ -51,17 +51,15 @@ class EndpointManager:
             List of endpoint dicts, newest first
         """
         if enabled_only:
-            endpoints = self.db.c2c_endpoints.select(
-                tenant=self.tenant, enabled=True
-            )
+            rowset = await self.db(
+                (self.db.c2c_endpoints.tenant == self.tenant)
+                & (self.db.c2c_endpoints.enabled == True)  # noqa: E712
+            ).select()
         else:
-            endpoints = self.db.c2c_endpoints.select(tenant=self.tenant)
+            rowset = await self.db(self.db.c2c_endpoints.tenant == self.tenant).select()
 
-        if not endpoints:
+        if not rowset:
             return []
-
-        # Convert to list if single result
-        endpoint_list = endpoints if isinstance(endpoints, list) else [endpoints]
 
         return [
             {
@@ -76,10 +74,10 @@ class EndpointManager:
                 "created_at": e.created_at.isoformat() if e.created_at else None,
                 "updated_at": e.updated_at.isoformat() if e.updated_at else None,
             }
-            for e in endpoint_list
+            for e in rowset
         ]
 
-    def get_endpoint(self, endpoint_id: str) -> dict[str, object] | None:
+    async def get_endpoint(self, endpoint_id: str) -> dict[str, object] | None:
         """Get an endpoint by ID.
 
         Args:
@@ -88,10 +86,12 @@ class EndpointManager:
         Returns:
             Endpoint dict or None if not found or belongs to different tenant
         """
-        endpoint = self.db.c2c_endpoints.select(
-            id=endpoint_id, tenant=self.tenant
-        )
+        rowset = await self.db(
+            (self.db.c2c_endpoints.id == endpoint_id)
+            & (self.db.c2c_endpoints.tenant == self.tenant)
+        ).select()
 
+        endpoint = rowset.first()
         if not endpoint:
             return None
 
@@ -108,7 +108,7 @@ class EndpointManager:
             "updated_at": endpoint.updated_at.isoformat() if endpoint.updated_at else None,
         }
 
-    def create_endpoint(
+    async def create_endpoint(
         self,
         region: str,
         name: str,
@@ -131,12 +131,20 @@ class EndpointManager:
 
         Raises:
             ValueError: If endpoint with same (tenant, region, name) already exists
+            or if api_key is provided but blank
         """
+        # Reject empty/blank api_key (finding #4)
+        if api_key is not None and not api_key.strip():
+            raise ValueError("api_key cannot be empty or blank")
+
         # Check for duplicate
-        existing = self.db.c2c_endpoints.select(
-            tenant=self.tenant, region=region, name=name
-        )
-        if existing:
+        rowset = await self.db(
+            (self.db.c2c_endpoints.tenant == self.tenant)
+            & (self.db.c2c_endpoints.region == region)
+            & (self.db.c2c_endpoints.name == name)
+        ).select()
+
+        if rowset.first():
             raise ValueError(
                 f"Endpoint with tenant={self.tenant}, region={region}, name={name} already exists"
             )
@@ -151,7 +159,8 @@ class EndpointManager:
             return_key = None
 
         # Create endpoint
-        endpoint = self.db.c2c_endpoints.create(
+        endpoint_id = await self.db.c2c_endpoints.async_insert(
+            id=secrets.token_urlsafe(16),
             tenant=self.tenant,
             region=region,
             name=name,
@@ -159,11 +168,19 @@ class EndpointManager:
             target=target,
             api_key_hash=api_key_hash,
             enabled=True,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
+
+        # Re-fetch to get all fields
+        rowset = await self.db(
+            self.db.c2c_endpoints.id == endpoint_id,
+        ).select()
+        endpoint = rowset.first()
 
         logger.info(
             "endpoint_created",
-            endpoint_id=endpoint.id,
+            endpoint_id=endpoint_id,
             region=region,
             name=name,
             tenant=self.tenant,
@@ -184,7 +201,7 @@ class EndpointManager:
 
         return (endpoint_dict, return_key)
 
-    def update_endpoint(self, endpoint_id: str, **fields: object) -> dict[str, object] | None:
+    async def update_endpoint(self, endpoint_id: str, **fields: object) -> dict[str, object] | None:
         """Update an endpoint.
 
         Args:
@@ -195,10 +212,12 @@ class EndpointManager:
             Updated endpoint dict or None if not found
         """
         # Verify ownership by tenant
-        existing = self.db.c2c_endpoints.select(
-            id=endpoint_id, tenant=self.tenant
-        )
-        if not existing:
+        rowset = await self.db(
+            (self.db.c2c_endpoints.id == endpoint_id)
+            & (self.db.c2c_endpoints.tenant == self.tenant)
+        ).select()
+
+        if not rowset.first():
             return None
 
         # Filter to allowed fields
@@ -206,14 +225,14 @@ class EndpointManager:
         update_data = {k: v for k, v in fields.items() if k in allowed}
 
         if not update_data:
-            return self.get_endpoint(endpoint_id)
+            return await self.get_endpoint(endpoint_id)
 
         # Update with current timestamp
-        self.db.c2c_endpoints.update(
-            id=endpoint_id,
-            tenant=self.tenant,
-            **update_data,
-        )
+        update_data["updated_at"] = datetime.now(timezone.utc)
+        await self.db(
+            (self.db.c2c_endpoints.id == endpoint_id)
+            & (self.db.c2c_endpoints.tenant == self.tenant)
+        ).update(**update_data)
 
         logger.info(
             "endpoint_updated",
@@ -221,9 +240,9 @@ class EndpointManager:
             tenant=self.tenant,
         )
 
-        return self.get_endpoint(endpoint_id)
+        return await self.get_endpoint(endpoint_id)
 
-    def delete_endpoint(self, endpoint_id: str) -> bool:
+    async def delete_endpoint(self, endpoint_id: str) -> bool:
         """Delete an endpoint.
 
         Args:
@@ -232,13 +251,18 @@ class EndpointManager:
         Returns:
             True if deleted, False if not found
         """
-        existing = self.db.c2c_endpoints.select(
-            id=endpoint_id, tenant=self.tenant
-        )
-        if not existing:
+        rowset = await self.db(
+            (self.db.c2c_endpoints.id == endpoint_id)
+            & (self.db.c2c_endpoints.tenant == self.tenant)
+        ).select()
+
+        if not rowset.first():
             return False
 
-        self.db.c2c_endpoints.delete(id=endpoint_id, tenant=self.tenant)
+        await self.db(
+            (self.db.c2c_endpoints.id == endpoint_id)
+            & (self.db.c2c_endpoints.tenant == self.tenant)
+        ).delete()
 
         logger.info(
             "endpoint_deleted",
@@ -249,8 +273,8 @@ class EndpointManager:
         return True
 
 
-def authenticate_node_global(
-    db: object, api_key: str
+async def authenticate_node_global(
+    db: Any, api_key: str
 ) -> tuple[dict[str, object], str] | None:
     """Authenticate a node globally by API key without trusting tenant.
 
@@ -258,18 +282,26 @@ def authenticate_node_global(
     comparison, and returns the endpoint and its tenant.
 
     Args:
-        db: penguin-dal DAL instance
+        db: penguin-dal AsyncDB instance
         api_key: Unencrypted API key from request
 
     Returns:
         Tuple of (endpoint_dict, tenant) if authenticated, None otherwise
     """
     try:
+        # Reject empty/blank api_key (finding #4)
+        if not api_key or not api_key.strip():
+            logger.warning("endpoint_auth_empty_key")
+            return None
+
         api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
         # Query c2c_endpoints globally (no tenant filter)
-        endpoint = db.c2c_endpoints.select(api_key_hash=api_key_hash)
+        rowset = await db(
+            db.c2c_endpoints.api_key_hash == api_key_hash,
+        ).select()
 
+        endpoint = rowset.first()
         if not endpoint:
             logger.warning(
                 "endpoint_auth_invalid_key",

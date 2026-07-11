@@ -161,8 +161,8 @@ class VRFManager:
             vrf.updated_at = datetime.utcnow()
 
             await self.db(
-                self.db.vrfs.id == vrf.id,
-                self.db.vrfs.tenant == vrf.tenant,
+                (self.db.vrfs.id == vrf.id)
+                & (self.db.vrfs.tenant == vrf.tenant)
             ).update(
                 name=vrf.name,
                 description=vrf.description,
@@ -197,19 +197,19 @@ class VRFManager:
         try:
             # Delete related OSPF configuration
             await self.db(
-                self.db.ospf_neighbors.vrf_id == vrf_id,
-                self.db.ospf_neighbors.tenant == tenant,
+                (self.db.ospf_neighbors.vrf_id == vrf_id)
+                & (self.db.ospf_neighbors.tenant == tenant)
             ).delete()
 
             await self.db(
-                self.db.ospf_areas.vrf_id == vrf_id,
-                self.db.ospf_areas.tenant == tenant,
+                (self.db.ospf_areas.vrf_id == vrf_id)
+                & (self.db.ospf_areas.tenant == tenant)
             ).delete()
 
             # Delete VRF
             await self.db(
-                self.db.vrfs.id == vrf_id,
-                self.db.vrfs.tenant == tenant,
+                (self.db.vrfs.id == vrf_id)
+                & (self.db.vrfs.tenant == tenant)
             ).delete()
 
             logger.info("vrf_deleted", vrf_id=vrf_id, tenant=tenant)
@@ -231,8 +231,8 @@ class VRFManager:
         """
         try:
             rowset = await self.db(
-                self.db.vrfs.id == vrf_id,
-                self.db.vrfs.tenant == tenant,
+                (self.db.vrfs.id == vrf_id)
+                & (self.db.vrfs.tenant == tenant)
             ).select()
 
             row = rowset.first() if rowset else None
@@ -273,8 +273,8 @@ class VRFManager:
         try:
             if active_only:
                 rowset = await self.db(
-                    self.db.vrfs.tenant == tenant,
-                    self.db.vrfs.is_active == True,  # noqa: E712
+                    (self.db.vrfs.tenant == tenant)
+                    & (self.db.vrfs.is_active == True)  # noqa: E712
                 ).select(orderby=self.db.vrfs.name)
             else:
                 rowset = await self.db(
@@ -357,8 +357,8 @@ class VRFManager:
         """
         try:
             rowset = await self.db(
-                self.db.ospf_neighbors.vrf_id == vrf_id,
-                self.db.ospf_neighbors.tenant == tenant,
+                (self.db.ospf_neighbors.vrf_id == vrf_id)
+                & (self.db.ospf_neighbors.tenant == tenant)
             ).select()
 
             neighbors: list[OSPFNeighbor] = []
@@ -446,8 +446,8 @@ class VRFManager:
 
                 # Get OSPF areas to add networks
                 areas = await self.db(
-                    self.db.ospf_areas.vrf_id == vrf_id,
-                    self.db.ospf_areas.tenant == tenant,
+                    (self.db.ospf_areas.vrf_id == vrf_id)
+                    & (self.db.ospf_areas.tenant == tenant)
                 ).select()
 
                 for area_row in areas:

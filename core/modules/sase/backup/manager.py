@@ -1,4 +1,5 @@
 """Database backup manager for local and S3 storage."""
+from __future__ import annotations
 
 import gzip
 import hashlib
@@ -6,14 +7,17 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+from uuid import uuid4
+
+import structlog
 
 from .crypto import decrypt_file, encrypt_file
 from .s3 import S3Config, S3Manager
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Strict allowlist pattern for backup names: alphanumeric, dots, hyphens, underscores
 VALID_BACKUP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -78,13 +82,12 @@ class BackupManager:
     """Manages database backup and restore operations."""
 
     def __init__(
-        self, db: Any, backup_dir: str = "/backups", get_db_uri_fn: Optional[Any] = None
+        self, db: Any, backup_dir: str = "/backups", get_db_uri_fn: Any | None = None
     ) -> None:
-        """
-        Initialize backup manager.
+        """Initialize backup manager.
 
         Args:
-            db: penguin-dal DAL instance
+            db: penguin-dal AsyncDB instance
             backup_dir: Directory for local backups
             get_db_uri_fn: Optional function to get database URI
         """
@@ -94,20 +97,41 @@ class BackupManager:
         self.get_db_uri_fn = get_db_uri_fn
 
         self.s3_config = S3Config.from_env()
-        self.s3_manager: Optional[S3Manager] = None
+        self.s3_manager: S3Manager | None = None
 
         if self.s3_config.enabled:
             self.s3_manager = S3Manager(self.s3_config)
 
-    def create_backup(
+    def _get_tenant_column(self, table_name: str) -> str | None:
+        """
+        Detect tenant column name for a table.
+
+        Args:
+            table_name: Name of the table to check
+
+        Returns:
+            Column name ("tenant" or "tenant_id") if present, None otherwise
+        """
+        if table_name not in self.db.tables:
+            return None
+
+        table = getattr(self.db, table_name)
+        # Check both "tenant" and "tenant_id" column names
+        if hasattr(table, "tenant"):
+            return "tenant"
+        if hasattr(table, "tenant_id"):
+            return "tenant_id"
+        return None
+
+    async def create_backup(
         self,
-        backup_name: Optional[str] = None,
+        backup_name: str | None = None,
         compress: bool = True,
         encrypt: bool = False,
-        encryption_key: Optional[str] = None,
-        upload_to_s3: Optional[bool] = None,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        encryption_key: str | None = None,
+        upload_to_s3: bool | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Create a full database backup.
 
@@ -117,7 +141,7 @@ class BackupManager:
             encrypt: Whether to encrypt backup
             encryption_key: Encryption key (required if encrypt=True)
             upload_to_s3: Override S3 upload setting
-            tenant_id: Tenant ID for multi-tenant isolation (scopes backup)
+            tenant_id: Tenant ID for multi-tenant isolation (scopes backup to tenant's data only)
 
         Returns:
             Backup metadata dict
@@ -150,36 +174,75 @@ class BackupManager:
             # Validate path is within backup directory
             _validate_path_in_directory(backup_file, self.backup_dir)
 
+            # Determine backup scope
+            scope = f"tenant:{tenant_id}" if tenant_id else "whole_db"
+
             # Export all tables
-            backup_data: Dict[str, Any] = {
+            backup_data: dict[str, Any] = {
                 "metadata": {
                     "version": "1.0",
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                     "db_uri": self._sanitize_db_uri(),
+                    "scope": scope,
                     "tables": [],
                 },
                 "data": {},
             }
 
-            # Backup each table from DAL
+            # Backup each table from DAL (skip internal tables)
+            skip_tables = {"alembic_version"}  # Internal database migration tracking
             for table_name in self.db.tables:
-                table = self.db[table_name]
-                rows = self.db(table).select()
+                if table_name in skip_tables:
+                    continue
 
-                table_data: List[Dict[str, Any]] = []
-                for row in rows:
-                    row_dict: Dict[str, Any] = {}
-                    for field in table.fields:
-                        value = row[field]
-                        if isinstance(value, datetime):
-                            value = value.isoformat()
-                        row_dict[field] = value
-                    table_data.append(row_dict)
+                try:
+                    table = getattr(self.db, table_name)
 
-                backup_data["data"][table_name] = table_data
-                backup_data["metadata"]["tables"].append(
-                    {"name": table_name, "row_count": len(table_data)}
-                )
+                    # If tenant-scoped backup, only include tenant-bearing tables
+                    if tenant_id:
+                        tenant_column = self._get_tenant_column(table_name)
+                        if not tenant_column:
+                            # Skip tables without tenant column in tenant mode
+                            logger.debug(
+                                "skipping_table_no_tenant_column",
+                                table_name=table_name,
+                                tenant_id=tenant_id,
+                            )
+                            continue
+
+                        # Query only rows for this tenant
+                        tenant_field = getattr(table, tenant_column)
+                        rows = await self.db(tenant_field == tenant_id).select()
+                    else:
+                        # Whole-DB backup: select all rows using first column != None as condition
+                        # (get an always-true condition for unconditional select)
+                        if hasattr(table, "id"):
+                            rows = await self.db(table.id != None).select()  # noqa: E712
+                        elif table_name in self.db.tables and len(self.db.tables[table_name].c.keys()) > 0:
+                            # Use first column if id doesn't exist
+                            first_col_name = list(self.db.tables[table_name].c.keys())[0]
+                            first_col = getattr(table, first_col_name)
+                            rows = await self.db(first_col != None).select()  # noqa: E712
+                        else:
+                            # Fallback: skip table if we can't construct a select
+                            logger.warning("cannot_select_table", table_name=table_name)
+                            continue
+
+                    table_data: list[dict[str, Any]] = []
+                    for row in rows:
+                        row_dict: dict[str, Any] = row.as_dict()
+                        # Convert datetime objects to ISO format strings
+                        for key, value in row_dict.items():
+                            if isinstance(value, datetime):
+                                row_dict[key] = value.isoformat()
+                        table_data.append(row_dict)
+
+                    backup_data["data"][table_name] = table_data
+                    backup_data["metadata"]["tables"].append(
+                        {"name": table_name, "row_count": len(table_data)}
+                    )
+                except Exception as e:
+                    logger.warning("failed_to_backup_table", table_name=table_name, error=str(e))
 
             # Write JSON (compressed if requested)
             json_data = json.dumps(backup_data, indent=2)
@@ -201,7 +264,7 @@ class BackupManager:
             checksum = self._calculate_checksum(backup_file)
 
             # Upload to S3 if enabled
-            s3_info: Optional[Dict[str, Any]] = None
+            s3_info: dict[str, Any] | None = None
             should_upload_s3 = (
                 upload_to_s3 if upload_to_s3 is not None else self.s3_config.enabled
             )
@@ -210,10 +273,10 @@ class BackupManager:
                 s3_info = self.s3_manager.upload_backup(backup_file, backup_name)
 
             # Create metadata
-            metadata: Dict[str, Any] = {
+            metadata: dict[str, Any] = {
                 "backup_name": backup_name,
                 "file_path": str(backup_file),
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "compressed": compress,
                 "encrypted": encrypt,
                 "checksum": checksum,
@@ -221,6 +284,7 @@ class BackupManager:
                 "table_count": len(backup_data["metadata"]["tables"]),
                 "total_rows": sum(t["row_count"] for t in backup_data["metadata"]["tables"]),
                 "s3_info": s3_info,
+                "scope": scope,
             }
 
             # Save metadata
@@ -228,28 +292,33 @@ class BackupManager:
             with open(metadata_file, "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            if s3_info:
+            if s3_info and self.s3_manager:
                 self.s3_manager.upload_metadata(metadata_file, backup_name)
 
-            logger.info(f"Backup created: {backup_file}")
+            logger.info(
+                "backup_created",
+                backup_file=str(backup_file),
+                scope=scope,
+                tenant_id=tenant_id,
+            )
             if s3_info:
-                logger.info(f"Uploaded to S3: {s3_info['s3_key']}")
+                logger.info("uploaded_to_s3", s3_key=s3_info["s3_key"])
 
             return metadata
 
         except Exception as e:
-            logger.error(f"Backup failed: {e}")
+            logger.error("backup_failed", error=str(e))
             raise
 
-    def restore_backup(
+    async def restore_backup(
         self,
         backup_path: str,
         decrypt: bool = False,
-        decryption_key: Optional[str] = None,
+        decryption_key: str | None = None,
         verify_checksum: bool = True,
         from_s3: bool = False,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Restore database from backup.
 
@@ -259,35 +328,41 @@ class BackupManager:
             decryption_key: Decryption key (required if decrypt=True)
             verify_checksum: Whether to verify integrity
             from_s3: Whether to download from S3 first
-            tenant_id: Tenant ID for multi-tenant isolation (validates authorization)
+            tenant_id: Tenant ID for multi-tenant isolation (validates authorization; fail-closed)
 
         Returns:
             Restore statistics dict
 
         Raises:
-            ValueError: If path escapes backup directory or tenant is unauthorized
+            ValueError: If path escapes backup directory, tenant is unauthorized, or scope mismatch
         """
         try:
+            # Validate tenant_id format up front (used by both S3 and local paths)
+            if tenant_id:
+                _validate_backup_name(tenant_id)
+
             # Handle S3 download
             if from_s3 and self.s3_manager:
                 backup_file = self.s3_manager.download_backup(backup_path)
+                # S3 restores have no local tenant directory to gate on; ownership
+                # is enforced at the row level below (foreign-tenant rows dropped).
             else:
                 backup_file = Path(backup_path)
                 if not backup_file.exists():
                     raise FileNotFoundError(f"Backup not found: {backup_file}")
 
-                # Validate path is within backup directory
+                # Validate path is within backup directory (always)
                 _validate_path_in_directory(backup_file, self.backup_dir)
 
-                # If tenant_id provided, verify backup belongs to that tenant
+                # FAIL-CLOSED tenant check: if tenant_id is set, backup MUST resolve under tenant dir
                 if tenant_id:
-                    _validate_backup_name(tenant_id)
                     tenant_dir = self.backup_dir / tenant_id
-                    if tenant_dir.exists():
-                        _validate_path_in_directory(backup_file, tenant_dir)
+                    # Unconditional check: fail if backup is not under tenant's directory
+                    _validate_path_in_directory(backup_file, tenant_dir)
 
             # Load and verify metadata
             metadata_file = backup_file.with_suffix(".meta")
+            metadata: dict[str, Any] = {}
             if metadata_file.exists():
                 with open(metadata_file, "r") as f:
                     metadata = json.load(f)
@@ -316,61 +391,114 @@ class BackupManager:
             if "metadata" not in backup_data or "data" not in backup_data:
                 raise ValueError("Invalid backup format")
 
+            # Scope check (informational only). The backup's declared scope lives
+            # inside the same untrusted file as the data, so it is NOT the security
+            # boundary — row-level tenant enforcement below is. We log a mismatch so
+            # a tenant restoring a whole_db backup is visible in the audit trail.
+            if tenant_id:
+                backup_scope = backup_data.get("metadata", {}).get("scope", "")
+                if backup_scope != f"tenant:{tenant_id}":
+                    logger.warning(
+                        "backup_scope_mismatch",
+                        tenant_id=tenant_id,
+                        backup_scope=backup_scope,
+                    )
+
             # Restore
-            restore_stats: Dict[str, Any] = {
-                "started_at": datetime.utcnow().isoformat(),
+            restore_stats: dict[str, Any] = {
+                "started_at": datetime.now(timezone.utc).isoformat(),
                 "tables_restored": [],
                 "total_rows_restored": 0,
+                "rows_skipped_foreign_tenant": 0,
                 "errors": [],
             }
 
             for table_name, table_data in backup_data["data"].items():
                 try:
                     if table_name not in self.db.tables:
-                        logger.warning(f"Table not found: {table_name}")
+                        logger.warning("table_not_found", table_name=table_name)
                         restore_stats["errors"].append(f"Table {table_name} not found")
                         continue
 
-                    table = self.db[table_name]
-                    self.db(table).delete()
+                    table = getattr(self.db, table_name)
+
+                    if tenant_id:
+                        # FAIL-CLOSED: tenant restores touch ONLY tenant-bearing tables.
+                        # A table with no tenant column is shared/global data a tenant
+                        # admin must never overwrite — skip it entirely (no delete, no insert).
+                        tenant_column = self._get_tenant_column(table_name)
+                        if not tenant_column:
+                            logger.debug(
+                                "skipping_shared_table_tenant_restore",
+                                table_name=table_name,
+                                tenant_id=tenant_id,
+                            )
+                            continue
+                        # Delete only this tenant's rows before re-inserting them.
+                        tenant_field = getattr(table, tenant_column)
+                        await self.db(tenant_field == tenant_id).delete()
+                    else:
+                        tenant_column = None
+                        # Whole-DB restore: delete all rows using first column != None as condition
+                        if hasattr(table, "id"):
+                            await self.db(table.id != None).delete()  # noqa: E712
+                        elif table_name in self.db.tables and len(self.db.tables[table_name].c.keys()) > 0:
+                            # Use first column if id doesn't exist
+                            first_col_name = list(self.db.tables[table_name].c.keys())[0]
+                            first_col = getattr(table, first_col_name)
+                            await self.db(first_col != None).delete()  # noqa: E712
+                        else:
+                            logger.warning("cannot_delete_table", table_name=table_name)
+                            continue
 
                     rows_restored = 0
                     for row_data in table_data:
-                        for field, value in row_data.items():
-                            if field in table.fields:
-                                field_type = table[field].type
-                                if field_type == "datetime" and value:
+                        # FAIL-CLOSED row-level ownership: in tenant mode, only insert
+                        # rows whose tenant column matches the caller's tenant. Foreign
+                        # rows in the backup file (whole_db backup, tampered file, wrong
+                        # S3 key) are dropped, never written into another tenant's space.
+                        if tenant_id and str(row_data.get(tenant_column)) != str(tenant_id):
+                            restore_stats["rows_skipped_foreign_tenant"] += 1
+                            continue
+
+                        # Convert ISO datetime strings back to datetime objects
+                        for field, value in list(row_data.items()):
+                            if isinstance(value, str) and field.endswith("_at"):
+                                try:
                                     row_data[field] = datetime.fromisoformat(value)
+                                except (ValueError, TypeError):
+                                    pass  # Keep original if not a valid datetime
 
-                        table.insert(**row_data)
+                        await table.async_insert(**row_data)
                         rows_restored += 1
-
-                    self.db.commit()
 
                     restore_stats["tables_restored"].append(
                         {"name": table_name, "rows": rows_restored}
                     )
                     restore_stats["total_rows_restored"] += rows_restored
 
-                    logger.info(f"Restored {rows_restored} rows to {table_name}")
+                    logger.info("restored_rows", table_name=table_name, rows=rows_restored)
 
                 except Exception as e:
-                    logger.error(f"Restore table failed: {table_name}: {e}")
+                    logger.error("restore_table_failed", table_name=table_name, error=str(e))
                     restore_stats["errors"].append(f"Table {table_name}: {str(e)}")
-                    self.db.rollback()
 
-            restore_stats["completed_at"] = datetime.utcnow().isoformat()
-            logger.info(f"Restore completed: {restore_stats['total_rows_restored']} rows")
+            restore_stats["completed_at"] = datetime.now(timezone.utc).isoformat()
+            logger.info(
+                "restore_completed",
+                total_rows_restored=restore_stats["total_rows_restored"],
+                tenant_id=tenant_id,
+            )
 
             return restore_stats
 
         except Exception as e:
-            logger.error(f"Restore failed: {e}")
+            logger.error("restore_failed", error=str(e))
             raise
 
     def list_backups(
-        self, include_s3: bool = True, tenant_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, include_s3: bool = True, tenant_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         List all backups.
 
@@ -384,7 +512,7 @@ class BackupManager:
         Raises:
             ValueError: If tenant_id is invalid
         """
-        backups: List[Dict[str, Any]] = []
+        backups: list[dict[str, Any]] = []
 
         if tenant_id:
             _validate_backup_name(tenant_id)
@@ -404,7 +532,7 @@ class BackupManager:
                         metadata["tenant_id"] = tenant_id
                     backups.append(metadata)
             except Exception as e:
-                logger.warning(f"Could not read {meta_file}: {e}")
+                logger.warning("could_not_read_meta_file", meta_file=str(meta_file), error=str(e))
 
         # S3 backups
         if include_s3 and self.s3_manager:
@@ -426,8 +554,8 @@ class BackupManager:
                     backups.append(s3_backup)
 
         # Remove duplicates (prefer S3)
-        seen_names = set()
-        unique_backups: List[Dict[str, Any]] = []
+        seen_names: set[str] = set()
+        unique_backups: list[dict[str, Any]] = []
         for backup in sorted(
             backups,
             key=lambda x: (x.get("created_at", ""), x.get("storage_location") == "s3"),
@@ -441,7 +569,7 @@ class BackupManager:
         return unique_backups
 
     def delete_backup(
-        self, backup_name: str, from_s3: bool = False, tenant_id: Optional[str] = None
+        self, backup_name: str, from_s3: bool = False, tenant_id: str | None = None
     ) -> bool:
         """
         Delete a backup.
@@ -480,10 +608,10 @@ class BackupManager:
                 try:
                     _validate_path_in_directory(backup_file, delete_dir)
                     if backup_file.is_symlink():
-                        logger.warning(f"Skipping symlink: {backup_file}")
+                        logger.warning("skipping_symlink", backup_file=str(backup_file))
                         continue
                     backup_file.unlink()
-                    logger.info(f"Deleted: {backup_file}")
+                    logger.info("deleted_backup_file", backup_file=str(backup_file))
                     deleted = True
 
                     # Delete associated .meta file
@@ -492,11 +620,11 @@ class BackupManager:
                         _validate_path_in_directory(meta_file, delete_dir)
                         if not meta_file.is_symlink():
                             meta_file.unlink()
-                            logger.info(f"Deleted: {meta_file}")
+                            logger.info("deleted_meta_file", meta_file=str(meta_file))
                 except ValueError as e:
-                    logger.error(f"Delete failed (path validation): {backup_file}: {e}")
+                    logger.error("delete_failed_path_validation", backup_file=str(backup_file), error=str(e))
                 except Exception as e:
-                    logger.error(f"Delete failed: {backup_file}: {e}")
+                    logger.error("delete_failed", backup_file=str(backup_file), error=str(e))
 
         # Also clean up any orphaned .meta files matching this backup name
         try:
@@ -504,16 +632,15 @@ class BackupManager:
                 _validate_path_in_directory(meta_file, delete_dir)
                 if not meta_file.is_symlink() and meta_file.exists():
                     meta_file.unlink()
-                    logger.info(f"Deleted orphaned metadata: {meta_file}")
+                    logger.info("deleted_orphaned_metadata", meta_file=str(meta_file))
                     deleted = True
         except Exception as e:
-            logger.error(f"Failed to clean up metadata files: {e}")
+            logger.error("failed_to_clean_metadata_files", error=str(e))
 
         return deleted
 
     def schedule_backup(self, cron_expression: str, **backup_kwargs: Any) -> str:
-        """
-        Schedule automatic backups.
+        """Schedule automatic backups.
 
         Args:
             cron_expression: Cron expression
@@ -523,8 +650,8 @@ class BackupManager:
             Schedule ID
         """
         # Placeholder for scheduler integration
-        schedule_id = f"schedule_{datetime.utcnow().timestamp()}"
-        logger.info(f"Scheduled: {schedule_id} with cron: {cron_expression}")
+        schedule_id = f"schedule_{datetime.now(timezone.utc).timestamp()}"
+        logger.info("scheduled_backup", schedule_id=schedule_id, cron_expression=cron_expression)
         return schedule_id
 
     def _sanitize_db_uri(self) -> str:

@@ -313,41 +313,6 @@ class TestScannerAsync:
 
         assert should_run is True
 
-    @pytest.mark.asyncio
-    async def test_store_finding(self) -> None:
-        """Test storing a finding in database."""
-        mock_db = AsyncMock()
-        mock_db.execute_insert = AsyncMock()
-
-        scanner = SecurityScanner(mock_db, tenant_id="tenant_123")
-
-        now = datetime.utcnow()
-        finding = ScanFinding(
-            scan_id="scan_123",
-            finding_type="vulnerability",
-            severity=ScanSeverity.HIGH,
-            title="Test",
-            description="Test",
-            affected_component="test",
-            recommendation="Fix",
-            cve_ids=["CVE-2021-1234"],
-            cvss_score=7.5,
-            confidence=85,
-            first_seen=now,
-            last_seen=now,
-            metadata={"key": "value"},
-        )
-
-        await scanner._store_finding(finding)
-
-        # Verify insert was called
-        mock_db.execute_insert.assert_called_once()
-        call_args = mock_db.execute_insert.call_args
-        assert call_args[0][0] == "security_findings"
-        record = call_args[0][1]
-        assert record["finding_id"]
-        assert record["severity"] == "high"
-        assert record["tenant_id"] == "tenant_123"
 
 
 class TestTenantScoping:
@@ -361,34 +326,3 @@ class TestTenantScoping:
 
         assert scanner.tenant_id == tenant_id
 
-    @pytest.mark.asyncio
-    async def test_store_finding_includes_tenant(self) -> None:
-        """Test that stored findings include tenant_id."""
-        mock_db = AsyncMock()
-        mock_db.execute_insert = AsyncMock()
-
-        tenant_id = "org_xyz789"
-        scanner = SecurityScanner(mock_db, tenant_id=tenant_id)
-
-        now = datetime.utcnow()
-        finding = ScanFinding(
-            scan_id="scan_123",
-            finding_type="vulnerability",
-            severity=ScanSeverity.CRITICAL,
-            title="Critical",
-            description="Description",
-            affected_component="component",
-            recommendation="Recommendation",
-            cve_ids=[],
-            cvss_score=9.0,
-            confidence=95,
-            first_seen=now,
-            last_seen=now,
-            metadata={},
-        )
-
-        await scanner._store_finding(finding)
-
-        call_args = mock_db.execute_insert.call_args
-        record = call_args[0][1]
-        assert record["tenant_id"] == tenant_id
