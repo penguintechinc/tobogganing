@@ -173,8 +173,15 @@ class TestRequireSessionUser:
         user_rowset = MagicMock()
         user_rowset.first.return_value = mock_user_row
 
-        # Set up side effect to return different results
-        mock_dal.return_value.select.side_effect = [session_rowset, user_rowset]
+        # Set up mock to return query proxies with async select
+        query_proxy_1 = MagicMock()
+        query_proxy_1.select = AsyncMock(return_value=session_rowset)
+
+        query_proxy_2 = MagicMock()
+        query_proxy_2.select = AsyncMock(return_value=user_rowset)
+
+        # Mock dal(...) to return different query proxies
+        mock_dal.side_effect = [query_proxy_1, query_proxy_2]
 
         @require_session_user
         async def handler() -> Any:

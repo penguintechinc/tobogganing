@@ -6,7 +6,6 @@ Supports both Bearer/JWT (via @require_scope, @require_tenant) and session cooki
 
 from __future__ import annotations
 
-import asyncio
 import functools
 from datetime import datetime
 from typing import Any, Callable, Optional
@@ -218,9 +217,7 @@ async def _validate_and_store_session(
             return None, None
 
         # Query session via DAL (session token is unique)
-        rowset = await asyncio.to_thread(
-            lambda: dal(dal.sessions.token == session_token).select()
-        )
+        rowset = await dal(dal.sessions.token == session_token).select()
         session_row = rowset.first()
 
         if not session_row:
@@ -235,19 +232,15 @@ async def _validate_and_store_session(
                 token=session_token[:8],
             )
             # Clean up expired session
-            await asyncio.to_thread(
-                lambda: dal(dal.sessions.id == session_row.id).delete()
-            )
+            await dal(dal.sessions.id == session_row.id).delete()
             return None, None
 
         # Get user for this session (tenant-scoped)
-        user_rowset = await asyncio.to_thread(
-            lambda: dal(
-                dal.users.id == session_row.user_id,
-                dal.users.tenant == session_row.tenant,
-                dal.users.is_active == True,  # noqa: E712
-            ).select()
-        )
+        user_rowset = await dal(
+            dal.users.id == session_row.user_id,
+            dal.users.tenant == session_row.tenant,
+            dal.users.is_active == True,  # noqa: E712
+        ).select()
 
         user_row = user_rowset.first()
         if not user_row:
