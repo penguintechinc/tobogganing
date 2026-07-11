@@ -222,26 +222,25 @@ class SecurityScanner:
         """
         # Get last scan time - tenant-scoped query
         try:
-            query_filters = [
-                ("scan_type", "==", scan_type.value),
-                ("status", "==", "completed"),
-            ]
-            if self.tenant_id:
-                query_filters.append(("tenant_id", "==", self.tenant_id))
-
-            last_scan = await self.db.execute_query(
-                "security_scans",
-                filters=query_filters,
-                order_by="-completed_at",
-                limit=1,
+            cond = (
+                (self.db.security_scans.scan_type == scan_type.value)
+                & (self.db.security_scans.status == "completed")
             )
+            if self.tenant_id:
+                cond = cond & (self.db.security_scans.tenant_id == self.tenant_id)
+
+            last_scans = await self.db(cond).select(
+                orderby=self.db.security_scans.completed_at.column.desc(),
+                limitby=(0, 1),
+            )
+            last_scan = last_scans.first()
 
             if not last_scan:
                 return True  # Never run before
 
             # Calculate next run time based on schedule
             schedule = config.get("schedule", "0 2 * * *")  # Default daily at 2 AM
-            last_completed = last_scan[0].get("completed_at") or datetime.utcnow()
+            last_completed = last_scan.completed_at or datetime.utcnow()
 
             # Simple schedule parsing
             if schedule == "0 2 * * *":  # Daily
@@ -256,7 +255,7 @@ class SecurityScanner:
             return datetime.utcnow() >= next_run
 
         except Exception as e:
-            logger.error("Error checking scan schedule", error=str(e), exc_info=True)
+            logger.error("error_checking_scan_schedule", error=str(e), exc_info=True)
             return True
 
     async def _execute_scan(self, scan_type: ScanType, config: dict[str, Any]) -> None:
@@ -270,29 +269,33 @@ class SecurityScanner:
         from .parsers import count_findings_by_severity
         from .models import SecurityScan, SecurityFinding
 
+        from uuid import uuid4
+
         scan_id = f"scan_{scan_type.value}_{int(datetime.utcnow().timestamp())}"
 
         try:
-            logger.info("Starting scan", scan_type=scan_type.value, scan_id=scan_id)
+            logger.info("starting_scan", scan_type=scan_type.value, scan_id=scan_id)
 
             # Record scan start
             scan_start = datetime.utcnow()
-            scan_record = {
-                "scan_id": scan_id,
-                "tenant_id": self.tenant_id or "system",
-                "scan_type": scan_type.value,
-                "target": "infrastructure",
-                "tools_used": json.dumps(config.get("tools", [])),
-                "status": "running",
-                "started_at": scan_start,
-                "triggered_by": "automated",
-                "metadata": json.dumps({"config": config}),
-            }
+            scan_record_id = str(uuid4())
 
             try:
-                await self.db.execute_insert("security_scans", scan_record)
+                await self.db.security_scans.async_insert(
+                    id=scan_record_id,
+                    scan_id=scan_id,
+                    tenant_id=self.tenant_id or "system",
+                    scan_type=scan_type.value,
+                    target="infrastructure",
+                    tools_used=json.dumps(config.get("tools", [])),
+                    status="running",
+                    started_at=scan_start,
+                    triggered_by="automated",
+                    metadata=json.dumps({"config": config}),
+                    created_at=scan_start,
+                )
             except Exception:
-                logger.debug("Could not record scan start", exc_info=True)
+                logger.debug("could_not_record_scan_start", exc_info=True)
 
             # Execute scan based on type
             findings = await execute_scan_by_type(scan_type, scan_id, self)
@@ -306,46 +309,38 @@ class SecurityScanner:
             scan_duration = int((datetime.utcnow() - scan_start).total_seconds())
 
             try:
-                await self.db.execute_update(
-                    "security_scans",
-                    filters=[("scan_id", "==", scan_id)],
-                    values={
-                        "status": "completed",
-                        "findings_count": len(findings),
-                        "critical_findings": severity_counts.get("critical", 0),
-                        "high_findings": severity_counts.get("high", 0),
-                        "medium_findings": severity_counts.get("medium", 0),
-                        "low_findings": severity_counts.get("low", 0),
-                        "completed_at": datetime.utcnow(),
-                        "scan_duration": scan_duration,
-                    },
+                await self.db(self.db.security_scans.scan_id == scan_id).update(
+                    status="completed",
+                    findings_count=len(findings),
+                    critical_findings=severity_counts.get("critical", 0),
+                    high_findings=severity_counts.get("high", 0),
+                    medium_findings=severity_counts.get("medium", 0),
+                    low_findings=severity_counts.get("low", 0),
+                    completed_at=datetime.utcnow(),
+                    scan_duration=scan_duration,
                 )
             except Exception:
-                logger.debug("Could not update scan record", exc_info=True)
+                logger.debug("could_not_update_scan_record", exc_info=True)
 
             logger.info(
-                "Completed scan",
+                "completed_scan",
                 scan_type=scan_type.value,
                 scan_id=scan_id,
                 findings_count=len(findings),
             )
 
         except Exception as e:
-            logger.error("Failed scan", scan_type=scan_type.value, scan_id=scan_id, error=str(e))
+            logger.error("failed_scan", scan_type=scan_type.value, scan_id=scan_id, error=str(e))
 
             # Update scan record with error
             try:
-                await self.db.execute_update(
-                    "security_scans",
-                    filters=[("scan_id", "==", scan_id)],
-                    values={
-                        "status": "failed",
-                        "error_message": str(e),
-                        "completed_at": datetime.utcnow(),
-                    },
+                await self.db(self.db.security_scans.scan_id == scan_id).update(
+                    status="failed",
+                    error_message=str(e),
+                    completed_at=datetime.utcnow(),
                 )
             except Exception:
-                logger.debug("Could not update failed scan record", exc_info=True)
+                logger.debug("could_not_update_failed_scan_record", exc_info=True)
 
     async def _store_finding(self, finding: ScanFinding) -> None:
         """Store a security finding in the database.
@@ -354,30 +349,33 @@ class SecurityScanner:
             finding: Finding to store.
         """
         try:
+            from uuid import uuid4
+
             finding_id = f"finding_{finding.scan_id}_{hash(finding.title)}_{int(datetime.utcnow().timestamp())}"
+            record_id = str(uuid4())
 
-            record = {
-                "finding_id": finding_id,
-                "scan_id": finding.scan_id,
-                "tenant_id": self.tenant_id or "system",
-                "finding_type": finding.finding_type,
-                "severity": finding.severity.value,
-                "title": finding.title,
-                "description": finding.description,
-                "affected_component": finding.affected_component,
-                "recommendation": finding.recommendation,
-                "cve_ids": json.dumps(finding.cve_ids),
-                "cvss_score": finding.cvss_score,
-                "confidence": finding.confidence,
-                "first_seen": finding.first_seen,
-                "last_seen": finding.last_seen,
-                "metadata": json.dumps(finding.metadata),
-            }
-
-            await self.db.execute_insert("security_findings", record)
+            await self.db.security_findings.async_insert(
+                id=record_id,
+                finding_id=finding_id,
+                scan_id=finding.scan_id,
+                tenant_id=self.tenant_id or "system",
+                finding_type=finding.finding_type,
+                severity=finding.severity.value,
+                title=finding.title,
+                description=finding.description,
+                affected_component=finding.affected_component,
+                recommendation=finding.recommendation,
+                cve_ids=json.dumps(finding.cve_ids),
+                cvss_score=finding.cvss_score,
+                confidence=finding.confidence,
+                first_seen=finding.first_seen,
+                last_seen=finding.last_seen,
+                metadata=json.dumps(finding.metadata),
+                created_at=datetime.utcnow(),
+            )
 
         except Exception as e:
-            logger.error("Failed to store finding", error=str(e), exc_info=True)
+            logger.error("failed_to_store_finding", error=str(e), exc_info=True)
 
     # Placeholder methods for infrastructure monitoring
     async def _scan_new_containers(self) -> None:

@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -18,9 +18,10 @@ def _create_backup_mock_db() -> MagicMock:
 
     users_table = MagicMock()
     users_table.fields = ["id", "name"]
+    users_table.async_insert = AsyncMock(return_value=1)
 
     query_proxy = MagicMock()
-    query_proxy.select.return_value = []
+    query_proxy.select = AsyncMock(return_value=[])
     db.return_value = query_proxy
     db.__call__ = MagicMock(return_value=query_proxy)
     db.__getitem__.return_value = users_table
@@ -252,8 +253,9 @@ class TestBackupManagerLocal:
         # Mock users table
         users_table = MagicMock()
         users_table.fields = ["id", "name", "email"]
+        users_table.async_insert = AsyncMock(return_value=1)
 
-        # Create mock rows
+        # Create mock rows with as_dict method
         mock_rows = []
         for row_data in [
             {"id": 1, "name": "Alice", "email": "alice@example.com"},
@@ -262,21 +264,25 @@ class TestBackupManagerLocal:
             row = MagicMock()
             for key, value in row_data.items():
                 setattr(row, key, value)
+            row.as_dict.return_value = row_data
             row.__getitem__ = lambda self, k, d=row_data: d.get(k)
             mock_rows.append(row)
 
         # Mock select and query
         query_proxy = MagicMock()
-        query_proxy.select.return_value = mock_rows
+        query_proxy.select = AsyncMock(return_value=mock_rows)
+        query_proxy.delete = AsyncMock(return_value=None)
         db.return_value = query_proxy
         db.__call__ = MagicMock(return_value=query_proxy)
         db.__getitem__.return_value = users_table
+        db.users = users_table
         db.commit = MagicMock()
         db.rollback = MagicMock()
 
         return db
 
-    def test_create_backup_local(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_create_backup_local(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
         """Test local backup creation."""
         backup_dir = tmp_path / "backups"
 
@@ -284,7 +290,7 @@ class TestBackupManagerLocal:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             # Create backup
-            result = manager.create_backup(backup_name="test_backup", compress=False)
+            result = await manager.create_backup(backup_name="test_backup", compress=False)
 
             assert result["backup_name"] == "test_backup"
             assert result["file_path"]
@@ -297,19 +303,21 @@ class TestBackupManagerLocal:
             assert backup_file.exists()
             assert backup_file.with_suffix(".meta").exists()
 
-    def test_create_backup_compressed(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_create_backup_compressed(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
         """Test compressed backup creation."""
         backup_dir = tmp_path / "backups"
 
         with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
-            result = manager.create_backup(backup_name="test_compressed", compress=True)
+            result = await manager.create_backup(backup_name="test_compressed", compress=True)
 
             assert result["compressed"] is True
             backup_file = Path(result["file_path"])
             assert backup_file.suffix == ".gz"
 
-    def test_list_backups_local(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_list_backups_local(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
         """Test listing local backups."""
         backup_dir = tmp_path / "backups"
 
@@ -317,8 +325,8 @@ class TestBackupManagerLocal:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             # Create two backups
-            manager.create_backup(backup_name="backup1", compress=False)
-            manager.create_backup(backup_name="backup2", compress=False)
+            await manager.create_backup(backup_name="backup1", compress=False)
+            await manager.create_backup(backup_name="backup2", compress=False)
 
             # List backups
             backups = manager.list_backups(include_s3=False)
@@ -328,7 +336,8 @@ class TestBackupManagerLocal:
             assert "backup1" in names
             assert "backup2" in names
 
-    def test_delete_backup_local(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_delete_backup_local(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
         """Test local backup deletion."""
         backup_dir = tmp_path / "backups"
 
@@ -336,7 +345,7 @@ class TestBackupManagerLocal:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             # Create backup
-            manager.create_backup(backup_name="to_delete", compress=False)
+            await manager.create_backup(backup_name="to_delete", compress=False)
 
             # Verify it exists
             backups = manager.list_backups(include_s3=False)
@@ -350,7 +359,8 @@ class TestBackupManagerLocal:
             backups = manager.list_backups(include_s3=False)
             assert len(backups) == 0
 
-    def test_create_backup_rejects_path_traversal(
+    @pytest.mark.asyncio
+    async def test_create_backup_rejects_path_traversal(
         self, tmp_path: Path, backup_mock_db: MagicMock
     ) -> None:
         """Test that create_backup rejects path traversal attempts."""
@@ -360,10 +370,10 @@ class TestBackupManagerLocal:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             with pytest.raises(ValueError, match="cannot contain"):
-                manager.create_backup(backup_name="../etc/passwd", compress=False)
+                await manager.create_backup(backup_name="../etc/passwd", compress=False)
 
             with pytest.raises(ValueError, match="start with"):
-                manager.create_backup(backup_name="/etc/passwd", compress=False)
+                await manager.create_backup(backup_name="/etc/passwd", compress=False)
 
     def test_delete_backup_rejects_path_traversal(
         self, tmp_path: Path, backup_mock_db: MagicMock
@@ -412,18 +422,22 @@ class TestTenantIsolation:
 
         users_table = MagicMock()
         users_table.fields = ["id", "name"]
+        users_table.async_insert = AsyncMock(return_value=1)
 
         query_proxy = MagicMock()
-        query_proxy.select.return_value = []
+        query_proxy.select = AsyncMock(return_value=[])
+        query_proxy.delete = AsyncMock(return_value=None)
         db.return_value = query_proxy
         db.__call__ = MagicMock(return_value=query_proxy)
         db.__getitem__.return_value = users_table
+        db.users = users_table
         db.commit = MagicMock()
         db.rollback = MagicMock()
 
         return db
 
-    def test_create_backup_with_tenant_id(
+    @pytest.mark.asyncio
+    async def test_create_backup_with_tenant_id(
         self, tmp_path: Path, backup_mock_db: MagicMock
     ) -> None:
         """Test that backups are isolated per tenant."""
@@ -433,12 +447,12 @@ class TestTenantIsolation:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             # Create backups for two tenants
-            result1 = manager.create_backup(
+            result1 = await manager.create_backup(
                 backup_name="tenant_backup_1",
                 compress=False,
                 tenant_id="tenant_a",
             )
-            result2 = manager.create_backup(
+            result2 = await manager.create_backup(
                 backup_name="tenant_backup_2",
                 compress=False,
                 tenant_id="tenant_b",
@@ -452,7 +466,8 @@ class TestTenantIsolation:
             assert "tenant_b" in str(file2)
             assert file1.parent != file2.parent
 
-    def test_list_backups_filtered_by_tenant(
+    @pytest.mark.asyncio
+    async def test_list_backups_filtered_by_tenant(
         self, tmp_path: Path, backup_mock_db: MagicMock
     ) -> None:
         """Test that list_backups respects tenant filter."""
@@ -462,8 +477,8 @@ class TestTenantIsolation:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             # Create backups for multiple tenants
-            manager.create_backup(backup_name="backup1", tenant_id="tenant_a")
-            manager.create_backup(backup_name="backup2", tenant_id="tenant_b")
+            await manager.create_backup(backup_name="backup1", tenant_id="tenant_a")
+            await manager.create_backup(backup_name="backup2", tenant_id="tenant_b")
 
             # List all backups
             all_backups = manager.list_backups(include_s3=False)
@@ -481,7 +496,8 @@ class TestTenantIsolation:
             assert tenant_b_backups[0]["backup_name"] == "backup2"
             assert tenant_b_backups[0].get("tenant_id") == "tenant_b"
 
-    def test_delete_backup_respects_tenant_boundary(
+    @pytest.mark.asyncio
+    async def test_delete_backup_respects_tenant_boundary(
         self, tmp_path: Path, backup_mock_db: MagicMock
     ) -> None:
         """Test that delete_backup respects tenant boundaries."""
@@ -491,8 +507,8 @@ class TestTenantIsolation:
             manager = BackupManager(backup_mock_db, backup_dir=str(backup_dir))
 
             # Create backups for two tenants
-            manager.create_backup(backup_name="backup1", tenant_id="tenant_a")
-            manager.create_backup(backup_name="backup2", tenant_id="tenant_b")
+            await manager.create_backup(backup_name="backup1", tenant_id="tenant_a")
+            await manager.create_backup(backup_name="backup2", tenant_id="tenant_b")
 
             # Delete tenant_a backup with tenant_a context
             deleted = manager.delete_backup("backup1", tenant_id="tenant_a")
@@ -688,11 +704,29 @@ class TestBackupRestore:
         db.tables = ["users"]
         users_table = MagicMock()
         users_table.fields = ["id", "name", "email"]
+
+        # async_insert side_effect to also call db.commit when rows are inserted
+        async def async_insert_with_commit(**kwargs: dict) -> int:
+            db.commit()
+            return 1
+
+        users_table.async_insert = AsyncMock(side_effect=async_insert_with_commit)
         db.__getitem__.return_value = users_table
+        db.users = users_table
+
+        # Mock query proxy for delete
+        query_proxy = MagicMock()
+        query_proxy.delete = AsyncMock(return_value=None)
+        db.return_value = query_proxy
+        db.__call__ = MagicMock(return_value=query_proxy)
+
+        db.commit = MagicMock()
+        db.rollback = MagicMock()
 
         return db, {"file": backup_file, "data": backup_data}
 
-    def test_restore_backup_local(
+    @pytest.mark.asyncio
+    async def test_restore_backup_local(
         self, tmp_path: Path, backup_db: tuple[MagicMock, dict]
     ) -> None:
         """Test local backup restore."""
@@ -712,7 +746,7 @@ class TestBackupRestore:
 
             # Mock checksum to pass verification
             with patch.object(manager, "_calculate_checksum", return_value="abc123"):
-                result = manager.restore_backup(str(backup_info["file"]))
+                result = await manager.restore_backup(str(backup_info["file"]))
 
                 assert result["total_rows_restored"] == 1
                 assert len(result["tables_restored"]) == 1
@@ -733,24 +767,26 @@ class TestBackupScheduling:
             assert schedule_id.startswith("schedule_")
 
 
-def test_backup_checksum_verification(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_backup_checksum_verification(tmp_path: Path) -> None:
     """Test that backup checksum is calculated correctly."""
     db = _create_backup_mock_db()
     with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
         manager = BackupManager(db, backup_dir=str(tmp_path))
-        result = manager.create_backup(backup_name="checksum_test", compress=False)
+        result = await manager.create_backup(backup_name="checksum_test", compress=False)
 
         # Checksum should be a valid hex string
         assert len(result["checksum"]) == 64
         assert all(c in "0123456789abcdef" for c in result["checksum"])
 
 
-def test_backup_metadata_structure(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_backup_metadata_structure(tmp_path: Path) -> None:
     """Test that backup metadata has correct structure."""
     db = _create_backup_mock_db()
     with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
         manager = BackupManager(db, backup_dir=str(tmp_path))
-        result = manager.create_backup(backup_name="metadata_test", compress=False)
+        result = await manager.create_backup(backup_name="metadata_test", compress=False)
 
         required_keys = [
             "backup_name",

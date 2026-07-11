@@ -29,7 +29,7 @@ class RateLimiter:
         """Initialize RateLimiter.
 
         Args:
-            db: penguin-dal DAL instance for database operations.
+            db: penguin-dal AsyncDB instance for database operations.
             redis_client: Redis client for rate limit tracking.
             tenant_id: Tenant ID for multi-tenant scoping.
         """
@@ -48,11 +48,16 @@ class RateLimiter:
         # Default rate limiting rules
         self._init_default_rules()
 
-        # Load custom rules from database
-        self._load_custom_rules()
-
+        # Note: custom rules must be loaded asynchronously via load_custom_rules()
         # Sort rules by priority
         self.rules.sort(key=lambda r: r.priority)
+
+    async def load_custom_rules(self) -> None:
+        """Load custom rate limiting rules from database asynchronously.
+
+        This must be called after __init__ to populate custom rules from the database.
+        """
+        await self._load_custom_rules()
 
     def _init_default_rules(self) -> None:
         """Initialize default rate limiting rules."""
@@ -106,17 +111,15 @@ class RateLimiter:
             ),
         ]
 
-    def _load_custom_rules(self) -> None:
-        """Load custom rate limiting rules from database."""
+    async def _load_custom_rules(self) -> None:
+        """Load custom rate limiting rules from database asynchronously."""
         try:
-            from sqlalchemy import select
+            cond = self.db.rate_limit_rules.enabled == True  # noqa: E712
 
-            stmt = select(RateLimitRule).where(RateLimitRule.enabled == True)
             if self.tenant_id:
-                stmt = stmt.where(RateLimitRule.tenant_id == self.tenant_id)
+                cond = cond & (self.db.rate_limit_rules.tenant_id == self.tenant_id)
 
-            # Note: penguin-dal provides synchronous execution
-            rows = self.db.query(stmt).all()
+            rows = await self.db(cond).select()
             for row in rows:
                 custom_rule = RateLimitRuleData(
                     name=row.name,
@@ -130,10 +133,13 @@ class RateLimiter:
                 self.rules.append(custom_rule)
                 logger.info("custom_rate_limit_rule_loaded", rule_name=row.name)
 
+            # Re-sort rules by priority after adding custom rules
+            self.rules.sort(key=lambda r: r.priority)
+
         except Exception as e:
             logger.warning("failed_to_load_custom_rate_limit_rules", error=str(e))
 
-    def is_allowed(
+    async def is_allowed(
         self, ip_address: str, endpoint: str, user_agent: str = ""
     ) -> tuple[bool, RateLimitRuleData | None, int]:
         """Check if request is allowed based on rate limiting rules.
@@ -161,19 +167,22 @@ class RateLimiter:
                     # Block the IP
                     self._block_ip(ip_address, rule.block_duration)
 
-                    # Log security event
-                    self._log_security_event(
-                        "rate_limit_violation",
-                        ip_address,
-                        endpoint,
-                        user_agent,
-                        "medium",
-                        {
-                            "rule": rule.name,
-                            "max_requests": rule.max_requests,
-                            "window": rule.window_seconds,
-                        },
-                    )
+                    # Log security event (async, but non-blocking)
+                    try:
+                        await self._log_security_event(
+                            "rate_limit_violation",
+                            ip_address,
+                            endpoint,
+                            user_agent,
+                            "medium",
+                            {
+                                "rule": rule.name,
+                                "max_requests": rule.max_requests,
+                                "window": rule.window_seconds,
+                            },
+                        )
+                    except Exception as e:
+                        logger.error("failed_to_log_rate_limit_violation", error=str(e))
 
                     return False, rule, retry_after
 
@@ -298,7 +307,7 @@ class RateLimiter:
         counter.append(now)
         return True, 0
 
-    def _log_security_event(
+    async def _log_security_event(
         self,
         event_type: str,
         ip_address: str,
@@ -307,20 +316,19 @@ class RateLimiter:
         severity: str,
         details: dict[str, Any],
     ) -> None:
-        """Log security event to database."""
+        """Log security event to database asynchronously."""
         try:
-            event = SecurityEvent(
+            await self.db.security_events.async_insert(
                 event_type=event_type,
                 ip_address=ip_address,
                 endpoint=endpoint,
                 user_agent=user_agent,
                 timestamp=datetime.utcnow(),
                 severity=severity,
-                details=details,
+                details=json.dumps(details) if details else None,
                 tenant_id=self.tenant_id,
+                created_at=datetime.utcnow(),
             )
-            self.db.session.add(event)
-            self.db.session.commit()
             logger.warning(
                 "security_event_logged",
                 event_type=event_type,
