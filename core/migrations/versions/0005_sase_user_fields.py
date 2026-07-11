@@ -27,8 +27,8 @@ def upgrade() -> None:
     # Create sessions table for SASE auth
     op.create_table(
         "sessions",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("user_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
+        sa.Column("user_id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
         sa.Column("token", sa.Text(), nullable=False, unique=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),

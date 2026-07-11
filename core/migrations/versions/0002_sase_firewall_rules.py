@@ -20,9 +20,9 @@ def upgrade() -> None:
     """Create firewall_rules table for SASE module."""
     op.create_table(
         "firewall_rules",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
-        sa.Column("user_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("user_id", sa.String(36), nullable=False),
         sa.Column("rule_type", sa.String(50), nullable=False),
         sa.Column("access_type", sa.String(20), nullable=False),
         sa.Column("pattern", sa.String(500), nullable=False),

@@ -21,7 +21,7 @@ def upgrade() -> None:
     # Create vrfs table
     op.create_table(
         "vrfs",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
@@ -45,9 +45,9 @@ def upgrade() -> None:
     # Create ospf_areas table
     op.create_table(
         "ospf_areas",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
-        sa.Column("vrf_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("vrf_id", sa.String(36), nullable=False),
         sa.Column("area_id", sa.String(20), nullable=False),
         sa.Column("area_type", sa.String(20), nullable=False, server_default="normal"),
         sa.Column("networks", sa.Text(), nullable=True),
@@ -64,9 +64,9 @@ def upgrade() -> None:
     # Create ospf_neighbors table
     op.create_table(
         "ospf_neighbors",
-        sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("id", sa.String(36), nullable=False),
         sa.Column("tenant", sa.String(255), nullable=False),
-        sa.Column("vrf_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("vrf_id", sa.String(36), nullable=False),
         sa.Column("neighbor_id", sa.String(50), nullable=False),
         sa.Column("neighbor_ip", sa.String(50), nullable=False),
         sa.Column("interface", sa.String(50), nullable=False),
