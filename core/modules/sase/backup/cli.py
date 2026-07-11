@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 async def _async_backup_cli(db: Any, args: Any) -> None:
     """Async implementation of backup CLI commands.
 
+    NOTE: This CLI performs whole-database backups only (tenant_id=None).
+    For per-tenant backups, use the HTTP API route (when implemented).
+    Whole-DB operations are reserved for platform admins only.
+
     Args:
         db: penguin-dal AsyncDB instance
         args: Parsed command-line arguments
@@ -22,23 +26,29 @@ async def _async_backup_cli(db: Any, args: Any) -> None:
     manager = BackupManager(db)
 
     if args.command == "create":
+        # TODO: Add --tenant-id flag to support tenant-scoped backups
+        # TODO: Enforce platform-admin scope at HTTP API route level
         result = await manager.create_backup(
             backup_name=args.name,
             compress=args.compress,
             encrypt=args.encrypt,
             encryption_key=args.key,
             upload_to_s3=args.s3,
+            tenant_id=None,  # Whole-DB backup (platform-admin only)
         )
         print(f"Backup created: {result['file_path']}")
         if result.get("s3_info"):
             print(f"Uploaded to S3: {result['s3_info']['s3_key']}")
 
     elif args.command == "restore":
+        # TODO: Add --tenant-id flag to support tenant-scoped restores
+        # TODO: Enforce proper scope at HTTP API route level
         result = await manager.restore_backup(
             backup_path=args.path,
             decrypt=args.decrypt,
             decryption_key=args.key,
             from_s3=args.from_s3,
+            tenant_id=None,  # Whole-DB restore (platform-admin only)
         )
         print(f"Restore completed: {result['total_rows_restored']} rows")
 
