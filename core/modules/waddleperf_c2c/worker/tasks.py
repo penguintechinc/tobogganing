@@ -356,4 +356,173 @@ except ImportError:
         raise RuntimeError("Celery not available; cannot enqueue run_pair task")
 
 
-__all__ = ["run_pair", "_execute_pair"]
+async def _start_recurring_run(
+    job_id: str,
+    tenant: str,
+    module: str,
+    job_type: str,
+    payload: dict[str, Any],
+    *,
+    db: Any | None = None,
+    dispatch: Any | None = None,
+) -> dict[str, Any] | None:
+    """Start a recurring matrix run triggered by the scheduler.
+
+    Creates a new matrix run via RunManager.create_run and enqueues it.
+    Reuses the existing pair fanout logic (RunManager.enqueue_run).
+
+    Args:
+        job_id: Scheduled job ID (for logging).
+        tenant: Tenant identifier.
+        module: Module name (waddleperf_c2c).
+        job_type: Job type (matrix_run).
+        payload: Job payload dict with endpoint_ids and interval_seconds.
+        db: penguin-dal AsyncDB instance (created fresh if None).
+        dispatch: Callable to dispatch pair tasks (default: celery run_pair.delay).
+
+    Returns:
+        Dict with run_id and status, or None if creation failed.
+    """
+    # Create fresh AsyncDB if not provided
+    if db is None:
+        try:
+            cfg = Config()
+            db_uri = build_db_uri(cfg)
+            db = AsyncDB(uri=db_uri, pool_size=cfg.db_pool_size)
+            await db.reflect()
+        except Exception as e:
+            logger.error(
+                "failed_to_create_dal_recurring",
+                job_id=job_id[:8],
+                tenant=tenant,
+                error=str(e),
+            )
+            return None
+
+    try:
+        # Extract payload fields
+        endpoint_ids = payload.get("endpoint_ids")
+
+        # Create run
+        run_mgr = RunManager(db, tenant)
+        try:
+            run, pairs = await run_mgr.create_run(
+                test_types=["latency", "throughput"],  # Default test types for recurring
+                endpoint_ids=endpoint_ids,
+                created_by=None,  # Scheduled job, no user
+            )
+        except ValueError as e:
+            logger.warning(
+                "recurring_run_creation_failed",
+                job_id=job_id[:8],
+                tenant=tenant,
+                error=str(e),
+            )
+            return None
+
+        run_id: str = run["id"]  # type: ignore[assignment]
+
+        # Mark as running
+        await run_mgr.mark_running(run_id)
+
+        # Enqueue pairs
+        try:
+            pairs_count = await run_mgr.enqueue_run(run_id, pairs, dispatch=dispatch)
+        except Exception as e:
+            logger.error(
+                "recurring_run_enqueue_failed",
+                job_id=job_id[:8],
+                run_id=run_id[:8],
+                error=str(e),
+                exc_info=True,
+            )
+            return None
+
+        logger.info(
+            "recurring_run_created",
+            job_id=job_id[:8],
+            run_id=run_id[:8],
+            pairs_count=pairs_count,
+            tenant=tenant,
+        )
+
+        return {
+            "run_id": run_id,
+            "status": "running",
+            "pairs_count": pairs_count,
+        }
+
+    except Exception as e:
+        logger.error(
+            "start_recurring_run_failed",
+            job_id=job_id[:8],
+            tenant=tenant,
+            error=str(e),
+            exc_info=True,
+        )
+        return None
+
+
+# Import Celery app and define task
+try:
+    from core.modules.waddleperf_c2c.worker.celery_app import celery_app
+
+    @celery_app.task(  # type: ignore[untyped-decorator]
+        bind=True,
+        name="waddleperf_c2c.start_recurring_run",
+        max_retries=0,
+    )
+    def start_recurring_run(
+        self: Any,
+        job_id: str,
+        tenant: str,
+        module: str,
+        job_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Celery task to start a recurring matrix run.
+
+        Triggered by the core scheduler sweep for recurring_runs jobs.
+        Builds a fresh AsyncDB per task and runs the async _start_recurring_run
+        logic via asyncio.run() inside the sync Celery task context.
+
+        Args:
+            self: Task self (bound task).
+            job_id: Scheduled job ID.
+            tenant: Tenant identifier.
+            module: Module name.
+            job_type: Job type.
+            payload: Job-specific payload.
+
+        Returns:
+            Dict with run_id and status, or None if failed.
+        """
+        return asyncio.run(
+            _start_recurring_run(
+                job_id=job_id,
+                tenant=tenant,
+                module=module,
+                job_type=job_type,
+                payload=payload,
+            )
+        )
+
+except ImportError:
+    logger.warning(
+        "Failed to import celery_app; start_recurring_run task unavailable"
+    )
+
+    def start_recurring_run(
+        job_id: str,
+        tenant: str,
+        module: str,
+        job_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Dummy start_recurring_run when Celery unavailable."""
+        raise RuntimeError(
+            "Celery not available; cannot enqueue start_recurring_run task"
+        )
+
+
+__all__ = ["run_pair", "_execute_pair", "start_recurring_run", "_start_recurring_run"]
