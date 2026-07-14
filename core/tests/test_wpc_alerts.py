@@ -565,3 +565,184 @@ class TestAlertComparators:
 
         # 50 <= 50 (breach)
         assert await evaluator.evaluate_result(tenant, {"device_id": str(uuid4()), "test_type": "ping", "latency_ms": None, "throughput": 50.0, "status": "completed"}) == 1
+
+
+# ---------------------------------------------------------------------------
+# HTTP-level API tests (routes, flag gating, tier gating)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def alerts_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
+    """Quart app with the waddleperf_cluster module mounted on a real DAL.
+
+    Feature flags are controlled per-test via app._test_enabled_flags (a set
+    of full flag keys); everything else is flag-off — so the flag-off 402
+    paths are exercised against the real gate, not a blanket bypass.
+    """
+    from core.app import create_app
+    from core.crypto import InAppKeyProvider, generate_rsa_key_pair
+    from core.registry import ModuleContext
+    import core.db
+    import core.app as app_module
+    import shared.licensing.entitlements
+
+    test_app = create_app()
+    test_app.config["TESTING"] = True
+
+    private_pem, public_pem = generate_rsa_key_pair()
+    provider = InAppKeyProvider(private_pem, public_pem)
+    test_app.config["KEY_PROVIDER"] = provider
+
+    monkeypatch.setattr(core.db, "get_db", lambda: real_dal)
+    monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
+    import core.modules.waddleperf_cluster.api.alerts as alerts_api
+    import core.modules.waddleperf_cluster.api.tests as tests_api
+    monkeypatch.setattr(alerts_api, "get_db", lambda: real_dal)
+    monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
+
+    enabled_flags: set[str] = set()
+
+    def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
+        return flag_key in enabled_flags
+
+    monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
+
+    from core.modules.waddleperf_cluster import module as wpc_module
+
+    test_app.registry.register(wpc_module())
+    ctx = ModuleContext(config=test_app.config_obj, db=real_dal, key_provider=provider)
+    test_app.registry.apply_to(test_app, ctx)
+
+    test_app._test_enabled_flags = enabled_flags  # type: ignore[attr-defined]
+    return test_app
+
+
+async def _alerts_token(app) -> str:
+    """Issue a wildcard-scope token against the app's key provider."""
+    from core.auth.jwt import encode_access_token
+
+    return await encode_access_token(
+        {
+            "sub": "alerts-tester",
+            "iss": "test-app",
+            "aud": "test-app",
+            "tenant": "tenant-alerts",
+            "scope": "*:*",
+        },
+        app.config["KEY_PROVIDER"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_rules_api_flag_off_returns_402(alerts_app) -> None:
+    """With the alerts flag off, the rules API must 402 before touching the DB."""
+    token = await _alerts_token(alerts_app)
+    client = alerts_app.test_client()
+    resp = await client.post(
+        "/api/v1/waddleperf_cluster/alerts/rules",
+        json={"name": "r", "metric": "latency_ms", "comparator": "gt", "threshold": 100},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 402
+
+
+@pytest.mark.asyncio
+async def test_rules_api_crud_roundtrip(alerts_app) -> None:
+    """Flag on (Community tier): create, list, and delete a rule over HTTP."""
+    alerts_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.alerts")
+    token = await _alerts_token(alerts_app)
+    client = alerts_app.test_client()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/api/v1/waddleperf_cluster/alerts/rules",
+        json={"name": "hi-latency", "metric": "latency_ms", "comparator": "gt", "threshold": 250},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    rule = await resp.get_json()
+    assert rule["metric"] == "latency_ms"
+
+    resp = await client.get("/api/v1/waddleperf_cluster/alerts/rules", headers=headers)
+    assert resp.status_code == 200
+    listed = await resp.get_json()
+    assert any(r["id"] == rule["id"] for r in listed["rules"])
+
+    resp = await client.delete(
+        f"/api/v1/waddleperf_cluster/alerts/rules/{rule['id']}", headers=headers
+    )
+    assert resp.status_code in (200, 204)
+
+
+@pytest.mark.asyncio
+async def test_email_channel_requires_only_alerts_flag(alerts_app) -> None:
+    """Email channels are Community: alerts flag alone is enough for 201."""
+    alerts_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.alerts")
+    token = await _alerts_token(alerts_app)
+    client = alerts_app.test_client()
+    resp = await client.post(
+        "/api/v1/waddleperf_cluster/alerts/channels",
+        json={"name": "ops", "kind": "email", "config": {"to": ["ops@example.com"]}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_webhook_channel_unlicensed_402_professional(alerts_app) -> None:
+    """Entitlement-key trap: alert_routing flag ON but license unset -> 402 via
+    the professional tier path. Fails if the entitlement key were prefixed
+    (tier would fall back to community and the paid gate would silently pass).
+    """
+    alerts_app._test_enabled_flags.update(
+        {
+            "tobogganing.waddleperf_cluster.alerts",
+            "tobogganing.waddleperf_cluster.alert_routing",
+        }
+    )
+    token = await _alerts_token(alerts_app)
+    client = alerts_app.test_client()
+    resp = await client.post(
+        "/api/v1/waddleperf_cluster/alerts/channels",
+        json={
+            "name": "hook",
+            "kind": "webhook",
+            "config": {"url": "https://example.com/hook", "secret": "s3cr3tvalue"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 402
+    body = await resp.get_json()
+    assert body["tier"] == "professional"
+
+
+@pytest.mark.asyncio
+async def test_webhook_channel_licensed_201_redacts_secret(
+    alerts_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Licensed Professional tier: webhook channel creates and redacts secret."""
+    alerts_app._test_enabled_flags.update(
+        {
+            "tobogganing.waddleperf_cluster.alerts",
+            "tobogganing.waddleperf_cluster.alert_routing",
+        }
+    )
+    import core.modules.waddleperf_cluster.api.alerts as alerts_api
+
+    monkeypatch.setattr(alerts_api, "_is_licensed_for_tier", lambda tier: True)
+    token = await _alerts_token(alerts_app)
+    client = alerts_app.test_client()
+    resp = await client.post(
+        "/api/v1/waddleperf_cluster/alerts/channels",
+        json={
+            "name": "hook",
+            "kind": "webhook",
+            "config": {"url": "https://example.com/hook", "secret": "s3cr3tvalue"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    body = await resp.get_json()
+    assert "s3cr3tvalue" not in json.dumps(body)
+    assert body["config"]["secret"].startswith("****")

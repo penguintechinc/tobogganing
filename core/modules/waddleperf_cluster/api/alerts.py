@@ -6,14 +6,13 @@ from typing import Any
 from uuid import uuid4
 
 import structlog
-from quart import Blueprint, jsonify, request
+from quart import Blueprint, current_app, request
 
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db
-from core.entitlements.gate import require_feature, _is_licensed_for_tier
-from core.modules.waddleperf_cluster.services.alert_evaluator import AlertEvaluator
+from core.entitlements.gate import _is_licensed_for_tier, require_feature, tier_of
+from core.flags import feature_enabled
 from core.notifications.channels import ChannelManager
-from core.notifications.service import NotificationService
 
 log = structlog.get_logger(__name__)
 
@@ -303,74 +302,41 @@ async def create_channel() -> tuple[dict[str, Any], int]:
         if kind not in ["email", "webhook"]:
             return {"error": "Invalid kind. Must be 'email' or 'webhook'"}, 400
 
-        # Email requires alerts feature
-        from core.entitlements.gate import feature_enabled
-
+        # Email requires the alerts feature; webhook additionally requires
+        # the Professional-tier alert_routing feature.
         if kind == "email":
             if not feature_enabled("waddleperf_cluster", "alerts"):
                 return {"error": "Feature not enabled"}, 402
-        # Webhook requires alert_routing feature AND Professional tier
         elif kind == "webhook":
             if not feature_enabled("waddleperf_cluster", "alert_routing"):
                 return {"error": "Feature not enabled"}, 402
 
-            # Check license tier
-            if not _is_licensed_for_tier(tenant_id, "professional"):
-                return {
-                    "error": "Webhook channels require Professional license tier"
-                }, 402
+            tier = tier_of("waddleperf_cluster.alert_routing", current_app.registry)
+            if not _is_licensed_for_tier(tier):
+                return (
+                    {
+                        "error": "License required",
+                        "message": f"Feature requires {tier} license",
+                        "tier": tier,
+                    },
+                    402,
+                )
 
-        # Validate config
-        config = data.get("config", {})
-        if kind == "email":
-            if not config.get("to"):
-                return {"error": "Email config must have 'to' list"}, 400
-        elif kind == "webhook":
-            url = config.get("url")
-            secret = config.get("secret")
-            if not url or not secret:
-                return {"error": "Webhook config must have 'url' and 'secret'"}, 400
-            # Validate HTTPS
-            if not url.startswith("https://"):
-                return {"error": "Webhook URL must be HTTPS"}, 400
-
-        db = get_db()
-        channel_mgr = ChannelManager(db)
-
-        import json
-
-        channel_id = str(uuid4())
-        await db.notification_channels.async_insert(
-            id=channel_id,
-            tenant=tenant_id,
-            name=data.get("name", ""),
-            kind=kind,
-            config=json.dumps(config),
-            enabled=data.get("enabled", True),
-            created_at=datetime.now(timezone.utc),
-        )
-
-        log.info(
-            "channel_created",
-            channel_id=channel_id,
-            tenant=tenant_id,
-            kind=kind,
-        )
-
-        # Redact secret in response
-        response_config = config.copy()
-        if kind == "webhook" and "secret" in response_config:
-            secret = response_config["secret"]
-            response_config["secret"] = "****" + secret[-4:] if len(secret) >= 4 else "****"
+        # Delegate creation (and config validation) to the channel manager.
+        channel_mgr = ChannelManager(get_db())
+        try:
+            channel = await channel_mgr.create_channel(
+                tenant=tenant_id,
+                name=data.get("name", ""),
+                kind=kind,
+                config=data.get("config", {}),
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}, 400
 
         return (
             {
-                "id": channel_id,
-                "name": data.get("name", ""),
-                "kind": kind,
-                "config": response_config,
-                "enabled": data.get("enabled", True),
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                **channel,
                 "meta": {
                     "version": 1,
                     "timestamp": datetime.now(timezone.utc).isoformat(),

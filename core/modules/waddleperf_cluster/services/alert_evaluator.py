@@ -55,7 +55,8 @@ class AlertEvaluator:
 
         # Get all enabled rules for this tenant
         rules_rowset = await self.db(
-            (self.db.alert_rules.tenant == tenant) & (self.db.alert_rules.enabled == True)
+            (self.db.alert_rules.tenant == tenant)
+            & (self.db.alert_rules.enabled == True)  # noqa: E712 -- DAL query syntax
         ).select()
 
         for rule_row in rules_rowset:
@@ -128,41 +129,43 @@ class AlertEvaluator:
                 notified=False,
             )
 
-            # Send notification if channel is configured
-            if channel_id:
-                try:
-                    rule_name = rule_row["name"]
-                    subject = f"Alert: {rule_name}"
-                    body = f"Rule '{rule_name}' breached: {metric_name}={metric_value} (threshold={threshold})"
+            # Notify: the rule's channel if set, else all enabled channels
+            try:
+                rule_name = rule_row["name"]
+                subject = f"Alert: {rule_name}"
+                body = (
+                    f"Rule '{rule_name}' breached: "
+                    f"{metric_name}={metric_value} (threshold={threshold})"
+                )
 
-                    await self.notifications.notify(
-                        tenant,
-                        subject,
-                        body,
-                        channel_ids=[channel_id],
-                    )
+                await self.notifications.notify(
+                    tenant,
+                    subject,
+                    body,
+                    channel_ids=[channel_id] if channel_id else None,
+                )
 
-                    # Mark event as notified
-                    await self.db(
-                        self.db.alert_events.id == event_id
-                    ).update(notified=True)
+                # Mark event as notified
+                await self.db(
+                    self.db.alert_events.id == event_id
+                ).update(notified=True)
 
-                    log.info(
-                        "alert_notification_sent",
-                        event_id=event_id,
-                        rule_id=rule_id,
-                        tenant=tenant,
-                    )
+                log.info(
+                    "alert_notification_sent",
+                    event_id=event_id,
+                    rule_id=rule_id,
+                    tenant=tenant,
+                )
 
-                except Exception as e:
-                    log.error(
-                        "alert_notification_failed",
-                        event_id=event_id,
-                        rule_id=rule_id,
-                        tenant=tenant,
-                        error=str(e),
-                    )
-                    # Do NOT re-raise; evaluation must never fail ingest
+            except Exception as e:
+                log.error(
+                    "alert_notification_failed",
+                    event_id=event_id,
+                    rule_id=rule_id,
+                    tenant=tenant,
+                    error=str(e),
+                )
+                # Do NOT re-raise; evaluation must never fail ingest
 
             events_fired += 1
             log.info(
@@ -191,7 +194,7 @@ class AlertEvaluator:
 
         # Get all enabled rules across all tenants
         rules_rowset = await self.db(
-            self.db.alert_rules.enabled == True
+            self.db.alert_rules.enabled == True  # noqa: E712 -- DAL query syntax
         ).select()
 
         for rule_row in rules_rowset:
@@ -292,7 +295,10 @@ class AlertEvaluator:
                     try:
                         rule_name = rule_row["name"]
                         subject = f"Alert: {rule_name}"
-                        body = f"Rule '{rule_name}' breached: {metric_name}={metric_value} (threshold={threshold})"
+                        body = (
+                            f"Rule '{rule_name}' breached: "
+                            f"{metric_name}={metric_value} (threshold={threshold})"
+                        )
 
                         await self.notifications.notify(
                             tenant,
