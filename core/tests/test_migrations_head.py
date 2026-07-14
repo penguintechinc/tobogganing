@@ -62,6 +62,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0013: test_schedules
     Migration 0014: c2c_endpoints
     Migration 0015: c2c_matrix_runs, c2c_pair_results
+    Migration 0016: scheduled_jobs
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -108,8 +109,18 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "c2c_pair_results",
     }
 
+    # Tables created by migration 0016 (core scheduler)
+    created_by_scheduler_migrations = {
+        "scheduled_jobs",
+    }
+
     # All tables covered by migrations
-    all_migration_tables = created_by_existing_migrations | created_by_migration_0008 | created_by_wpc_migrations
+    all_migration_tables = (
+        created_by_existing_migrations
+        | created_by_migration_0008
+        | created_by_wpc_migrations
+        | created_by_scheduler_migrations
+    )
 
     # Verify coverage
     missing_tables = expected_tables - all_migration_tables

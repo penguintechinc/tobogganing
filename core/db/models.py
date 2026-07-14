@@ -708,6 +708,33 @@ class C2CPairResult(Base):
         return f"<C2CPairResult(id={self.id}, tenant={self.tenant}, run_id={self.run_id})>"
 
 
+class ScheduledJob(Base):
+    """DB-backed dynamic schedule row dispatched by the core scheduler sweep."""
+
+    __tablename__ = "scheduled_jobs"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    module: Column[str] = Column(String(64), nullable=False)
+    job_type: Column[str] = Column(String(64), nullable=False)
+    payload: Column[str] = Column(Text, nullable=False)
+    interval_seconds: Column[int] = Column(Integer, nullable=False)
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    last_run_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    next_run_at: Column[datetime] = Column(DateTime, nullable=False, index=True)
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+    updated_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<ScheduledJob(id={self.id}, module={self.module}, job_type={self.job_type})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -731,4 +758,5 @@ __all__ = [
     "C2CEndpoint",
     "C2CMatrixRun",
     "C2CPairResult",
+    "ScheduledJob",
 ]
