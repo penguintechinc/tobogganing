@@ -4,7 +4,6 @@ from __future__ import annotations
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 from uuid import uuid4
 
 logger = structlog.get_logger()
@@ -133,8 +132,11 @@ class OrgUnitManager:
         """
         if parent_id is not None:
             ous_rowset = await self.db(
-            (self.db.org_units.tenant == self.tenant_id) & (self.db.org_units.parent_id == parent_id)
-        ).select(limitby=(offset, offset + limit))
+                (
+                    (self.db.org_units.tenant == self.tenant_id)
+                    & (self.db.org_units.parent_id == parent_id)
+                )
+            ).select(limitby=(offset, offset + limit))
         else:
             ous_rowset = await self.db(
                 self.db.org_units.tenant == self.tenant_id,
@@ -168,7 +170,11 @@ class OrgUnitManager:
         if not existing:
             return None
 
-        update_data = {k: v for k, v in data.items() if k in ["name", "description", "parent_id", "is_active"]}
+        update_data = {
+            k: v
+            for k, v in data.items()
+            if k in ["name", "description", "parent_id", "is_active"]
+        }
         update_data["updated_at"] = datetime.now(timezone.utc)
 
         await self.db(

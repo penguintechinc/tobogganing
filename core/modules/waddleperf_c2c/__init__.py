@@ -12,6 +12,15 @@ def module() -> ModuleContract:
         ModuleContract with c2c blueprints, feature flags, and
         Professional-tier entitlements.
     """
+    from core.scheduler.registry import register_job_handler
+
+    # Register the job handler for recurring matrix runs
+    register_job_handler(
+        "waddleperf_c2c",
+        "matrix_run",
+        "core.modules.waddleperf_c2c.worker.tasks.start_recurring_run",
+    )
+
     return ModuleContract(
         name="waddleperf_c2c",
         blueprints=list(blueprints),
@@ -24,11 +33,13 @@ def module() -> ModuleContract:
             "tobogganing.waddleperf_c2c.endpoints",
             "tobogganing.waddleperf_c2c.runs",
             "tobogganing.waddleperf_c2c.matrix",
+            "tobogganing.waddleperf_c2c.recurring_runs",
         ],
         entitlements=[
             Entitlement("waddleperf_c2c.endpoints", "professional"),
             Entitlement("waddleperf_c2c.runs", "professional"),
             Entitlement("waddleperf_c2c.matrix", "professional"),
+            Entitlement("waddleperf_c2c.recurring_runs", "professional"),
         ],
         migrations=["0014", "0015"],
         health=None,

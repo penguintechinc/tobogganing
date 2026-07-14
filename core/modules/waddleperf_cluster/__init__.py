@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from core.modules.waddleperf_cluster.api import blueprints
 from core.registry import Entitlement, ModuleContract, NavEntry
+from core.scheduler.registry import register_job_handler
 
 
 def module() -> ModuleContract:
@@ -12,7 +13,7 @@ def module() -> ModuleContract:
         ModuleContract with WaddlePerf cluster blueprints, feature flags,
         entitlements, and navigation entries.
     """
-    return ModuleContract(
+    contract = ModuleContract(
         name="waddleperf_cluster",
         blueprints=list(blueprints),
         nav=[
@@ -29,6 +30,9 @@ def module() -> ModuleContract:
             "tobogganing.waddleperf_cluster.stats",
             "tobogganing.waddleperf_cluster.live_test",
             "tobogganing.waddleperf_cluster.large_fleet",
+            "tobogganing.waddleperf_cluster.scheduled_tests",
+            "tobogganing.waddleperf_cluster.alerts",
+            "tobogganing.waddleperf_cluster.alert_routing",
         ],
         entitlements=[
             Entitlement("waddleperf_cluster.org_units", "community"),
@@ -38,7 +42,26 @@ def module() -> ModuleContract:
             Entitlement("waddleperf_cluster.stats", "community"),
             Entitlement("waddleperf_cluster.live_test", "community"),
             Entitlement("waddleperf_cluster.large_fleet", "professional"),
+            Entitlement("waddleperf_cluster.scheduled_tests", "community"),
+            Entitlement("waddleperf_cluster.alerts", "community"),
+            Entitlement("waddleperf_cluster.alert_routing", "professional"),
         ],
         migrations=["0010", "0011", "0012"],
         health=None,
     )
+
+    # Register handler for scheduled server tests
+    register_job_handler(
+        "waddleperf_cluster",
+        "server_test",
+        "core.modules.waddleperf_cluster.worker.tasks.run_server_test",
+    )
+
+    # Register handler for alert sweep
+    register_job_handler(
+        "waddleperf_cluster",
+        "alert_sweep",
+        "core.modules.waddleperf_cluster.worker.tasks.alert_sweep",
+    )
+
+    return contract

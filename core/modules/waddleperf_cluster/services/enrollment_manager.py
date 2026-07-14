@@ -7,7 +7,6 @@ import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 from uuid import uuid4
 
 logger = structlog.get_logger()
@@ -110,7 +109,10 @@ class EnrollmentManager:
             EnrollmentSecret or None if not found
         """
         secret_rowset = await self.db(
-            (self.db.device_enrollment_secrets.id == secret_id) & (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+            (
+                (self.db.device_enrollment_secrets.id == secret_id)
+                & (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+            )
         ).select()
         secret_obj = secret_rowset.first()
 
@@ -168,7 +170,10 @@ class EnrollmentManager:
             return False
 
         await self.db(
-            (self.db.device_enrollment_secrets.id == secret_id) & (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+            (
+                (self.db.device_enrollment_secrets.id == secret_id)
+                & (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+            )
         ).delete()
 
         logger.info(
@@ -193,8 +198,11 @@ class EnrollmentManager:
 
             # Query for this secret
             secret_rowset = await self.db(
-            (self.db.device_enrollment_secrets.tenant == self.tenant_id) & (self.db.device_enrollment_secrets.secret_hash == secret_hash)
-        ).select()
+                (
+                    (self.db.device_enrollment_secrets.tenant == self.tenant_id)
+                    & (self.db.device_enrollment_secrets.secret_hash == secret_hash)
+                )
+            ).select()
             secret_obj = secret_rowset.first()
 
             if not secret_obj:

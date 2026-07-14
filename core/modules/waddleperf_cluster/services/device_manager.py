@@ -7,7 +7,6 @@ import secrets
 import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 from uuid import uuid4
 
 logger = structlog.get_logger()
@@ -60,7 +59,8 @@ class DeviceManager:
         """Register a new device and return (device, api_key).
 
         Args:
-            device_info: Device data dictionary (name, serial, hostname, os, org_unit_id, device_metadata)
+            device_info: Device data dictionary with keys name, serial, hostname, os,
+                org_unit_id, device_metadata
 
         Returns:
             Tuple of (Device object, unencrypted api_key)
@@ -141,7 +141,10 @@ class DeviceManager:
 
             # Query device_api_keys for this hash
             key_rowset = await self.db(
-                (self.db.device_api_keys.api_key_hash == api_key_hash) & (self.db.device_api_keys.tenant == self.tenant_id)
+                (
+                    (self.db.device_api_keys.api_key_hash == api_key_hash)
+                    & (self.db.device_api_keys.tenant == self.tenant_id)
+                )
             ).select()
             key_obj = key_rowset.first()
 
@@ -168,7 +171,10 @@ class DeviceManager:
 
             # Get device record
             device_rowset = await self.db(
-                (self.db.devices.id == key_obj.device_id) & (self.db.devices.tenant == self.tenant_id)
+                (
+                    (self.db.devices.id == key_obj.device_id)
+                    & (self.db.devices.tenant == self.tenant_id)
+                )
             ).select()
             device_obj = device_rowset.first()
 
@@ -244,7 +250,10 @@ class DeviceManager:
         """
         if org_unit_id is not None:
             devices_rowset = await self.db(
-                (self.db.devices.tenant == self.tenant_id) & (self.db.devices.org_unit_id == org_unit_id)
+                (
+                    (self.db.devices.tenant == self.tenant_id)
+                    & (self.db.devices.org_unit_id == org_unit_id)
+                )
             ).select(limitby=(offset, offset + limit))
         else:
             devices_rowset = await self.db(
@@ -338,7 +347,10 @@ class DeviceManager:
 
         # Delete API keys first
         await self.db(
-            (self.db.device_api_keys.device_id == device_id) & (self.db.device_api_keys.tenant == self.tenant_id)
+            (
+                (self.db.device_api_keys.device_id == device_id)
+                & (self.db.device_api_keys.tenant == self.tenant_id)
+            )
         ).delete()
 
         # Delete device

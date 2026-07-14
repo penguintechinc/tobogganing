@@ -708,6 +708,130 @@ class C2CPairResult(Base):
         return f"<C2CPairResult(id={self.id}, tenant={self.tenant}, run_id={self.run_id})>"
 
 
+class ScheduledJob(Base):
+    """DB-backed dynamic schedule row dispatched by the core scheduler sweep."""
+
+    __tablename__ = "scheduled_jobs"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    module: Column[str] = Column(String(64), nullable=False)
+    job_type: Column[str] = Column(String(64), nullable=False)
+    payload: Column[str] = Column(Text, nullable=False)
+    interval_seconds: Column[int] = Column(Integer, nullable=False)
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    last_run_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    next_run_at: Column[datetime] = Column(DateTime, nullable=False, index=True)
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+    updated_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<ScheduledJob(id={self.id}, module={self.module}, job_type={self.job_type})>"
+
+
+class NotificationChannel(Base):
+    """Notification delivery channel (email or webhook)."""
+
+    __tablename__ = "notification_channels"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    name: Column[str] = Column(String(128), nullable=False)
+    kind: Column[str] = Column(String(16), nullable=False)
+    config: Column[str] = Column(Text, nullable=False)
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<NotificationChannel(id={self.id}, tenant={self.tenant}, kind={self.kind})>"
+
+
+class NotificationDelivery(Base):
+    """Record of a delivery attempt for a notification."""
+
+    __tablename__ = "notification_deliveries"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    channel_id: Column[str] = Column(String(36), nullable=False)
+    subject: Column[str] = Column(String(256), nullable=False)
+    status: Column[str] = Column(String(16), nullable=False)
+    error: Column[str | None] = Column(Text, nullable=True)
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<NotificationDelivery(id={self.id}, channel_id={self.channel_id}, status={self.status})>"
+
+
+class AlertRule(Base):
+    """Alert rule for threshold-based notifications."""
+
+    __tablename__ = "alert_rules"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    name: Column[str] = Column(String(128), nullable=False)
+    metric: Column[str] = Column(String(64), nullable=False)
+    comparator: Column[str] = Column(String(8), nullable=False)
+    threshold: Column[float] = Column(Float, nullable=False)
+    window_seconds: Column[int] = Column(Integer, nullable=False, server_default="300")
+    device_id: Column[str | None] = Column(String(36), nullable=True)
+    test_type: Column[str | None] = Column(String(32), nullable=True)
+    channel_id: Column[str | None] = Column(String(36), nullable=True)
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<AlertRule(id={self.id}, tenant={self.tenant}, metric={self.metric}, comparator={self.comparator})>"
+
+
+class AlertEvent(Base):
+    """Alert event fired when a rule is breached."""
+
+    __tablename__ = "alert_events"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    rule_id: Column[str] = Column(String(36), nullable=False)
+    device_id: Column[str | None] = Column(String(36), nullable=True)
+    observed_value: Column[float] = Column(Float, nullable=False)
+    fired_at: Column[datetime] = Column(DateTime, nullable=False)
+    notified: Column[bool] = Column(Boolean, nullable=False, server_default="false")
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<AlertEvent(id={self.id}, rule_id={self.rule_id}, observed_value={self.observed_value})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -731,4 +855,9 @@ __all__ = [
     "C2CEndpoint",
     "C2CMatrixRun",
     "C2CPairResult",
+    "ScheduledJob",
+    "NotificationChannel",
+    "NotificationDelivery",
+    "AlertRule",
+    "AlertEvent",
 ]

@@ -25,6 +25,8 @@ from core.db.models import (
     C2CEndpoint,
     C2CMatrixRun,
     C2CPairResult,
+    AlertRule,
+    AlertEvent,
 )
 from core.modules.sase.security.scanner.models import (
     SecurityScan,
@@ -43,7 +45,7 @@ from core.modules.sase.security.feeds.models import (
 
 
 def test_alembic_migrations_cover_all_tables() -> None:
-    """Verify all Base.metadata tables are covered by migrations 0001-0015.
+    """Verify all Base.metadata tables are covered by migrations 0001-0017.
 
     Migration 0001: users, refresh_tokens, password_reset_tokens
     Migration 0002: firewall_rules
@@ -62,6 +64,9 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0013: test_schedules
     Migration 0014: c2c_endpoints
     Migration 0015: c2c_matrix_runs, c2c_pair_results
+    Migration 0016: scheduled_jobs
+    Migration 0017: notification_channels, notification_deliveries
+    Migration 0018: alert_rules, alert_events
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -108,8 +113,22 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "c2c_pair_results",
     }
 
+    # Tables created by migrations 0016-0018 (core scheduler + notifications + alerts)
+    created_by_scheduler_migrations = {
+        "scheduled_jobs",
+        "notification_channels",
+        "notification_deliveries",
+        "alert_rules",
+        "alert_events",
+    }
+
     # All tables covered by migrations
-    all_migration_tables = created_by_existing_migrations | created_by_migration_0008 | created_by_wpc_migrations
+    all_migration_tables = (
+        created_by_existing_migrations
+        | created_by_migration_0008
+        | created_by_wpc_migrations
+        | created_by_scheduler_migrations
+    )
 
     # Verify coverage
     missing_tables = expected_tables - all_migration_tables
@@ -148,6 +167,8 @@ def test_base_metadata_models_imported() -> None:
         C2CEndpoint,
         C2CMatrixRun,
         C2CPairResult,
+        AlertRule,
+        AlertEvent,
         SecurityScan,
         SecurityFinding,
         ScanSchedule,

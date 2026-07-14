@@ -5,7 +5,7 @@ import structlog
 from datetime import datetime, timezone
 from typing import Any
 
-from quart import Blueprint, jsonify, request
+from quart import Blueprint, request
 
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db
@@ -349,6 +349,37 @@ async def record_result(test_id: str) -> tuple[dict[str, Any], int]:
             device_id=device_obj.id,
             tenant=tenant_id,
         )
+
+        # Fire alert evaluation (must never fail the ingest response)
+        try:
+            from core.entitlements.gate import feature_enabled
+
+            if feature_enabled("waddleperf_cluster", "alerts"):
+                from core.modules.waddleperf_cluster.services.alert_evaluator import (
+                    AlertEvaluator,
+                )
+                from core.notifications.service import NotificationService
+
+                notifications = NotificationService(db)
+                evaluator = AlertEvaluator(db, notifications)
+
+                result_dict = {
+                    "device_id": result.device_id,
+                    "test_type": result.test_type,
+                    "latency_ms": result.latency_ms,
+                    "throughput": result.throughput,
+                    "status": result.status,
+                }
+
+                await evaluator.evaluate_result(tenant_id, result_dict)
+
+        except Exception as e:
+            logger.error(
+                "alert_evaluation_failed",
+                test_id=test_id,
+                error=str(e),
+            )
+            # Continue with response regardless of alert failure
 
         return (
             {
