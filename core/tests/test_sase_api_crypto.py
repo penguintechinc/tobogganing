@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
 import pytest
+import pytest_asyncio
 from quart import Quart
 
 from core.auth.jwt import decode_token, encode_access_token
@@ -69,8 +70,8 @@ def app_with_sase(
     return app
 
 
-@pytest.fixture
-def valid_tenant_token(app_with_sase: Quart) -> str:
+@pytest_asyncio.fixture
+async def valid_tenant_token(app_with_sase: Quart) -> str:
     """Generate a valid tenant JWT token for testing.
 
     Args:
@@ -90,7 +91,7 @@ def valid_tenant_token(app_with_sase: Quart) -> str:
         "permissions": "headend proxy wireguard",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
@@ -451,7 +452,7 @@ async def test_jwt_validate_token_success(
         "permissions": "headend proxy",
         "metadata": {"cluster_id": "cluster-1"},
     }
-    valid_token = encode_access_token(claims, provider, ttl_hours=1)
+    valid_token = await encode_access_token(claims, provider, ttl_hours=1)
 
     with patch("core.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
@@ -508,7 +509,7 @@ async def test_jwt_refresh_token_success(app_with_sase: Quart) -> None:
         "tenant": "test-tenant",
         "token_type": "refresh",
     }
-    refresh_token = encode_access_token(claims, provider, ttl_hours=24)
+    refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
 
     with patch("core.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
@@ -723,8 +724,8 @@ async def test_wireguard_keys_revocation_not_found(
 # =============================================================================
 
 
-@pytest.fixture
-def cross_tenant_token(app_with_sase: Quart) -> str:
+@pytest_asyncio.fixture
+async def cross_tenant_token(app_with_sase: Quart) -> str:
     """Generate a JWT token for a different tenant.
 
     Args:
@@ -743,12 +744,12 @@ def cross_tenant_token(app_with_sase: Quart) -> str:
         "scope": "*:*",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
-@pytest.fixture
-def revoke_scope_token(app_with_sase: Quart) -> str:
+@pytest_asyncio.fixture
+async def revoke_scope_token(app_with_sase: Quart) -> str:
     """Generate a token with jwt:revoke scope.
 
     Args:
@@ -767,7 +768,7 @@ def revoke_scope_token(app_with_sase: Quart) -> str:
         "scope": "jwt:revoke",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
@@ -900,7 +901,7 @@ async def test_jwt_revoke_requires_scope(app_with_sase: Quart) -> None:
         "tenant": "test-tenant",
         "scope": "sase:read",  # No jwt:revoke scope
     }
-    token_without_scope = encode_access_token(claims, provider, ttl_hours=1)
+    token_without_scope = await encode_access_token(claims, provider, ttl_hours=1)
 
     with patch("core.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True

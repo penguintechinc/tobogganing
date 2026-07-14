@@ -165,7 +165,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
 
         # Generate access token (1 hour default)
         try:
-            access_token = encode_access_token(
+            access_token = await encode_access_token(
                 claims, key_provider, ttl_hours=1
             )
         except ValueError as e:
@@ -179,7 +179,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         refresh_claims = claims.copy()
         refresh_claims["token_type"] = "refresh"
         try:
-            refresh_token = encode_access_token(
+            refresh_token = await encode_access_token(
                 refresh_claims, key_provider, ttl_hours=24
             )
         except ValueError as e:
@@ -279,7 +279,7 @@ async def refresh_jwt_token() -> tuple[dict[str, Any], int]:
         }
 
         try:
-            new_access_token = encode_access_token(
+            new_access_token = await encode_access_token(
                 access_claims, key_provider, ttl_hours=1
             )
         except ValueError as e:

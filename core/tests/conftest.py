@@ -305,8 +305,8 @@ def app_with_sase(app: Quart, mock_db: MagicMock) -> Quart:
     return app
 
 
-@pytest.fixture
-def valid_tenant_token(app_with_sase: Quart) -> str:
+@pytest_asyncio.fixture
+async def valid_tenant_token(app_with_sase: Quart) -> str:
     """Generate a valid tenant JWT token.
 
     Args:
@@ -327,12 +327,12 @@ def valid_tenant_token(app_with_sase: Quart) -> str:
         "scope": "clusters:read clients:read",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
-@pytest.fixture
-def valid_write_token(app_with_sase: Quart) -> str:
+@pytest_asyncio.fixture
+async def valid_write_token(app_with_sase: Quart) -> str:
     """Generate a valid JWT token with write scopes.
 
     Args:
@@ -353,7 +353,7 @@ def valid_write_token(app_with_sase: Quart) -> str:
         "scope": "*:*",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
@@ -424,8 +424,8 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     return app
 
 
-@pytest.fixture
-def wpc_tenant_token(app_with_wpc: Quart) -> str:
+@pytest_asyncio.fixture
+async def wpc_tenant_token(app_with_wpc: Quart) -> str:
     """Generate a valid tenant JWT token for WPC module with minimal scopes.
 
     Args:
@@ -446,12 +446,12 @@ def wpc_tenant_token(app_with_wpc: Quart) -> str:
         "scope": "org_units:read devices:read tests:read stats:read",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
-@pytest.fixture
-def wpc_write_token(app_with_wpc: Quart) -> str:
+@pytest_asyncio.fixture
+async def wpc_write_token(app_with_wpc: Quart) -> str:
     """Generate a JWT token with full write scopes for WPC testing.
 
     Args:
@@ -472,12 +472,12 @@ def wpc_write_token(app_with_wpc: Quart) -> str:
         "scope": "*:*",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
-@pytest.fixture
-def wpc_readonly_token(app_with_wpc: Quart) -> str:
+@pytest_asyncio.fixture
+async def wpc_readonly_token(app_with_wpc: Quart) -> str:
     """Generate a JWT token with read-only scope for WPC testing.
 
     Args:
@@ -498,7 +498,7 @@ def wpc_readonly_token(app_with_wpc: Quart) -> str:
         "scope": "org_units:read devices:read tests:read stats:read schedules:read config:read version:read",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
@@ -564,8 +564,8 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     return app
 
 
-@pytest.fixture
-def c2c_write_token(app_with_c2c: Quart) -> str:
+@pytest_asyncio.fixture
+async def c2c_write_token(app_with_c2c: Quart) -> str:
     """Generate a JWT token with c2c write scopes for testing.
 
     Args:
@@ -586,12 +586,12 @@ def c2c_write_token(app_with_c2c: Quart) -> str:
         "scope": "c2c:read c2c:write",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
-@pytest.fixture
-def c2c_readonly_token(app_with_c2c: Quart) -> str:
+@pytest_asyncio.fixture
+async def c2c_readonly_token(app_with_c2c: Quart) -> str:
     """Generate a JWT token with c2c read-only scope for testing.
 
     Args:
@@ -612,5 +612,5 @@ def c2c_readonly_token(app_with_c2c: Quart) -> str:
         "scope": "c2c:read",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token

@@ -7,6 +7,8 @@ import tempfile
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from core.crypto import (
     AwsKmsKeyProvider,
@@ -47,7 +49,6 @@ class TestInAppKeyProvider:
         private_pem, public_pem = generate_rsa_key_pair()
         provider = InAppKeyProvider(private_pem, public_pem)
 
-        assert provider.private_pem == private_pem
         assert provider.public_pem == public_pem
 
     def test_kid_is_stable_and_non_empty(self) -> None:
@@ -72,6 +73,23 @@ class TestInAppKeyProvider:
 
         assert provider1.kid != provider2.kid
 
+    @pytest.mark.asyncio
+    async def test_inapp_sign_verifies_against_public_key(self) -> None:
+        """InAppKeyProvider.sign produces a PKCS1v15/SHA256 signature verifiable with its public key."""
+        priv, pub = generate_rsa_key_pair()
+        provider = InAppKeyProvider(priv, pub)
+        data = b"header.payload"
+        sig = await provider.sign(data)
+        public_key = serialization.load_pem_public_key(pub.encode())
+        # Raises InvalidSignature on failure
+        public_key.verify(sig, data, padding.PKCS1v15(), hashes.SHA256())
+
+    def test_protocol_has_no_private_pem(self) -> None:
+        """The KeyProvider protocol no longer exposes private key material."""
+        from core.crypto.keys import KeyProvider
+        # Structural check: annotations/members on the Protocol class
+        assert not hasattr(KeyProvider, "private_pem")
+
 
 class TestBuildKeyProvider:
     """Test the build_key_provider factory function."""
@@ -84,7 +102,6 @@ class TestBuildKeyProvider:
 
         provider = build_key_provider()
 
-        assert provider.private_pem == private_pem
         assert provider.public_pem == public_pem
 
     def test_build_from_env_jwt_private_key_path(self, monkeypatch: Any) -> None:
@@ -101,7 +118,6 @@ class TestBuildKeyProvider:
 
             provider = build_key_provider()
 
-            assert provider.private_pem == private_pem
             assert provider.public_pem == public_pem
         finally:
             os.unlink(temp_path)
@@ -122,7 +138,6 @@ class TestBuildKeyProvider:
             provider = build_key_provider()
 
             # Should use JWT_PRIVATE_KEY_PEM (env var takes precedence)
-            assert provider.private_pem == private_pem1
             assert provider.public_pem == public_pem1
         finally:
             os.unlink(temp_path)
@@ -134,7 +149,6 @@ class TestBuildKeyProvider:
 
         provider = build_key_provider()
 
-        assert provider.private_pem.startswith("-----BEGIN PRIVATE KEY-----")
         assert provider.public_pem.startswith("-----BEGIN PUBLIC KEY-----")
         assert len(provider.kid) == 16
 
@@ -142,12 +156,13 @@ class TestBuildKeyProvider:
 class TestKmsStubs:
     """Test KMS provider stubs."""
 
-    def test_aws_kms_provider_raises_not_implemented(self) -> None:
+    @pytest.mark.asyncio
+    async def test_aws_kms_provider_raises_not_implemented(self) -> None:
         """Test that AwsKmsKeyProvider raises NotImplementedError."""
         provider = AwsKmsKeyProvider()
 
         with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            _ = provider.private_pem
+            await provider.sign(b"test")
 
         with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
             _ = provider.public_pem
@@ -155,12 +170,13 @@ class TestKmsStubs:
         with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
             _ = provider.kid
 
-    def test_gcp_kms_provider_raises_not_implemented(self) -> None:
+    @pytest.mark.asyncio
+    async def test_gcp_kms_provider_raises_not_implemented(self) -> None:
         """Test that GcpKmsKeyProvider raises NotImplementedError."""
         provider = GcpKmsKeyProvider()
 
         with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            _ = provider.private_pem
+            await provider.sign(b"test")
 
         with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
             _ = provider.public_pem

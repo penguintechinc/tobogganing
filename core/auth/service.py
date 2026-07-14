@@ -124,7 +124,7 @@ class AuthService:
                     return AuthResult(success=False, error="Invalid MFA token")
 
             # Generate tokens
-            access_token = self._generate_access_token(user)
+            access_token = await self._generate_access_token(user)
             refresh_token = await self._generate_and_store_refresh_token(user.id)
 
             return AuthResult(
@@ -164,7 +164,7 @@ class AuthService:
                 return AuthResult(success=False, error="User not found or inactive")
 
             # Generate new access token
-            access_token = self._generate_access_token(user)
+            access_token = await self._generate_access_token(user)
 
             return AuthResult(success=True, access_token=access_token)
         except Exception as e:
@@ -309,7 +309,7 @@ class AuthService:
             logger.error("get_user_error", user_id=user_id, error=str(e))
             return None
 
-    def _generate_access_token(self, user: Any) -> str:
+    async def _generate_access_token(self, user: Any) -> str:
         """
         Generate an access token for a user.
 
@@ -337,7 +337,7 @@ class AuthService:
             "roles": [role],
         }
 
-        return encode_access_token(
+        return await encode_access_token(
             claims,
             self.key_provider,
             ttl_hours=self.config.jwt_expiration_hours,

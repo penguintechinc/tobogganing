@@ -4,24 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import os
-from dataclasses import dataclass
 from typing import Protocol
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 
 class KeyProvider(Protocol):
-    """Protocol for RS256 key providers."""
+    """Protocol for RS256 signing-key providers (operation-based; no private-key export)."""
 
-    @property
-    def private_pem(self) -> str:
-        """Return the private key in PEM format."""
+    async def sign(self, data: bytes) -> bytes:
+        """Sign data with RSASSA-PKCS1-v1_5 / SHA-256 and return the raw signature."""
         ...
 
     @property
     def public_pem(self) -> str:
-        """Return the public key in PEM format."""
+        """Return the public key in PEM (SubjectPublicKeyInfo) format."""
         ...
 
     @property
@@ -30,22 +28,21 @@ class KeyProvider(Protocol):
         ...
 
 
-@dataclass(slots=True)
 class InAppKeyProvider:
     """In-application RS256 key provider using a persistent PEM-encoded key pair."""
 
-    _private_key_pem: str
-    _public_key_pem: str
-
     def __init__(self, private_key_pem: str, public_key_pem: str) -> None:
-        """Initialize with PEM-encoded keys."""
+        """Initialize with PEM-encoded keys and parse private key for signing."""
         self._private_key_pem = private_key_pem
         self._public_key_pem = public_key_pem
+        # Parse private key once during init for fast signing
+        self._private_key = serialization.load_pem_private_key(
+            private_key_pem.encode(), password=None
+        )
 
-    @property
-    def private_pem(self) -> str:
-        """Return the private key in PEM format."""
-        return self._private_key_pem
+    async def sign(self, data: bytes) -> bytes:
+        """Sign locally with the in-app RSA private key (fast; no thread hop needed)."""
+        return self._private_key.sign(data, padding.PKCS1v15(), hashes.SHA256())
 
     @property
     def public_pem(self) -> str:
@@ -61,8 +58,7 @@ class InAppKeyProvider:
 class AwsKmsKeyProvider:
     """AWS KMS-backed key provider stub (Phase 4b)."""
 
-    @property
-    def private_pem(self) -> str:
+    async def sign(self, data: bytes) -> bytes:
         """Raise NotImplementedError as placeholder for Phase 4b."""
         raise NotImplementedError("wired in Phase 4b")
 
@@ -80,8 +76,7 @@ class AwsKmsKeyProvider:
 class GcpKmsKeyProvider:
     """Google Cloud KMS-backed key provider stub (Phase 4b)."""
 
-    @property
-    def private_pem(self) -> str:
+    async def sign(self, data: bytes) -> bytes:
         """Raise NotImplementedError as placeholder for Phase 4b."""
         raise NotImplementedError("wired in Phase 4b")
 

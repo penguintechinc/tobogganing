@@ -123,8 +123,8 @@ async def app_with_wpc_realdb(
     return test_app
 
 
-@pytest.fixture
-def wpc_write_token_realdb(app_with_wpc_realdb: Quart) -> str:
+@pytest_asyncio.fixture
+async def wpc_write_token_realdb(app_with_wpc_realdb: Quart) -> str:
     """Generate a JWT token with full write scopes for real-DAL tests.
 
     Args:
@@ -145,7 +145,7 @@ def wpc_write_token_realdb(app_with_wpc_realdb: Quart) -> str:
         "scope": "*:*",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
