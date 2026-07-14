@@ -5,7 +5,7 @@ import structlog
 from datetime import datetime, timezone
 from typing import Any
 
-from quart import Blueprint, jsonify, request
+from quart import Blueprint, request
 
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Any
 
 import httpx
 import structlog

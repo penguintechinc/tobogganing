@@ -119,11 +119,15 @@ class TestManager:
         update_data = {
             k: v
             for k, v in data.items()
-            if k in ["status", "latency_ms", "throughput", "test_output", "completed_at"]
+            if k
+            in ["status", "latency_ms", "throughput", "test_output", "completed_at"]
         }
 
         await self.db(
-            (self.db.perf_test_results.id == test_id) & (self.db.perf_test_results.tenant == self.tenant)
+            (
+                (self.db.perf_test_results.id == test_id)
+                & (self.db.perf_test_results.tenant == self.tenant)
+            )
         ).update(**update_data)
 
         logger.info(
@@ -145,7 +149,10 @@ class TestManager:
             PerfTestResult or None if not found
         """
         test_rowset = await self.db(
-            (self.db.perf_test_results.id == test_id) & (self.db.perf_test_results.tenant == self.tenant)
+            (
+                (self.db.perf_test_results.id == test_id)
+                & (self.db.perf_test_results.tenant == self.tenant)
+            )
         ).select()
         test_obj = test_rowset.first()
 
@@ -270,7 +277,10 @@ class TestManager:
             return False
 
         await self.db(
-            (self.db.perf_test_results.id == test_id) & (self.db.perf_test_results.tenant == self.tenant)
+            (
+                (self.db.perf_test_results.id == test_id)
+                & (self.db.perf_test_results.tenant == self.tenant)
+            )
         ).delete()
 
         logger.info(

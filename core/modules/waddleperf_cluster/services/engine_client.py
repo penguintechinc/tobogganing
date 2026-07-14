@@ -199,7 +199,7 @@ class EngineClient:
                     details=error_text,
                 )
                 raise EngineError(
-                    f"Test execution failed",
+                    "Test execution failed",
                     status_code=response.status_code,
                     details=error_text,
                 )

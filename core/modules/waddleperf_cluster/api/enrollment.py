@@ -1,12 +1,11 @@
 """Enrollment REST API blueprint for WaddlePerf cluster."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, current_app, jsonify, request
+from quart import Blueprint, request
 
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db

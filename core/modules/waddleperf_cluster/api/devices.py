@@ -1,12 +1,11 @@
 """Devices REST API blueprint for WaddlePerf cluster."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, current_app, jsonify, request
+from quart import Blueprint, request
 
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db
@@ -140,7 +139,9 @@ async def get_device(device_id: str) -> tuple[dict[str, Any], int]:
                     "os": device.os,
                     "org_unit_id": device.org_unit_id,
                     "status": device.status,
-                    "last_heartbeat": device.last_heartbeat.isoformat() if device.last_heartbeat else None,
+                    "last_heartbeat": (
+                        device.last_heartbeat.isoformat() if device.last_heartbeat else None
+                    ),
                     "created_at": device.created_at.isoformat(),
                     "updated_at": device.updated_at.isoformat(),
                     "metadata": device.device_metadata or {},
