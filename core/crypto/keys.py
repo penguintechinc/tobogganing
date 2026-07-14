@@ -189,9 +189,10 @@ class GcpKmsKeyProvider:
         """Initialize with GCP KMS key name and optional client.
 
         Args:
-            key_name: Full CryptoKeyVersion resource name
-                (e.g., 'projects/my-project/locations/us/keyRings/my-keyring/cryptoKeys/my-key/versions/1')
-            client: Optional google.cloud.kms.KeyManagementServiceClient; if None, lazily imported and created.
+            key_name: Full CryptoKeyVersion resource name (e.g.,
+                'projects/p/locations/us/keyRings/r/cryptoKeys/k/versions/1')
+            client: Optional google.cloud.kms.KeyManagementServiceClient;
+                if None, lazily imported and created.
         """
         self._key_name = key_name
         self._client = client
