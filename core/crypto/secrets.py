@@ -1,6 +1,7 @@
 """Encryption for sensitive secrets at rest (MFA, tokens)."""
 from __future__ import annotations
 
+import base64
 import logging
 import os
 from base64 import b64decode, b64encode
@@ -13,26 +14,43 @@ logger = logging.getLogger(__name__)
 class SecretEncryptor:
     """Encrypts and decrypts sensitive secrets using Fernet (AES-128-CBC)."""
 
-    def __init__(self) -> None:
-        """Initialize with encryption key from env or ephemeral key."""
-        key_b64 = os.environ.get("DATA_ENCRYPTION_KEY")
+    def __init__(self, key: bytes | None = None) -> None:
+        """Initialize with encryption key from parameter or env or ephemeral key.
 
-        if not key_b64:
-            logger.warning(
-                "DATA_ENCRYPTION_KEY not set; generating ephemeral key (dev only)"
-            )
-            self._key = Fernet.generate_key()
+        Args:
+            key: 32-byte raw encryption key. If None, read from DATA_ENCRYPTION_KEY env
+                 or generate ephemeral key.
+
+        Raises:
+            ValueError: If key is not 32 bytes or decoding fails.
+        """
+        if key is not None:
+            if len(key) != 32:
+                raise ValueError(
+                    f"Invalid key length: expected 32 bytes, got {len(key)}"
+                )
+            self._raw_key = key
         else:
-            try:
-                self._key = b64decode(key_b64)
-                if len(self._key) != 32:
-                    raise ValueError(
-                        f"Invalid key length: expected 32 bytes, got {len(self._key)}"
-                    )
-            except Exception as e:
-                raise ValueError(f"Failed to decode DATA_ENCRYPTION_KEY: {e}")
+            key_b64 = os.environ.get("DATA_ENCRYPTION_KEY")
 
-        self._cipher = Fernet(self._key)
+            if not key_b64:
+                logger.warning(
+                    "DATA_ENCRYPTION_KEY not set; generating ephemeral key (dev only)"
+                )
+                self._raw_key = os.urandom(32)
+            else:
+                try:
+                    self._raw_key = b64decode(key_b64)
+                    if len(self._raw_key) != 32:
+                        raise ValueError(
+                            f"Invalid key length: expected 32 bytes, got {len(self._raw_key)}"
+                        )
+                except Exception as e:
+                    raise ValueError(f"Failed to decode DATA_ENCRYPTION_KEY: {e}")
+
+        # Convert raw 32 bytes to Fernet-compatible base64url-encoded key
+        # This FIXES the pre-existing bug where env-set keys could never construct Fernet
+        self._cipher = Fernet(base64.urlsafe_b64encode(self._raw_key))
 
     def encrypt(self, plaintext: str) -> str:
         """Encrypt plaintext secret to base64-encoded ciphertext.
@@ -81,12 +99,18 @@ _encryptor: SecretEncryptor | None = None
 def get_encryptor() -> SecretEncryptor:
     """Get or initialize the global secret encryptor.
 
+    Uses the configured data key provider (in-app by default; external KMS in Task 6).
+
     Returns:
         SecretEncryptor instance.
     """
     global _encryptor
     if _encryptor is None:
-        _encryptor = SecretEncryptor()
+        # For now, use in-app provider; Task 6 will replace this with gated selection
+        from core.crypto.data_keys import InAppDataKeyProvider
+
+        provider = InAppDataKeyProvider()
+        _encryptor = SecretEncryptor(provider.get_data_key())
     return _encryptor
 
 
