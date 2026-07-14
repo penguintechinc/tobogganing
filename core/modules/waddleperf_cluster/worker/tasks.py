@@ -238,3 +238,48 @@ def run_server_test(
             payload=payload,
         )
     )
+
+
+async def _alert_sweep_async(db: Any | None = None) -> int:
+    """Evaluate alert rules across all tenants. Core logic (testable).
+
+    Args:
+        db: penguin-dal AsyncDB instance (created fresh if None)
+
+    Returns:
+        Number of alert events fired
+    """
+    # Create fresh AsyncDB if not provided
+    if db is None:
+        try:
+            cfg = Config()
+            db_uri = build_db_uri(cfg)
+            db = AsyncDB(uri=db_uri, pool_size=cfg.db_pool_size)
+            await db.reflect()
+        except Exception as e:
+            logger.error("failed_to_create_dal_alert_sweep", error=str(e))
+            return 0
+
+    try:
+        from core.modules.waddleperf_cluster.services.alert_evaluator import (
+            AlertEvaluator,
+        )
+        from core.notifications.service import NotificationService
+
+        notifications = NotificationService(db)
+        evaluator = AlertEvaluator(db, notifications)
+        events_fired = await evaluator.sweep()
+
+        logger.info("alert_sweep_complete", events_fired=events_fired)
+
+        return events_fired
+
+    except Exception as e:
+        logger.error("alert_sweep_failed", error=str(e))
+        return 0
+
+
+@celery_app.task(name="core.modules.waddleperf_cluster.worker.tasks.alert_sweep")
+def alert_sweep() -> None:
+    """Celery task to sweep and evaluate alert rules across all tenants."""
+    asyncio.run(_alert_sweep_async())

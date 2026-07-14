@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -172,7 +172,7 @@ class NotificationService:
                 subject=subject,
                 status=status,
                 error=error,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
         except Exception as e:
             log.error("failed_to_record_delivery", error=str(e), exc_info=True)

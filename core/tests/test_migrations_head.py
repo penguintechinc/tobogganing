@@ -25,6 +25,8 @@ from core.db.models import (
     C2CEndpoint,
     C2CMatrixRun,
     C2CPairResult,
+    AlertRule,
+    AlertEvent,
 )
 from core.modules.sase.security.scanner.models import (
     SecurityScan,
@@ -64,6 +66,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0015: c2c_matrix_runs, c2c_pair_results
     Migration 0016: scheduled_jobs
     Migration 0017: notification_channels, notification_deliveries
+    Migration 0018: alert_rules, alert_events
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -110,11 +113,13 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "c2c_pair_results",
     }
 
-    # Tables created by migrations 0016-0017 (core scheduler + notifications)
+    # Tables created by migrations 0016-0018 (core scheduler + notifications + alerts)
     created_by_scheduler_migrations = {
         "scheduled_jobs",
         "notification_channels",
         "notification_deliveries",
+        "alert_rules",
+        "alert_events",
     }
 
     # All tables covered by migrations
@@ -162,6 +167,8 @@ def test_base_metadata_models_imported() -> None:
         C2CEndpoint,
         C2CMatrixRun,
         C2CPairResult,
+        AlertRule,
+        AlertEvent,
         SecurityScan,
         SecurityFinding,
         ScanSchedule,

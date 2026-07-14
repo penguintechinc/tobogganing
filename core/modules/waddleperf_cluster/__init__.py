@@ -31,6 +31,8 @@ def module() -> ModuleContract:
             "tobogganing.waddleperf_cluster.live_test",
             "tobogganing.waddleperf_cluster.large_fleet",
             "tobogganing.waddleperf_cluster.scheduled_tests",
+            "tobogganing.waddleperf_cluster.alerts",
+            "tobogganing.waddleperf_cluster.alert_routing",
         ],
         entitlements=[
             Entitlement("waddleperf_cluster.org_units", "community"),
@@ -41,6 +43,8 @@ def module() -> ModuleContract:
             Entitlement("waddleperf_cluster.live_test", "community"),
             Entitlement("waddleperf_cluster.large_fleet", "professional"),
             Entitlement("waddleperf_cluster.scheduled_tests", "community"),
+            Entitlement("waddleperf_cluster.alerts", "community"),
+            Entitlement("waddleperf_cluster.alert_routing", "professional"),
         ],
         migrations=["0010", "0011", "0012"],
         health=None,
@@ -51,6 +55,13 @@ def module() -> ModuleContract:
         "waddleperf_cluster",
         "server_test",
         "core.modules.waddleperf_cluster.worker.tasks.run_server_test",
+    )
+
+    # Register handler for alert sweep
+    register_job_handler(
+        "waddleperf_cluster",
+        "alert_sweep",
+        "core.modules.waddleperf_cluster.worker.tasks.alert_sweep",
     )
 
     return contract
