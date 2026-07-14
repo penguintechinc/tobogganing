@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import time
 from typing import Any, Optional
 
@@ -10,13 +12,18 @@ import jwt as pyjwt
 from core.crypto.keys import KeyProvider
 
 
-def encode_access_token(
+def _b64url(data: bytes) -> str:
+    """Base64url-encode without padding (JWS serialization)."""
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+async def encode_access_token(
     claims: dict[str, Any],
     key_provider: KeyProvider,
     ttl_hours: int = 1,
 ) -> str:
     """
-    Encode an access token with RS256 signature.
+    Encode an access token with RS256 signature via manual JWS assembly.
 
     Args:
         claims: Dictionary of claims to include in the token (must include 'sub', 'iss', 'aud', 'tenant').
@@ -40,14 +47,14 @@ def encode_access_token(
         "exp": now + (ttl_hours * 3600),
     }
 
-    token = pyjwt.encode(
-        payload,
-        key_provider.private_pem,
-        algorithm="RS256",
-        headers={"kid": key_provider.kid},
+    header = {"alg": "RS256", "typ": "JWT", "kid": key_provider.kid}
+    signing_input = (
+        _b64url(json.dumps(header, separators=(",", ":")).encode())
+        + "."
+        + _b64url(json.dumps(payload, separators=(",", ":")).encode())
     )
-
-    return token
+    signature = await key_provider.sign(signing_input.encode("ascii"))
+    return signing_input + "." + _b64url(signature)
 
 
 def decode_token(

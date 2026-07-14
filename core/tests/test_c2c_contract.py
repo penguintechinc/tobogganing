@@ -100,7 +100,7 @@ async def test_unlicensed_professional_request_returns_402(
     ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
     app.registry.apply_to(app, ctx)
 
-    token = encode_access_token(
+    token = await encode_access_token(
         {
             "sub": "u",
             "iss": "test-app",

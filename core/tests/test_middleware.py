@@ -89,7 +89,7 @@ class TestRequireTenant:
 
         token = pyjwt.encode(
             payload,
-            provider.private_pem,
+            provider._private_key_pem,
             algorithm="RS256",
             headers={"kid": provider.kid},
         )
@@ -120,7 +120,7 @@ class TestRequireTenant:
             "scope": "*:read",
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_tenant
         async def handler() -> Any:
@@ -168,7 +168,7 @@ class TestRequireScope:
             "scope": "*:read",  # Only read access
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("*:write")  # Requires write access
         async def handler() -> Any:
@@ -196,7 +196,7 @@ class TestRequireScope:
             "scope": "*:read *:write",
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("*:read")
         async def handler() -> Any:
@@ -224,7 +224,7 @@ class TestRequireScope:
             "scope": "*:read *:write *:admin",
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         # Require multiple scopes
         @require_scope("*:read", "*:write")
@@ -253,7 +253,7 @@ class TestRequireScope:
             "scope": "*:read *:write",  # Missing *:admin
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         # Require multiple scopes
         @require_scope("*:read", "*:admin")
@@ -288,7 +288,7 @@ class TestRequireScope:
 
         token = pyjwt.encode(
             payload,
-            provider.private_pem,
+            provider._private_key_pem,
             algorithm="RS256",
             headers={"kid": provider.kid},
         )
@@ -321,7 +321,7 @@ class TestRequireScope:
             "scope": "*:read",  # Wildcard action
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("clusters:read")  # Specific resource:action
         async def handler() -> Any:
@@ -351,7 +351,7 @@ class TestRequireScope:
             "scope": "*:read",  # Only read action
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("clusters:write")  # Requires write action
         async def handler() -> Any:
@@ -379,7 +379,7 @@ class TestRequireScope:
             "scope": "clusters:*",  # Wildcard resource
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("clusters:read", "clusters:write")
         async def handler() -> Any:
@@ -409,7 +409,7 @@ class TestRequireScope:
             "scope": "*:*",  # Wildcard all
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("clusters:read", "pods:write", "nodes:admin")
         async def handler() -> Any:
@@ -437,7 +437,7 @@ class TestRequireScope:
             "scope": "clusters:read clusters:write",  # Exact scopes
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("clusters:read")
         async def handler() -> Any:
@@ -465,7 +465,7 @@ class TestRequireScope:
             "scope": "clusters:read",  # Missing clusters:delete
         }
 
-        token = encode_access_token(claims, provider, ttl_hours=1)
+        token = await encode_access_token(claims, provider, ttl_hours=1)
 
         @require_scope("clusters:delete")
         async def handler() -> Any:
@@ -507,7 +507,7 @@ class TestCurrentClaims:
             "scope": "*:read",
         }
 
-        token = encode_access_token(claims_dict, provider, ttl_hours=1)
+        token = await encode_access_token(claims_dict, provider, ttl_hours=1)
 
         async with app_with_auth.app_context():
             async with app_with_auth.test_request_context(

@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from quart import Quart
 
 from core.auth.jwt import encode_access_token
@@ -38,8 +39,8 @@ def app_with_ping(app: Quart, mock_db: MagicMock) -> Quart:
     return app
 
 
-@pytest.fixture
-def valid_tenant_token(app_with_ping: Quart) -> str:
+@pytest_asyncio.fixture
+async def valid_tenant_token(app_with_ping: Quart) -> str:
     """Generate a valid tenant JWT token for testing.
 
     Args:
@@ -58,7 +59,7 @@ def valid_tenant_token(app_with_ping: Quart) -> str:
         "scope": "*:*",
     }
 
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 

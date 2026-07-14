@@ -42,7 +42,7 @@ async def c2c_readonly_token_matrix(app_with_c2c_matrix_realdal: Quart) -> str:
         "tenant": "test-tenant",
         "scope": "c2c:read",
     }
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
@@ -57,7 +57,7 @@ async def c2c_write_token_matrix(app_with_c2c_matrix_realdal: Quart) -> str:
         "tenant": "test-tenant",
         "scope": "c2c:read c2c:write",
     }
-    token = encode_access_token(claims, provider, ttl_hours=1)
+    token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
 
 
