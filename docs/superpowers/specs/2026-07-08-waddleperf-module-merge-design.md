@@ -134,8 +134,20 @@ Fix on the current tree so nothing critical is carried into the merge.
 - Implement `core/crypto` key-provider abstraction: `InAppKeyProvider` (default) + `AwsKmsKeyProvider` + `GcpKmsKeyProvider`, covering the at-rest encryption key and the JWT signing/auth key from Phase 0.
 - Backend selection via config (`KMS_PROVIDER=inapp|aws|gcp` + creds/key ARN), gated behind Enterprise flag `tobogganing.core.external_kms` + license entitlement; fallback to in-app key when entitlement absent. Metered as a per-feature Enterprise entitlement.
 
+### Phase 4c — WaddlePerf feature completion (scheduler, alerting, AutoPerf, regions)
+Closes the remaining WaddlePerf-parity gaps. **All async** — Quart-native handlers, async Celery tasks, one penguin-dal instance per coroutine/task; no sync DB access anywhere in this phase.
+
+- **Server-side scheduler (`core/scheduler`)** — Celery beat with DB-backed dynamic schedules (tenant-scoped `scheduled_jobs` table via penguin-dal; Alembic migration; beat process reloads schedule from DB, no code-defined crontabs). Modules register job types through the module contract. First consumers: `waddleperf_cluster` server-initiated recurring tests (flag `tobogganing.waddleperf_cluster.scheduled_tests`, Community) and `waddleperf_c2c` recurring matrix runs (flag `tobogganing.waddleperf_c2c.recurring_runs`, Professional). The scheduler itself is core infrastructure — consumers are gated, not the mechanism.
+- **Alerting + notifications** — split delivery from rules:
+  - `core/notifications`: per-tenant delivery channels (SMTP email + webhook), channel config CRUD, delivery log; secrets from env/secret store, never logged.
+  - `modules/waddleperf_cluster` alert rules: threshold rules (metric, comparator, threshold, evaluation window) evaluated async on result ingest and on scheduler sweep. Basic email alerts → Community (`tobogganing.waddleperf_cluster.alerts`); webhook routing + escalation policies → Professional (`tobogganing.waddleperf_cluster.alert_routing`).
+- **AutoPerf tiered monitoring (Professional)** — flag `tobogganing.waddleperf_cluster.autoperf`. Tier definitions (T1 light: ping/HTTP; T2: traces + DNS + TCP; T3: full speedtest + traceroute); per-device/target escalation state machine driven by alert-rule breaches, de-escalating after N consecutive clean cycles; executes via the scheduler; results feed stats + alerting. Metered as a per-feature entitlement.
+- **Region/node registry (Professional)** — flag `tobogganing.waddleperf_c2c.regions`. Public/private test-node catalog (region, provider, visibility, health status), CRUD + scheduler-driven health sweep; c2c matrix orchestration can select endpoints by region. Registered nodes count toward node metering.
+
+Internal sequencing: scheduler → alerting/notifications → AutoPerf (depends on both) → region registry (independent, may run in parallel).
+
 ### Phase 5 — Single portal frontend
-- One React app (tobogganing portal) with per-module view manifests; rebuild browser-test live charts (websocket + recharts). Drop `managerServer/frontend`; retire `webClient/frontend` after parity. Role-based nav (Admin/Reporter/Viewer); shared `@penguintechinc/react-*` components.
+- One React app (tobogganing portal) with per-module view manifests; rebuild browser-test live charts (websocket + recharts). Drop `managerServer/frontend`; retire `webClient/frontend` after parity. Role-based nav (Admin/Reporter/Viewer); shared `@penguintechinc/react-*` components. Includes views for Phase 4c features: alert rules + notification channels, AutoPerf tier status, region/node registry.
 
 ### Phase 6 — Remaining >1000-line files + hardening finish
 - `shared/react_libs/src/components/FormModalBuilder.tsx` (1081) → split types / `buildFieldSchema` / theming / field-renderer subcomponents.
@@ -162,5 +174,6 @@ Fix on the current tree so nothing critical is carried into the merge.
 
 - **Phase 0:** security scans (`make test-security` — bandit, gosec, gitleaks, trivy) clean; auth unit tests prove cert issuance rejects anonymous callers and JWTs validate across workers.
 - **Framework/modules:** `make test` unit+integration on a penguin-dal test DB; module-registry integration test asserts each module's flags default OFF, the license gate returns 402 without entitlement, and cached-value fallback works when license/PostHog is unreachable.
+- **Phase 4c:** real-DAL integration tests for schedule persistence + due-job evaluation; alert-rule breach produces a recorded notification (transport mocked at SMTP/webhook boundary only); AutoPerf escalation and de-escalation state transitions; region CRUD + matrix region filtering; all 4c flags default OFF and Professional features return 402 without entitlement.
 - **End-to-end:** `make smoke-test` on a clean alpha cluster (Kustomize `local-alpha`); browser perf-test flow + WireGuard connect flow exercised; `make lint` + a ≤1000-line check across changed files.
 - **Coverage:** ≥90% gate on touched services.
