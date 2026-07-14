@@ -43,7 +43,7 @@ from core.modules.sase.security.feeds.models import (
 
 
 def test_alembic_migrations_cover_all_tables() -> None:
-    """Verify all Base.metadata tables are covered by migrations 0001-0015.
+    """Verify all Base.metadata tables are covered by migrations 0001-0017.
 
     Migration 0001: users, refresh_tokens, password_reset_tokens
     Migration 0002: firewall_rules
@@ -63,6 +63,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0014: c2c_endpoints
     Migration 0015: c2c_matrix_runs, c2c_pair_results
     Migration 0016: scheduled_jobs
+    Migration 0017: notification_channels, notification_deliveries
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -109,9 +110,11 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "c2c_pair_results",
     }
 
-    # Tables created by migration 0016 (core scheduler)
+    # Tables created by migrations 0016-0017 (core scheduler + notifications)
     created_by_scheduler_migrations = {
         "scheduled_jobs",
+        "notification_channels",
+        "notification_deliveries",
     }
 
     # All tables covered by migrations

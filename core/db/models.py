@@ -735,6 +735,52 @@ class ScheduledJob(Base):
         return f"<ScheduledJob(id={self.id}, module={self.module}, job_type={self.job_type})>"
 
 
+class NotificationChannel(Base):
+    """Notification delivery channel (email or webhook)."""
+
+    __tablename__ = "notification_channels"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    name: Column[str] = Column(String(128), nullable=False)
+    kind: Column[str] = Column(String(16), nullable=False)
+    config: Column[str] = Column(Text, nullable=False)
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<NotificationChannel(id={self.id}, tenant={self.tenant}, kind={self.kind})>"
+
+
+class NotificationDelivery(Base):
+    """Record of a delivery attempt for a notification."""
+
+    __tablename__ = "notification_deliveries"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    channel_id: Column[str] = Column(String(36), nullable=False)
+    subject: Column[str] = Column(String(256), nullable=False)
+    status: Column[str] = Column(String(16), nullable=False)
+    error: Column[str | None] = Column(Text, nullable=True)
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<NotificationDelivery(id={self.id}, channel_id={self.channel_id}, status={self.status})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -759,4 +805,6 @@ __all__ = [
     "C2CMatrixRun",
     "C2CPairResult",
     "ScheduledJob",
+    "NotificationChannel",
+    "NotificationDelivery",
 ]
