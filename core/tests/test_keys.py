@@ -153,33 +153,3 @@ class TestBuildKeyProvider:
         assert len(provider.kid) == 16
 
 
-class TestKmsStubs:
-    """Test KMS provider stubs."""
-
-    @pytest.mark.asyncio
-    async def test_aws_kms_provider_raises_not_implemented(self) -> None:
-        """Test that AwsKmsKeyProvider raises NotImplementedError."""
-        provider = AwsKmsKeyProvider()
-
-        with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            await provider.sign(b"test")
-
-        with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            _ = provider.public_pem
-
-        with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            _ = provider.kid
-
-    @pytest.mark.asyncio
-    async def test_gcp_kms_provider_raises_not_implemented(self) -> None:
-        """Test that GcpKmsKeyProvider raises NotImplementedError."""
-        provider = GcpKmsKeyProvider()
-
-        with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            await provider.sign(b"test")
-
-        with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            _ = provider.public_pem
-
-        with pytest.raises(NotImplementedError, match="wired in Phase 4b"):
-            _ = provider.kid

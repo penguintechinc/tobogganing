@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -56,39 +57,151 @@ class InAppKeyProvider:
 
 
 class AwsKmsKeyProvider:
-    """AWS KMS-backed key provider stub (Phase 4b)."""
+    """AWS KMS-backed key provider using GetPublicKey + DIGEST signing."""
+
+    def __init__(self, key_arn: str, client: Any | None = None) -> None:
+        """Initialize with AWS KMS key ARN and optional client.
+
+        Args:
+            key_arn: AWS KMS key ARN (e.g., 'arn:aws:kms:us-east-1:123456789012:key/12345678')
+            client: Optional boto3 KMS client; if None, lazily imported and created.
+        """
+        self._key_arn = key_arn
+        self._client = client
+        self._public_pem: str | None = None
+        self._kid: str | None = None
+
+    def _get_client(self) -> Any:
+        """Lazily import and create boto3 KMS client if not provided."""
+        if self._client is None:
+            import boto3
+            self._client = boto3.client("kms")
+        return self._client
 
     async def sign(self, data: bytes) -> bytes:
-        """Raise NotImplementedError as placeholder for Phase 4b."""
-        raise NotImplementedError("wired in Phase 4b")
+        """Sign data using AWS KMS DIGEST signing operation.
+
+        Args:
+            data: The data to sign (usually JWS signing input in bytes).
+
+        Returns:
+            The raw signature bytes (RSASSA_PKCS1_V1_5_SHA_256).
+        """
+        client = self._get_client()
+        # Compute SHA256 digest of data
+        digest = hashlib.sha256(data).digest()
+
+        # Call AWS KMS sign operation in thread pool
+        response = await asyncio.to_thread(
+            client.sign,
+            KeyId=self._key_arn,
+            Message=digest,
+            MessageType="DIGEST",
+            SigningAlgorithm="RSASSA_PKCS1_V1_5_SHA_256"
+        )
+
+        return response["Signature"]
 
     @property
     def public_pem(self) -> str:
-        """Raise NotImplementedError as placeholder for Phase 4b."""
-        raise NotImplementedError("wired in Phase 4b")
+        """Return the public key in PEM (SubjectPublicKeyInfo) format.
+
+        Cached after first access via GetPublicKey operation.
+        """
+        if self._public_pem is None:
+            client = self._get_client()
+            # Get public key from AWS KMS
+            response = client.get_public_key(KeyId=self._key_arn)
+            # response["PublicKey"] is DER-encoded; convert to PEM
+            der_key = response["PublicKey"]
+            public_key = serialization.load_der_public_key(der_key)
+            self._public_pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            ).decode("utf-8")
+        return self._public_pem
 
     @property
     def kid(self) -> str:
-        """Raise NotImplementedError as placeholder for Phase 4b."""
-        raise NotImplementedError("wired in Phase 4b")
+        """Return the Key ID derived from SHA256 hash of public key.
+
+        Follows the same rule as InAppKeyProvider: sha256(public_pem)[:16].
+        """
+        if self._kid is None:
+            self._kid = hashlib.sha256(self.public_pem.encode()).hexdigest()[:16]
+        return self._kid
 
 
 class GcpKmsKeyProvider:
-    """Google Cloud KMS-backed key provider stub (Phase 4b)."""
+    """Google Cloud KMS-backed key provider using GetPublicKey + AsymmetricSign."""
+
+    def __init__(self, key_name: str, client: Any | None = None) -> None:
+        """Initialize with GCP KMS key name and optional client.
+
+        Args:
+            key_name: Full CryptoKeyVersion resource name
+                (e.g., 'projects/my-project/locations/us/keyRings/my-keyring/cryptoKeys/my-key/versions/1')
+            client: Optional google.cloud.kms.KeyManagementServiceClient; if None, lazily imported and created.
+        """
+        self._key_name = key_name
+        self._client = client
+        self._public_pem: str | None = None
+        self._kid: str | None = None
+
+    def _get_client(self) -> Any:
+        """Lazily import and create GCP KMS client if not provided."""
+        if self._client is None:
+            from google.cloud import kms
+            self._client = kms.KeyManagementServiceClient()
+        return self._client
 
     async def sign(self, data: bytes) -> bytes:
-        """Raise NotImplementedError as placeholder for Phase 4b."""
-        raise NotImplementedError("wired in Phase 4b")
+        """Sign data using GCP KMS AsymmetricSign operation.
+
+        Args:
+            data: The data to sign (usually JWS signing input in bytes).
+
+        Returns:
+            The raw signature bytes (using the KMS key's signing algorithm).
+        """
+        client = self._get_client()
+        # Compute SHA256 digest of data
+        digest = hashlib.sha256(data).digest()
+
+        # Call GCP KMS sign operation in thread pool
+        response = await asyncio.to_thread(
+            client.asymmetric_sign,
+            request={
+                "name": self._key_name,
+                "digest": {"sha256": digest},
+            }
+        )
+
+        return response.signature
 
     @property
     def public_pem(self) -> str:
-        """Raise NotImplementedError as placeholder for Phase 4b."""
-        raise NotImplementedError("wired in Phase 4b")
+        """Return the public key in PEM (SubjectPublicKeyInfo) format.
+
+        Cached after first access via GetPublicKey operation.
+        """
+        if self._public_pem is None:
+            client = self._get_client()
+            # Get public key from GCP KMS
+            response = client.get_public_key(request={"name": self._key_name})
+            # response.pem is already in PEM format
+            self._public_pem = response.pem
+        return self._public_pem
 
     @property
     def kid(self) -> str:
-        """Raise NotImplementedError as placeholder for Phase 4b."""
-        raise NotImplementedError("wired in Phase 4b")
+        """Return the Key ID derived from SHA256 hash of public key.
+
+        Follows the same rule as InAppKeyProvider: sha256(public_pem)[:16].
+        """
+        if self._kid is None:
+            self._kid = hashlib.sha256(self.public_pem.encode()).hexdigest()[:16]
+        return self._kid
 
 
 def generate_rsa_key_pair() -> tuple[str, str]:
