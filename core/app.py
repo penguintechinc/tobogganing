@@ -10,8 +10,11 @@ from quart import Quart, jsonify
 from quart_cors import cors
 
 from core.config import Config, build_db_uri
+from core.crypto.secrets import SecretEncryptor, set_encryptor
+from core.crypto.selection import build_signing_provider, build_data_key_provider
 from core.db import init_dal, get_db
 from core.registry import ModuleContext, ModuleRegistry
+from core.registry.contract import Entitlement
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +63,12 @@ def create_app(config: Config | None = None) -> Quart:
     registry = ModuleRegistry()
     app.registry = registry  # type: ignore[attr-defined]
 
+    # Register core-level entitlements and flags
+    registry.register_entitlements(
+        [Entitlement(feature="core.external_kms", tier="enterprise")]
+    )
+    registry._flags.append("tobogganing.core.external_kms")
+
     # Import and register modules from core.modules
     import core.modules
     for module_name in core.modules.__all__:
@@ -74,6 +83,15 @@ def create_app(config: Config | None = None) -> Quart:
         except (ImportError, AttributeError) as e:
             logger.error(f"Failed to register module {module_name}: {e}")
 
+    # Build and set the signing key provider (in-app or external KMS)
+    try:
+        key_provider = build_signing_provider(registry)
+        app.config["KEY_PROVIDER"] = key_provider
+        logger.info(f"Configured key provider: {type(key_provider).__name__}")
+    except Exception as e:
+        logger.error(f"Failed to configure key provider: {e}")
+        raise
+
     @app.before_serving
     async def setup_services() -> None:
         """Initialize services after DB connection is ready."""
@@ -81,8 +99,19 @@ def create_app(config: Config | None = None) -> Quart:
             db = get_db()
             app.db = db  # type: ignore[attr-defined]
             # Apply registry to app with the module context
-            ctx = ModuleContext(config=config, db=db, key_provider=None)
+            ctx = ModuleContext(config=config, db=db, key_provider=app.config.get("KEY_PROVIDER"))
             registry.apply_to(app, ctx)
+
+            # Initialize the global encryptor from the selected data key provider
+            try:
+                data_key_provider = build_data_key_provider(registry)
+                encryptor = SecretEncryptor(data_key_provider.get_data_key())
+                set_encryptor(encryptor)
+                logger.info(f"Initialized encryptor: {type(data_key_provider).__name__}")
+            except Exception as e:
+                logger.error(f"Failed to initialize encryptor: {e}")
+                raise
+
             logger.info("Services initialized on app startup")
 
     # Health check endpoint

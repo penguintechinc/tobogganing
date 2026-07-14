@@ -207,6 +207,9 @@ def test_db_session() -> Any:
         alembic_ini_path = Path(__file__).parent.parent / "alembic.ini"
         alembic_cfg = AlembicConfig(str(alembic_ini_path))
         alembic_cfg.set_main_option("sqlalchemy.url", db_uri)
+        # Keep alembic's fileConfig() from disabling every already-created
+        # logger session-wide (it silently breaks caplog in later tests).
+        alembic_cfg.attributes["configure_logger"] = False
 
         # Set the script location to the migrations directory
         migrations_dir = Path(__file__).parent.parent / "migrations"
@@ -259,6 +262,9 @@ async def real_dal() -> Any:
         alembic_cfg.set_main_option(
             "script_location", str(Path(__file__).parent.parent / "migrations")
         )
+        # Keep alembic's fileConfig() from disabling every already-created
+        # logger session-wide (it silently breaks caplog in later tests).
+        alembic_cfg.attributes["configure_logger"] = False
         command.upgrade(alembic_cfg, "head")
 
         dal = AsyncDB(uri=db_uri)

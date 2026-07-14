@@ -55,6 +55,56 @@ class InAppKeyProvider:
         """Return the Key ID derived from public key hash."""
         return hashlib.sha256(self._public_key_pem.encode()).hexdigest()[:16]
 
+    @classmethod
+    def _build_from_env(cls) -> InAppKeyProvider:
+        """Build InAppKeyProvider from environment configuration.
+
+        Checks JWT_PRIVATE_KEY_PEM env var first; if not found,
+        attempts to read from JWT_PRIVATE_KEY_PATH file.
+        Falls back to generating a new key pair for development.
+
+        Returns:
+            InAppKeyProvider instance.
+
+        Raises:
+            ValueError: If private key cannot be loaded or generated.
+        """
+        private_pem_env = os.getenv("JWT_PRIVATE_KEY_PEM")
+        if private_pem_env:
+            # Extract public key from private key
+            private_key = serialization.load_pem_private_key(
+                private_pem_env.encode(),
+                password=None,
+            )
+            public_key = private_key.public_key()
+            public_pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode("utf-8")
+            return cls(private_pem_env, public_pem)
+
+        private_key_path = os.getenv("JWT_PRIVATE_KEY_PATH")
+        if private_key_path:
+            try:
+                with open(private_key_path, "r") as f:
+                    private_pem = f.read()
+                private_key = serialization.load_pem_private_key(
+                    private_pem.encode(),
+                    password=None,
+                )
+                public_key = private_key.public_key()
+                public_pem = public_key.public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                ).decode("utf-8")
+                return cls(private_pem, public_pem)
+            except (IOError, ValueError) as e:
+                raise ValueError(f"Failed to load private key from {private_key_path}: {e}")
+
+        # Development fallback: generate new key pair
+        private_pem, public_pem = generate_rsa_key_pair()
+        return cls(private_pem, public_pem)
+
 
 class AwsKmsKeyProvider:
     """AWS KMS-backed key provider using GetPublicKey + DIGEST signing."""
@@ -227,12 +277,11 @@ def generate_rsa_key_pair() -> tuple[str, str]:
 
 
 def build_key_provider() -> KeyProvider:
-    """
-    Build and return a KeyProvider based on environment configuration.
+    """Build and return a KeyProvider based on environment configuration.
 
-    Checks for JWT_PRIVATE_KEY_PEM env var first; if not found,
-    attempts to read from JWT_PRIVATE_KEY_PATH file.
-    Falls back to generating a new key pair for development.
+    Builds an in-app provider from JWT_PRIVATE_KEY_PEM, JWT_PRIVATE_KEY_PATH,
+    or a newly generated key pair. For full selection logic including external
+    KMS providers, use build_signing_provider from core.crypto.selection instead.
 
     Returns:
         KeyProvider: Configured key provider instance.
@@ -240,46 +289,4 @@ def build_key_provider() -> KeyProvider:
     Raises:
         ValueError: If private key cannot be loaded or generated.
     """
-    private_pem_env = os.getenv("JWT_PRIVATE_KEY_PEM")
-    if private_pem_env:
-        # Extract public key from private key
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.backends import default_backend
-
-        private_key = serialization.load_pem_private_key(
-            private_pem_env.encode(),
-            password=None,
-            backend=default_backend(),
-        )
-        public_key = private_key.public_key()
-        public_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode("utf-8")
-        return InAppKeyProvider(private_pem_env, public_pem)
-
-    private_key_path = os.getenv("JWT_PRIVATE_KEY_PATH")
-    if private_key_path:
-        try:
-            with open(private_key_path, "r") as f:
-                private_pem = f.read()
-            from cryptography.hazmat.primitives import serialization
-            from cryptography.hazmat.backends import default_backend
-
-            private_key = serialization.load_pem_private_key(
-                private_pem.encode(),
-                password=None,
-                backend=default_backend(),
-            )
-            public_key = private_key.public_key()
-            public_pem = public_key.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode("utf-8")
-            return InAppKeyProvider(private_pem, public_pem)
-        except (IOError, ValueError) as e:
-            raise ValueError(f"Failed to load private key from {private_key_path}: {e}")
-
-    # Development fallback: generate new key pair
-    private_pem, public_pem = generate_rsa_key_pair()
-    return InAppKeyProvider(private_pem, public_pem)
+    return InAppKeyProvider._build_from_env()

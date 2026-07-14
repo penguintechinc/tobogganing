@@ -14,8 +14,12 @@ from core.db.base import Base
 # Get the Alembic config object
 config = context.config
 
-# Interpret the config file for Python logging.
-if config.config_file_name is not None:
+# Interpret the config file for Python logging. Callers (e.g. the test
+# harness) can opt out via attributes["configure_logger"] = False so
+# fileConfig() doesn't disable every already-created logger.
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
+):
     fileConfig(config.config_file_name)
 
 logger = logging.getLogger("alembic.env")

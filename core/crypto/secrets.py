@@ -114,6 +114,16 @@ def get_encryptor() -> SecretEncryptor:
     return _encryptor
 
 
+def set_encryptor(encryptor: SecretEncryptor) -> None:
+    """Set the global encryptor instance (for testing or app startup injection).
+
+    Args:
+        encryptor: SecretEncryptor instance to use globally.
+    """
+    global _encryptor
+    _encryptor = encryptor
+
+
 def encrypt_secret(plaintext: str) -> str:
     """Encrypt a secret.
 

@@ -35,6 +35,14 @@ class ModuleRegistry:
         self._nav.extend(contract.nav)
         self._entitlements.extend(contract.entitlements)
 
+    def register_entitlements(self, entitlements: list[Entitlement]) -> None:
+        """Register core-level entitlements (features without a module contract).
+
+        Args:
+            entitlements: List of Entitlement objects to register.
+        """
+        self._entitlements.extend(entitlements)
+
     def apply_to(self, app: Quart, ctx: ModuleContext) -> None:
         """Apply all registered modules to the Quart application.
 
