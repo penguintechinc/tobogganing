@@ -83,3 +83,28 @@ test.describe('Portal Smoke Tests', () => {
     expect(json.status).toBe('ok');
   });
 });
+
+  test('module views render across all three modules', async ({ page }) => {
+    await page.goto('/login');
+    const emailInput = page.locator('input[type="email"]');
+    const passwordInput = page.locator('input[type="password"]');
+    await emailInput.fill('test@example.com');
+    await passwordInput.fill('testpass');
+    await page.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL('/', { timeout: 5000 });
+
+    // waddleperf_cluster devices: two mocked rows
+    await page.goto('/m/waddleperf_cluster/devices');
+    await expect(page.getByText('edge-nyc-1')).toBeVisible();
+    await expect(page.getByText('edge-lon-1')).toBeVisible();
+
+    // sase clusters: empty state renders (no crash)
+    await page.goto('/m/sase/clusters');
+    await expect(page.getByText(/no .*found|no data|empty/i).first()).toBeVisible({
+      timeout: 5000,
+    });
+
+    // c2c nodes: one mocked row
+    await page.goto('/m/waddleperf_c2c/c2c-nodes');
+    await expect(page.getByText('us-east-node')).toBeVisible();
+  });

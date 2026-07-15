@@ -35,6 +35,12 @@ Note: `@penguintechinc/react-libs` / `react-aaa` had peer-dep conflicts at scaff
 - **Jest + RTL**: 90% threshold (lines/branches/functions/statements) enforced in `jest.config.js`; interceptors are unit-tested by invoking handlers directly.
 - **Playwright** (`portal/e2e/`): smoke suite boots the built app via `server.js` against a mock core API (`e2e/mock-api.js`, port 3001); artifacts in `/tmp/playwright-tobogganing`, cleaned after every run.
 
-## Views (Phase 5a)
+## Views
 
-Devices, Tests (expandable results), Stats (summary + trends chart) for `waddleperf_cluster`; all other nav entries render placeholders until Phase 5b (SASE views, alerts/channels, AutoPerf, regions, c2c matrix, live-test charts).
+Full module parity as of Phase 5b:
+
+- **waddleperf_cluster**: Devices, Tests (expandable results), Stats (summary + trends), Alerts (rules/channels/events tabs, Professional upsell on webhook channels), Scheduled Tests, AutoPerf (policies + tier state), Live Test (WebSocket stream → real-time chart; token passed as `?token=` since browsers cannot set WS headers).
+- **waddleperf_c2c**: Nodes (endpoints), Runs with the source×dest matrix grid (colored by loss/latency), Recurring jobs (matrix_run/node_health), Regions (aggregate cards + redacted public-node table).
+- **sase**: Clusters, Clients, Status.
+
+New modules appear automatically: register nav in the module contract and add a page to the module's view map in `src/routes/` — the manifest does the rest.

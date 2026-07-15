@@ -40,17 +40,23 @@ class StreamMessage:
 
 
 async def _validate_websocket_auth() -> tuple[str | None, str | None]:
-    """Validate WebSocket connection via JWT Authorization header.
+    """Validate WebSocket connection via JWT.
+
+    Accepts the token from the Authorization header (service clients) or,
+    when the header is absent, from the ``token`` query parameter — the
+    browser WebSocket API cannot set custom headers.
 
     Returns:
         Tuple of (tenant, claims) if valid, (None, None) otherwise.
     """
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        logger.warning("websocket_auth_failed_missing_bearer")
-        return None, None
-
-    token = auth_header[7:]
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        token = request.args.get("token", "")
+        if not token:
+            logger.warning("websocket_auth_failed_missing_bearer")
+            return None, None
     key_provider = current_app.config.get("KEY_PROVIDER")
     if not key_provider:
         logger.error("websocket_auth_failed_no_key_provider")

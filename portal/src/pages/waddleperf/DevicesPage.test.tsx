@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DevicesPage } from './DevicesPage';
 import * as waddleperf from '../../api/waddleperf';
@@ -195,6 +196,33 @@ describe('DevicesPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Never')).toBeInTheDocument();
+    });
+  });
+
+  it('calls retry on fetch failure', async () => {
+    const error = new Error('Network error');
+    mockWaddleperf.listDevices.mockRejectedValueOnce(error);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DevicesPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Error loading data')).toBeInTheDocument();
+    });
+
+    mockWaddleperf.listDevices.mockResolvedValueOnce(mockDevices);
+    const retryButton = screen.getByText('Retry');
+    await userEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Device 1')).toBeInTheDocument();
     });
   });
 });

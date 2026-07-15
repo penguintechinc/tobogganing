@@ -7,9 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { Shell } from './components/Shell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PlaceholderView } from './components/PlaceholderView';
-import { DevicesPage } from './pages/waddleperf/DevicesPage';
-import { TestsPage } from './pages/waddleperf/TestsPage';
-import { StatsPage } from './pages/waddleperf/StatsPage';
+import { resolveView } from './routes/viewRegistry';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,16 +49,9 @@ export function ModuleViewRoute() {
     return null;
   }
 
-  if (module === 'waddleperf_cluster') {
-    if (view === 'devices') {
-      return <DevicesPage />;
-    }
-    if (view === 'tests') {
-      return <TestsPage />;
-    }
-    if (view === 'stats') {
-      return <StatsPage />;
-    }
+  const View = resolveView(module, view);
+  if (View) {
+    return <View />;
   }
 
   return <PlaceholderView module={module} view={view} />;

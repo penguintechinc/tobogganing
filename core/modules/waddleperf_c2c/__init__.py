@@ -33,6 +33,7 @@ def module() -> ModuleContract:
             NavEntry("C2C Nodes", "/api/v1/waddleperf_c2c/endpoints", "server"),
             NavEntry("C2C Runs", "/api/v1/waddleperf_c2c/runs", "activity"),
             NavEntry("C2C Matrix", "/api/v1/waddleperf_c2c/matrix", "grid"),
+            NavEntry("C2C Recurring", "/api/v1/waddleperf_c2c/recurring", "clock"),
             NavEntry("C2C Regions", "/api/v1/waddleperf_c2c/regions", "map"),
         ],
         flags=[
