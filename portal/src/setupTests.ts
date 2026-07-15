@@ -23,6 +23,20 @@ global.sessionStorage = {
   },
 } as Storage;
 
-// Mock window.location.href
+// Mock window.location with full properties
 delete (window as unknown as Record<string, unknown>).location;
-window.location = { href: '' } as unknown as Location;
+Object.defineProperty(window, 'location', {
+  value: {
+    href: '',
+    origin: 'http://localhost',
+    protocol: 'http:',
+    host: 'localhost',
+    hostname: 'localhost',
+    port: '',
+    pathname: '/',
+    search: '',
+    hash: '',
+    reload: jest.fn(),
+  },
+  writable: true,
+});

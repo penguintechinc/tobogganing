@@ -15,10 +15,10 @@ export default {
   ],
   coverageThreshold: {
     global: {
-      lines: 45,
-      branches: 20,
-      functions: 40,
-      statements: 45,
+      lines: 90,
+      branches: 90,
+      functions: 90,
+      statements: 90,
     },
   },
   setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],

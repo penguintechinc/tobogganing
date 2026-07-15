@@ -1,6 +1,4 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@import "tailwindcss";
 
 :root {
   --bg-primary: #0f172a;
@@ -19,7 +17,8 @@
 }
 
 body {
-  @apply bg-slate-900 text-amber-400;
+  background-color: #0f172a;
+  color: #fbbf24;
 }
 
 @media (prefers-reduced-motion: reduce) {

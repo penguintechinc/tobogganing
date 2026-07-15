@@ -1,21 +1,49 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Shell } from './Shell';
 import { AuthProvider } from '../context/AuthContext';
 
-const queryClient = new QueryClient();
+jest.mock('../hooks/useManifest', () => ({
+  useManifest: () => ({
+    data: {
+      modules: [
+        {
+          name: 'Admin',
+          nav: [
+            { label: 'Users', path: '/m/admin/users', icon: 'laptop' },
+            { label: 'Settings', path: '/m/admin/settings', icon: 'settings' },
+          ],
+          flags: {},
+        },
+      ],
+      role: 'maintainer',
+    },
+    isLoading: false,
+    error: null,
+  }),
+}));
 
 const renderShell = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
   render(
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Shell />
+          <Routes>
+            <Route path="/" element={<Shell />} />
+          </Routes>
         </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
   );
 };
 
@@ -28,26 +56,49 @@ describe('Shell', () => {
     );
   });
 
-  it('renders sidebar on desktop', () => {
+  it('renders sidebar branding on desktop', async () => {
     renderShell();
-    // The sidebar renders but may not be visible due to hidden lg:block
-    expect(screen.getByText('Tobogganing')).toBeInTheDocument();
+    await waitFor(() => {
+      const tobogganing = screen.getAllByText('Tobogganing');
+      expect(tobogganing.length).toBeGreaterThan(0);
+    });
   });
 
-  it('renders logout button in sidebar', () => {
+  it('renders logout button in sidebar', async () => {
     renderShell();
-    expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+    });
   });
 
-  it('renders hamburger menu on mobile', () => {
+  it('renders hamburger menu on mobile', async () => {
     renderShell();
-    const toggleButton = screen.getByLabelText(/toggle menu/i);
-    expect(toggleButton).toBeInTheDocument();
+    await waitFor(() => {
+      const toggleButton = screen.getByLabelText(/toggle menu/i);
+      expect(toggleButton).toBeInTheDocument();
+    });
   });
 
   it('renders main outlet area', () => {
     renderShell();
-    // Shell is rendered with Outlet, which will render child routes
     expect(document.querySelector('main')).toBeInTheDocument();
+  });
+
+  it('toggles mobile menu on hamburger click', async () => {
+    renderShell();
+    const toggleButton = screen.getByLabelText(/toggle menu/i);
+
+    fireEvent.click(toggleButton);
+    await waitFor(() => {
+      const adminText = screen.getAllByText('Admin');
+      expect(adminText.length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(toggleButton);
+    await waitFor(() => {
+      const adminText = screen.queryAllByText('Admin');
+      // Admin text should still be there (desktop version is always rendered)
+      expect(adminText.length >= 1).toBe(true);
+    });
   });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useParams } from 'react-router-dom';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { AuthProvider } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
@@ -7,6 +7,9 @@ import { DashboardPage } from './pages/DashboardPage';
 import { Shell } from './components/Shell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PlaceholderView } from './components/PlaceholderView';
+import { DevicesPage } from './pages/waddleperf/DevicesPage';
+import { TestsPage } from './pages/waddleperf/TestsPage';
+import { StatsPage } from './pages/waddleperf/StatsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,10 +44,24 @@ export function App() {
   );
 }
 
-function ModuleViewRoute() {
-  const parts = window.location.pathname.split('/');
-  const module = parts[2];
-  const view = parts[3];
+export function ModuleViewRoute() {
+  const { module, view } = useParams<{ module: string; view: string }>();
+
+  if (!module || !view) {
+    return null;
+  }
+
+  if (module === 'waddleperf_cluster') {
+    if (view === 'devices') {
+      return <DevicesPage />;
+    }
+    if (view === 'tests') {
+      return <TestsPage />;
+    }
+    if (view === 'stats') {
+      return <StatsPage />;
+    }
+  }
 
   return <PlaceholderView module={module} view={view} />;
 }
