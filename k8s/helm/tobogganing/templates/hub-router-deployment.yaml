@@ -17,9 +17,6 @@ spec:
       labels:
         {{- include "tobogganing.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: hub-router
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
       hostNetwork: {{ .Values.hubRouter.hostNetwork }}
