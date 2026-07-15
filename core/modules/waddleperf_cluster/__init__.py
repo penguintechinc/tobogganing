@@ -21,6 +21,9 @@ def module() -> ModuleContract:
             NavEntry("Devices", "/api/v1/waddleperf_cluster/devices", "laptop"),
             NavEntry("Tests", "/api/v1/waddleperf_cluster/tests", "activity"),
             NavEntry("Stats", "/api/v1/waddleperf_cluster/stats", "bar-chart-2"),
+            NavEntry("Alerts", "/api/v1/waddleperf_cluster/alerts", "bell"),
+            NavEntry("Scheduled Tests", "/api/v1/waddleperf_cluster/scheduled-tests", "clock"),
+            NavEntry("AutoPerf", "/api/v1/waddleperf_cluster/autoperf", "zap"),
         ],
         flags=[
             "tobogganing.waddleperf_cluster.org_units",
