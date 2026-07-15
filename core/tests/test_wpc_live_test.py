@@ -408,3 +408,71 @@ class TestLiveTestHTTP:
                 pytest.skip(
                     f"WebSocket test client limitation: {str(e)}. Full testing via integration tests."
                 )
+
+
+class TestWebSocketQueryParamAuth:
+    """The browser WebSocket API cannot set headers — ?token= must work."""
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_accepts_query_token(
+        self, app_with_wpc
+    ) -> None:
+        """A valid JWT passed as ?token= authenticates the websocket."""
+        from core.auth.jwt import encode_access_token
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        provider = app_with_wpc.config["KEY_PROVIDER"]
+        token = await encode_access_token(
+            {
+                "sub": "u1",
+                "iss": "test-app",
+                "aud": "test-app",
+                "tenant": "tenant-ws",
+                "scope": "*:*",
+            },
+            provider,
+        )
+
+        async with app_with_wpc.test_request_context(
+            f"/api/v1/waddleperf_cluster/live-test/stream?token={token}",
+            method="GET",
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant == "tenant-ws"
+        assert claims is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_bad_query_token(
+        self, app_with_wpc
+    ) -> None:
+        """Garbage ?token= is rejected; no header fallback confusion."""
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        async with app_with_wpc.test_request_context(
+            "/api/v1/waddleperf_cluster/live-test/stream?token=not-a-jwt",
+            method="GET",
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_missing_both_rejected(
+        self, app_with_wpc
+    ) -> None:
+        """No header and no query token → rejected."""
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        async with app_with_wpc.test_request_context(
+            "/api/v1/waddleperf_cluster/live-test/stream",
+            method="GET",
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
