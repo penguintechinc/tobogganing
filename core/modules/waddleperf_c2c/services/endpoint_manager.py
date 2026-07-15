@@ -61,21 +61,7 @@ class EndpointManager:
         if not rowset:
             return []
 
-        return [
-            {
-                "id": e.id,
-                "tenant": e.tenant,
-                "region": e.region,
-                "name": e.name,
-                "engine_url": e.engine_url,
-                "target": e.target,
-                "api_key_hash": e.api_key_hash,
-                "enabled": e.enabled,
-                "created_at": e.created_at.isoformat() if e.created_at else None,
-                "updated_at": e.updated_at.isoformat() if e.updated_at else None,
-            }
-            for e in rowset
-        ]
+        return [self._endpoint_to_dict(e) for e in rowset]
 
     async def get_endpoint(self, endpoint_id: str) -> dict[str, object] | None:
         """Get an endpoint by ID.
@@ -95,18 +81,7 @@ class EndpointManager:
         if not endpoint:
             return None
 
-        return {
-            "id": endpoint.id,
-            "tenant": endpoint.tenant,
-            "region": endpoint.region,
-            "name": endpoint.name,
-            "engine_url": endpoint.engine_url,
-            "target": endpoint.target,
-            "api_key_hash": endpoint.api_key_hash,
-            "enabled": endpoint.enabled,
-            "created_at": endpoint.created_at.isoformat() if endpoint.created_at else None,
-            "updated_at": endpoint.updated_at.isoformat() if endpoint.updated_at else None,
-        }
+        return self._endpoint_to_dict(endpoint)
 
     async def create_endpoint(
         self,
@@ -115,6 +90,8 @@ class EndpointManager:
         engine_url: str,
         target: str,
         api_key: str | None = None,
+        visibility: str = "private",
+        provider: str | None = None,
     ) -> tuple[dict[str, object], str | None]:
         """Create a new endpoint.
 
@@ -124,15 +101,21 @@ class EndpointManager:
             engine_url: Base URL of the test engine
             target: Target host that other nodes test against
             api_key: Optional API key; if None, one is generated
+            visibility: Endpoint visibility ('private' or 'public'), default 'private'
+            provider: Optional cloud provider name
 
         Returns:
             Tuple of (endpoint_dict, raw_api_key). If api_key provided,
             raw_api_key is None. If generated, raw_api_key is returned once.
 
         Raises:
-            ValueError: If endpoint with same (tenant, region, name) already exists
-            or if api_key is provided but blank
+            ValueError: If endpoint with same (tenant, region, name) already exists,
+            or if api_key is provided but blank, or if visibility is invalid
         """
+        # Validate visibility
+        if visibility not in ("private", "public"):
+            raise ValueError(f"visibility must be 'private' or 'public', got {visibility}")
+
         # Reject empty/blank api_key (finding #4)
         if api_key is not None and not api_key.strip():
             raise ValueError("api_key cannot be empty or blank")
@@ -168,6 +151,10 @@ class EndpointManager:
             target=target,
             api_key_hash=api_key_hash,
             enabled=True,
+            visibility=visibility,
+            provider=provider,
+            health_status="unknown",
+            last_health_check=None,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -186,7 +173,19 @@ class EndpointManager:
             tenant=self.tenant,
         )
 
-        endpoint_dict = {
+        endpoint_dict = self._endpoint_to_dict(endpoint)
+        return (endpoint_dict, return_key)
+
+    def _endpoint_to_dict(self, endpoint: Any) -> dict[str, object]:
+        """Convert endpoint row to dict with all fields.
+
+        Args:
+            endpoint: Endpoint row from database
+
+        Returns:
+            Dictionary representation of endpoint
+        """
+        return {
             "id": endpoint.id,
             "tenant": endpoint.tenant,
             "region": endpoint.region,
@@ -195,18 +194,24 @@ class EndpointManager:
             "target": endpoint.target,
             "api_key_hash": endpoint.api_key_hash,
             "enabled": endpoint.enabled,
+            "visibility": endpoint.visibility,
+            "provider": endpoint.provider,
+            "health_status": endpoint.health_status,
+            "last_health_check": (
+                endpoint.last_health_check.isoformat()
+                if endpoint.last_health_check
+                else None
+            ),
             "created_at": endpoint.created_at.isoformat() if endpoint.created_at else None,
             "updated_at": endpoint.updated_at.isoformat() if endpoint.updated_at else None,
         }
-
-        return (endpoint_dict, return_key)
 
     async def update_endpoint(self, endpoint_id: str, **fields: object) -> dict[str, object] | None:
         """Update an endpoint.
 
         Args:
             endpoint_id: Endpoint ID
-            **fields: Fields to update (name, engine_url, target, region, enabled)
+            **fields: Fields to update (name, engine_url, target, region, enabled, visibility)
 
         Returns:
             Updated endpoint dict or None if not found
@@ -221,8 +226,14 @@ class EndpointManager:
             return None
 
         # Filter to allowed fields
-        allowed = {"name", "engine_url", "target", "region", "enabled"}
+        allowed = {"name", "engine_url", "target", "region", "enabled", "visibility", "provider"}
         update_data = {k: v for k, v in fields.items() if k in allowed}
+
+        # Validate visibility if provided
+        if "visibility" in update_data and update_data["visibility"] not in ("private", "public"):
+            raise ValueError(
+                f"visibility must be 'private' or 'public', got {update_data['visibility']}"
+            )
 
         if not update_data:
             return await self.get_endpoint(endpoint_id)
@@ -241,6 +252,115 @@ class EndpointManager:
         )
 
         return await self.get_endpoint(endpoint_id)
+
+    async def list_regions(self, tenant: str) -> list[dict[str, object]]:
+        """Aggregate regions over tenant's endpoints and all public endpoints.
+
+        Returns aggregate data including node count, healthy count, and providers
+        for each region. Includes own tenant's all endpoints and ALL tenants'
+        public endpoints.
+
+        Args:
+            tenant: Tenant identifier
+
+        Returns:
+            List of region aggregates: {region, node_count, healthy_count, providers}
+        """
+        # Get own tenant's all endpoints
+        own_rowset = await self.db(self.db.c2c_endpoints.tenant == tenant).select()
+
+        # Get all public endpoints from any tenant
+        public_rowset = await self.db(
+            self.db.c2c_endpoints.visibility == "public"
+        ).select()
+
+        # Combine and aggregate by region
+        endpoints = list(own_rowset) if own_rowset else []
+        endpoints += list(public_rowset) if public_rowset else []
+
+        region_data: dict[str, dict[str, Any]] = {}
+        for ep in endpoints:
+            region = ep.region
+            if region not in region_data:
+                region_data[region] = {
+                    "region": region,
+                    "node_count": 0,
+                    "healthy_count": 0,
+                    "providers": set(),
+                }
+
+            region_data[region]["node_count"] += 1
+            if ep.health_status == "healthy":
+                region_data[region]["healthy_count"] += 1
+            if ep.provider:
+                region_data[region]["providers"].add(ep.provider)
+
+        # Convert to list with providers as list
+        result = [
+            {
+                "region": data["region"],
+                "node_count": data["node_count"],
+                "healthy_count": data["healthy_count"],
+                "providers": sorted(list(data["providers"])),
+            }
+            for data in region_data.values()
+        ]
+
+        return sorted(result, key=lambda r: r["region"])
+
+    async def visible_endpoints(
+        self, tenant: str, region: str | None = None
+    ) -> list[dict[str, object]]:
+        """List endpoints visible to a tenant (own + foreign public, optionally filtered by region).
+
+        Returns own tenant's all endpoints + all public endpoints from other tenants.
+        Foreign public endpoints are returned WITHOUT engine_url, target, or api_key_hash.
+
+        Args:
+            tenant: Tenant identifier
+            region: Optional region filter
+
+        Returns:
+            List of visible endpoint dicts (foreign public endpoints redacted)
+        """
+        # Get own tenant's all endpoints
+        if region:
+            own_rowset = await self.db(
+                (self.db.c2c_endpoints.tenant == tenant) & (self.db.c2c_endpoints.region == region)
+            ).select()
+        else:
+            own_rowset = await self.db(self.db.c2c_endpoints.tenant == tenant).select()
+
+        # Get all public endpoints from any tenant
+        if region:
+            public_rowset = await self.db(
+                (self.db.c2c_endpoints.visibility == "public")
+                & (self.db.c2c_endpoints.region == region)
+            ).select()
+        else:
+            public_rowset = await self.db(
+                self.db.c2c_endpoints.visibility == "public"
+            ).select()
+
+        result = []
+
+        # Add own endpoints (full data)
+        if own_rowset:
+            for ep in own_rowset:
+                result.append(self._endpoint_to_dict(ep))
+
+        # Add foreign public endpoints (redacted)
+        if public_rowset:
+            for ep in public_rowset:
+                if ep.tenant != tenant:  # Foreign
+                    # Redact sensitive fields
+                    redacted = self._endpoint_to_dict(ep)
+                    del redacted["engine_url"]
+                    del redacted["target"]
+                    del redacted["api_key_hash"]
+                    result.append(redacted)
+
+        return result
 
     async def delete_endpoint(self, endpoint_id: str) -> bool:
         """Delete an endpoint.
@@ -327,7 +447,8 @@ async def authenticate_node_global(
             )
             return None
 
-        endpoint_dict = {
+        # Build endpoint dict with all fields
+        endpoint_dict: dict[str, object] = {
             "id": endpoint.id,
             "tenant": endpoint.tenant,
             "region": endpoint.region,
@@ -336,6 +457,14 @@ async def authenticate_node_global(
             "target": endpoint.target,
             "api_key_hash": endpoint.api_key_hash,
             "enabled": endpoint.enabled,
+            "visibility": endpoint.visibility,
+            "provider": endpoint.provider,
+            "health_status": endpoint.health_status,
+            "last_health_check": (
+                endpoint.last_health_check.isoformat()
+                if endpoint.last_health_check
+                else None
+            ),
             "created_at": endpoint.created_at.isoformat() if endpoint.created_at else None,
             "updated_at": endpoint.updated_at.isoformat() if endpoint.updated_at else None,
         }
