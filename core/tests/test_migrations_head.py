@@ -27,6 +27,8 @@ from core.db.models import (
     C2CPairResult,
     AlertRule,
     AlertEvent,
+    AutoPerfPolicy,
+    AutoPerfState,
 )
 from core.modules.sase.security.scanner.models import (
     SecurityScan,
@@ -45,7 +47,7 @@ from core.modules.sase.security.feeds.models import (
 
 
 def test_alembic_migrations_cover_all_tables() -> None:
-    """Verify all Base.metadata tables are covered by migrations 0001-0017.
+    """Verify all Base.metadata tables are covered by migrations 0001-0019.
 
     Migration 0001: users, refresh_tokens, password_reset_tokens
     Migration 0002: firewall_rules
@@ -67,6 +69,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0016: scheduled_jobs
     Migration 0017: notification_channels, notification_deliveries
     Migration 0018: alert_rules, alert_events
+    Migration 0019: autoperf_policies, autoperf_state
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -113,13 +116,15 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "c2c_pair_results",
     }
 
-    # Tables created by migrations 0016-0018 (core scheduler + notifications + alerts)
+    # Tables created by migrations 0016-0019 (core scheduler + notifications + alerts + autoperf)
     created_by_scheduler_migrations = {
         "scheduled_jobs",
         "notification_channels",
         "notification_deliveries",
         "alert_rules",
         "alert_events",
+        "autoperf_policies",
+        "autoperf_state",
     }
 
     # All tables covered by migrations
@@ -169,6 +174,8 @@ def test_base_metadata_models_imported() -> None:
         C2CPairResult,
         AlertRule,
         AlertEvent,
+        AutoPerfPolicy,
+        AutoPerfState,
         SecurityScan,
         SecurityFinding,
         ScanSchedule,
