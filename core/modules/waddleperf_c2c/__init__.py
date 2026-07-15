@@ -14,11 +14,16 @@ def module() -> ModuleContract:
     """
     from core.scheduler.registry import register_job_handler
 
-    # Register the job handler for recurring matrix runs
+    # Register job handlers for recurring jobs
     register_job_handler(
         "waddleperf_c2c",
         "matrix_run",
         "core.modules.waddleperf_c2c.worker.tasks.start_recurring_run",
+    )
+    register_job_handler(
+        "waddleperf_c2c",
+        "node_health",
+        "core.modules.waddleperf_c2c.worker.tasks.node_health",
     )
 
     return ModuleContract(
