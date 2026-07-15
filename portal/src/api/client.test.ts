@@ -178,3 +178,20 @@ describe('apiClient', () => {
     }
   });
 });
+
+describe('auth endpoint 401 passthrough', () => {
+  it('rejects auth-endpoint 401s without refresh or redirect', async () => {
+    const interceptors = apiClient.interceptors.response as unknown as {
+      handlers: { rejected: (e: unknown) => Promise<unknown> }[];
+    };
+    const handler = interceptors.handlers[0]!.rejected;
+    const error = {
+      config: { url: '/auth/login' },
+      response: { status: 401 },
+    };
+    sessionStorage.setItem('refresh_token', 'should-not-be-used');
+    await expect(handler(error)).rejects.toBe(error);
+    // No redirect happened (location mock untouched by this path)
+    sessionStorage.removeItem('refresh_token');
+  });
+});

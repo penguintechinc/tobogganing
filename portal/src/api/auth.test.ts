@@ -159,3 +159,34 @@ describe('auth utilities', () => {
     });
   });
 });
+
+describe('parseJwt claim normalization', () => {
+  const makeToken = (payload: Record<string, unknown>): string => {
+    const b64 = btoa(JSON.stringify(payload))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return `h.${b64}.s`;
+  };
+
+  it('derives role from roles array and email fallback from sub (real backend tokens)', () => {
+    const claims = parseJwt(
+      makeToken({ sub: 'user-1', tenant: 't1', roles: ['admin'], exp: 9999999999 })
+    );
+    expect(claims.role).toBe('admin');
+    expect(claims.email).toBe('user-1');
+  });
+
+  it('keeps singular role and explicit email when present', () => {
+    const claims = parseJwt(
+      makeToken({ sub: 'u', email: 'a@b.co', role: 'reporter', tenant: 't1' })
+    );
+    expect(claims.role).toBe('reporter');
+    expect(claims.email).toBe('a@b.co');
+  });
+
+  it('defaults role to viewer when no role claims exist', () => {
+    const claims = parseJwt(makeToken({ sub: 'u', tenant: 't1' }));
+    expect(claims.role).toBe('viewer');
+  });
+});

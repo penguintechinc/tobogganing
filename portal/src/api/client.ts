@@ -29,6 +29,14 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Auth endpoints own their 401 semantics (bad credentials, dead refresh
+    // token) - never treat them as an expired session, or the login page's
+    // own error state would be wiped by a redirect/reload.
+    const requestUrl: string = originalRequest?.url ?? '';
+    if (requestUrl.includes('/auth/')) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       const refreshToken = sessionStorage.getItem('refresh_token');

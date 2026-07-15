@@ -28,10 +28,15 @@ async def get_manifest() -> tuple[dict, int]:
         if not claims:
             return {"error": "Unauthorized: invalid token"}, 403
 
-        # Get role from claims, default to "viewer"
-        role = claims.get("role", "viewer")
+        # Real tokens carry roles: [..] (see AuthService); accept singular
+        # "role" for compatibility, default to "viewer".
+        roles = claims.get("roles")
+        if isinstance(roles, list) and roles:
+            role = roles[0]
+        else:
+            role = claims.get("role", "viewer")
         if isinstance(role, list) and role:
-            role = role[0]  # Extract first role if it's a list
+            role = role[0]
 
         # Build modules manifest
         registry = current_app.registry

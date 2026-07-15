@@ -55,21 +55,22 @@ test.describe('Portal Smoke Tests', () => {
     await submitButton.click();
 
     // Verify redirect to dashboard
-    await expect(page).toHaveURL('/dashboard', { timeout: 5000 });
+    await expect(page).toHaveURL('/', { timeout: 5000 });
 
     // Verify sidebar is visible with module navigation
     const sidebar = page.locator('nav');
     await expect(sidebar).toBeVisible();
 
-    // Verify waddleperf_cluster module entries are in nav
-    await expect(page.locator('text=Devices')).toBeVisible();
-    await expect(page.locator('text=Tests')).toBeVisible();
-    await expect(page.locator('text=Stats')).toBeVisible();
+    // Verify waddleperf_cluster module entries are in nav (scope to links —
+    // the labels also appear on dashboard module cards)
+    await expect(page.getByRole('link', { name: 'Devices' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Tests' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Stats' })).toBeVisible();
   });
 
   test('direct navigation to protected route while logged out redirects to /login', async ({ page }) => {
-    // Try to navigate to a protected route (e.g., /dashboard)
-    await page.goto('/dashboard');
+    // Try to navigate to a real protected route
+    await page.goto('/m/waddleperf_cluster/devices');
 
     // Verify redirect to login page
     await expect(page).toHaveURL('/login');

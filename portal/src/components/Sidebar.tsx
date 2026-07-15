@@ -61,9 +61,9 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-slate-700 p-4 space-y-2">
-        {user && (
+        {user?.email && (
           <div className="px-4 py-2 text-xs text-amber-600 truncate" title={user.email}>
-            {user.email.split('@')[0]}@...
+            {user.email.includes('@') ? `${user.email.split('@')[0]}@...` : user.email}
           </div>
         )}
         <button
