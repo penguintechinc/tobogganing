@@ -24,6 +24,9 @@ certs/
 certificates/
 secrets/
 .secrets
+# ...but the SASE certs source package is code, not TLS material — keep it tracked
+!core/modules/sase/certs/
+!core/modules/sase/certs/**
 
 # Configuration files with sensitive data
 config.yaml
@@ -158,3 +161,8 @@ sasewaddle-*
 releases/
 artifacts/
 
+# Built Go headend binaries
+services/hub-router/headend-proxy*
+services/hub-router/headend-test
+services/hub-router/test-headend
+services/hub-router/proxy/headend-proxy

@@ -19,8 +19,6 @@ spec:
       labels:
         {{- include "tobogganing.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: hub-webui
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
       securityContext:

@@ -75,24 +75,17 @@ class SecurityFixture(Fixture):
 security_fixture = SecurityFixture()
 
 
-def check_security_bypass(func):
-    """Decorator to bypass security checks for specific endpoints."""
-    def wrapper(*args, **kwargs):
-        # Mark request as security bypass
-        request.environ['SECURITY_BYPASS'] = True
-        return func(*args, **kwargs)
-    return wrapper
-
-
 def require_admin_role(func):
     """Decorator to require admin role for security management endpoints."""
+    import functools
+
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # This would integrate with your authentication system
-        # For now, check if user has admin role
-        user = request.environ.get('user')
-        if not user or user.get('role') != 'admin':
+        user = getattr(request, "user", None)
+        if not user or (user.get("role") if isinstance(user, dict) else getattr(user, "role", None)) != "admin":
             abort(403, "Admin role required")
         return func(*args, **kwargs)
+
     return wrapper
 
 

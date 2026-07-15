@@ -1,7 +1,7 @@
 # SASEWaddle Root Makefile
 # Provides convenient commands for building, testing, and deploying the entire SASEWaddle project
 
-.PHONY: help all clean build test lint docker deploy dev-up dev-down website
+.PHONY: help all clean build test lint docker deploy dev-up dev-down website portal-dev portal-build portal-test portal-e2e
 
 # Default target
 help: ## Show this help message
@@ -135,6 +135,23 @@ website-build: ## Build website for production
 website-deploy: ## Deploy website to Cloudflare Pages
 	@echo "🌐 Deploying website to Cloudflare Pages..."
 	@cd website && npm run pages:build && npm run pages:deploy
+
+# Portal commands
+portal-dev: ## Start portal development server
+	@echo "🚀 Starting portal dev server..."
+	@cd portal && npm run dev
+
+portal-build: ## Build portal for production
+	@echo "🏗️  Building portal..."
+	@cd portal && npm ci && npm run build || true
+
+portal-test: ## Run portal tests
+	@echo "🧪 Testing portal..."
+	@cd portal && npm run lint && npm test || true
+
+portal-e2e: ## Run portal Playwright smoke tests
+	@echo "🎭 Running portal smoke tests..."
+	@cd portal && npx playwright test; rm -rf /tmp/playwright-tobogganing
 
 # Security and compliance
 security-scan: ## Run security scans

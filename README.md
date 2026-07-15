@@ -64,6 +64,7 @@
 - **High Availability**: Multi-datacenter orchestration with failover
 - **VRF & OSPF Support**: Enterprise network segmentation with FRR integration
 - **Database Backup System**: Local and S3-compatible storage with encryption
+- **External KMS**: AWS KMS / GCP Cloud KMS integration for enterprise key management (see [docs/KMS.md](docs/KMS.md))
 
 ### Advanced Management
 - **Web Management Portal**: Beautiful py4web interface with role-based access (Admin/Reporter)
