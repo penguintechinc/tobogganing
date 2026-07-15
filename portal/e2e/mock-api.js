@@ -37,10 +37,52 @@ app.post('/api/v1/auth/login', (req, res) => {
   res.status(401).json({ error: 'Invalid credentials' });
 });
 
+
+// GET /api/v1/waddleperf_cluster/devices — two rows for smoke assertions
+app.get('/api/v1/waddleperf_cluster/devices', (req, res) => {
+  res.status(200).json({
+    devices: [
+      { id: 'd1', name: 'edge-nyc-1', org_unit_id: 'ou1', status: 'active', last_heartbeat: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { id: 'd2', name: 'edge-lon-1', org_unit_id: 'ou1', status: 'inactive', last_heartbeat: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    ],
+    meta: { version: 1, timestamp: new Date().toISOString() },
+  });
+});
+
+// GET /api/v1/sase/clusters — empty list exercises the empty state
+app.get('/api/v1/sase/clusters', (req, res) => {
+  res.status(200).json({ clusters: [], meta: { version: 1, timestamp: new Date().toISOString() } });
+});
+
+// GET /api/v1/waddleperf_c2c/endpoints — one row
+app.get('/api/v1/waddleperf_c2c/endpoints', (req, res) => {
+  res.status(200).json({
+    endpoints: [
+      { id: 'e1', name: 'us-east-node', region: 'us-east', visibility: 'public', provider: 'aws', health_status: 'healthy', enabled: true, engine_url: 'https://e1.example.com', target: 't', created_at: new Date().toISOString() },
+    ],
+    meta: { version: 1, timestamp: new Date().toISOString() },
+  });
+});
+
 // GET /api/v1/portal/manifest
 app.get('/api/v1/portal/manifest', (req, res) => {
   res.status(200).json({
     modules: [
+      {
+        name: 'sase',
+        nav: [
+          { label: 'Clusters', path: '/api/v1/sase/clusters', icon: 'server' },
+          { label: 'Status', path: '/api/v1/sase/status', icon: 'activity' },
+        ],
+        flags: {},
+      },
+      {
+        name: 'waddleperf_c2c',
+        nav: [
+          { label: 'C2C Nodes', path: '/api/v1/waddleperf_c2c/endpoints', icon: 'globe' },
+        ],
+        flags: {},
+      },
       {
         name: 'waddleperf_cluster',
         nav: [

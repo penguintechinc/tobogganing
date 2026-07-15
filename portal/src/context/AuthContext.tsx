@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { logout as authLogout, getStoredClaims, login as authLogin } from '../api/auth';
 
 interface Claims {
@@ -25,14 +25,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Claims | null>(null);
-
-  useEffect(() => {
-    const storedClaims = getStoredClaims();
-    if (storedClaims) {
-      setUser(storedClaims);
+  // Hydrate synchronously from storage: an effect-based hydration leaves the
+  // first render unauthenticated, so deep links / full page loads bounce to
+  // /login despite valid tokens.
+  const [user, setUser] = useState<Claims | null>(() => {
+    try {
+      return getStoredClaims() ?? null;
+    } catch {
+      return null;
     }
-  }, []);
+  });
 
   const login = async (email: string, password: string, mfaToken?: string) => {
     const result = await authLogin(email, password, mfaToken);
