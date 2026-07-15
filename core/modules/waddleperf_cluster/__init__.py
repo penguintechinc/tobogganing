@@ -24,6 +24,7 @@ def module() -> ModuleContract:
             NavEntry("Alerts", "/api/v1/waddleperf_cluster/alerts", "bell"),
             NavEntry("Scheduled Tests", "/api/v1/waddleperf_cluster/scheduled-tests", "clock"),
             NavEntry("AutoPerf", "/api/v1/waddleperf_cluster/autoperf", "zap"),
+            NavEntry("Live Test", "/api/v1/waddleperf_cluster/live-test", "radio"),
         ],
         flags=[
             "tobogganing.waddleperf_cluster.org_units",

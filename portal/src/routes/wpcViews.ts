@@ -5,6 +5,7 @@ import { StatsPage } from '../pages/waddleperf/StatsPage';
 import { AlertsPage } from '../pages/waddleperf/AlertsPage';
 import { ScheduledTestsPage } from '../pages/waddleperf/ScheduledTestsPage';
 import { AutoPerfPage } from '../pages/waddleperf/AutoPerfPage';
+import { LiveTestPage } from '../pages/waddleperf/LiveTestPage';
 
 /** View-slug -> page map for the waddleperf_cluster module. */
 export const wpcViews: Record<string, ComponentType> = {
@@ -14,4 +15,5 @@ export const wpcViews: Record<string, ComponentType> = {
   alerts: AlertsPage,
   'scheduled-tests': ScheduledTestsPage,
   autoperf: AutoPerfPage,
+  'live-test': LiveTestPage,
 };
