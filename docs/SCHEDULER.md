@@ -26,8 +26,26 @@ Broker/backend come from `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` (Valkey).
 | Recurring matrix runs | `waddleperf_c2c` | `tobogganing.waddleperf_c2c.recurring_runs` | `waddleperf_c2c.recurring_runs` | Professional |
 | Threshold alerts (rules, events, email channels) | `waddleperf_cluster` | `tobogganing.waddleperf_cluster.alerts` | `waddleperf_cluster.alerts` | Community |
 | Webhook alert routing | `waddleperf_cluster` | `tobogganing.waddleperf_cluster.alert_routing` | `waddleperf_cluster.alert_routing` | Professional |
+| AutoPerf tiered monitoring | `waddleperf_cluster` | `tobogganing.waddleperf_cluster.autoperf` | `waddleperf_cluster.autoperf` | Professional |
+| Region/node registry + health sweep | `waddleperf_c2c` | `tobogganing.waddleperf_c2c.regions` | `waddleperf_c2c.regions` | Professional |
 
 All flags default OFF. Note the entitlement keys are **bare** (`{module}.{feature}`, no `tobogganing.` prefix) — a prefixed entitlement key silently degrades the paid gate to Community.
+
+## AutoPerf (`waddleperf_cluster`, Professional)
+
+Auto-escalating tiered monitoring per policy (`/autoperf/policies`, migration 0019). An `autoperf_cycle` scheduler job runs the active tier's test set against the policy's device/target:
+
+| Tier | Test set | Interval |
+|---|---|---|
+| T1 | icmp, http | `t1_interval_seconds` (light, steady-state) |
+| T2 | + tcp, udp, http_trace | `t2_interval_seconds` |
+| T3 | + speedtest, traceroute | `t3_interval_seconds` (heaviest) |
+
+Escalation is driven by alert events: any `alert_events` row for the device since the last cycle bumps the tier (capped at T3) and resets the clean counter; `deescalate_after_clean` consecutive clean cycles step back down one tier. Tier changes retune the scheduled job's interval automatically. Results flow through the normal TestManager path, so stats and alert rules see them.
+
+## Region/node registry (`waddleperf_c2c`, Professional)
+
+`c2c_endpoints` gains `visibility` (`private` default | `public`), `provider`, `health_status`, `last_health_check` (migration 0020). `GET /regions` aggregates nodes by region; `GET /regions/nodes?region=...` lists visible nodes. Visibility semantics: a tenant always sees its own endpoints; `public` endpoints are visible across tenants **redacted** — only id/name/region/provider/health surface; `engine_url`, `target`, and key material never cross the tenant boundary. Private foreign endpoints are never visible. The `node_health` sweep (created via `/recurring` with `job_type: "node_health"`) checks each owning tenant's engines' `/health` and updates status.
 
 ## Job handler contract
 
