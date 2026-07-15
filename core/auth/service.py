@@ -153,8 +153,16 @@ class AuthService:
             if not rt_record:
                 return AuthResult(success=False, error="Invalid or revoked refresh token")
 
-            # Verify expiration
-            if rt_record.expires_at < datetime.now(timezone.utc):
+            # Verify expiration (handle both aware and naive datetimes)
+            expires_at = rt_record.expires_at
+            if isinstance(expires_at, str):
+                # Parse from ISO format if stored as string
+                expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+            elif expires_at.tzinfo is None:
+                # Assume UTC if naive
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+            if expires_at < datetime.now(timezone.utc):
                 return AuthResult(success=False, error="Refresh token expired")
 
             # Get user
@@ -364,6 +372,7 @@ class AuthService:
         expires_at = now + timedelta(days=30)
 
         await self.db.refresh_tokens.async_insert(
+            id=str(uuid4()),
             user_id=user_id,
             token=refresh_token,
             expires_at=expires_at,

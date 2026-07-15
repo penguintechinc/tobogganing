@@ -90,3 +90,11 @@ class ModuleRegistry:
             if entitlement.feature == feature:
                 return entitlement
         return None
+
+    def modules(self) -> dict[str, ModuleContract]:
+        """Get all registered module contracts.
+
+        Returns:
+            Dictionary mapping module name to ModuleContract.
+        """
+        return self._modules.copy()
