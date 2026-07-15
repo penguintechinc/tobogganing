@@ -26,35 +26,35 @@ import (
 
 // AccessLog represents a user access log entry
 type AccessLog struct {
-	Timestamp   time.Time `json:"timestamp"`
-	UserID      string    `json:"user_id"`
-	Username    string    `json:"username"`
-	SourceIP    string    `json:"source_ip"`
-	TargetHost  string    `json:"target_host"`
-	Protocol    string    `json:"protocol"`
-	Action      string    `json:"action"` // "allow" or "deny"
-	Method      string    `json:"method,omitempty"`
-	Path        string    `json:"path,omitempty"`
-	StatusCode  int       `json:"status_code,omitempty"`
-	BytesSent   int64     `json:"bytes_sent,omitempty"`
-	UserAgent   string    `json:"user_agent,omitempty"`
-	RequestID   string    `json:"request_id,omitempty"`
+	Timestamp  time.Time `json:"timestamp"`
+	UserID     string    `json:"user_id"`
+	Username   string    `json:"username"`
+	SourceIP   string    `json:"source_ip"`
+	TargetHost string    `json:"target_host"`
+	Protocol   string    `json:"protocol"`
+	Action     string    `json:"action"` // "allow" or "deny"
+	Method     string    `json:"method,omitempty"`
+	Path       string    `json:"path,omitempty"`
+	StatusCode int       `json:"status_code,omitempty"`
+	BytesSent  int64     `json:"bytes_sent,omitempty"`
+	UserAgent  string    `json:"user_agent,omitempty"`
+	RequestID  string    `json:"request_id,omitempty"`
 }
 
 // SyslogLogger handles UDP syslog logging for user access
 type SyslogLogger struct {
-	enabled      bool
-	syslogHost   string
-	syslogPort   string
-	facility     int
-	severity     int
-	hostname     string
-	appName      string
-	conn         *net.UDPConn
-	mu           sync.RWMutex
-	logQueue     chan AccessLog
-	workers      int
-	stopChan     chan bool
+	enabled    bool
+	syslogHost string
+	syslogPort string
+	facility   int
+	severity   int
+	hostname   string
+	appName    string
+	conn       *net.UDPConn
+	mu         sync.RWMutex
+	logQueue   chan AccessLog
+	workers    int
+	stopChan   chan bool
 }
 
 // RFC3164 priority calculation: facility * 8 + severity
@@ -83,18 +83,18 @@ const (
 // NewSyslogLogger creates a new syslog logger instance
 func NewSyslogLogger(syslogHost, syslogPort string) *SyslogLogger {
 	hostname, _ := getCurrentHostname()
-	
+
 	return &SyslogLogger{
-		enabled:     syslogHost != "",
-		syslogHost:  syslogHost,
-		syslogPort:  syslogPort,
-		facility:    FacilityLocal0,
-		severity:    SeverityInformational,
-		hostname:    hostname,
-		appName:     "sasewaddle-headend",
-		logQueue:    make(chan AccessLog, 1000), // Buffer up to 1000 logs
-		workers:     3,                          // 3 worker goroutines
-		stopChan:    make(chan bool),
+		enabled:    syslogHost != "",
+		syslogHost: syslogHost,
+		syslogPort: syslogPort,
+		facility:   FacilityLocal0,
+		severity:   SeverityInformational,
+		hostname:   hostname,
+		appName:    "sasewaddle-headend",
+		logQueue:   make(chan AccessLog, 1000), // Buffer up to 1000 logs
+		workers:    3,                          // 3 worker goroutines
+		stopChan:   make(chan bool),
 	}
 }
 
@@ -126,7 +126,7 @@ func (s *SyslogLogger) Stop() {
 	}
 
 	log.Info("Stopping syslog logger")
-	
+
 	// Signal workers to stop
 	for i := 0; i < s.workers; i++ {
 		s.stopChan <- true
@@ -245,7 +245,7 @@ func (s *SyslogLogger) connect() error {
 // worker processes log entries from the queue
 func (s *SyslogLogger) worker(name string) {
 	log.Debugf("Syslog worker %s started", name)
-	
+
 	for {
 		select {
 		case accessLog := <-s.logQueue:
