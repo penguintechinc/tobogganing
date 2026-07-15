@@ -39,7 +39,7 @@ Note: `@penguintechinc/react-libs` / `react-aaa` had peer-dep conflicts at scaff
 
 Full module parity as of Phase 5b:
 
-- **waddleperf_cluster**: Devices, Tests (expandable results), Stats (summary + trends), Alerts (rules/channels/events tabs, Professional upsell on webhook channels), Scheduled Tests, AutoPerf (policies + tier state), Live Test (WebSocket stream → real-time chart; token passed as `?token=` since browsers cannot set WS headers).
+- **waddleperf_cluster**: Devices, Tests (expandable results), Stats (summary + trends), Alerts (rules/channels/events tabs, Professional upsell on webhook channels), Scheduled Tests, AutoPerf (policies + tier state), Live Test (WebSocket stream → real-time chart; JWT passed via the `Sec-WebSocket-Protocol` handshake header — `new WebSocket(url, ["tobogganing-bearer", token])` — the one header browsers can set on a WS handshake, keeping the token out of the URL and access logs).
 - **waddleperf_c2c**: Nodes (endpoints), Runs with the source×dest matrix grid (colored by loss/latency), Recurring jobs (matrix_run/node_health), Regions (aggregate cards + redacted public-node table).
 - **sase**: Clusters, Clients, Status.
 

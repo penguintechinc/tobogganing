@@ -40,7 +40,7 @@ describe('useLiveTest', () => {
     expect(result.current.series).toEqual([]);
   });
 
-  it('connects to WebSocket with correct URL and token', async () => {
+  it('connects with token in the subprotocol header, never the URL', async () => {
     const { result } = renderHook(() => useLiveTest());
 
     await act(async () => {
@@ -55,9 +55,15 @@ describe('useLiveTest', () => {
       expect(global.WebSocket).toHaveBeenCalled();
     });
 
-    const wsCall = ((global.WebSocket as unknown) as jest.Mock).mock.calls[0]?.[0];
-    expect(wsCall).toContain('/api/v1/waddleperf_cluster/live-test/stream');
-    expect(wsCall).toContain('token=test-token-123');
+    const call = ((global.WebSocket as unknown) as jest.Mock).mock.calls[0];
+    const wsUrl = call?.[0] as string;
+    const subprotocols = call?.[1] as string[];
+    // URL carries no credential
+    expect(wsUrl).toContain('/api/v1/waddleperf_cluster/live-test/stream');
+    expect(wsUrl).not.toContain('token');
+    expect(wsUrl).not.toContain('test-token-123');
+    // Token rides in the Sec-WebSocket-Protocol handshake header
+    expect(subprotocols).toEqual(['tobogganing-bearer', 'test-token-123']);
   });
 
   it('posts to /live-test/run on start', async () => {

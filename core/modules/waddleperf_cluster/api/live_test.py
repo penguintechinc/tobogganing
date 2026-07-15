@@ -26,6 +26,27 @@ logger = structlog.get_logger()
 
 blueprint = Blueprint("wpc_live_test", __name__, url_prefix="/live-test")
 
+# Sentinel subprotocol the browser client sends ahead of the JWT so the token
+# rides in the Sec-WebSocket-Protocol header instead of the URL query string.
+WS_AUTH_SUBPROTOCOL = "tobogganing-bearer"
+
+
+def _token_from_subprotocol() -> str:
+    """Extract the bearer token from the ``Sec-WebSocket-Protocol`` header.
+
+    Browsers cannot set arbitrary headers on a WebSocket handshake but CAN
+    offer subprotocols via ``new WebSocket(url, [sentinel, token])``. The
+    client sends ``<WS_AUTH_SUBPROTOCOL>, <token>``; this returns the token,
+    or an empty string if the header is absent or malformed. Keeping the token
+    in a request header (not the URL) prevents it leaking into access/proxy
+    logs and browser history.
+    """
+    raw = request.headers.get("Sec-WebSocket-Protocol", "")
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if len(parts) >= 2 and parts[0] == WS_AUTH_SUBPROTOCOL:
+        return parts[1]
+    return ""
+
 
 @dataclass(slots=True)
 class StreamMessage:
@@ -43,8 +64,10 @@ async def _validate_websocket_auth() -> tuple[str | None, str | None]:
     """Validate WebSocket connection via JWT.
 
     Accepts the token from the Authorization header (service clients) or,
-    when the header is absent, from the ``token`` query parameter — the
-    browser WebSocket API cannot set custom headers.
+    when the header is absent, from the ``Sec-WebSocket-Protocol`` handshake
+    header (browser clients — see :func:`_token_from_subprotocol`). The token
+    is never read from the URL query string, so it cannot leak into access
+    logs or browser history.
 
     Returns:
         Tuple of (tenant, claims) if valid, (None, None) otherwise.
@@ -53,7 +76,7 @@ async def _validate_websocket_auth() -> tuple[str | None, str | None]:
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
     else:
-        token = request.args.get("token", "")
+        token = _token_from_subprotocol()
         if not token:
             logger.warning("websocket_auth_failed_missing_bearer")
             return None, None

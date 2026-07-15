@@ -55,12 +55,16 @@ export function useLiveTest(): LiveTestHookState {
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/v1/waddleperf_cluster/live-test/stream?token=${encodeURIComponent(token)}`;
+    const wsUrl = `${protocol}//${window.location.host}/api/v1/waddleperf_cluster/live-test/stream`;
 
     console.log('[useLiveTest] Connecting to WebSocket');
     setStatus('connecting');
 
-    const ws = new WebSocket(wsUrl);
+    // Pass the JWT via the Sec-WebSocket-Protocol handshake header (the only
+    // header a browser can set on a WebSocket) rather than the URL, so it
+    // never lands in access/proxy logs or browser history. The server reads
+    // the token from the subprotocol following the auth sentinel.
+    const ws = new WebSocket(wsUrl, ['tobogganing-bearer', token]);
 
     ws.onopen = () => {
       console.log('[useLiveTest] WebSocket connected');

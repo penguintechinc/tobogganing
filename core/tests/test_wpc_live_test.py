@@ -410,21 +410,20 @@ class TestLiveTestHTTP:
                 )
 
 
-class TestWebSocketQueryParamAuth:
-    """The browser WebSocket API cannot set headers — ?token= must work."""
+class TestWebSocketSubprotocolAuth:
+    """Browsers can't set headers on a WS handshake but CAN offer subprotocols.
 
-    @pytest.mark.asyncio
-    async def test_validate_websocket_auth_accepts_query_token(
-        self, app_with_wpc
-    ) -> None:
-        """A valid JWT passed as ?token= authenticates the websocket."""
+    The token rides in the Sec-WebSocket-Protocol header (never the URL) so it
+    can't leak into access logs or browser history.
+    """
+
+    WS_PATH = "/api/v1/waddleperf_cluster/live-test/stream"
+
+    async def _make_token(self, app) -> str:
+        """Mint a valid access token for tenant-ws."""
         from core.auth.jwt import encode_access_token
-        from core.modules.waddleperf_cluster.api.live_test import (
-            _validate_websocket_auth,
-        )
 
-        provider = app_with_wpc.config["KEY_PROVIDER"]
-        token = await encode_access_token(
+        return await encode_access_token(
             {
                 "sub": "u1",
                 "iss": "test-app",
@@ -432,29 +431,80 @@ class TestWebSocketQueryParamAuth:
                 "tenant": "tenant-ws",
                 "scope": "*:*",
             },
-            provider,
+            app.config["KEY_PROVIDER"],
         )
 
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_accepts_subprotocol_token(
+        self, app_with_wpc
+    ) -> None:
+        """A valid JWT offered as the second subprotocol authenticates the ws."""
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
         async with app_with_wpc.test_request_context(
-            f"/api/v1/waddleperf_cluster/live-test/stream?token={token}",
+            self.WS_PATH,
             method="GET",
+            headers={"Sec-WebSocket-Protocol": f"tobogganing-bearer, {token}"},
         ):
             tenant, claims = await _validate_websocket_auth()
         assert tenant == "tenant-ws"
         assert claims is not None
 
     @pytest.mark.asyncio
-    async def test_validate_websocket_auth_rejects_bad_query_token(
+    async def test_validate_websocket_auth_rejects_bad_subprotocol_token(
         self, app_with_wpc
     ) -> None:
-        """Garbage ?token= is rejected; no header fallback confusion."""
+        """Garbage token in the subprotocol is rejected."""
         from core.modules.waddleperf_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
         async with app_with_wpc.test_request_context(
-            "/api/v1/waddleperf_cluster/live-test/stream?token=not-a-jwt",
+            self.WS_PATH,
             method="GET",
+            headers={"Sec-WebSocket-Protocol": "tobogganing-bearer, not-a-jwt"},
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_ignores_url_query_token(
+        self, app_with_wpc
+    ) -> None:
+        """Regression: a token in ?token= is NOT accepted — URL path is closed.
+
+        Prevents the credential-in-URL leak; only the header path authenticates.
+        """
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            f"{self.WS_PATH}?token={token}",
+            method="GET",
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_malformed_subprotocol_rejected(
+        self, app_with_wpc
+    ) -> None:
+        """Sentinel present but no token value → rejected."""
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={"Sec-WebSocket-Protocol": "tobogganing-bearer"},
         ):
             tenant, claims = await _validate_websocket_auth()
         assert tenant is None
@@ -464,13 +514,13 @@ class TestWebSocketQueryParamAuth:
     async def test_validate_websocket_auth_missing_both_rejected(
         self, app_with_wpc
     ) -> None:
-        """No header and no query token → rejected."""
+        """No header and no subprotocol → rejected."""
         from core.modules.waddleperf_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
         async with app_with_wpc.test_request_context(
-            "/api/v1/waddleperf_cluster/live-test/stream",
+            self.WS_PATH,
             method="GET",
         ):
             tenant, claims = await _validate_websocket_auth()
