@@ -34,10 +34,10 @@ import (
 type RuleType string
 
 const (
-	RuleTypeDomain      RuleType = "domain"
-	RuleTypeIP          RuleType = "ip"
-	RuleTypeIPRange     RuleType = "ip_range"
-	RuleTypeURLPattern  RuleType = "url_pattern"
+	RuleTypeDomain       RuleType = "domain"
+	RuleTypeIP           RuleType = "ip"
+	RuleTypeIPRange      RuleType = "ip_range"
+	RuleTypeURLPattern   RuleType = "url_pattern"
 	RuleTypeProtocolRule RuleType = "protocol_rule"
 )
 
@@ -49,15 +49,15 @@ const (
 )
 
 type FirewallRule struct {
-	Pattern     string                 `json:"pattern"`
-	Priority    int                    `json:"priority"`
-	Description string                 `json:"description"`
-	SrcIP       string                 `json:"src_ip,omitempty"`
-	DstIP       string                 `json:"dst_ip,omitempty"`
-	Protocol    string                 `json:"protocol,omitempty"`
-	SrcPort     string                 `json:"src_port,omitempty"`
-	DstPort     string                 `json:"dst_port,omitempty"`
-	Direction   string                 `json:"direction,omitempty"`
+	Pattern     string `json:"pattern"`
+	Priority    int    `json:"priority"`
+	Description string `json:"description"`
+	SrcIP       string `json:"src_ip,omitempty"`
+	DstIP       string `json:"dst_ip,omitempty"`
+	Protocol    string `json:"protocol,omitempty"`
+	SrcPort     string `json:"src_port,omitempty"`
+	DstPort     string `json:"dst_port,omitempty"`
+	Direction   string `json:"direction,omitempty"`
 }
 
 type UserRules struct {
@@ -95,41 +95,41 @@ type Manager struct {
 
 func NewManager(managerURL, authToken string) *Manager {
 	return &Manager{
-		managerURL:  managerURL,
-		authToken:   authToken,
-		userRules:   make(map[string]*UserRules),
-		stopChan:    make(chan bool),
+		managerURL: managerURL,
+		authToken:  authToken,
+		userRules:  make(map[string]*UserRules),
+		stopChan:   make(chan bool),
 	}
 }
 
 func (m *Manager) Start() error {
 	log.Info("Starting firewall manager")
-	
+
 	// Initial fetch
 	if err := m.fetchRules(); err != nil {
 		log.Errorf("Failed to fetch initial rules: %v", err)
 		return err
 	}
-	
+
 	// Start periodic refresh with randomized interval (30-90 seconds)
 	// This prevents thundering herd when multiple headends start simultaneously
 	refreshInterval := time.Duration(30+rand.Intn(61)) * time.Second
 	log.Infof("Setting randomized refresh interval to %v", refreshInterval)
-	
+
 	m.refreshTicker = time.NewTicker(refreshInterval)
 	go m.refreshLoop()
-	
+
 	log.Info("Firewall manager started successfully")
 	return nil
 }
 
 func (m *Manager) Stop() {
 	log.Info("Stopping firewall manager")
-	
+
 	if m.refreshTicker != nil {
 		m.refreshTicker.Stop()
 	}
-	
+
 	close(m.stopChan)
 }
 
@@ -155,15 +155,15 @@ func (m *Manager) fetchRules() error {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	
+
 	req, err := http.NewRequest("GET", m.managerURL+"/api/v1/firewall/rules", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+m.authToken)
 	req.Header.Set("User-Agent", "SASEWaddle-Headend/1.0")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch rules: %w", err)
@@ -173,17 +173,17 @@ func (m *Manager) fetchRules() error {
 			log.Warnf("Failed to close response body: %v", err)
 		}
 	}()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to fetch rules: status %d, body: %s", resp.StatusCode, string(body))
 	}
-	
+
 	var rulesResponse AllRulesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rulesResponse); err != nil {
 		return fmt.Errorf("failed to decode rules response: %w", err)
 	}
-	
+
 	// Update local cache
 	m.updateMutex.Lock()
 	m.userRules = make(map[string]*UserRules)
@@ -193,7 +193,7 @@ func (m *Manager) fetchRules() error {
 	}
 	m.lastUpdate = time.Now()
 	m.updateMutex.Unlock()
-	
+
 	log.Infof("Updated firewall rules for %d users", len(rulesResponse.UserRules))
 	return nil
 }
@@ -201,22 +201,22 @@ func (m *Manager) fetchRules() error {
 func (m *Manager) CheckAccess(userID, target string) bool {
 	m.updateMutex.RLock()
 	defer m.updateMutex.RUnlock()
-	
+
 	rules, exists := m.userRules[userID]
 	if !exists {
 		log.Warnf("No firewall rules found for user %s, denying access", userID)
 		return false
 	}
-	
+
 	// Collect all rules with priorities
 	type priorityRule struct {
 		rule       FirewallRule
 		ruleType   RuleType
 		accessType AccessType
 	}
-	
+
 	var allRules []priorityRule
-	
+
 	// Add all rule types to a single list for priority-based processing
 	for _, rule := range rules.Rules.DenyDomains {
 		allRules = append(allRules, priorityRule{rule, RuleTypeDomain, AccessTypeDeny})
@@ -248,7 +248,7 @@ func (m *Manager) CheckAccess(userID, target string) bool {
 	for _, rule := range rules.Rules.AllowProtocolRules {
 		allRules = append(allRules, priorityRule{rule, RuleTypeProtocolRule, AccessTypeAllow})
 	}
-	
+
 	// Sort by priority (lower number = higher priority)
 	for i := 0; i < len(allRules)-1; i++ {
 		for j := i + 1; j < len(allRules); j++ {
@@ -257,17 +257,17 @@ func (m *Manager) CheckAccess(userID, target string) bool {
 			}
 		}
 	}
-	
+
 	// Process rules in priority order
 	for _, priorityRule := range allRules {
 		if m.matchesRule(priorityRule.rule, priorityRule.ruleType, target) {
 			allowed := priorityRule.accessType == AccessTypeAllow
-			log.Debugf("User %s access to %s: %v (matched rule: %s, priority: %d)", 
+			log.Debugf("User %s access to %s: %v (matched rule: %s, priority: %d)",
 				userID, target, allowed, priorityRule.rule.Pattern, priorityRule.rule.Priority)
 			return allowed
 		}
 	}
-	
+
 	// No matching rule found - default deny
 	log.Debugf("User %s access to %s: denied (no matching rules)", userID, target)
 	return false
@@ -300,14 +300,14 @@ func (m *Manager) matchDomain(pattern, target string) bool {
 	} else {
 		targetDomain = strings.ToLower(target)
 	}
-	
+
 	pattern = strings.ToLower(pattern)
-	
+
 	// Exact match
 	if pattern == targetDomain {
 		return true
 	}
-	
+
 	// Wildcard subdomain match (*.example.com matches sub.example.com)
 	if strings.HasPrefix(pattern, "*.") {
 		baseDomain := pattern[2:]
@@ -315,7 +315,7 @@ func (m *Manager) matchDomain(pattern, target string) bool {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -327,19 +327,19 @@ func (m *Manager) matchIP(pattern, target string) bool {
 			targetIP = u.Hostname()
 		}
 	}
-	
+
 	// Remove port if present
 	if host, _, err := net.SplitHostPort(targetIP); err == nil {
 		targetIP = host
 	}
-	
+
 	targetAddr := net.ParseIP(targetIP)
 	patternAddr := net.ParseIP(pattern)
-	
+
 	if targetAddr == nil || patternAddr == nil {
 		return false
 	}
-	
+
 	return targetAddr.Equal(patternAddr)
 }
 
@@ -351,22 +351,22 @@ func (m *Manager) matchIPRange(pattern, target string) bool {
 			targetIP = u.Hostname()
 		}
 	}
-	
+
 	// Remove port if present
 	if host, _, err := net.SplitHostPort(targetIP); err == nil {
 		targetIP = host
 	}
-	
+
 	targetAddr := net.ParseIP(targetIP)
 	if targetAddr == nil {
 		return false
 	}
-	
+
 	_, network, err := net.ParseCIDR(pattern)
 	if err != nil {
 		return false
 	}
-	
+
 	return network.Contains(targetAddr)
 }
 
@@ -376,7 +376,7 @@ func (m *Manager) matchURLPattern(pattern, target string) bool {
 		log.Errorf("Invalid regex pattern: %s, error: %v", pattern, err)
 		return false
 	}
-	
+
 	return regex.MatchString(target)
 }
 
@@ -386,39 +386,39 @@ func (m *Manager) matchProtocolRule(rule FirewallRule, target string) bool {
 	if connInfo == nil {
 		return false
 	}
-	
+
 	// Check protocol
 	if rule.Protocol != "" && !strings.EqualFold(rule.Protocol, connInfo["protocol"]) {
 		return false
 	}
-	
+
 	// Check source IP
 	if rule.SrcIP != "" && !m.matchIPOrRange(rule.SrcIP, connInfo["src_ip"]) {
 		return false
 	}
-	
+
 	// Check destination IP
 	if rule.DstIP != "" && !m.matchIPOrRange(rule.DstIP, connInfo["dst_ip"]) {
 		return false
 	}
-	
+
 	// Check source port
 	if rule.SrcPort != "" && !m.matchPort(rule.SrcPort, connInfo["src_port"]) {
 		return false
 	}
-	
+
 	// Check destination port
 	if rule.DstPort != "" && !m.matchPort(rule.DstPort, connInfo["dst_port"]) {
 		return false
 	}
-	
+
 	// Check direction
 	if rule.Direction != "" && rule.Direction != "both" {
 		if rule.Direction != connInfo["direction"] {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -426,38 +426,38 @@ func (m *Manager) parseConnectionTarget(target string) map[string]string {
 	if !strings.Contains(target, "->") {
 		return nil
 	}
-	
+
 	parts := strings.Split(target, "->")
 	if len(parts) < 2 {
 		return nil
 	}
-	
+
 	srcPart := parts[0]
 	dstPart := parts[1]
-	
+
 	// Parse source
 	srcComponents := strings.Split(srcPart, ":")
 	if len(srcComponents) < 1 {
 		return nil
 	}
-	
+
 	protocol := srcComponents[0]
 	srcIP := "*"
 	srcPort := "*"
-	
+
 	if len(srcComponents) > 1 {
 		srcIP = srcComponents[1]
 	}
 	if len(srcComponents) > 2 {
 		srcPort = srcComponents[2]
 	}
-	
+
 	// Parse destination
 	dstComponents := strings.Split(dstPart, ":")
 	dstIP := "*"
 	dstPort := "*"
 	direction := "outbound"
-	
+
 	if len(dstComponents) > 0 {
 		dstIP = dstComponents[0]
 	}
@@ -467,7 +467,7 @@ func (m *Manager) parseConnectionTarget(target string) map[string]string {
 	if len(dstComponents) > 2 {
 		direction = dstComponents[2]
 	}
-	
+
 	return map[string]string{
 		"protocol":  protocol,
 		"src_ip":    srcIP,
@@ -482,7 +482,7 @@ func (m *Manager) matchIPOrRange(ruleIP, targetIP string) bool {
 	if ruleIP == "*" || targetIP == "*" {
 		return true
 	}
-	
+
 	// Check if ruleIP is a CIDR range
 	if strings.Contains(ruleIP, "/") {
 		_, network, err := net.ParseCIDR(ruleIP)
@@ -495,14 +495,14 @@ func (m *Manager) matchIPOrRange(ruleIP, targetIP string) bool {
 		}
 		return network.Contains(targetAddr)
 	}
-	
+
 	// Exact IP match
 	ruleAddr := net.ParseIP(ruleIP)
 	targetAddr := net.ParseIP(targetIP)
 	if ruleAddr == nil || targetAddr == nil {
 		return false
 	}
-	
+
 	return ruleAddr.Equal(targetAddr)
 }
 
@@ -510,29 +510,29 @@ func (m *Manager) matchPort(rulePort, targetPort string) bool {
 	if rulePort == "*" || targetPort == "*" {
 		return true
 	}
-	
+
 	targetPortNum, err := strconv.Atoi(targetPort)
 	if err != nil {
 		return false
 	}
-	
+
 	// Port range (e.g., "80-443")
 	if strings.Contains(rulePort, "-") {
 		parts := strings.Split(rulePort, "-")
 		if len(parts) != 2 {
 			return false
 		}
-		
+
 		start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
 		end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-		
+
 		if err1 != nil || err2 != nil {
 			return false
 		}
-		
+
 		return targetPortNum >= start && targetPortNum <= end
 	}
-	
+
 	// Port list (e.g., "80,443,8080")
 	if strings.Contains(rulePort, ",") {
 		ports := strings.Split(rulePort, ",")
@@ -545,20 +545,20 @@ func (m *Manager) matchPort(rulePort, targetPort string) bool {
 		}
 		return false
 	}
-	
+
 	// Single port
 	rulePortNum, err := strconv.Atoi(rulePort)
 	if err != nil {
 		return false
 	}
-	
+
 	return rulePortNum == targetPortNum
 }
 
 func (m *Manager) GetUserRules(userID string) *UserRules {
 	m.updateMutex.RLock()
 	defer m.updateMutex.RUnlock()
-	
+
 	if rules, exists := m.userRules[userID]; exists {
 		return rules
 	}
