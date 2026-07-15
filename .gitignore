@@ -33,6 +33,11 @@ config.yaml
 config.json
 *config*.yaml
 *config*.json
+# ...but TypeScript/tooling configs match *config*.json and MUST be committed
+!tsconfig.json
+!tsconfig.*.json
+!**/tsconfig.json
+!**/tsconfig.*.json
 .env
 .env.local
 .env.*.local
@@ -121,13 +126,8 @@ obj/
 *.tmp
 vendor/
 
-# Lock files
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-Gemfile.lock
-Pipfile.lock
-poetry.lock
+# Lock files that pin dependencies MUST be committed (see standards);
+# only truly environment-local lockfiles may be ignored.
 Cargo.lock
 composer.lock
 
