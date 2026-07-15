@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClientsPage } from './ClientsPage';
 import * as saseApi from '../../api/sase';
@@ -117,7 +118,7 @@ describe('ClientsPage', () => {
     expect(screen.getByText('Clients')).toBeInTheDocument();
   });
 
-  it('renders client status badge', async () => {
+  it('renders client status badge for active status', async () => {
     const mockClients = [
       {
         id: '1',
@@ -135,6 +136,27 @@ describe('ClientsPage', () => {
     await waitFor(() => {
       const statusBadge = screen.getByText('active');
       expect(statusBadge).toHaveClass('bg-green-900');
+    });
+  });
+
+  it('renders client status badge for inactive status', async () => {
+    const mockClients = [
+      {
+        id: '1',
+        name: 'client-1',
+        type: 'docker',
+        cluster_id: 'cluster-1',
+        status: 'inactive',
+        last_seen: '2026-07-15T10:00:00Z',
+      },
+    ];
+    mockListClients.mockResolvedValue(mockClients);
+
+    renderPage();
+
+    await waitFor(() => {
+      const statusBadge = screen.getByText('inactive');
+      expect(statusBadge).toHaveClass('bg-yellow-900');
     });
   });
 
@@ -157,6 +179,24 @@ describe('ClientsPage', () => {
       // Check that date formatting is applied
       const dateElement = screen.getByText(/15.*2026/);
       expect(dateElement).toBeInTheDocument();
+    });
+  });
+
+  it('calls refetch on retry when error occurs', async () => {
+    const error = new Error('Failed to fetch');
+    mockListClients.mockRejectedValue(error);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Error loading data')).toBeInTheDocument();
+    });
+
+    const retryButton = screen.getByText('Retry');
+    await userEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(mockListClients).toHaveBeenCalledTimes(2);
     });
   });
 });

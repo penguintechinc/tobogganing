@@ -210,4 +210,40 @@ describe('StatusPage', () => {
       expect(screen.getByText(/Last updated/)).toBeInTheDocument();
     });
   });
+
+  it('shows warning status with red styling for non-healthy', async () => {
+    const mockStatus = {
+      service: 'SASE Orchestrator API',
+      status: 'warning',
+      clusters: { total: 5, active: 3 },
+      clients: { total: 10, active: 7 },
+      meta: { version: 1, timestamp: '2026-07-15T10:00:00Z' },
+    };
+    mockGetStatus.mockResolvedValue(mockStatus);
+
+    renderPage();
+
+    await waitFor(() => {
+      const statusText = screen.getByText('WARNING');
+      expect(statusText).toHaveClass('text-red-400');
+    });
+  });
+
+  it('shows 0% active when total is zero', async () => {
+    const mockStatus = {
+      service: 'SASE Orchestrator API',
+      status: 'healthy',
+      clusters: { total: 0, active: 0 },
+      clients: { total: 0, active: 0 },
+      meta: { version: 1, timestamp: '2026-07-15T10:00:00Z' },
+    };
+    mockGetStatus.mockResolvedValue(mockStatus);
+
+    renderPage();
+
+    await waitFor(() => {
+      const percentageElements = screen.getAllByText(/0% active/);
+      expect(percentageElements.length).toBeGreaterThan(0);
+    });
+  });
 });

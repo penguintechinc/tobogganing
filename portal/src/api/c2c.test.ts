@@ -248,6 +248,26 @@ describe('c2c API', () => {
         params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'latency' },
       });
     });
+
+    it('should fetch matrix trends with window parameter', async () => {
+      const mockTrends = [{ timestamp: '2026-07-15T00:00:00Z', value: 50 }];
+
+      (apiClient.get as jest.Mock).mockResolvedValue({
+        data: {
+          source: 'us-west-2',
+          dest: 'us-east-1',
+          test_type: 'latency',
+          trends: mockTrends,
+        },
+      });
+
+      const result = await getMatrixTrends('us-west-2', 'us-east-1', 'latency', 3600);
+
+      expect(result).toEqual(mockTrends);
+      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/trends', {
+        params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'latency', window: 3600 },
+      });
+    });
   });
 
   describe('listRecurringJobs', () => {

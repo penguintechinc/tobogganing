@@ -171,6 +171,54 @@ describe('RegionsPage', () => {
     });
   });
 
+  it('collapses region node list when clicked again', async () => {
+    const mockRegions = [
+      {
+        region: 'us-west-2',
+        node_count: 1,
+        healthy_count: 1,
+        providers: ['aws'],
+      },
+    ];
+
+    const mockNodes = [
+      {
+        id: 'node-1',
+        region: 'us-west-2',
+        name: 'node-1',
+        engine_url: 'http://engine:8080',
+        target: 'target.com',
+        enabled: true,
+      },
+    ];
+
+    (c2cApi.listRegions as jest.Mock).mockResolvedValue(mockRegions);
+    (c2cApi.listVisibleNodes as jest.Mock).mockResolvedValue(mockNodes);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RegionsPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('us-west-2')).toBeInTheDocument();
+    });
+
+    const regionButton = screen.getByRole('button', { name: /us-west-2/i });
+    fireEvent.click(regionButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Nodes in us-west-2')).toBeInTheDocument();
+    });
+
+    fireEvent.click(regionButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Nodes in us-west-2')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows empty state when no regions', async () => {
     (c2cApi.listRegions as jest.Mock).mockResolvedValue([]);
 
@@ -182,6 +230,55 @@ describe('RegionsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No regions configured')).toBeInTheDocument();
+    });
+  });
+
+  it('closes region node list when X button is clicked', async () => {
+    const mockRegions = [
+      {
+        region: 'us-west-2',
+        node_count: 1,
+        healthy_count: 1,
+        providers: ['aws'],
+      },
+    ];
+
+    const mockNodes = [
+      {
+        id: 'node-1',
+        region: 'us-west-2',
+        name: 'node-1',
+        engine_url: 'http://engine:8080',
+        target: 'target.com',
+        enabled: true,
+      },
+    ];
+
+    (c2cApi.listRegions as jest.Mock).mockResolvedValue(mockRegions);
+    (c2cApi.listVisibleNodes as jest.Mock).mockResolvedValue(mockNodes);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RegionsPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('us-west-2')).toBeInTheDocument();
+    });
+
+    const regionButton = screen.getByRole('button', { name: /us-west-2/i });
+    fireEvent.click(regionButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Nodes in us-west-2')).toBeInTheDocument();
+    });
+
+    const closeButton = screen.getByRole('button', { name: '✕' });
+    fireEvent.click(closeButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Nodes in us-west-2')).not.toBeInTheDocument();
     });
   });
 });

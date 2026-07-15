@@ -266,4 +266,61 @@ describe('TestsPage', () => {
     const retryBtn = screen.getByText('Retry');
     expect(retryBtn).toBeInTheDocument();
   });
+
+  it('expands row to show full test details', async () => {
+    mockWaddleperf.listTests.mockResolvedValueOnce(mockTests);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TestsPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('datatable')).toBeInTheDocument();
+      expect(screen.getByText('latency')).toBeInTheDocument();
+    });
+
+    const rows = screen.getAllByTestId('datatable-row');
+    fireEvent.click(rows[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByText('Throughput')).toBeInTheDocument();
+    });
+  });
+
+  it('closes expanded row detail', async () => {
+    mockWaddleperf.listTests.mockResolvedValueOnce(mockTests);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TestsPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('datatable')).toBeInTheDocument();
+    });
+
+    const rows = screen.getAllByTestId('datatable-row');
+    fireEvent.click(rows[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByText('Throughput')).toBeInTheDocument();
+    });
+
+    fireEvent.click(rows[0]!);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Throughput')).not.toBeInTheDocument();
+    });
+  });
 });

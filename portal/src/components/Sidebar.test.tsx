@@ -218,4 +218,22 @@ describe('Sidebar', () => {
     const allTobogganing = screen.getAllByText('Tobogganing');
     expect(allTobogganing.length).toBeGreaterThan(0);
   });
+
+  it('opens and closes mobile menu multiple times', async () => {
+    renderSidebar();
+
+    const toggleButton = screen.getByLabelText(/toggle menu/i);
+
+    // Open menu
+    fireEvent.click(toggleButton);
+    expect(toggleButton).toBeInTheDocument();
+
+    // Close menu
+    fireEvent.click(toggleButton);
+    expect(toggleButton).toBeInTheDocument();
+
+    // Open menu again
+    fireEvent.click(toggleButton);
+    expect(toggleButton).toBeInTheDocument();
+  });
 });
