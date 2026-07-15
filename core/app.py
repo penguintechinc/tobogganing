@@ -48,6 +48,12 @@ def create_app(config: Config | None = None) -> Quart:
     ]
     cors(app, allow_origin=cors_origins)
 
+    # Register core API blueprints
+    from core.api.auth_routes import auth_bp
+    from core.api.portal_routes import portal_bp
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(portal_bp)
+
     # Set DATABASE_URI for penguin-dal init_dal()
     db_uri = build_db_uri(config)
     app.config["DATABASE_URI"] = db_uri

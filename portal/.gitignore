@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.log
+npm-debug.log*
+.env
+.env.local
+.DS_Store
+coverage/
+.jest-cache/
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+playwright-report/
