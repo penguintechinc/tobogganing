@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import structlog
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from core.config import Config, build_db_uri
@@ -525,4 +526,222 @@ except ImportError:
         )
 
 
-__all__ = ["run_pair", "_execute_pair", "start_recurring_run", "_start_recurring_run"]
+async def _node_health(
+    job_id: str,
+    tenant: str,
+    module: str,
+    job_type: str,
+    payload: dict[str, Any],
+    *,
+    db: Any | None = None,
+    engine_factory: EngineFactory | None = None,
+) -> None:
+    """Sweep tenant's endpoints and update their health status.
+
+    Checks each of the tenant's enabled endpoints via GET {engine_url}/health
+    with 5s timeout. Updates health_status and last_health_check in the database.
+    Per-endpoint try/except ensures one failing endpoint doesn't stop the sweep.
+    Only scans the owning tenant's endpoints (fail-closed).
+
+    Args:
+        job_id: Scheduled job ID (for logging).
+        tenant: Tenant identifier.
+        module: Module name (waddleperf_c2c).
+        job_type: Job type (node_health).
+        payload: Job payload (unused for health sweep).
+        db: penguin-dal AsyncDB instance (created fresh if None).
+        engine_factory: Callable to create EngineClient (default: custom health factory).
+
+    Returns:
+        None. Never raises; all errors caught and logged.
+    """
+    # Create fresh AsyncDB if not provided
+    if db is None:
+        try:
+            cfg = Config()
+            db_uri = build_db_uri(cfg)
+            db = AsyncDB(uri=db_uri, pool_size=cfg.db_pool_size)
+            await db.reflect()
+        except Exception as e:
+            logger.error(
+                "failed_to_create_dal_node_health",
+                job_id=job_id[:8],
+                tenant=tenant,
+                error=str(e),
+            )
+            return
+
+    # Default engine factory: 5s timeout for health checks
+    if engine_factory is None:
+        def engine_factory(endpoint: dict[str, Any]) -> EngineClient:
+            return EngineClient(
+                base_url=endpoint.get("engine_url"),
+                api_key=None,
+                timeout=5.0,
+            )
+
+    try:
+        # Get all enabled endpoints for this tenant
+        endpoint_mgr = EndpointManager(db, tenant)
+        endpoints = await endpoint_mgr.list_endpoints(enabled_only=True)
+
+        for endpoint in endpoints:
+            endpoint_id = endpoint.get("id")
+            engine_url = endpoint.get("engine_url")
+
+            try:
+                # Create engine client and check health
+                engine = engine_factory(endpoint)
+                is_healthy = await engine.health()
+                health_status = "healthy" if is_healthy else "unhealthy"
+
+                # Update endpoint health status and timestamp
+                await db(
+                    (db.c2c_endpoints.id == endpoint_id)
+                    & (db.c2c_endpoints.tenant == tenant)
+                ).update(
+                    health_status=health_status,
+                    last_health_check=datetime.now(timezone.utc),
+                )
+
+                logger.info(
+                    "endpoint_health_checked",
+                    endpoint_id=endpoint_id[:8],
+                    engine_url=engine_url,
+                    health_status=health_status,
+                    tenant=tenant,
+                )
+
+            except EngineError as e:
+                # Engine error (timeout, connection refused, etc.) → unhealthy
+                logger.warning(
+                    "endpoint_health_error",
+                    endpoint_id=endpoint_id[:8],
+                    engine_url=engine_url,
+                    error=str(e),
+                    tenant=tenant,
+                )
+                try:
+                    await db(
+                        (db.c2c_endpoints.id == endpoint_id)
+                        & (db.c2c_endpoints.tenant == tenant)
+                    ).update(
+                        health_status="unhealthy",
+                        last_health_check=datetime.now(timezone.utc),
+                    )
+                except Exception as update_err:
+                    logger.error(
+                        "failed_to_update_endpoint_health",
+                        endpoint_id=endpoint_id[:8],
+                        error=str(update_err),
+                        tenant=tenant,
+                    )
+
+            except Exception as e:
+                # Unexpected error → log and mark unhealthy, continue
+                logger.error(
+                    "unexpected_error_health_check",
+                    endpoint_id=endpoint_id[:8],
+                    error=str(e),
+                    exc_info=True,
+                    tenant=tenant,
+                )
+                try:
+                    await db(
+                        (db.c2c_endpoints.id == endpoint_id)
+                        & (db.c2c_endpoints.tenant == tenant)
+                    ).update(
+                        health_status="unhealthy",
+                        last_health_check=datetime.now(timezone.utc),
+                    )
+                except Exception as update_err:
+                    logger.error(
+                        "failed_to_update_endpoint_health",
+                        endpoint_id=endpoint_id[:8],
+                        error=str(update_err),
+                        tenant=tenant,
+                    )
+
+        logger.info(
+            "node_health_sweep_completed",
+            job_id=job_id[:8],
+            tenant=tenant,
+            endpoint_count=len(endpoints),
+        )
+
+    except Exception as e:
+        logger.error(
+            "node_health_sweep_failed",
+            job_id=job_id[:8],
+            tenant=tenant,
+            error=str(e),
+            exc_info=True,
+        )
+
+
+# Import Celery app and define task
+try:
+    from core.modules.waddleperf_c2c.worker.celery_app import celery_app
+
+    @celery_app.task(  # type: ignore[untyped-decorator]
+        bind=True,
+        name="waddleperf_c2c.node_health",
+        max_retries=0,
+    )
+    def node_health(
+        self: Any,
+        job_id: str,
+        tenant: str,
+        module: str,
+        job_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Celery task to perform a node health sweep.
+
+        Triggered by the core scheduler sweep for node_health jobs.
+        Builds a fresh AsyncDB per task and runs the async _node_health
+        logic via asyncio.run() inside the sync Celery task context.
+
+        Args:
+            self: Task self (bound task).
+            job_id: Scheduled job ID.
+            tenant: Tenant identifier.
+            module: Module name.
+            job_type: Job type.
+            payload: Job-specific payload (unused).
+
+        Returns:
+            None.
+        """
+        return asyncio.run(
+            _node_health(
+                job_id=job_id,
+                tenant=tenant,
+                module=module,
+                job_type=job_type,
+                payload=payload,
+            )
+        )
+
+except ImportError:
+    logger.warning("Failed to import celery_app; node_health task unavailable")
+
+    def node_health(
+        job_id: str,
+        tenant: str,
+        module: str,
+        job_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Dummy node_health when Celery unavailable."""
+        raise RuntimeError("Celery not available; cannot enqueue node_health task")
+
+
+__all__ = [
+    "run_pair",
+    "_execute_pair",
+    "start_recurring_run",
+    "_start_recurring_run",
+    "node_health",
+    "_node_health",
+]

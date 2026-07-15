@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from core.modules.waddleperf_cluster.api.alerts import alerts_bp as alerts_blueprint
+from core.modules.waddleperf_cluster.api.autoperf import autoperf_bp as autoperf_blueprint
 from core.modules.waddleperf_cluster.api.devices import blueprint as devices_blueprint
 from core.modules.waddleperf_cluster.api.enrollment import blueprint as enrollment_blueprint
 from core.modules.waddleperf_cluster.api.live_test import blueprint as live_test_blueprint
@@ -21,6 +22,7 @@ blueprints = [
     stats_blueprint,
     live_test_blueprint,
     alerts_blueprint,
+    autoperf_blueprint,
 ]
 
 __all__ = ["blueprints"]

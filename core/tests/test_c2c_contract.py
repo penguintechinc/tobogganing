@@ -46,7 +46,7 @@ def test_contract_flags_and_migrations() -> None:
     contract = c2c_module()
     for feature in C2C_FEATURES:
         assert f"tobogganing.waddleperf_c2c.{feature}" in contract.flags
-    assert contract.migrations == ["0014", "0015"]
+    assert contract.migrations == ["0014", "0015", "0020"]
 
 
 def test_tier_of_resolves_professional_via_registry(app_with_c2c: Quart) -> None:

@@ -33,6 +33,7 @@ def module() -> ModuleContract:
             "tobogganing.waddleperf_cluster.scheduled_tests",
             "tobogganing.waddleperf_cluster.alerts",
             "tobogganing.waddleperf_cluster.alert_routing",
+            "tobogganing.waddleperf_cluster.autoperf",
         ],
         entitlements=[
             Entitlement("waddleperf_cluster.org_units", "community"),
@@ -45,6 +46,7 @@ def module() -> ModuleContract:
             Entitlement("waddleperf_cluster.scheduled_tests", "community"),
             Entitlement("waddleperf_cluster.alerts", "community"),
             Entitlement("waddleperf_cluster.alert_routing", "professional"),
+            Entitlement("waddleperf_cluster.autoperf", "professional"),
         ],
         migrations=["0010", "0011", "0012"],
         health=None,
@@ -62,6 +64,13 @@ def module() -> ModuleContract:
         "waddleperf_cluster",
         "alert_sweep",
         "core.modules.waddleperf_cluster.worker.tasks.alert_sweep",
+    )
+
+    # Register handler for autoperf cycle
+    register_job_handler(
+        "waddleperf_cluster",
+        "autoperf_cycle",
+        "core.modules.waddleperf_cluster.worker.tasks.autoperf_cycle",
     )
 
     return contract

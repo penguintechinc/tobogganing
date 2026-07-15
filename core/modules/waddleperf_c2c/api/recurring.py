@@ -10,6 +10,7 @@ from quart import Blueprint, request
 from core.auth.middleware import current_claims, require_scope, require_tenant
 from core.db import get_db
 from core.entitlements.gate import require_feature
+from core.flags import feature_enabled
 from core.scheduler.job_manager import JobManager
 
 logger = structlog.get_logger()
@@ -22,16 +23,20 @@ blueprint = Blueprint("c2c_recurring", __name__, url_prefix="/recurring")
 @require_scope("c2c:write")
 @require_feature("waddleperf_c2c", "recurring_runs")
 async def create_recurring() -> tuple[dict[str, Any], int]:
-    """Create a new recurring matrix run job.
+    """Create a new recurring matrix run or node health job.
 
     Request body:
         {
-            "endpoint_ids": ["ep-1", "ep-2"] or null,  # null = all enabled endpoints
-            "interval_seconds": 300
+            "endpoint_ids": ["ep-1", "ep-2"] or null,
+            # null = all enabled endpoints (matrix_run only)
+            "interval_seconds": 300,
+            "job_type": "matrix_run" or "node_health"  # default: "matrix_run"
         }
 
     Returns:
         201 with job_id and scheduled details.
+        400 on invalid input or job_type.
+        402 if node_health requires regions feature but not enabled.
     """
     try:
         claims = current_claims()
@@ -44,6 +49,23 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
         data = await request.get_json()
         endpoint_ids = data.get("endpoint_ids")
         interval_seconds = data.get("interval_seconds")
+        job_type = data.get("job_type", "matrix_run")  # Default to matrix_run
+
+        # Validate job_type
+        if job_type not in ("matrix_run", "node_health"):
+            return {
+                "error": "Invalid job_type",
+                "message": "job_type must be 'matrix_run' or 'node_health'",
+            }, 400
+
+        # node_health requires the regions feature
+        if job_type == "node_health":
+            is_regions_enabled = feature_enabled("waddleperf_c2c", "regions")
+            if not is_regions_enabled:
+                return {
+                    "error": "Feature not available",
+                    "message": "node_health requires the 'regions' feature to be enabled",
+                }, 402
 
         # Validate interval_seconds
         if interval_seconds is None or not isinstance(interval_seconds, int):
@@ -88,7 +110,7 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
             job = await manager.create_job(
                 tenant=tenant,
                 module="waddleperf_c2c",
-                job_type="matrix_run",
+                job_type=job_type,
                 payload=payload,
                 interval_seconds=interval_seconds,
                 enabled=True,
@@ -103,6 +125,7 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
             "recurring_job_created",
             job_id=job["id"][:8],
             interval_seconds=interval_seconds,
+            job_type=job_type,
             tenant=tenant,
         )
 
@@ -110,6 +133,7 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
             {
                 "job_id": job["id"],
                 "interval_seconds": interval_seconds,
+                "job_type": job_type,
                 "next_run_at": job["next_run_at"].isoformat()
                 if job["next_run_at"]
                 else None,
@@ -131,7 +155,7 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
 @require_scope("c2c:read")
 @require_feature("waddleperf_c2c", "recurring_runs")
 async def list_recurring() -> tuple[dict[str, Any], int]:
-    """List recurring matrix run jobs for the tenant.
+    """List recurring jobs (matrix_run and node_health) for the tenant.
 
     Returns:
         200 with list of jobs.
@@ -147,18 +171,20 @@ async def list_recurring() -> tuple[dict[str, Any], int]:
         manager = JobManager(db)
         jobs = await manager.list_jobs(tenant, module="waddleperf_c2c")
 
-        # Filter to matrix_run jobs only
-        matrix_jobs = [j for j in jobs if j["job_type"] == "matrix_run"]
+        # Filter to recurring job types (matrix_run and node_health)
+        recurring_jobs = [
+            j for j in jobs if j["job_type"] in ("matrix_run", "node_health")
+        ]
 
         logger.info(
             "recurring_jobs_listed",
-            count=len(matrix_jobs),
+            count=len(recurring_jobs),
             tenant=tenant,
         )
 
         return (
             {
-                "jobs": matrix_jobs,
+                "jobs": recurring_jobs,
                 "meta": {
                     "version": 1,
                     "timestamp": datetime.now(timezone.utc).isoformat(),

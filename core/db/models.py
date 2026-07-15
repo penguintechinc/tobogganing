@@ -626,6 +626,10 @@ class C2CEndpoint(Base):
     target: Column[str] = Column(String(500), nullable=False)
     api_key_hash: Column[str | None] = Column(String(255), nullable=True, index=True)
     enabled: Column[bool] = Column(Boolean, default=True, nullable=False)
+    visibility: Column[str] = Column(String(16), nullable=False, server_default="private")
+    provider: Column[str | None] = Column(String(64), nullable=True)
+    health_status: Column[str] = Column(String(16), nullable=False, server_default="unknown")
+    last_health_check: Column[datetime | None] = Column(DateTime, nullable=True)
     created_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), nullable=False
     )
@@ -832,6 +836,57 @@ class AlertEvent(Base):
         return f"<AlertEvent(id={self.id}, rule_id={self.rule_id}, observed_value={self.observed_value})>"
 
 
+class AutoPerfPolicy(Base):
+    """AutoPerf tiered monitoring policy configuration."""
+
+    __tablename__ = "autoperf_policies"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    name: Column[str] = Column(String(128), nullable=False)
+    device_id: Column[str] = Column(String(36), nullable=False)
+    target: Column[str] = Column(String(500), nullable=False)
+    t1_interval_seconds: Column[int] = Column(Integer, nullable=False, server_default="300")
+    t2_interval_seconds: Column[int] = Column(Integer, nullable=False, server_default="120")
+    t3_interval_seconds: Column[int] = Column(Integer, nullable=False, server_default="60")
+    deescalate_after_clean: Column[int] = Column(Integer, nullable=False, server_default="3")
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<AutoPerfPolicy(id={self.id}, device_id={self.device_id}, tenant={self.tenant})>"
+
+
+class AutoPerfState(Base):
+    """AutoPerf escalation state machine state for a policy."""
+
+    __tablename__ = "autoperf_state"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    policy_id: Column[str] = Column(String(36), nullable=False, unique=True)
+    current_tier: Column[int] = Column(Integer, nullable=False, server_default="1")
+    clean_cycles: Column[int] = Column(Integer, nullable=False, server_default="0")
+    last_cycle_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    escalated_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    updated_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<AutoPerfState(id={self.id}, policy_id={self.policy_id}, current_tier={self.current_tier})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -860,4 +915,6 @@ __all__ = [
     "NotificationDelivery",
     "AlertRule",
     "AlertEvent",
+    "AutoPerfPolicy",
+    "AutoPerfState",
 ]
