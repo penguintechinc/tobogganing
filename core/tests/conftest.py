@@ -553,8 +553,8 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
 
     monkeypatch.setattr(
         core.entitlements.gate,
-        "_is_licensed_for_tier",
-        lambda tier: True,
+        "_licensed_tier",
+        lambda: "professional",
     )
 
     # Register WaddlePerf C2C module via registry (REAL auth, no monkeypatch)
