@@ -15,6 +15,8 @@ The WaddlePerf merge produced a working control-plane skeleton (`core/`, Quart) 
 | **hub-client** | VPN concentrator — **WireGuard and OpenZiti coexisting**, selected per end-user | *new* (VPN-termination role split out of hub-router) | **Rust** (new + security-sensitive + high-perf net — Go phase-out) |
 | **hub-perf** | WaddlePerf test receivers (perf data plane) | `engines/testserver` — rename | Go (existing — maintain) |
 
+**Management overlays (thin, no logic of their own):** `hub-cli` and `hub-webui` sit on top of `hub-api` for configuration, management, and review. `hub-webui` is today's React portal; `hub-cli` is new. Neither holds business logic — both are clients of the hub-api API.
+
 **Clients (two distinct connect paths):**
 - **Node agents → hub-routers** (intra-cluster + relayed c2c):
   - **client-k8s** = `clients/docker` — DaemonSet-style containerized node agent. **Stays in this repo, maintained here.**
@@ -35,6 +37,7 @@ The WaddlePerf merge produced a working control-plane skeleton (`core/`, Quart) 
 - **Per-service DB accounts**, single `users` identity table, UUID cross-refs.
 - **Every feature behind a PostHog flag** (`tobogganing.{module}.{feature}`, default OFF) **+ license entitlement** where tiered. The license gate must call the real client (fixes the `_is_licensed_for_tier` → `False` stub).
 - **Service-to-service:** gRPC preferred (REST fallback); SPIFFE/SPIRE or OIDC machine JWTs, never static keys.
+- **Config distribution:** every client, hub, and bridge fetches its configuration from `hub-api` via **gRPC** — hub-api is the single source of truth; nothing is configured locally.
 - **REST surfaces publish OpenAPI** (`openapi/v{major}.yaml`), login-only public doc + auth-gated full spec.
 - **≥2 replicas / HA in production**; securityContext everywhere; digest-pinned images.
 
