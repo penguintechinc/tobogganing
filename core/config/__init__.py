@@ -1,4 +1,5 @@
 """Configuration module for Tobogganing Core."""
+
 from __future__ import annotations
 
 import os
@@ -36,6 +37,13 @@ class Config:
 
     # Logging configuration
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
+
+    # Environment (dev/staging/production)
+    env: str = os.getenv("ENV", "dev")
+
+    # Hub-router deployment count for HA checks
+    # NOTE: in P-B this re-binds to the live hub-router registry count
+    hub_router_count: int = int(os.getenv("HUB_ROUTER_COUNT", "1"))
 
 
 def build_db_uri(cfg: Config) -> str:

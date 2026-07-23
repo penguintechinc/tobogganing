@@ -10,6 +10,7 @@ from quart import Quart, jsonify
 from quart_cors import cors
 
 from core.config import Config, build_db_uri
+from core.config.readiness import validate_prod_readiness
 from core.crypto.secrets import SecretEncryptor, set_encryptor
 from core.crypto.selection import build_signing_provider, build_data_key_provider
 from core.db import init_dal, get_db
@@ -101,6 +102,14 @@ def create_app(config: Config | None = None) -> Quart:
     @app.before_serving
     async def setup_services() -> None:
         """Initialize services after DB connection is ready."""
+        # Validate production readiness and emit warnings if needed (non-fatal)
+        readiness_warnings = validate_prod_readiness({
+            "env": config.env,
+            "hub_router_count": config.hub_router_count,
+        })
+        for warning in readiness_warnings:
+            logger.warning(warning)
+
         if get_db is not None:
             db = get_db()
             app.db = db  # type: ignore[attr-defined]
