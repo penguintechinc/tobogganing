@@ -14,7 +14,7 @@ from typing import Any
 import structlog
 from quart import Blueprint, current_app, request, websocket
 
-from core.auth.middleware import current_claims, require_tenant
+from core.auth.middleware import _scope_satisfied, current_claims, require_scope, require_tenant
 from core.db import get_db
 from core.entitlements.gate import require_feature
 from core.flags import feature_enabled
@@ -228,6 +228,19 @@ async def live_test_stream() -> None:
         await ws.close(code=1008, message="Unauthorized")
         return
 
+    # Check required scope: tests:write
+    token_scope = claims.get("scope", "")
+    if not token_scope:
+        logger.warning("websocket_rejected_no_scope", tenant=tenant)
+        await ws.close(code=1008, message="Unauthorized: insufficient privileges")
+        return
+
+    token_scopes = set(token_scope.split())
+    if not _scope_satisfied("tests:write", token_scopes):
+        logger.warning("websocket_rejected_insufficient_scope", tenant=tenant)
+        await ws.close(code=1008, message="Unauthorized: insufficient privileges")
+        return
+
     # Check feature flag
     if not await _check_feature_flag(tenant):
         logger.warning("websocket_rejected_feature_disabled", tenant=tenant)
@@ -382,6 +395,7 @@ async def live_test_stream() -> None:
 
 @blueprint.route("/run", methods=["POST"])
 @require_tenant
+@require_scope("tests:write")
 @require_feature("waddleperf_cluster", "live_test")
 async def run_test_sync() -> tuple[dict[str, Any], int]:
     """Synchronous HTTP endpoint to run a single test.

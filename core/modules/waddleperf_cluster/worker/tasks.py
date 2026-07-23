@@ -417,7 +417,9 @@ async def _autoperf_cycle_async(
         if current_tier >= 2:
             test_types.extend(["tcp", "udp", "http_trace"])
         if current_tier >= 3:
-            test_types.extend(["speedtest", "traceroute"])
+            # TODO(deferred): Add a true bandwidth/speedtest engine endpoint.
+            # For now, tier-3 escalation includes only engine-supported types.
+            test_types.extend(["traceroute"])
 
         logger.info(
             "autoperf_cycle_starting",

@@ -77,6 +77,53 @@ class TestLiveTestHTTP:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_run_test_sync_requires_tests_write_scope(
+        self, app_with_wpc, wpc_readonly_token
+    ) -> None:
+        """Test that read-only tokens (without tests:write scope) are rejected.
+
+        Regression: gh-401 — live-test endpoints must require tests:write scope.
+        """
+        with patch(
+            "core.entitlements.gate.feature_enabled", return_value=True
+        ), patch("core.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
+            "core.modules.waddleperf_cluster.api.live_test.DeviceManager"
+        ) as mock_dm_class, patch(
+            "core.modules.waddleperf_cluster.api.live_test.EngineClient"
+        ) as mock_engine_class:
+            # Mock DeviceManager
+            mock_dm = AsyncMock()
+            device_row = make_mock_row(
+                {"id": "device-1", "tenant": "test-tenant", "device_id": "device-1"}
+            )
+            mock_dm.get_device = AsyncMock(return_value=device_row)
+            mock_dm_class.return_value = mock_dm
+
+            mock_engine = AsyncMock()
+            mock_engine.run_test = AsyncMock(
+                return_value={"status": "success", "latency_ms": 50.0}
+            )
+            mock_engine_class.return_value = mock_engine
+
+            client = app_with_wpc.test_client()
+            headers = {"Authorization": f"Bearer {wpc_readonly_token}"}
+
+            response = await client.post(
+                "/api/v1/waddleperf_cluster/live-test/run",
+                json={
+                    "test_type": "http",
+                    "target": "example.com",
+                    "device_id": "device-1",
+                },
+                headers=headers,
+            )
+
+            # Should be rejected with 403 Forbidden due to insufficient scope
+            assert response.status_code == 403
+            data = await response.get_json()
+            assert "insufficient" in data["error"].lower()
+
+    @pytest.mark.asyncio
     async def test_run_test_sync_requires_feature_flag(
         self, app_with_wpc, valid_wpc_token
     ) -> None:
@@ -526,3 +573,30 @@ class TestWebSocketSubprotocolAuth:
             tenant, claims = await _validate_websocket_auth()
         assert tenant is None
         assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_websocket_stream_requires_tests_write_scope(
+        self, app_with_wpc, wpc_readonly_token
+    ) -> None:
+        """Regression: gh-401 — WebSocket /stream requires tests:write scope.
+
+        A read-only token should be rejected with close code 1008.
+        """
+        from core.modules.waddleperf_cluster.api.live_test import (
+            _validate_websocket_auth,
+            _check_feature_flag,
+        )
+
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={"Sec-WebSocket-Protocol": f"tobogganing-bearer, {wpc_readonly_token}"},
+        ):
+            tenant, claims = await _validate_websocket_auth()
+            assert tenant is not None
+            assert claims is not None
+
+            # Verify the token has read-only scope (no tests:write)
+            scope = claims.get("scope", "")
+            assert "tests:write" not in scope
+            assert "*:*" not in scope
