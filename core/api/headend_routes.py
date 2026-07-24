@@ -17,8 +17,11 @@ from typing import Any
 import structlog
 from quart import Blueprint, request
 
+from core.auth.jwt import decode_token
+from core.crypto.keys import KeyProvider
 from core.db import get_db
 from core.modules.sase.auth.user_manager import UserManager
+from core.modules.sase.certs.certificate_manager import CertificateManager
 from core.modules.sase.firewall.access_control import AccessControlManager
 from core.modules.sase.network.port_manager import PortConfigManager
 
@@ -57,6 +60,23 @@ def _extract_bearer_token() -> str | None:
     return auth_header[7:]
 
 
+def _extract_bearer_token_from_header(auth_header: str) -> str | None:
+    """Extract Bearer token from Authorization header string.
+
+    Args:
+        auth_header: Authorization header value.
+
+    Returns:
+        Token string if valid Bearer header found, else None.
+    """
+    if not auth_header:
+        return None
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[7:].strip()
+    return token or None
+
+
 def get_access_control_manager(db: Any) -> AccessControlManager:
     """Get access control manager instance.
 
@@ -91,6 +111,20 @@ def get_port_config_manager(db: Any) -> PortConfigManager:
         PortConfigManager bound to the database.
     """
     return PortConfigManager(db)
+
+
+def get_certificate_manager(
+    cert_mgr: CertificateManager | None,
+) -> CertificateManager | None:
+    """Get certificate manager instance from app config.
+
+    Args:
+        cert_mgr: CertificateManager from app config.
+
+    Returns:
+        CertificateManager or None if not configured.
+    """
+    return cert_mgr
 
 
 @headend_bp.route("/firewall/rules", methods=["GET"])
@@ -153,6 +187,180 @@ async def get_firewall_rules() -> tuple[dict[str, Any], int]:
     except Exception as e:
         logger.error("firewall_rules_error", error=str(e))
         return {"error": "Failed to get firewall rules"}, 500
+
+
+@headend_bp.route("/wireguard/peers", methods=["GET"])
+async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
+    """Get all WireGuard peer configurations for headend consumption.
+
+    Requires headend authentication via Bearer token (HEADEND_API_TOKEN).
+    Returns peer configurations for the default tenant.
+
+    Returns:
+        - 200: {peers: [...], total: N, meta: {...}}
+        - 401: {error: "..."} if auth fails
+        - 500: {error: "..."} on server error
+    """
+    try:
+        # Authenticate headend
+        token = _extract_bearer_token()
+        if not _verify_headend_token(token):
+            return {"error": "Unauthorized: invalid headend token"}, 401
+
+        # Get certificate manager from app config
+        from quart import current_app
+
+        cert_manager: CertificateManager | None = current_app.config.get("CERT_MANAGER")
+        if not cert_manager:
+            logger.error("cert_manager_not_configured")
+            return {"error": "Internal server error"}, 500
+
+        # Get all WireGuard peers for default tenant
+        # (headend operates at the cluster level, not tenant-scoped)
+        tenant = "default"
+        try:
+            peers = await cert_manager.get_all_wireguard_peers(tenant_id=tenant)
+        except Exception as e:
+            logger.error(
+                "wireguard_peers_fetch_failed",
+                tenant_id=tenant,
+                error=str(e),
+            )
+            return {"error": "Failed to fetch peers"}, 500
+
+        logger.info(
+            "wireguard_peers_fetched",
+            peer_count=len(peers),
+            tenant_id=tenant,
+        )
+
+        return (
+            {
+                "peers": peers,
+                "total": len(peers),
+                "meta": {
+                    "version": 1,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+            200,
+        )
+
+    except Exception as e:
+        logger.error("wireguard_peers_error", error=str(e))
+        return {"error": "Internal server error"}, 500
+
+
+@headend_bp.route("/auth/public-key", methods=["GET"])
+async def get_auth_public_key() -> tuple[dict[str, Any], int]:
+    """Get the public key for JWT verification.
+
+    Used by headend servers and clients to verify JWTs issued by the auth service.
+    Returns the key in PEM format with the key ID (kid).
+
+    This endpoint is PUBLIC (no authentication required) because headends need
+    the key before they can authenticate.
+
+    Returns:
+        - 200: {public_key: "...", kid: "...", algorithm: "RS256", ...}
+        - 500: {error: "..."} on server error
+    """
+    try:
+        from quart import current_app
+
+        key_provider: KeyProvider | None = current_app.config.get("KEY_PROVIDER")
+        if not key_provider:
+            logger.error("key_provider_not_configured")
+            return {"error": "Internal server error"}, 500
+
+        logger.info("jwt_public_key_requested")
+
+        return (
+            {
+                "public_key": key_provider.public_pem,
+                "kid": key_provider.kid,
+                "algorithm": "RS256",
+                "use": "sig",
+                "meta": {
+                    "version": 1,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+            200,
+        )
+
+    except Exception as e:
+        logger.error("jwt_public_key_error", error=str(e))
+        return {"error": "Internal server error"}, 500
+
+
+@headend_bp.route("/auth/validate", methods=["POST"])
+async def validate_auth_token() -> tuple[dict[str, Any], int]:
+    """Validate a JWT token and return its payload.
+
+    Used by headend servers to validate node JWTs issued by the auth service.
+    Requires the JWT in the Authorization header (the token to validate).
+
+    Request header:
+        Authorization: Bearer <token>
+
+    Returns:
+        - 200: {valid: True, node_id: "...", tenant: "...", ...}
+        - 401: {error: "..."} if token is invalid
+        - 500: {error: "..."} on server error
+    """
+    try:
+        from quart import current_app
+
+        # Extract token from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        token = _extract_bearer_token_from_header(auth_header)
+
+        if not token:
+            logger.warning("auth_validate_no_token")
+            return {"error": "Invalid authorization header"}, 401
+
+        key_provider: KeyProvider | None = current_app.config.get("KEY_PROVIDER")
+        if not key_provider:
+            logger.error("key_provider_not_configured")
+            return {"error": "Internal server error"}, 500
+
+        # Validate token
+        claims = decode_token(token, key_provider)
+
+        if not claims:
+            logger.warning("auth_validate_invalid_or_expired")
+            return {"error": "Invalid or expired token"}, 401
+
+        logger.info(
+            "auth_validate_successful",
+            node_id=claims.get("sub"),
+        )
+
+        return (
+            {
+                "valid": True,
+                "node_id": claims.get("sub"),
+                "node_type": claims.get("node_type"),
+                "tenant": claims.get("tenant"),
+                "permissions": (
+                    claims.get("permissions", "").split()
+                    if claims.get("permissions")
+                    else []
+                ),
+                "metadata": claims.get("metadata", {}),
+                "expires_at": claims.get("exp"),
+                "meta": {
+                    "version": 1,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+            200,
+        )
+
+    except Exception as e:
+        logger.error("auth_validate_error", error=str(e))
+        return {"error": "Internal server error"}, 500
 
 
 @headend_bp.route("/headend/<headend_id>/ports", methods=["GET"])

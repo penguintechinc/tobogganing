@@ -220,3 +220,156 @@ async def test_get_headend_ports_not_found(app_with_sase: Quart) -> None:
         assert "error" in data
 
     os.environ.pop("HEADEND_API_TOKEN", None)
+
+
+# WireGuard and JWT flat endpoints (headend-callable, app-level routes)
+
+
+@pytest.mark.asyncio
+async def test_get_wireguard_peers_no_auth(app_with_sase: Quart) -> None:
+    """Test GET /api/v1/wireguard/peers fails without auth.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.get("/api/v1/wireguard/peers")
+
+    assert response.status_code == 401
+    data = await response.get_json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_get_wireguard_peers_invalid_token(app_with_sase: Quart) -> None:
+    """Test GET /api/v1/wireguard/peers fails with invalid Bearer token.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.get(
+        "/api/v1/wireguard/peers",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    data = await response.get_json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_get_wireguard_peers_success(app_with_sase: Quart) -> None:
+    """Test GET /api/v1/wireguard/peers returns peers for valid headend token.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    test_token = "test-headend-token"
+    os.environ["HEADEND_API_TOKEN"] = test_token
+
+    client = app_with_sase.test_client()
+
+    # Mock CertificateManager in app config
+    mock_cm = AsyncMock()
+    mock_cm.get_all_wireguard_peers = AsyncMock(
+        return_value=[
+            {
+                "node_id": "cluster-1",
+                "public_key": "pub-key-1",
+                "ip_address": "10.0.0.1",
+                "allowed_ips": "10.0.0.1/32",
+            }
+        ]
+    )
+    app_with_sase.config["CERT_MANAGER"] = mock_cm
+
+    response = await client.get(
+        "/api/v1/wireguard/peers",
+        headers={"Authorization": f"Bearer {test_token}"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert "peers" in data
+    assert "total" in data
+    assert data["total"] == 1
+    assert len(data["peers"]) == 1
+
+    os.environ.pop("HEADEND_API_TOKEN", None)
+
+
+@pytest.mark.asyncio
+async def test_get_auth_public_key_no_auth(app_with_sase: Quart) -> None:
+    """Test GET /api/v1/auth/public-key succeeds without auth (public endpoint).
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.get("/api/v1/auth/public-key")
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert "public_key" in data
+    assert "kid" in data
+    assert "algorithm" in data
+
+
+@pytest.mark.asyncio
+async def test_post_auth_validate_success(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/validate validates a token.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    from core.auth.jwt import encode_access_token
+
+    client = app_with_sase.test_client()
+    provider = app_with_sase.config["KEY_PROVIDER"]
+
+    # Generate a test token to validate
+    claims = {
+        "sub": "test-node",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
+        "tenant": "default",
+        "node_type": "kubernetes_node",
+        "permissions": "headend proxy wireguard",
+    }
+
+    test_token = await encode_access_token(claims, provider, ttl_hours=1)
+
+    # Send validation request
+    response = await client.post(
+        "/api/v1/auth/validate",
+        headers={"Authorization": f"Bearer {test_token}"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["valid"] is True
+    assert data["node_id"] == "test-node"
+    assert data["tenant"] == "default"
+
+
+@pytest.mark.asyncio
+async def test_post_auth_validate_invalid_token(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/validate rejects invalid token.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.post(
+        "/api/v1/auth/validate",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    data = await response.get_json()
+    assert "error" in data
