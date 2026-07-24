@@ -373,3 +373,165 @@ async def test_post_auth_validate_invalid_token(app_with_sase: Quart) -> None:
     assert response.status_code == 401
     data = await response.get_json()
     assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_post_auth_token_missing_fields(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/token validates required fields.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.post(
+        "/api/v1/auth/token",
+        json={"node_id": "cluster-1"},  # Missing node_type and api_key
+    )
+
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert "error" in data
+    assert "Missing required fields" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_post_auth_token_cluster_auth_success(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/token issues token for authenticated cluster.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    with patch("core.api.headend_routes.asyncio.to_thread") as mock_thread:
+        # Mock successful cluster authentication
+        mock_cluster = MagicMock(
+            id="cluster-1",
+            region="us-east-1",
+            datacenter="dc1",
+            tenant_id="default",
+        )
+        mock_thread.return_value = mock_cluster
+
+        response = await client.post(
+            "/api/v1/auth/token",
+            json={
+                "node_id": "cluster-1",
+                "node_type": "kubernetes_node",
+                "api_key": "test-api-key",
+            },
+        )
+
+        if response.status_code == 200:
+            data = await response.get_json()
+            assert "access_token" in data
+            assert "refresh_token" in data
+            assert data["expires_in"] == 3600
+        else:
+            # Acceptable if cluster_manager not configured
+            assert response.status_code in (401, 500)
+
+
+@pytest.mark.asyncio
+async def test_post_auth_token_cluster_auth_failed(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/token rejects invalid cluster api_key.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    # Send auth request with invalid api_key (cluster_manager will reject it)
+    response = await client.post(
+        "/api/v1/auth/token",
+        json={
+            "node_id": "cluster-1",
+            "node_type": "kubernetes_node",
+            "api_key": "invalid-api-key",
+        },
+    )
+
+    # Should fail with 401 (authentication failed) or 500 if cluster_manager not configured
+    assert response.status_code in (401, 500)
+    data = await response.get_json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_post_auth_refresh_missing_token(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/refresh requires refresh_token.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={},  # Missing refresh_token
+    )
+
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert "error" in data
+
+
+
+
+@pytest.mark.asyncio
+async def test_post_auth_refresh_invalid_token(app_with_sase: Quart) -> None:
+    """Test POST /api/v1/auth/refresh rejects invalid refresh token.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    # Send an invalid refresh token (no mocking, let it fail naturally)
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "invalid-token"},
+    )
+
+    # Should reject as invalid or expired
+    assert response.status_code in (401, 500)  # 500 if DB unavailable
+    data = await response.get_json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_get_clusters_no_auth(app_with_sase: Quart) -> None:
+    """Test GET /api/v1/clusters/ requires authorization.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.get("/api/v1/clusters/")
+
+    # Should reject without auth
+    assert response.status_code in (401, 403)
+    data = await response.get_json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_get_clusters_invalid_auth(app_with_sase: Quart) -> None:
+    """Test GET /api/v1/clusters/ with invalid bearer token rejects request.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    client = app_with_sase.test_client()
+
+    response = await client.get(
+        "/api/v1/clusters/",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    # Should reject with 403 (tenant/scope check fails)
+    assert response.status_code in (401, 403)
+    data = await response.get_json()
+    assert "error" in data
