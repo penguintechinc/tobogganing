@@ -1,4 +1,5 @@
 """Main Quart application factory for Tobogganing Core."""
+
 from __future__ import annotations
 
 import asyncio
@@ -44,15 +45,14 @@ def create_app(config: Config | None = None) -> Quart:
     logging.basicConfig(level=config.log_level)
 
     # Configure CORS
-    cors_origins = [
-        origin.strip() for origin in config.cors_origins.split(",")
-    ]
+    cors_origins = [origin.strip() for origin in config.cors_origins.split(",")]
     cors(app, allow_origin=cors_origins)
 
     # Register core API blueprints
     from hub_api.api.auth_routes import auth_bp
     from hub_api.api.portal_routes import portal_bp
     from hub_api.api.headend_routes import headend_bp
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(portal_bp)
     # Headend routes: flat app-level paths for hub-router headend service
@@ -82,6 +82,7 @@ def create_app(config: Config | None = None) -> Quart:
 
     # Import and register modules from hub_api.modules
     import hub_api.modules
+
     for module_name in hub_api.modules.__all__:
         # Dynamically import the module and call its module() factory
         module_path = f"hub_api.modules.{module_name}"
@@ -107,10 +108,12 @@ def create_app(config: Config | None = None) -> Quart:
     async def setup_services() -> None:
         """Initialize services after DB connection is ready."""
         # Validate production readiness and emit warnings if needed (non-fatal)
-        readiness_warnings = validate_prod_readiness({
-            "env": config.env,
-            "hub_router_count": config.hub_router_count,
-        })
+        readiness_warnings = validate_prod_readiness(
+            {
+                "env": config.env,
+                "hub_router_count": config.hub_router_count,
+            }
+        )
         for warning in readiness_warnings:
             logger.warning(warning)
 
@@ -118,7 +121,9 @@ def create_app(config: Config | None = None) -> Quart:
             db = get_db()
             app.db = db  # type: ignore[attr-defined]
             # Apply registry to app with the module context
-            ctx = ModuleContext(config=config, db=db, key_provider=app.config.get("KEY_PROVIDER"))
+            ctx = ModuleContext(
+                config=config, db=db, key_provider=app.config.get("KEY_PROVIDER")
+            )
             registry.apply_to(app, ctx)
 
             # Initialize the global encryptor from the selected data key provider
@@ -126,21 +131,38 @@ def create_app(config: Config | None = None) -> Quart:
                 data_key_provider = build_data_key_provider(registry)
                 encryptor = SecretEncryptor(data_key_provider.get_data_key())
                 set_encryptor(encryptor)
-                logger.info(f"Initialized encryptor: {type(data_key_provider).__name__}")
+                logger.info(
+                    f"Initialized encryptor: {type(data_key_provider).__name__}"
+                )
             except Exception as e:
                 logger.error(f"Failed to initialize encryptor: {e}")
                 raise
 
             logger.info("Services initialized on app startup")
 
-    # Health check endpoint
+    # Liveness probe endpoint (lightweight, no dependencies)
     @app.route("/health", methods=["GET"])
-    async def health_check() -> tuple[dict[str, str | int], int]:
-        """Health check endpoint with database check.
+    async def health_check() -> tuple[dict[str, str], int]:
+        """Liveness probe endpoint. Returns 200 if process is running.
+
+        Does not check external dependencies; only verifies the process is up.
 
         Returns:
             JSON response with health status and status code.
-            200 if healthy, 503 if database check fails.
+            200 always (process-only check).
+        """
+        return {"status": "healthy"}, 200
+
+    # Readiness probe endpoint (with database check)
+    @app.route("/ready", methods=["GET"])
+    async def readiness_check() -> tuple[dict[str, str | int], int]:
+        """Readiness probe endpoint with database connectivity check.
+
+        Returns 200 if process is up and database is reachable, 503 if DB check fails.
+
+        Returns:
+            JSON response with readiness status and status code.
+            200 if ready, 503 if database check fails.
         """
         try:
             db = get_db()
@@ -148,10 +170,11 @@ def create_app(config: Config | None = None) -> Quart:
                 # Try to execute a simple query to check DB connectivity
                 def check_db() -> None:
                     db.connection.execute(sa.text("SELECT 1"))
+
                 await asyncio.to_thread(check_db)
             return {"status": "healthy"}, 200
         except Exception as e:
-            logger.error(f"Health check failed: {str(e)}")
+            logger.error(f"Readiness check failed: {str(e)}")
             return {"status": "unhealthy", "error": "database"}, 503
 
     # Error handlers

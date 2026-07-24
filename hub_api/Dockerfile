@@ -33,7 +33,7 @@ USER appuser
 
 # Health check using native Python (no curl/wget)
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-    CMD python3 -c "import http.client; conn = http.client.HTTPConnection('localhost', 8080, timeout=2); conn.request('GET', '/healthz'); res = conn.getresponse(); exit(0 if res.status == 200 else 1)"
+    CMD python3 -c "import http.client; conn = http.client.HTTPConnection('localhost', 8080, timeout=2); conn.request('GET', '/health'); res = conn.getresponse(); exit(0 if res.status == 200 else 1)"
 
 # Run the application
 CMD ["hypercorn", "hub_api.app:app", "--bind", "0.0.0.0:8080"]

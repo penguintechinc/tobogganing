@@ -27,7 +27,7 @@ hubApi:
   probes:
     liveness:
       httpGet:
-        path: /healthz
+        path: /health
         port: 8080
       initialDelaySeconds: 15
       periodSeconds: 20
@@ -35,7 +35,7 @@ hubApi:
       failureThreshold: 3
     readiness:
       httpGet:
-        path: /healthz
+        path: /ready
         port: 8080
       initialDelaySeconds: 5
       periodSeconds: 10
