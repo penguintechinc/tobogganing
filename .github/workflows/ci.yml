@@ -37,36 +37,36 @@ jobs:
       uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('services/hub-api/requirements.txt') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('hub_api/requirements.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
     
     - name: Install dependencies
       run: |
-        cd services/hub-api
+        cd hub_api
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-cov pytest-asyncio
-    
+
     - name: Lint with pylint
       run: |
-        cd services/hub-api
+        cd hub_api
         python -m pylint --rcfile=.pylintrc . || exit 0
-    
+
     - name: Type check with mypy
       run: |
-        cd services/hub-api
+        cd hub_api
         python -m mypy . || exit 0
-    
+
     - name: Test with pytest
       run: |
-        cd services/hub-api
+        cd hub_api
         python -m pytest tests/ -v --cov=. --cov-report=xml || exit 0
-    
+
     - name: Upload coverage reports
       uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
       with:
-        file: ./services/hub-api/coverage.xml
+        file: ./hub_api/coverage.xml
         flags: manager
         name: manager-coverage
 
@@ -202,7 +202,7 @@ jobs:
     - name: Run bandit (Python security scanner)
       run: |
         pip install bandit[toml]
-        bandit -r services/hub-api --format json --output bandit-results.json || true
+        bandit -r hub_api --format json --output bandit-results.json || true
       continue-on-error: true
 
     - name: Run gosec (Go security scanner)
@@ -213,9 +213,8 @@ jobs:
 
     - name: Run Trivy filesystem scanning
       uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
-        with:
-          trivy-version: 'v0.69.3'
       with:
+        trivy-version: 'v0.69.3'
         scan-type: 'fs'
         scan-ref: '.'
         format: 'sarif'
@@ -287,7 +286,7 @@ jobs:
       if: matrix.component == 'manager'
       uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
       with:
-        context: ./services/hub-api
+        context: ./hub_api
         platforms: linux/amd64,linux/arm64
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
@@ -468,9 +467,8 @@ jobs:
     
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
-        with:
-          trivy-version: 'v0.69.3'
       with:
+        trivy-version: 'v0.69.3'
         scan-type: 'fs'
         scan-ref: '.'
         format: 'sarif'

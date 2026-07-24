@@ -128,7 +128,7 @@ jobs:
     - name: Run bandit (Python)
       run: |
         pip install bandit[toml]
-        bandit -r services/hub-api --format json --output bandit-results.json || true
+        bandit -r hub_api --format json --output bandit-results.json || true
       continue-on-error: true
 
     - name: Run gosec (Go)
