@@ -81,6 +81,7 @@ Each phase gets its own spec + plan at execution time; this is the umbrella.
 8. **Inspection-Point customization mechanism** — proxy-wasm (Rust) filter vs Rust ext_authz/ext_proc sidecar vs native C++ Envoy filter, for the rules/verdict path. (P-C/§11)
 9. **Sensor tap format** — Envoy L7 tap vs an L3/L4 packet mirror the sensors (Suricata/Zeek/Arkime) natively consume. (P-C/§11)
 10. **bridge-router placement** — vs hub-router c2c transport; which targets route via bridge-router (external/VPC/agentless) vs directly to hub-routers (agent nodes). (P-B/P-C)
+11. **Headend service-auth token unification** — the Go headend uses `authToken` for firewall/ports but `CLUSTER_API_KEY` for wireguard/peers; the brain validates `HEADEND_API_TOKEN` for all three flat endpoints. Unify to one service credential (ideally SPIFFE/OIDC machine JWT per standards, replacing the static shared token) when P-B revives peer-sync. (P-B)
 
 ## 9. Verification (per phase)
 
