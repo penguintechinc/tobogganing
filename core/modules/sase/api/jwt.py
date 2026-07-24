@@ -1,4 +1,5 @@
 """JWT authentication blueprint for SASE module."""
+
 from __future__ import annotations
 
 import asyncio
@@ -89,6 +90,9 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         permissions = []
         metadata: dict[str, Any] = {}
         tenant_id = "default"  # Phase-2 default; will use node metadata in Phase-3
+        authenticated_principal: Any = (
+            None  # Track authenticated principal for sub claim
+        )
 
         if node_type in ("kubernetes_node", "raw_compute"):
             # Authenticate cluster/headend nodes
@@ -97,11 +101,14 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
                     cluster = await asyncio.to_thread(
                         cluster_manager.authenticate_cluster, api_key
                     )
-                    if cluster:
+                    if cluster and getattr(cluster, "id", None) == node_id:
                         authenticated = True
+                        authenticated_principal = cluster
                         permissions = ["headend", "proxy", "wireguard"]
                         metadata = {
-                            "cluster_id": cluster.id if hasattr(cluster, "id") else str(cluster),
+                            "cluster_id": (
+                                cluster.id if hasattr(cluster, "id") else str(cluster)
+                            ),
                             "region": getattr(cluster, "region", "unknown"),
                             "datacenter": getattr(cluster, "datacenter", "unknown"),
                         }
@@ -124,9 +131,12 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
                     )
                     if client and getattr(client, "id", None) == node_id:
                         authenticated = True
+                        authenticated_principal = client
                         permissions = ["connect", "tunnel", "route"]
                         metadata = {
-                            "client_id": client.id if hasattr(client, "id") else str(client),
+                            "client_id": (
+                                client.id if hasattr(client, "id") else str(client)
+                            ),
                             "client_type": getattr(client, "type", "unknown"),
                             "cluster_id": getattr(client, "cluster_id", "unknown"),
                         }
@@ -151,9 +161,13 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
                 401,
             )
 
-        # Build JWT claims with tenant-first
+        # Build JWT claims — use authenticated principal's id, not request body
+        # (defense in depth: don't trust client-supplied node_id)
+        principal_id = getattr(
+            authenticated_principal, "id", node_id
+        )  # Fall back to node_id if no id attr
         claims = {
-            "sub": node_id,
+            "sub": principal_id,
             "iss": "tobogganing",
             "aud": "tobogganing",
             "tenant": tenant_id,
@@ -165,9 +179,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
 
         # Generate access token (1 hour default)
         try:
-            access_token = await encode_access_token(
-                claims, key_provider, ttl_hours=1
-            )
+            access_token = await encode_access_token(claims, key_provider, ttl_hours=1)
         except ValueError as e:
             logger.error("access_token_encoding_failed", error=str(e))
             return (
@@ -272,11 +284,7 @@ async def refresh_jwt_token() -> tuple[dict[str, Any], int]:
             )
 
         # Generate new access token with same claims
-        access_claims = {
-            k: v
-            for k, v in claims.items()
-            if k != "token_type"
-        }
+        access_claims = {k: v for k, v in claims.items() if k != "token_type"}
 
         try:
             new_access_token = await encode_access_token(
@@ -448,9 +456,7 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
         node_tenant = None
         if cluster_manager:
             try:
-                cluster = await asyncio.to_thread(
-                    cluster_manager.get_cluster, node_id
-                )
+                cluster = await asyncio.to_thread(cluster_manager.get_cluster, node_id)
                 if cluster:
                     node_tenant = getattr(cluster, "tenant_id", "default")
             except Exception:
@@ -458,9 +464,7 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
 
         if not node_tenant and client_registry:
             try:
-                client = await asyncio.to_thread(
-                    client_registry.get_client, node_id
-                )
+                client = await asyncio.to_thread(client_registry.get_client, node_id)
                 if client:
                     node_tenant = getattr(client, "tenant_id", "default")
             except Exception:

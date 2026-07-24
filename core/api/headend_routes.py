@@ -135,7 +135,7 @@ async def get_firewall_rules() -> tuple[dict[str, Any], int]:
     """Get all firewall rules for headend consumption.
 
     Requires headend authentication via Bearer token (HEADEND_API_TOKEN).
-    Returns rules for all active users across all tenants.
+    Returns rules for all active users in the default tenant.
 
     Returns:
         - 200: {timestamp, rules_count, user_rules: {user_id: [rules]}}
@@ -349,6 +349,9 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
         permissions = []
         metadata: dict[str, Any] = {}
         tenant_id = "default"
+        authenticated_principal: Any = (
+            None  # Track authenticated principal for sub claim
+        )
 
         if node_type in ("kubernetes_node", "raw_compute"):
             # Authenticate cluster/headend nodes
@@ -357,8 +360,9 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                     cluster = await asyncio.to_thread(
                         cluster_manager.authenticate_cluster, api_key
                     )
-                    if cluster:
+                    if cluster and getattr(cluster, "id", None) == node_id:
                         authenticated = True
+                        authenticated_principal = cluster
                         permissions = ["headend", "proxy", "wireguard"]
                         metadata = {
                             "cluster_id": (
@@ -386,6 +390,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                     )
                     if client and getattr(client, "id", None) == node_id:
                         authenticated = True
+                        authenticated_principal = client
                         permissions = ["connect", "tunnel", "route"]
                         metadata = {
                             "client_id": (
@@ -415,9 +420,13 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                 401,
             )
 
-        # Build JWT claims
+        # Build JWT claims — use authenticated principal's id, not request body
+        # (defense in depth: don't trust client-supplied node_id)
+        principal_id = getattr(
+            authenticated_principal, "id", node_id
+        )  # Fall back to node_id if no id attr
         claims = {
-            "sub": node_id,
+            "sub": principal_id,
             "iss": "tobogganing",
             "aud": "tobogganing",
             "tenant": tenant_id,
@@ -743,10 +752,9 @@ async def get_headend_ports(headend_id: str) -> tuple[dict[str, Any], int]:
         if db is None:
             return {"error": "Database unavailable"}, 500
 
-        # Get tenant and cluster from query params
-        # Note: tenant should be derived from headend config in multi-tenant
-        # For now, use default tenant
-        tenant = request.args.get("tenant", "default")
+        # Get cluster from query params; tenant is always "default" (no client control)
+        # TODO(P-B §11): derive tenant from per-cluster machine-JWT
+        tenant = "default"
         cluster_id = request.args.get("cluster_id", f"cluster-{headend_id}")
 
         pcm = get_port_config_manager(db)
