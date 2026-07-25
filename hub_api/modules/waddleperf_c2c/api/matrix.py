@@ -1,16 +1,19 @@
 """Cluster-to-cluster results matrix REST API blueprint."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, jsonify, request
+from quart import Blueprint, request
 
-from hub_api.auth.middleware import current_claims, require_scope, require_tenant
+from hub_api.auth.middleware import (current_claims, require_scope,
+                                     require_tenant)
 from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.waddleperf_c2c.services.matrix_service import MatrixService
+from hub_api.modules.waddleperf_c2c.services.matrix_service import \
+    MatrixService
 from hub_api.modules.waddleperf_c2c.services.run_manager import RunManager
 
 logger = structlog.get_logger()
@@ -26,7 +29,7 @@ async def get_latest_matrix() -> tuple[dict[str, Any], int]:
     """Get the latest NxN region matrix for a test type.
 
     Query params:
-        test_type: Required test type (e.g., "latency", "throughput")
+        test_type: Required test type (e.g., "http", "icmp")
 
     Returns:
         200 with matrix data, 400 if test_type missing.

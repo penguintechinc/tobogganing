@@ -3,18 +3,22 @@
 Tasks execute source->destination endpoint tests via the engine client,
 recording results in the database.
 """
+
 from __future__ import annotations
 
 import asyncio
-import structlog
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from hub_api.config import Config, build_db_uri
-from hub_api.modules.waddleperf_c2c.services.endpoint_manager import EndpointManager
-from hub_api.modules.waddleperf_c2c.services.run_manager import RunManager
-from hub_api.modules.waddleperf_cluster.services.engine_client import EngineClient, EngineError
+import structlog
 from penguin_dal import AsyncDB
+
+from hub_api.config import Config, build_db_uri
+from hub_api.modules.waddleperf_c2c.services.endpoint_manager import \
+    EndpointManager
+from hub_api.modules.waddleperf_c2c.services.run_manager import RunManager
+from hub_api.modules.waddleperf_cluster.services.engine_client import (
+    EngineClient, EngineError)
 
 logger = structlog.get_logger()
 
@@ -408,7 +412,10 @@ async def _start_recurring_run(
         run_mgr = RunManager(db, tenant)
         try:
             run, pairs = await run_mgr.create_run(
-                test_types=["latency", "throughput"],  # Default test types for recurring
+                test_types=[
+                    "icmp",
+                    "http",
+                ],  # Default test types for recurring (must be in ALLOWED_TEST_TYPES)
                 endpoint_ids=endpoint_ids,
                 created_by=None,  # Scheduled job, no user
             )
@@ -509,9 +516,7 @@ try:
         )
 
 except ImportError:
-    logger.warning(
-        "Failed to import celery_app; start_recurring_run task unavailable"
-    )
+    logger.warning("Failed to import celery_app; start_recurring_run task unavailable")
 
     def start_recurring_run(
         job_id: str,
@@ -573,6 +578,7 @@ async def _node_health(
 
     # Default engine factory: 5s timeout for health checks
     if engine_factory is None:
+
         def engine_factory(endpoint: dict[str, Any]) -> EngineClient:
             return EngineClient(
                 base_url=endpoint.get("engine_url"),
