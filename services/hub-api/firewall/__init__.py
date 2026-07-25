@@ -1,1 +1,0 @@
-# Firewall and access control management for SASEWaddle Manager
