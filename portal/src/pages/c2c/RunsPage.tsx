@@ -18,7 +18,7 @@ function RunsPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [matrixData, setMatrixData] = useState<{ regions: string[]; cells: MatrixCell[] } | null>(null);
-  const [testTypes, setTestTypes] = useState<string>('latency');
+  const [testTypes, setTestTypes] = useState<string>('http');
 
   const queryClient = useQueryClient();
 
@@ -38,7 +38,7 @@ function RunsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['c2c', 'runs'] });
       setShowForm(false);
-      setTestTypes('latency');
+      setTestTypes('http');
     },
   });
 
@@ -129,7 +129,7 @@ function RunsPage() {
               value={testTypes}
               onChange={(e) => setTestTypes(e.target.value)}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
-              placeholder="latency, throughput"
+              placeholder="http, tcp, udp, icmp"
               required
             />
           </div>
@@ -162,7 +162,7 @@ function RunsPage() {
             <MatrixGrid
               regions={matrixData.regions}
               cells={matrixData.cells}
-              testType="latency"
+              testType="http"
             />
           )}
         </div>

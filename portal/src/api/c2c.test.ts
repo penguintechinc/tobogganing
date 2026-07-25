@@ -177,7 +177,7 @@ describe('c2c API', () => {
 
   describe('createRun', () => {
     it('should create a new run', async () => {
-      const payload = { test_types: ['latency'] };
+      const payload = { test_types: ['http'] };
 
       (apiClient.post as jest.Mock).mockResolvedValue({
         data: { run_id: 'run-1', total_pairs: 10 },
@@ -201,11 +201,11 @@ describe('c2c API', () => {
         data: mockMatrix,
       });
 
-      const result = await getLatestMatrix('latency');
+      const result = await getLatestMatrix('http');
 
       expect(result).toEqual(mockMatrix);
       expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/latest', {
-        params: { test_type: 'latency' },
+        params: { test_type: 'http' },
       });
     });
   });
@@ -236,16 +236,16 @@ describe('c2c API', () => {
         data: {
           source: 'us-west-2',
           dest: 'us-east-1',
-          test_type: 'latency',
+          test_type: 'http',
           trends: mockTrends,
         },
       });
 
-      const result = await getMatrixTrends('us-west-2', 'us-east-1', 'latency');
+      const result = await getMatrixTrends('us-west-2', 'us-east-1', 'http');
 
       expect(result).toEqual(mockTrends);
       expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/trends', {
-        params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'latency' },
+        params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'http' },
       });
     });
 
@@ -256,16 +256,16 @@ describe('c2c API', () => {
         data: {
           source: 'us-west-2',
           dest: 'us-east-1',
-          test_type: 'latency',
+          test_type: 'http',
           trends: mockTrends,
         },
       });
 
-      const result = await getMatrixTrends('us-west-2', 'us-east-1', 'latency', 3600);
+      const result = await getMatrixTrends('us-west-2', 'us-east-1', 'http', 3600);
 
       expect(result).toEqual(mockTrends);
       expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/trends', {
-        params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'latency', window: 3600 },
+        params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'http', window: 3600 },
       });
     });
   });
