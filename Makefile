@@ -1,256 +1,294 @@
-# SASEWaddle Root Makefile
-# Provides convenient commands for building, testing, and deploying the entire SASEWaddle project
+# Tobogganing - Zero Trust SASE Platform
+# Build automation for all services
 
-.PHONY: help all clean build test lint docker deploy dev-up dev-down website
+.PHONY: help all clean build test lint docker deploy setup dev smoke-test
+.PHONY: build-hub-api build-hub-router build-hub-webui build-client
+.PHONY: test-unit test-integration test-e2e test-hub-api test-hub-router test-hub-webui test-client
+.PHONY: lint-hub-api lint-hub-router lint-hub-webui lint-client
+.PHONY: docker-build docker-push dev-up dev-down dev-logs dev-restart
+.PHONY: deploy-alpha deploy-beta deploy-prod deploy-terraform
+.PHONY: helm-lint helm-template seed-mock-data
+.PHONY: install-hooks pre-commit-check pre-push-check
+
+VERSION := $(shell cat .version)
 
 # Default target
 help: ## Show this help message
-	@echo "SASEWaddle - Open Source SASE Solution"
+	@echo "Tobogganing - Zero Trust SASE Platform"
+	@echo "Version: $(VERSION)"
 	@echo ""
 	@echo "Available commands:"
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-# Build all components
+# ============================================================
+# Setup & Build
+# ============================================================
+
 all: clean build test ## Build and test all components
 
+setup: ## Install all dependencies
+	@echo "Installing dependencies..."
+	@cd services/hub-api && pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
+	@cd services/hub-router && go mod download
+	@cd services/hub-webui && npm ci
+	@cd clients/native && go mod download
+	@echo "Dependencies installed"
+	@$(MAKE) install-hooks
+
 clean: ## Clean all build artifacts
-	@echo "🧹 Cleaning build artifacts..."
+	@echo "Cleaning build artifacts..."
 	@rm -rf build/ dist/ releases/ artifacts/
-	@cd manager && rm -rf __pycache__ .pytest_cache htmlcov/ *.egg-info/
-	@cd headend && rm -rf build/ *.test *.out
+	@cd services/hub-api && rm -rf __pycache__ .pytest_cache htmlcov/ *.egg-info/ .mypy_cache/
+	@cd services/hub-router && rm -rf build/ *.test *.out
+	@cd services/hub-webui && rm -rf dist/ node_modules/.cache/ .vite/
 	@cd clients/native && rm -rf build/ *.test *.out
-	@cd website && rm -rf .next/ out/ node_modules/.cache/
-	@echo "✅ Clean complete"
+	@echo "Clean complete"
 
-# Build all components
-build: build-manager build-headend build-client build-website ## Build all components
+build: build-hub-api build-hub-router build-hub-webui build-client ## Build all components
 
-build-manager: ## Build Manager Service
-	@echo "🏗️  Building Manager Service..."
-	@cd manager && pip install -r requirements.txt
+build-hub-api: ## Build Hub API (Quart)
+	@echo "Building Hub API..."
+	@cd services/hub-api && pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
 
-build-headend: ## Build Headend Server
-	@echo "🏗️  Building Headend Server..."
-	@cd headend && go mod download && go build -o build/headend-proxy ./proxy
+build-hub-router: ## Build Hub Router (Go)
+	@echo "Building Hub Router..."
+	@cd services/hub-router && go mod download && CGO_ENABLED=1 go build -o build/hub-router ./proxy
+	@cd services/hub-router && go build -o build/healthcheck ./cmd/healthcheck
+
+build-hub-webui: ## Build Hub WebUI (React)
+	@echo "Building Hub WebUI..."
+	@cd services/hub-webui && npm ci && npm run build
 
 build-client: ## Build Native Client
-	@echo "🏗️  Building Native Client..."
-	@cd clients/native && go mod download && go build -o build/sasewaddle-client ./cmd
+	@echo "Building Native Client..."
+	@cd clients/native && go mod download && go build -o build/tobogganing-client ./cmd
 
-build-website: ## Build Website
-	@echo "🏗️  Building Website..."
-	@cd website && npm install && npm run build
+# ============================================================
+# Testing
+# ============================================================
 
-# Run all tests
-test: test-manager test-headend test-client ## Run all tests
+test: test-hub-api test-hub-router test-hub-webui test-client ## Run all tests
 
-test-manager: ## Run Manager Service tests
-	@echo "🧪 Testing Manager Service..."
-	@cd manager && python -m pytest tests/ -v --cov=. || true
+test-unit: test-hub-api test-hub-router test-hub-webui ## Run unit tests only
 
-test-headend: ## Run Headend Server tests
-	@echo "🧪 Testing Headend Server..."
-	@cd headend && go test -v -race ./... || true
+test-integration: ## Run integration tests
+	@echo "Running integration tests..."
+	@cd tests/integration && python3 -m pytest -v || true
 
-test-client: ## Run Native Client tests
-	@echo "🧪 Testing Native Client..."
+test-e2e: ## Run end-to-end tests
+	@echo "Running e2e tests..."
+	@cd tests/e2e && python3 -m pytest -v || true
+
+test-hub-api: ## Test Hub API
+	@echo "Testing Hub API..."
+	@cd services/hub-api && python3 -m pytest tests/ -v --cov=. || true
+
+test-hub-router: ## Test Hub Router
+	@echo "Testing Hub Router..."
+	@cd services/hub-router && go test -v -race ./... || true
+
+test-hub-webui: ## Test Hub WebUI
+	@echo "Testing Hub WebUI..."
+	@cd services/hub-webui && npm test -- --run || true
+
+test-client: ## Test Native Client
+	@echo "Testing Native Client..."
 	@cd clients/native && go test -v -race ./... || true
 
-# Run linting
-lint: lint-manager lint-headend lint-client lint-website ## Run all linting
+smoke-test: ## Run smoke tests (build, start, API health)
+	@echo "Running smoke tests..."
+	@cd tests/smoke && bash run-smoke-tests.sh || true
 
-lint-manager: ## Lint Manager Service
-	@echo "🔍 Linting Manager Service..."
-	@cd manager && python -m pylint . --rcfile=.pylintrc || true
-	@cd manager && python -m mypy . || true
+seed-mock-data: ## Populate database with test data
+	@echo "Seeding mock data..."
+	@cd services/hub-api && python3 -m scripts.seed_mock_data || true
 
-lint-headend: ## Lint Headend Server
-	@echo "🔍 Linting Headend Server..."
-	@cd headend && golangci-lint run || true
+# ============================================================
+# Linting
+# ============================================================
+
+lint: ## Run all linting
+	@echo "=== Linting ==="
+	@cd services/hub-api && echo "-- flake8 --" && python3 -m flake8 . --max-line-length=120 --exclude=.git,__pycache__,venv,node_modules 2>/dev/null || true
+	@cd services/hub-api && echo "-- black --" && python3 -m black --check . 2>/dev/null || true
+	@cd services/hub-api && echo "-- isort --" && python3 -m isort --check-only . 2>/dev/null || true
+	@cd services/hub-api && echo "-- mypy --" && python3 -m mypy . --ignore-missing-imports 2>/dev/null || true
+	@cd services/hub-router && echo "-- golangci-lint --" && golangci-lint run 2>/dev/null || true
+	@cd clients/native && echo "-- golangci-lint --" && golangci-lint run 2>/dev/null || true
+	@cd services/hub-webui && echo "-- eslint --" && npm run lint 2>/dev/null || true
+	@find . -name "Dockerfile*" -not -path "*/.git/*" -exec echo "-- hadolint: {} --" \; -exec hadolint {} \; 2>/dev/null || true
+	@find . -name "*.sh" -not -path "*/.git/*" -exec echo "-- shellcheck: {} --" \; -exec shellcheck {} \; 2>/dev/null || true
+	@echo "Linting complete"
+
+lint-hub-api: ## Lint Hub API
+	@echo "Linting Hub API..."
+	@cd services/hub-api && python3 -m flake8 . || true
+	@cd services/hub-api && python3 -m black --check . || true
+	@cd services/hub-api && python3 -m isort --check-only . || true
+	@cd services/hub-api && python3 -m mypy . || true
+	@cd services/hub-api && python3 -m bandit -r . -x tests || true
+
+lint-hub-router: ## Lint Hub Router
+	@echo "Linting Hub Router..."
+	@cd services/hub-router && golangci-lint run || true
+
+lint-hub-webui: ## Lint Hub WebUI
+	@echo "Linting Hub WebUI..."
+	@cd services/hub-webui && npm run lint || true
 
 lint-client: ## Lint Native Client
-	@echo "🔍 Linting Native Client..."
+	@echo "Linting Native Client..."
 	@cd clients/native && golangci-lint run || true
 
-lint-website: ## Lint Website
-	@echo "🔍 Linting Website..."
-	@cd website && npm run lint || true
+# ============================================================
+# Docker
+# ============================================================
 
-# Docker commands
 docker: docker-build ## Build all Docker images
 
 docker-build: ## Build all Docker images
-	@echo "🐳 Building Docker images..."
-	@docker build -t sasewaddle/manager:latest ./manager
-	@docker build -t sasewaddle/headend:latest ./headend
-	@docker build -t sasewaddle/client:latest ./clients/docker
+	@echo "Building Docker images..."
+	@docker build -t tobogganing/hub-api:latest ./services/hub-api
+	@docker build -t tobogganing/hub-router:latest ./services/hub-router
+	@docker build -t tobogganing/hub-webui:latest ./services/hub-webui
+	@docker build -t tobogganing/client:latest ./clients/docker
 
 docker-push: ## Push Docker images to registry
-	@echo "🐳 Pushing Docker images..."
-	@docker push sasewaddle/manager:latest
-	@docker push sasewaddle/headend:latest
-	@docker push sasewaddle/client:latest
+	@echo "Pushing Docker images..."
+	@docker push tobogganing/hub-api:latest
+	@docker push tobogganing/hub-router:latest
+	@docker push tobogganing/hub-webui:latest
+	@docker push tobogganing/client:latest
 
-# Development environment
+# ============================================================
+# Development
+# ============================================================
+
+dev: dev-up ## Start development environment
+
 dev-up: ## Start development environment
-	@echo "🚀 Starting development environment..."
-	@cd deploy/docker-compose && docker-compose -f docker-compose.dev.yml up -d
-	@echo "✅ Development environment started"
-	@echo "   Manager UI: http://localhost:8000"
-	@echo "   Redis Commander: http://localhost:8082"
-	@echo "   Adminer: http://localhost:8081"
+	@echo "Starting development environment..."
+	@docker compose -f docker-compose.dev.yml up -d
+	@echo "Development environment started"
+	@echo "  Hub API:          http://localhost:8080"
+	@echo "  Hub WebUI:        http://localhost:3000"
+	@echo "  Redis Commander:  http://localhost:8081"
+	@echo "  Adminer:          http://localhost:8082"
 
 dev-down: ## Stop development environment
-	@echo "🛑 Stopping development environment..."
-	@cd deploy/docker-compose && docker-compose -f docker-compose.dev.yml down
-	@echo "✅ Development environment stopped"
+	@echo "Stopping development environment..."
+	@docker compose -f docker-compose.dev.yml down
+	@echo "Development environment stopped"
 
 dev-logs: ## Show development environment logs
-	@cd deploy/docker-compose && docker-compose -f docker-compose.dev.yml logs -f
+	@docker compose -f docker-compose.dev.yml logs -f
 
 dev-restart: dev-down dev-up ## Restart development environment
 
-# Deployment commands
-deploy: deploy-k8s ## Deploy to production
+# ============================================================
+# Deployment
+# ============================================================
 
-deploy-k8s: ## Deploy to Kubernetes
-	@echo "☸️  Deploying to Kubernetes..."
-	@cd deploy/kubernetes && kubectl apply -f .
-	@echo "✅ Kubernetes deployment complete"
+deploy-alpha: ## Deploy to alpha (local K8s)
+	@echo "Deploying to alpha..."
+	@kubectl apply -k k8s/kustomize/overlays/alpha
 
-deploy-terraform: ## Deploy with Terraform
-	@echo "🏗️  Deploying with Terraform..."
+deploy-beta: ## Deploy to beta cluster
+	@echo "Deploying to beta..."
+	@kubectl apply -k k8s/kustomize/overlays/beta
+
+deploy-prod: ## Deploy to production
+	@echo "Deploying to production..."
+	@kubectl apply -k k8s/kustomize/overlays/prod
+
+deploy-terraform: ## Deploy infrastructure with Terraform
+	@echo "Deploying with Terraform..."
 	@cd deploy/terraform && terraform init && terraform plan && terraform apply
-	@echo "✅ Terraform deployment complete"
 
-# Website commands
-website: ## Build and serve website locally
-	@echo "🌐 Starting website development server..."
-	@cd website && npm install && npm run dev
+helm-lint: ## Lint Helm chart
+	@helm lint k8s/helm/tobogganing
 
-website-build: ## Build website for production
-	@echo "🌐 Building website for production..."
-	@cd website && npm install && npm run build
+helm-template: ## Dry-run Helm template rendering
+	@helm template tobogganing k8s/helm/tobogganing
 
-website-deploy: ## Deploy website to Cloudflare Pages
-	@echo "🌐 Deploying website to Cloudflare Pages..."
-	@cd website && npm run pages:build && npm run pages:deploy
+# ============================================================
+# Security & Quality
+# ============================================================
 
-# Security and compliance
 security-scan: ## Run security scans
-	@echo "🔐 Running security scans..."
+	@echo "Running security scans..."
+	@cd services/hub-api && python3 -m bandit -r . -x tests || true
+	@cd services/hub-api && pip-audit || true
+	@cd services/hub-router && gosec ./... || true
+	@cd services/hub-webui && npm audit || true
 	@docker run --rm -v $(PWD):/workspace aquasec/trivy fs /workspace || true
 
-# Release commands
-release: ## Create a new release
-	@echo "🎉 Creating new release..."
-	@./scripts/create-release.sh
+qa: lint test security-scan ## Run full quality assurance suite
 
-release-notes: ## Generate release notes
-	@echo "📝 Generating release notes..."
-	@git log --pretty=format:"- %s" $(shell git describe --tags --abbrev=0)..HEAD
+ci: clean setup lint test docker-build ## Simulate CI pipeline locally
 
-# Documentation
-docs: ## Generate documentation
-	@echo "📚 Generating documentation..."
-	@cd manager && python -m pdoc --html --output-dir ../docs/ . || true
-
-# Health checks
-health: ## Check system health
-	@echo "💚 Checking system health..."
-	@curl -f http://localhost:8000/health || echo "Manager service not responding"
-	@curl -f http://localhost:8080/health || echo "Headend service not responding"
-
-# Performance testing
-perf-test: ## Run performance tests
-	@echo "⚡ Running performance tests..."
-	@echo "Performance testing framework would run here"
-
-# Installation
-install: build ## Install SASEWaddle locally
-	@echo "📦 Installing SASEWaddle..."
-	@sudo cp clients/native/build/sasewaddle-client /usr/local/bin/
-	@echo "✅ Installation complete"
-	@echo "   Run 'sasewaddle-client --help' to get started"
-
-uninstall: ## Uninstall SASEWaddle
-	@echo "🗑️  Uninstalling SASEWaddle..."
-	@sudo rm -f /usr/local/bin/sasewaddle-client
-	@echo "✅ Uninstallation complete"
-
-# Certificate management
-certs-generate: ## Generate development certificates
-	@echo "🔐 Generating development certificates..."
-	@mkdir -p certs
-	@openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-		-keyout certs/dev.key -out certs/dev.crt \
-		-subj "/C=US/ST=Development/L=Local/O=SASEWaddle/CN=localhost"
-	@echo "✅ Development certificates generated in ./certs/"
-
-# Database management
-db-migrate: ## Run database migrations
-	@echo "🗄️  Running database migrations..."
-	@cd manager && python -m manager.tools.migrate
-
-db-reset: ## Reset development database
-	@echo "🗄️  Resetting development database..."
-	@rm -f manager/data/sasewaddle.db
-	@cd manager && python -m manager.tools.init_db
-
+# ============================================================
 # Utilities
+# ============================================================
+
 version: ## Show version information
-	@echo "SASEWaddle Version Information:"
-	@echo "  Version: $(shell cat .version)"
+	@echo "Tobogganing Version Information:"
+	@echo "  Version: $(VERSION)"
 	@echo "  Git Commit: $(shell git rev-parse --short HEAD)"
 	@echo "  Build Date: $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')"
 	@echo ""
 	@echo "Component Versions:"
-	@cd manager && python --version 2>&1 | sed 's/^/  Manager: /'
-	@cd headend && go version | sed 's/^/  Headend: /'
-	@cd clients/native && go version | sed 's/^/  Client: /'
-	@cd website && node --version | sed 's/^/  Website: Node /'
+	@cd services/hub-api && python3 --version 2>&1 | sed 's/^/  Hub API: /' || true
+	@cd services/hub-router && go version 2>&1 | sed 's/^/  Hub Router: /' || true
+	@cd services/hub-webui && node --version 2>&1 | sed 's/^/  Hub WebUI: Node /' || true
 
-dependencies: ## Install all dependencies
-	@echo "📦 Installing dependencies..."
-	@cd manager && pip install -r requirements.txt -r requirements-dev.txt
-	@cd headend && go mod download
-	@cd clients/native && go mod download
-	@cd website && npm install
-	@echo "✅ Dependencies installed"
+health: ## Check system health
+	@echo "Checking system health..."
+	@curl -sf http://localhost:8080/healthz && echo " Hub API: healthy" || echo " Hub API: not responding"
+	@curl -sf http://localhost:9090/health && echo " Hub Router: healthy" || echo " Hub Router: not responding"
+	@curl -sf http://localhost:3000 > /dev/null && echo " Hub WebUI: healthy" || echo " Hub WebUI: not responding"
 
-# Quality assurance
-qa: lint test security-scan ## Run full quality assurance suite
+certs-generate: ## Generate development certificates
+	@echo "Generating development certificates..."
+	@mkdir -p certs
+	@openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+		-keyout certs/dev.key -out certs/dev.crt \
+		-subj "/C=US/ST=Development/L=Local/O=Tobogganing/CN=localhost"
+	@echo "Development certificates generated in ./certs/"
 
-# CI/CD simulation
-ci: clean dependencies lint test docker ## Simulate CI pipeline locally
+db-migrate: ## Run database migrations
+	@echo "Running database migrations..."
+	@cd services/hub-api && python3 -m scripts.migrate
 
-# Project statistics
-stats: ## Show project statistics
-	@echo "📊 SASEWaddle Project Statistics:"
-	@echo "  Total files: $(shell find . -type f | wc -l)"
-	@echo "  Lines of code:"
-	@echo "    Python: $(shell find manager -name '*.py' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "    Go: $(shell find headend clients/native -name '*.go' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "    TypeScript: $(shell find website -name '*.tsx' -o -name '*.ts' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "    YAML: $(shell find . -name '*.yml' -o -name '*.yaml' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "  Git commits: $(shell git rev-list --count HEAD 2>/dev/null || echo 0)"
-	@echo "  Contributors: $(shell git log --format='%an' | sort -u | wc -l 2>/dev/null || echo 0)"
+db-reset: ## Reset development database
+	@echo "Resetting development database..."
+	@rm -f services/hub-api/data/tobogganing.db
+	@cd services/hub-api && python3 -m scripts.init_db
 
-# Environment information
+install: build ## Install Tobogganing client locally
+	@echo "Installing Tobogganing..."
+	@sudo cp clients/native/build/tobogganing-client /usr/local/bin/
+	@echo "Installation complete"
+	@echo "  Run 'tobogganing-client --help' to get started"
+
+uninstall: ## Uninstall Tobogganing client
+	@echo "Uninstalling Tobogganing..."
+	@sudo rm -f /usr/local/bin/tobogganing-client
+	@echo "Uninstallation complete"
+
 env-info: ## Show environment information
-	@echo "🌍 Environment Information:"
+	@echo "Environment Information:"
 	@echo "  OS: $(shell uname -s -r)"
 	@echo "  Architecture: $(shell uname -m)"
 	@echo "  Docker: $(shell docker --version 2>/dev/null || echo 'Not installed')"
 	@echo "  Kubernetes: $(shell kubectl version --client --short 2>/dev/null || echo 'Not installed')"
 	@echo "  Terraform: $(shell terraform --version 2>/dev/null | head -1 || echo 'Not installed')"
-	@echo "  Python: $(shell python --version 2>/dev/null || echo 'Not installed')"
+	@echo "  Python: $(shell python3 --version 2>/dev/null || echo 'Not installed')"
 	@echo "  Go: $(shell go version 2>/dev/null || echo 'Not installed')"
 	@echo "  Node.js: $(shell node --version 2>/dev/null || echo 'Not installed')"
 
-# Troubleshooting
 troubleshoot: ## Run troubleshooting checks
-	@echo "🔧 Running troubleshooting checks..."
+	@echo "Running troubleshooting checks..."
 	@echo "1. Checking prerequisites..."
 	@make env-info
 	@echo ""
@@ -258,9 +296,52 @@ troubleshoot: ## Run troubleshooting checks
 	@make health
 	@echo ""
 	@echo "3. Checking Docker containers..."
-	@docker ps -a | grep sasewaddle || echo "No SASEWaddle containers found"
+	@docker ps -a | grep tobogganing || echo "No Tobogganing containers found"
 	@echo ""
 	@echo "4. Checking disk space..."
 	@df -h . | head -2
 	@echo ""
-	@echo "✅ Troubleshooting complete"
+	@echo "Troubleshooting complete"
+
+stats: ## Show project statistics
+	@echo "Tobogganing Project Statistics:"
+	@echo "  Total files: $(shell find . -type f -not -path './.git/*' -not -path '*/node_modules/*' | wc -l)"
+	@echo "  Lines of code:"
+	@echo "    Python: $(shell find services/hub-api -name '*.py' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
+	@echo "    Go: $(shell find services/hub-router clients/native -name '*.go' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
+	@echo "    TypeScript: $(shell find services/hub-webui/src -name '*.tsx' -o -name '*.ts' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
+	@echo "  Git commits: $(shell git rev-list --count HEAD 2>/dev/null || echo 0)"
+
+test-functional: ## Run functional tests (APIs, pages, tabs, modals, buttons)
+	@echo "No functional tests defined"
+
+test-security: ## Run security tests (gosec, bandit, npm audit, trivy)
+	@echo "=== Security Scans ==="
+	@cd services/hub-api && echo "-- bandit --" && python3 -m bandit -r . -x tests 2>/dev/null || true
+	@echo "-- pip-audit --" && find services/hub-api -name "requirements.txt" -exec pip-audit -r {} 2>/dev/null \; || true
+	@cd services/hub-router && echo "-- gosec --" && gosec ./... 2>/dev/null || true
+	@cd clients/native && echo "-- gosec --" && gosec ./... 2>/dev/null || true
+	@cd services/hub-router && echo "-- govulncheck --" && govulncheck ./... 2>/dev/null || true
+	@cd clients/native && echo "-- govulncheck --" && govulncheck ./... 2>/dev/null || true
+	@cd services/hub-webui && echo "-- npm audit --" && npm audit 2>/dev/null || true
+	@echo "-- gitleaks --" && gitleaks detect --source . --no-git 2>/dev/null || true
+	@echo "Security scans complete"
+
+install-hooks: ## Install pre-commit and pre-push git hooks from scripts/hooks/
+	@echo "Installing git hooks..."
+	@ln -sf "$(PWD)/scripts/hooks/pre-commit" "$(PWD)/.git/hooks/pre-commit"
+	@ln -sf "$(PWD)/scripts/hooks/pre-push"   "$(PWD)/.git/hooks/pre-push"
+	@chmod +x scripts/hooks/pre-commit scripts/hooks/pre-push
+	@echo "✓ pre-commit → .git/hooks/pre-commit"
+	@echo "✓ pre-push   → .git/hooks/pre-push"
+
+pre-commit-check: ## Run pre-commit checks manually (same as git pre-commit hook)
+	@scripts/hooks/pre-commit
+
+pre-push-check: ## Run pre-push checks manually (same as git pre-push hook)
+	@scripts/hooks/pre-push
+
+pre-commit: pre-commit-check ## Alias for pre-commit-check
+
+deploy-dev: ## Deploy to dev environment (alias to deploy-alpha)
+	@$(MAKE) deploy-alpha

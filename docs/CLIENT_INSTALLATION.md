@@ -92,7 +92,7 @@ chmod +x /usr/local/bin/tobogganing-client
 # Coming in v1.2.0
 ```
 
-### 🛷 Linux Installation
+### 🖥️ Linux Installation
 
 #### Ubuntu/Debian
 ```bash
@@ -327,17 +327,17 @@ network:
 
 ```bash
 # Core configuration
-export SASEWADDLE_MANAGER_URL="https://manager.example.com:8000"
-export SASEWADDLE_API_KEY="your-api-key"
-export SASEWADDLE_LOG_LEVEL="info"
+export TOBOGGANING_MANAGER_URL="https://hub-api.example.com:8080"
+export TOBOGGANING_API_KEY="your-api-key"
+export TOBOGGANING_LOG_LEVEL="info"
 
 # GUI-specific (GUI builds only)
-export SASEWADDLE_SYSTEM_TRAY="true"
-export SASEWADDLE_AUTO_UPDATE="true"
+export TOBOGGANING_SYSTEM_TRAY="true"
+export TOBOGGANING_AUTO_UPDATE="true"
 
 # Headless-specific
-export SASEWADDLE_DAEMON_MODE="true"
-export SASEWADDLE_PID_FILE="/var/run/tobogganing.pid"
+export TOBOGGANING_DAEMON_MODE="true"
+export TOBOGGANING_PID_FILE="/var/run/tobogganing.pid"
 ```
 
 ---
@@ -466,7 +466,7 @@ curl -k https://manager.example.com:8000/health
 nslookup manager.example.com
 
 # Test with debug logging
-SASEWADDLE_LOG_LEVEL=debug tobogganing-client connect
+TOBOGGANING_LOG_LEVEL=debug tobogganing-client connect
 ```
 
 #### WireGuard Interface Issues
@@ -501,7 +501,7 @@ tobogganing-client reset --confirm
 top -p $(pgrep tobogganing-client)
 
 # Reduce log level
-export SASEWADDLE_LOG_LEVEL=warning
+export TOBOGGANING_LOG_LEVEL=warning
 
 # Check for update loops
 tobogganing-client logs | grep "update"

@@ -1,4 +1,4 @@
-# Web interface module for SASEWaddle Manager
+# Web interface module for Tobogganing Manager
 
 from py4web import action, request, response, redirect, Field, Session, URL, T
 from py4web.utils.form import Form, FormStyleDefault
@@ -30,5 +30,5 @@ def admin_dashboard():
     """Main admin dashboard."""
     return dict(
         title="Admin Dashboard",
-        description="SASEWaddle Manager Administration"
+        description="Tobogganing Manager Administration"
     )

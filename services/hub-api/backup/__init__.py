@@ -1,4 +1,4 @@
-"""Database backup and restore functionality for SASEWaddle Manager."""
+"""Database backup and restore functionality for Tobogganing Manager."""
 
 import os
 import json
@@ -13,7 +13,6 @@ import logging
 from urllib.parse import urlparse
 
 from database import get_db, get_database_uri
-from pydal import DAL
 
 try:
     import boto3
@@ -30,7 +29,7 @@ class S3Config:
     def __init__(self):
         self.enabled = os.getenv('BACKUP_S3_ENABLED', 'false').lower() == 'true'
         self.endpoint_url = os.getenv('BACKUP_S3_ENDPOINT_URL')  # For MINIO, etc.
-        self.bucket = os.getenv('BACKUP_S3_BUCKET', 'sasewaddle-backups')
+        self.bucket = os.getenv('BACKUP_S3_BUCKET', 'tobogganing-backups')
         self.region = os.getenv('BACKUP_S3_REGION', 'us-east-1')
         self.access_key = os.getenv('BACKUP_S3_ACCESS_KEY')
         self.secret_key = os.getenv('BACKUP_S3_SECRET_KEY')
@@ -151,7 +150,7 @@ class BackupManager:
             # Generate backup name if not provided
             if not backup_name:
                 timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-                backup_name = f"sasewaddle_backup_{timestamp}"
+                backup_name = f"tobogganing_backup_{timestamp}"
             
             # Determine file extension
             ext = ".json"
@@ -174,20 +173,25 @@ class BackupManager:
             }
             
             # Backup each table
+            # db.tables is a dict[str, sqlalchemy.Table] in penguin-dal
             for table_name in db.tables:
-                table = db[table_name]
-                rows = db(table).select()
-                
+                sa_table = db.tables[table_name]
+                table_proxy = getattr(db, table_name)
+                # Select all rows using a full-table query via QuerySet
+                from penguin_dal.query import Query
+                from sqlalchemy import true as sa_true
+                rows = db(Query(sa_true(), table=sa_table)).select()
+
                 # Convert rows to JSON-serializable format
                 table_data = []
                 for row in rows:
                     row_dict = {}
-                    for field in table.fields:
-                        value = row[field]
+                    for col_name in sa_table.columns.keys():
+                        value = row.get(col_name)
                         # Handle datetime objects
                         if isinstance(value, datetime):
                             value = value.isoformat()
-                        row_dict[field] = value
+                        row_dict[col_name] = value
                     table_data.append(row_dict)
                 
                 backup_data["data"][table_name] = table_data
@@ -328,7 +332,7 @@ class BackupManager:
                 "total_rows_restored": 0,
                 "errors": []
             }
-            
+
             # Restore each table
             for table_name, table_data in backup_data['data'].items():
                 try:
@@ -336,39 +340,43 @@ class BackupManager:
                         logger.warning(f"Table {table_name} not found in current schema, skipping")
                         restore_stats["errors"].append(f"Table {table_name} not found")
                         continue
-                    
-                    table = db[table_name]
-                    
-                    # Clear existing data (optional - could make this configurable)
-                    db(table).delete()
-                    
+
+                    sa_table = db.tables[table_name]
+                    table_proxy = getattr(db, table_name)
+                    col_names = set(sa_table.columns.keys())
+
+                    # Clear existing data
+                    from penguin_dal.query import Query
+                    from sqlalchemy import true as sa_true
+                    db(Query(sa_true(), table=sa_table)).delete()
+
                     # Insert backup data
                     rows_restored = 0
                     for row_data in table_data:
-                        # Convert datetime strings back to datetime objects
+                        # Convert datetime strings back; drop unknown columns
+                        clean: dict = {}
                         for field, value in row_data.items():
-                            if field in table.fields:
-                                field_type = table[field].type
-                                if field_type == 'datetime' and value:
-                                    row_data[field] = datetime.fromisoformat(value)
-                        
-                        table.insert(**row_data)
+                            if field not in col_names:
+                                continue
+                            col_type = str(sa_table.columns[field].type)
+                            if 'DATETIME' in col_type.upper() and value:
+                                value = datetime.fromisoformat(value)
+                            clean[field] = value
+
+                        table_proxy.insert(**clean)
                         rows_restored += 1
-                    
-                    db.commit()
-                    
+
                     restore_stats["tables_restored"].append({
                         "name": table_name,
                         "rows": rows_restored
                     })
                     restore_stats["total_rows_restored"] += rows_restored
-                    
+
                     logger.info(f"Restored {rows_restored} rows to table {table_name}")
-                    
+
                 except Exception as e:
                     logger.error(f"Error restoring table {table_name}: {e}")
                     restore_stats["errors"].append(f"Table {table_name}: {str(e)}")
-                    db.rollback()
             
             restore_stats["completed_at"] = datetime.utcnow().isoformat()
             logger.info(f"Restore completed: {restore_stats['total_rows_restored']} rows restored")
@@ -663,7 +671,7 @@ def backup_cli():
     """Command-line interface for backup operations."""
     import argparse
     
-    parser = argparse.ArgumentParser(description='SASEWaddle Database Backup Manager')
+    parser = argparse.ArgumentParser(description='Tobogganing Database Backup Manager')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
     # Create backup command

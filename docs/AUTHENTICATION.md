@@ -173,7 +173,7 @@ services:
       - SESSION_TIMEOUT_HOURS=8
       
       # License
-      - SASEWADDLE_LICENSE_KEY=${ENTERPRISE_LICENSE}
+      - TOBOGGANING_LICENSE_KEY=${ENTERPRISE_LICENSE}
       
       # SSO Configuration
       - SSO_ENABLED=true

@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/pinning-dependency-digests/SKILL.md

@@ -1,5 +1,5 @@
 """
-Prometheus Metrics for SASEWaddle Manager Service
+Prometheus Metrics for Tobogganing Manager Service
 Provides comprehensive metrics for monitoring and alerting
 """
 
@@ -35,14 +35,14 @@ class ManagerMetrics:
         
         # Service Info
         self.service_info = Info(
-            'sasewaddle_manager_info',
-            'SASEWaddle Manager service information',
+            'tobogganing_manager_info',
+            'Tobogganing Manager service information',
             registry=self.registry
         )
         
         # Service Status
         self.service_status = Enum(
-            'sasewaddle_manager_status',
+            'tobogganing_manager_status',
             'Current status of the manager service',
             states=['starting', 'healthy', 'degraded', 'unhealthy'],
             registry=self.registry
@@ -50,21 +50,21 @@ class ManagerMetrics:
         
         # Uptime
         self.uptime_seconds = Gauge(
-            'sasewaddle_manager_uptime_seconds',
+            'tobogganing_manager_uptime_seconds',
             'Time since manager service started',
             registry=self.registry
         )
         
         # HTTP Request Metrics
         self.http_requests_total = Counter(
-            'sasewaddle_manager_http_requests_total',
+            'tobogganing_manager_http_requests_total',
             'Total HTTP requests processed',
             ['method', 'endpoint', 'status'],
             registry=self.registry
         )
         
         self.http_request_duration = Histogram(
-            'sasewaddle_manager_http_request_duration_seconds',
+            'tobogganing_manager_http_request_duration_seconds',
             'Time spent processing HTTP requests',
             ['method', 'endpoint'],
             registry=self.registry
@@ -72,34 +72,34 @@ class ManagerMetrics:
         
         # API Authentication Metrics
         self.auth_attempts_total = Counter(
-            'sasewaddle_manager_auth_attempts_total',
+            'tobogganing_manager_auth_attempts_total',
             'Total authentication attempts',
             ['type', 'result'],  # type: api_key, jwt, session; result: success, failure
             registry=self.registry
         )
         
         self.active_sessions = Gauge(
-            'sasewaddle_manager_active_sessions',
+            'tobogganing_manager_active_sessions',
             'Number of active user sessions',
             registry=self.registry
         )
         
         # Cluster Metrics
         self.clusters_total = Gauge(
-            'sasewaddle_manager_clusters_total',
+            'tobogganing_manager_clusters_total',
             'Total number of registered clusters',
             registry=self.registry
         )
         
         self.clusters_by_status = Gauge(
-            'sasewaddle_manager_clusters_by_status',
+            'tobogganing_manager_clusters_by_status',
             'Number of clusters by status',
             ['status'],  # active, inactive, unhealthy
             registry=self.registry
         )
         
         self.cluster_heartbeats_total = Counter(
-            'sasewaddle_manager_cluster_heartbeats_total',
+            'tobogganing_manager_cluster_heartbeats_total',
             'Total cluster heartbeat messages received',
             ['cluster_id', 'status'],
             registry=self.registry
@@ -107,27 +107,27 @@ class ManagerMetrics:
         
         # Client Metrics
         self.clients_total = Gauge(
-            'sasewaddle_manager_clients_total',
+            'tobogganing_manager_clients_total',
             'Total number of registered clients',
             registry=self.registry
         )
         
         self.clients_by_type = Gauge(
-            'sasewaddle_manager_clients_by_type',
+            'tobogganing_manager_clients_by_type',
             'Number of clients by type',
             ['type'],  # docker, native
             registry=self.registry
         )
         
         self.clients_by_status = Gauge(
-            'sasewaddle_manager_clients_by_status',
+            'tobogganing_manager_clients_by_status',
             'Number of clients by status',
             ['status'],  # active, inactive, pending
             registry=self.registry
         )
         
         self.client_registrations_total = Counter(
-            'sasewaddle_manager_client_registrations_total',
+            'tobogganing_manager_client_registrations_total',
             'Total client registration attempts',
             ['type', 'result'],  # result: success, failure
             registry=self.registry
@@ -135,21 +135,21 @@ class ManagerMetrics:
         
         # Certificate Metrics
         self.certificates_issued_total = Counter(
-            'sasewaddle_manager_certificates_issued_total',
+            'tobogganing_manager_certificates_issued_total',
             'Total certificates issued',
             ['type'],  # client, headend, ca
             registry=self.registry
         )
         
         self.certificates_active = Gauge(
-            'sasewaddle_manager_certificates_active',
+            'tobogganing_manager_certificates_active',
             'Number of active certificates',
             ['type'],
             registry=self.registry
         )
         
         self.certificates_expiring_soon = Gauge(
-            'sasewaddle_manager_certificates_expiring_soon',
+            'tobogganing_manager_certificates_expiring_soon',
             'Number of certificates expiring within 30 days',
             ['type'],
             registry=self.registry
@@ -157,21 +157,21 @@ class ManagerMetrics:
         
         # JWT Token Metrics
         self.jwt_tokens_issued_total = Counter(
-            'sasewaddle_manager_jwt_tokens_issued_total',
+            'tobogganing_manager_jwt_tokens_issued_total',
             'Total JWT tokens issued',
             ['node_type'],  # client, headend
             registry=self.registry
         )
         
         self.jwt_tokens_validated_total = Counter(
-            'sasewaddle_manager_jwt_tokens_validated_total',
+            'tobogganing_manager_jwt_tokens_validated_total',
             'Total JWT token validation attempts',
             ['result'],  # success, failure, expired
             registry=self.registry
         )
         
         self.jwt_tokens_revoked_total = Counter(
-            'sasewaddle_manager_jwt_tokens_revoked_total',
+            'tobogganing_manager_jwt_tokens_revoked_total',
             'Total JWT tokens revoked',
             ['reason'],  # admin, client_request, expired, security
             registry=self.registry
@@ -179,20 +179,20 @@ class ManagerMetrics:
         
         # Database Metrics
         self.database_connections = Gauge(
-            'sasewaddle_manager_database_connections',
+            'tobogganing_manager_database_connections',
             'Number of active database connections',
             registry=self.registry
         )
         
         self.database_queries_total = Counter(
-            'sasewaddle_manager_database_queries_total',
+            'tobogganing_manager_database_queries_total',
             'Total database queries executed',
             ['operation'],  # select, insert, update, delete
             registry=self.registry
         )
         
         self.database_query_duration = Histogram(
-            'sasewaddle_manager_database_query_duration_seconds',
+            'tobogganing_manager_database_query_duration_seconds',
             'Time spent executing database queries',
             ['operation'],
             registry=self.registry
@@ -200,13 +200,13 @@ class ManagerMetrics:
         
         # Redis Metrics
         self.redis_connections = Gauge(
-            'sasewaddle_manager_redis_connections',
+            'tobogganing_manager_redis_connections',
             'Number of active Redis connections',
             registry=self.registry
         )
         
         self.redis_operations_total = Counter(
-            'sasewaddle_manager_redis_operations_total',
+            'tobogganing_manager_redis_operations_total',
             'Total Redis operations',
             ['operation'],  # get, set, del, expire
             registry=self.registry
@@ -214,97 +214,97 @@ class ManagerMetrics:
         
         # System Resource Metrics
         self.memory_usage_bytes = Gauge(
-            'sasewaddle_manager_memory_usage_bytes',
+            'tobogganing_manager_memory_usage_bytes',
             'Memory usage in bytes',
             registry=self.registry
         )
         
         self.cpu_usage_percent = Gauge(
-            'sasewaddle_manager_cpu_usage_percent',
+            'tobogganing_manager_cpu_usage_percent',
             'CPU usage percentage',
             registry=self.registry
         )
         
         # Client and Headend Reported Metrics
         self.client_metrics_bytes_sent = Gauge(
-            'sasewaddle_client_bytes_sent',
+            'tobogganing_client_bytes_sent',
             'Bytes sent by client',
             ['client_id', 'client_name', 'client_type', 'headless'],
             registry=self.registry
         )
         
         self.client_metrics_bytes_received = Gauge(
-            'sasewaddle_client_bytes_received',
+            'tobogganing_client_bytes_received',
             'Bytes received by client',
             ['client_id', 'client_name', 'client_type', 'headless'],
             registry=self.registry
         )
         
         self.client_metrics_packets_sent = Gauge(
-            'sasewaddle_client_packets_sent',
+            'tobogganing_client_packets_sent',
             'Packets sent by client',
             ['client_id', 'client_name', 'client_type', 'headless'],
             registry=self.registry
         )
         
         self.client_metrics_packets_received = Gauge(
-            'sasewaddle_client_packets_received',
+            'tobogganing_client_packets_received',
             'Packets received by client',
             ['client_id', 'client_name', 'client_type', 'headless'],
             registry=self.registry
         )
         
         self.client_metrics_connection_uptime = Gauge(
-            'sasewaddle_client_connection_uptime_seconds',
+            'tobogganing_client_connection_uptime_seconds',
             'Client connection uptime in seconds',
             ['client_id', 'client_name', 'client_type', 'headless'],
             registry=self.registry
         )
         
         self.client_metrics_last_check_in = Gauge(
-            'sasewaddle_client_last_check_in_timestamp',
+            'tobogganing_client_last_check_in_timestamp',
             'Timestamp of last check-in from client',
             ['client_id', 'client_name', 'client_type', 'headless'],
             registry=self.registry
         )
         
         self.headend_metrics_connections = Gauge(
-            'sasewaddle_headend_active_connections',
+            'tobogganing_headend_active_connections',
             'Active connections on headend',
             ['headend_id', 'headend_name', 'region', 'datacenter'],
             registry=self.registry
         )
         
         self.headend_metrics_bandwidth_in = Gauge(
-            'sasewaddle_headend_bandwidth_in_bytes',
+            'tobogganing_headend_bandwidth_in_bytes',
             'Incoming bandwidth on headend',
             ['headend_id', 'headend_name', 'region', 'datacenter'],
             registry=self.registry
         )
         
         self.headend_metrics_bandwidth_out = Gauge(
-            'sasewaddle_headend_bandwidth_out_bytes',
+            'tobogganing_headend_bandwidth_out_bytes',
             'Outgoing bandwidth on headend',
             ['headend_id', 'headend_name', 'region', 'datacenter'],
             registry=self.registry
         )
         
         self.headend_metrics_cpu_usage = Gauge(
-            'sasewaddle_headend_cpu_usage_percent',
+            'tobogganing_headend_cpu_usage_percent',
             'CPU usage on headend',
             ['headend_id', 'headend_name', 'region', 'datacenter'],
             registry=self.registry
         )
         
         self.headend_metrics_memory_usage = Gauge(
-            'sasewaddle_headend_memory_usage_bytes',
+            'tobogganing_headend_memory_usage_bytes',
             'Memory usage on headend',
             ['headend_id', 'headend_name', 'region', 'datacenter'],
             registry=self.registry
         )
         
         self.headend_metrics_last_check_in = Gauge(
-            'sasewaddle_headend_last_check_in_timestamp',
+            'tobogganing_headend_last_check_in_timestamp',
             'Timestamp of last check-in from headend',
             ['headend_id', 'headend_name', 'region', 'datacenter'],
             registry=self.registry
@@ -312,14 +312,14 @@ class ManagerMetrics:
         
         # Business Logic Metrics
         self.user_logins_total = Counter(
-            'sasewaddle_manager_user_logins_total',
+            'tobogganing_manager_user_logins_total',
             'Total user login attempts',
             ['role', 'result'],  # role: admin, reporter; result: success, failure
             registry=self.registry
         )
         
         self.api_rate_limit_hits = Counter(
-            'sasewaddle_manager_api_rate_limit_hits_total',
+            'tobogganing_manager_api_rate_limit_hits_total',
             'Total API rate limit hits',
             ['endpoint', 'client_type'],
             registry=self.registry
@@ -327,7 +327,7 @@ class ManagerMetrics:
         
         # Error Metrics
         self.errors_total = Counter(
-            'sasewaddle_manager_errors_total',
+            'tobogganing_manager_errors_total',
             'Total errors by component',
             ['component', 'error_type'],
             registry=self.registry
@@ -339,7 +339,7 @@ class ManagerMetrics:
         
         self.service_info.info({
             'version': version,
-            'service': 'sasewaddle-manager',
+            'service': 'tobogganing-manager',
             'started_at': datetime.now().isoformat()
         })
         

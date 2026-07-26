@@ -57,19 +57,25 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       
       - name: Install dependencies
         working-directory: ./clients/native
         run: |
           go mod download
           go mod verify
-      
+
+      - name: Run gosec (Go security scanner)
+        uses: securego/gosec@223e19b8856e00f02cc67804499a83f77e208f3c  # v2.25.0
+        with:
+          args: '-no-fail -fmt json -out gosec-results.json ./clients/native/...'
+        continue-on-error: true
+
       - name: Build headless binary
         working-directory: ./clients/native
         env:
@@ -84,7 +90,7 @@ jobs:
             ./cmd/headless
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}
@@ -104,21 +110,27 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       
       - name: Install dependencies
-        working-directory: ./headend
+        working-directory: ./services/hub-router
         run: |
           go mod download
           go mod verify
-      
+
+      - name: Run gosec (Go security scanner)
+        uses: securego/gosec@223e19b8856e00f02cc67804499a83f77e208f3c  # v2.25.0
+        with:
+          args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router/...'
+        continue-on-error: true
+
       - name: Build binary
-        working-directory: ./headend
+        working-directory: ./services/hub-router
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -129,7 +141,7 @@ jobs:
             ./proxy
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}
@@ -141,13 +153,13 @@ jobs:
     
     steps:
       - name: Download Intel binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           name: tobogganing-client-darwin-amd64
           path: ./
       
       - name: Download ARM64 binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           name: tobogganing-client-darwin-arm64
           path: ./
@@ -160,7 +172,7 @@ jobs:
           chmod +x tobogganing-client-darwin-universal-headless
       
       - name: Upload Universal Headless Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: tobogganing-client-darwin-universal-headless
           path: tobogganing-client-darwin-universal-headless
@@ -175,10 +187,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           path: ./artifacts
       
@@ -197,7 +209,7 @@ jobs:
           done
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3
         with:
           draft: false
           prerelease: false

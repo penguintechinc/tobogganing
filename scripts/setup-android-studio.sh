@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Android Studio Setup Script for SASEWaddle Development
+# Android Studio Setup Script for Tobogganing Development
 # This script installs Android Studio, Android SDK, and configures the environment for React Native development
 
 set -e
@@ -26,7 +26,7 @@ ANDROID_HOME="/opt/android-sdk"
 JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 
 echo "=============================================="
-echo "  Android Studio Setup for SASEWaddle"
+echo "  Android Studio Setup for Tobogganing"
 echo "=============================================="
 echo
 
@@ -234,8 +234,8 @@ create_avd() {
     log_info "Creating Android Virtual Device for testing..."
     
     local avdmanager="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
-    local avd_name="SASEWaddle_Test_Device"
-    local compact_avd="SASEWaddle_Compact"
+    local avd_name="Tobogganing_Test_Device"
+    local compact_avd="Tobogganing_Compact"
     
     # Check if AVD already exists
     if "$avdmanager" list avd 2>/dev/null | grep -q "$avd_name"; then
@@ -268,15 +268,15 @@ create_avd() {
     fi
 }
 
-# Build and deploy SASEWaddle mobile app
+# Build and deploy Tobogganing mobile app
 build_and_deploy_app() {
-    log_info "Building and deploying SASEWaddle mobile app..."
-    
-    local mobile_dir="/workspaces/SASEWaddle/clients/mobile"
+    log_info "Building and deploying Tobogganing mobile app..."
+
+    local mobile_dir="/workspaces/tobogganing/clients/mobile"
     
     # Check if mobile project exists
     if [ ! -d "$mobile_dir" ]; then
-        log_warning "SASEWaddle mobile project not found at $mobile_dir"
+        log_warning "Tobogganing mobile project not found at $mobile_dir"
         return 0
     fi
     
@@ -306,7 +306,7 @@ build_and_deploy_app() {
                 log_info "Installing app to connected device/emulator..."
                 if adb install -r "$apk_path" 2>/dev/null; then
                     log_success "✅ App installed successfully!"
-                    log_info "Launch the app on your device to test SASEWaddle mobile"
+                    log_info "Launch the app on your device to test Tobogganing mobile"
                 else
                     log_warning "⚠️  App installation failed - no device connected"
                 fi
@@ -326,8 +326,8 @@ build_and_deploy_app() {
 
 # Start Android emulator (optional)
 start_emulator() {
-    local avd_name="${1:-SASEWaddle_Test_Device}"
-    local compact_avd="SASEWaddle_Compact"
+    local avd_name="${1:-Tobogganing_Test_Device}"
+    local compact_avd="Tobogganing_Compact"
     
     log_info "Starting Android emulator..."
     
@@ -365,30 +365,30 @@ export ANDROID_SDK_ROOT=\$ANDROID_HOME
 export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator
 export JAVA_HOME=$JAVA_HOME
 
-cd /workspaces/SASEWaddle/clients/mobile
+cd /workspaces/tobogganing/clients/mobile
 $INSTALL_DIR/android-studio/bin/studio.sh "\$@"
 EOF
     
     chmod +x "$HOME/launch-android-studio.sh"
     
     # Create React Native project opener script
-    cat > "$HOME/open-sasewaddle-mobile.sh" << EOF
+    cat > "$HOME/open-tobogganing-mobile.sh" << EOF
 #!/bin/bash
 export ANDROID_HOME=$ANDROID_HOME
 export ANDROID_SDK_ROOT=\$ANDROID_HOME
 export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator
 export JAVA_HOME=$JAVA_HOME
 
-cd /workspaces/SASEWaddle/clients/mobile
-echo "Opening SASEWaddle Mobile project in Android Studio..."
+cd /workspaces/tobogganing/clients/mobile
+echo "Opening Tobogganing Mobile project in Android Studio..."
 $INSTALL_DIR/android-studio/bin/studio.sh android/
 EOF
-    
-    chmod +x "$HOME/open-sasewaddle-mobile.sh"
+
+    chmod +x "$HOME/open-tobogganing-mobile.sh"
     
     log_success "Launch scripts created:"
     echo "  • ~/launch-android-studio.sh - Launch Android Studio"
-    echo "  • ~/open-sasewaddle-mobile.sh - Open SASEWaddle mobile project"
+    echo "  • ~/open-tobogganing-mobile.sh - Open Tobogganing mobile project"
 }
 
 # Verify installation
@@ -438,9 +438,9 @@ verify_installation() {
         fi
         
         # Check React Native compatibility if project exists
-        if [ -d "/workspaces/SASEWaddle/clients/mobile" ]; then
+        if [ -d "/workspaces/tobogganing/clients/mobile" ]; then
             log_info "Testing React Native environment..."
-            cd /workspaces/SASEWaddle/clients/mobile 2>/dev/null || true
+            cd /workspaces/tobogganing/clients/mobile 2>/dev/null || true
             if command -v npx >/dev/null 2>&1; then
                 if timeout 10s npx react-native doctor 2>/dev/null | grep -q "Android Studio"; then
                     log_success "✅ React Native recognizes Android Studio"
@@ -472,7 +472,7 @@ print_summary() {
     log_info "Next Steps:"
     echo "  1. Reload your shell: source ~/.bashrc"
     echo "  2. Launch Android Studio: ~/launch-android-studio.sh"
-    echo "  3. Open SASEWaddle project: ~/open-sasewaddle-mobile.sh"
+    echo "  3. Open Tobogganing project: ~/open-tobogganing-mobile.sh"
     echo "  4. Start Android emulator to test the app"
     echo
     log_info "Useful Commands:"
@@ -528,7 +528,7 @@ main() {
 # Handle script arguments
 case "${1:-}" in
     --help|-h)
-        echo "Android Studio Setup Script for SASEWaddle"
+        echo "Android Studio Setup Script for Tobogganing"
         echo
         echo "Usage: $0 [OPTIONS]"
         echo
@@ -536,12 +536,12 @@ case "${1:-}" in
         echo "  --help, -h          Show this help message"
         echo "  --verify            Only verify existing installation"
         echo "  --cleanup           Only cleanup temporary files"
-        echo "  --build-app         Only build and deploy SASEWaddle app"
+        echo "  --build-app         Only build and deploy Tobogganing app"
         echo "  --start-emulator    Start Android emulator"
         echo "  --create-avd        Create Android Virtual Device only"
         echo
         echo "This script will install Android Studio, Android SDK, set up"
-        echo "the development environment, and deploy the SASEWaddle mobile app."
+        echo "the development environment, and deploy the Tobogganing mobile app."
         echo
         exit 0
         ;;
@@ -558,7 +558,7 @@ case "${1:-}" in
         ;;
     --start-emulator)
         setup_environment
-        start_emulator "${2:-SASEWaddle_Test_Device}"
+        start_emulator "${2:-Tobogganing_Test_Device}"
         ;;
     --create-avd)
         setup_environment

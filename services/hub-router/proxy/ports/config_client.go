@@ -65,7 +65,7 @@ func (c *ConfigClient) FetchConfig() (*PortConfig, error) {
 	}
 	
 	req.Header.Set("Authorization", "Bearer "+c.authToken)
-	req.Header.Set("User-Agent", "SASEWaddle-Headend/1.0")
+	req.Header.Set("User-Agent", "Tobogganing-Headend/1.0")
 	
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

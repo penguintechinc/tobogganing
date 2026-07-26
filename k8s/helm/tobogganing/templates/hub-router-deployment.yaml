@@ -72,14 +72,28 @@ spec:
             capabilities:
               add:
                 {{- toYaml .Values.hubRouter.securityContext.capabilities.add | nindent 16 }}
+                {{- if .Values.xdp.enabled }}
+                - BPF
+                - SYS_ADMIN
+                {{- end }}
           volumeMounts:
             - name: dev-net-tun
               mountPath: /dev/net/tun
+            {{- if .Values.xdp.enabled }}
+            - name: bpf-fs
+              mountPath: /sys/fs/bpf
+            {{- end }}
       volumes:
         - name: dev-net-tun
           hostPath:
             path: /dev/net/tun
             type: CharDevice
+        {{- if .Values.xdp.enabled }}
+        - name: bpf-fs
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

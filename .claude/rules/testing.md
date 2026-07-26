@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/rules/testing.md

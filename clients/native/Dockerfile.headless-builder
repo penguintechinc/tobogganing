@@ -1,13 +1,14 @@
-# Multi-stage Docker build for SASEWaddle Headless client
+# Multi-stage Docker build for Tobogganing Headless client
 # This provides a consistent build environment for headless/nogui builds
 
-FROM golang:1.23-alpine AS headless-builder
+FROM golang:1.24-bookworm@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb AS headless-builder
 
 # Install basic build dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     gcc \
-    musl-dev \
-    git
+    libc6-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /src
@@ -26,17 +27,17 @@ ARG GIT_COMMIT
 RUN CGO_ENABLED=0 go build \
     -tags="nogui" \
     -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-    -o sasewaddle-client-headless \
+    -o tobogganing-client-headless \
     ./cmd/headless
 
 # Test stage - verify the binary was built
-FROM alpine:3.19 AS test
-RUN apk add --no-cache file
-COPY --from=headless-builder /src/sasewaddle-client-headless /tmp/
-RUN file /tmp/sasewaddle-client-headless && \
-    ls -la /tmp/sasewaddle-client-headless && \
-    /tmp/sasewaddle-client-headless --version || true
+FROM debian:bookworm-slim@sha256:01f42367a0a94ad4bc17111776fd66e3500c1d87c15bbd6055b7371d39c124fb AS test
+RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
+COPY --from=headless-builder /src/tobogganing-client-headless /tmp/
+RUN file /tmp/tobogganing-client-headless && \
+    ls -la /tmp/tobogganing-client-headless && \
+    /tmp/tobogganing-client-headless --version || true
 
 # Final stage - extract the binary
 FROM scratch
-COPY --from=headless-builder /src/sasewaddle-client-headless /sasewaddle-client-headless
+COPY --from=headless-builder /src/tobogganing-client-headless /tobogganing-client-headless

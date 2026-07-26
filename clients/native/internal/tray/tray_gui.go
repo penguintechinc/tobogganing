@@ -1,6 +1,6 @@
 //go:build !nogui && (linux || darwin || windows)
 
-// Package tray provides system tray icon functionality for SASEWaddle client.
+// Package tray provides system tray icon functionality for Tobogganing client.
 //
 // The tray package implements a cross-platform system tray icon that allows users to:
 // - Monitor connection status
@@ -16,15 +16,20 @@ package tray
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/getlantern/systray"
 	"github.com/pkg/browser"
+
+	"github.com/tobogganing/clients/native/internal/logger"
 )
+
+var log = logger.Get()
 
 // VPNManager interface defines the methods needed to control VPN connections
 type VPNManager interface {
@@ -95,7 +100,7 @@ func (t *TrayManager) onReady() {
 
 // onExit is called when the system tray is exiting
 func (t *TrayManager) onExit() {
-	log.Println("System tray exiting")
+	log.Info("system tray exiting")
 }
 
 // setupTrayIcon configures the tray icon
@@ -103,8 +108,8 @@ func (t *TrayManager) setupTrayIcon() {
 	// Set icon based on platform and theme
 	iconData := t.getIconData("disconnected")
 	systray.SetIcon(iconData)
-	systray.SetTitle("SASEWaddle")
-	systray.SetTooltip("SASEWaddle - Disconnected")
+	systray.SetTitle("Tobogganing")
+	systray.SetTooltip("Tobogganing - Disconnected")
 }
 
 // setupMenu creates the context menu
@@ -121,10 +126,10 @@ func (t *TrayManager) setupMenu() {
 
 	t.updateItem = systray.AddMenuItem("Update Configuration", "Pull latest configuration from server")
 	t.settingsItem = systray.AddMenuItem("Settings", "Open settings")
-	t.aboutItem = systray.AddMenuItem("About", "About SASEWaddle")
+	t.aboutItem = systray.AddMenuItem("About", "About Tobogganing")
 	systray.AddSeparator()
 
-	t.exitItem = systray.AddMenuItem("Exit", "Exit SASEWaddle")
+	t.exitItem = systray.AddMenuItem("Exit", "Exit Tobogganing")
 
 	// Initially disable disconnect
 	t.disconnectItem.Disable()
@@ -197,7 +202,7 @@ func (t *TrayManager) updateStatus() {
 	t.statusItem.SetTitle(statusText)
 
 	// Update tooltip
-	tooltip := fmt.Sprintf("SASEWaddle - %s", status)
+	tooltip := fmt.Sprintf("Tobogganing - %s", status)
 	systray.SetTooltip(tooltip)
 }
 
@@ -230,7 +235,7 @@ func (t *TrayManager) getIconData(state string) []byte {
 	// Get executable directory for icon files
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("Failed to get executable path: %v", err)
+		log.Error("failed to get executable path", zap.Error(err))
 		return getEmbeddedIcon(state)
 	}
 
@@ -248,28 +253,28 @@ func (t *TrayManager) getIconData(state string) []byte {
 	}
 
 	iconPath := filepath.Join(iconDir, iconFile)
-	if data, err := os.ReadFile(iconPath); err == nil {
+	if data, err := os.ReadFile(iconPath); err == nil { // #nosec G304 -- path from fixed iconDir + validated iconFile
 		return data
 	}
 
-	log.Printf("Could not load icon file %s: %v", iconPath, err)
+	log.Warn("could not load icon file", zap.String("path", iconPath), zap.Error(err))
 	return getEmbeddedIcon(state)
 }
 
 // Menu handlers
 
 func (t *TrayManager) handleConnect() {
-	log.Println("Tray: Connect requested")
+	log.Info("tray: connect requested")
 	if err := t.vpn.Connect(); err != nil {
-		log.Printf("Failed to connect: %v", err)
+		log.Error("tray: connect failed", zap.Error(err))
 		t.showNotification("Connection Failed", fmt.Sprintf("Failed to connect: %v", err))
 	}
 }
 
 func (t *TrayManager) handleDisconnect() {
-	log.Println("Tray: Disconnect requested")
+	log.Info("tray: disconnect requested")
 	if err := t.vpn.Disconnect(); err != nil {
-		log.Printf("Failed to disconnect: %v", err)
+		log.Error("tray: disconnect failed", zap.Error(err))
 		t.showNotification("Disconnect Failed", fmt.Sprintf("Failed to disconnect: %v", err))
 	}
 }
@@ -278,17 +283,17 @@ func (t *TrayManager) handleViewStats() {
 	// Open statistics page in browser
 	statsURL := fmt.Sprintf("%s/client/stats", t.config.GetServerURL())
 	if err := browser.OpenURL(statsURL); err != nil {
-		log.Printf("Failed to open statistics URL: %v", err)
+		log.Error("tray: failed to open statistics URL", zap.Error(err))
 	}
 }
 
 func (t *TrayManager) handleUpdateConfig() {
-	log.Println("Tray: Update configuration requested")
+	log.Info("tray: update configuration requested")
 	if err := t.config.UpdateConfiguration(); err != nil {
-		log.Printf("Failed to update configuration: %v", err)
+		log.Error("tray: update configuration failed", zap.Error(err))
 		t.showNotification("Configuration Update Failed", fmt.Sprintf("Failed to update: %v", err))
 	} else {
-		log.Println("Configuration updated successfully")
+		log.Info("tray: configuration updated")
 		t.showNotification("Configuration Updated", "Configuration updated successfully")
 	}
 	t.lastUpdate = time.Now()
@@ -298,7 +303,7 @@ func (t *TrayManager) handleSettings() {
 	// Open settings page in browser or show settings dialog
 	settingsURL := fmt.Sprintf("%s/client/settings", t.config.GetServerURL())
 	if err := browser.OpenURL(settingsURL); err != nil {
-		log.Printf("Failed to open settings URL: %v", err)
+		log.Error("tray: failed to open settings URL", zap.Error(err))
 	}
 }
 
@@ -306,17 +311,17 @@ func (t *TrayManager) handleAbout() {
 	// Open about page or show about dialog
 	aboutURL := fmt.Sprintf("%s/client/about", t.config.GetServerURL())
 	if err := browser.OpenURL(aboutURL); err != nil {
-		log.Printf("Failed to open about URL: %v", err)
+		log.Error("tray: failed to open about URL", zap.Error(err))
 	}
 }
 
 func (t *TrayManager) handleExit() {
-	log.Println("Tray: Exit requested")
+	log.Info("tray: exit requested")
 	// Disconnect if connected
 	if t.vpn.IsConnected() {
-		log.Println("Disconnecting before exit...")
+		log.Info("disconnecting before exit")
 		if err := t.vpn.Disconnect(); err != nil {
-			log.Printf("Failed to disconnect on exit: %v", err)
+			log.Error("tray: failed to disconnect on exit", zap.Error(err))
 		}
 		// Give a moment for cleanup
 		time.Sleep(2 * time.Second)
@@ -351,7 +356,7 @@ func (t *TrayManager) showNotification(title, message string) {
 	systray.SetTooltip(fmt.Sprintf("%s: %s", title, message))
 	
 	// Log the notification for debugging
-	log.Printf("Notification: %s - %s", title, message)
+	log.Info("notification", zap.String("title", title), zap.String("message", message))
 	
 	// On platforms that support it, this could be extended to show
 	// native system notifications using platform-specific APIs

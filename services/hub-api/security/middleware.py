@@ -1,4 +1,4 @@
-"""py4web middleware integration for SASEWaddle security."""
+"""py4web middleware integration for Tobogganing security."""
 
 import logging
 from typing import Dict, Any, Optional

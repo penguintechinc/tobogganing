@@ -173,7 +173,7 @@ const ConfigurationScreen: React.FC = () => {
               style={styles.textInput}
               value={isEditing ? editedConfig.serverName : config.serverName}
               onChangeText={(text) => setEditedConfig({ ...editedConfig, serverName: text })}
-              placeholder="SASEWaddle Server"
+              placeholder="Tobogganing Server"
               placeholderTextColor={colors.textSecondary}
               editable={isEditing}
             />

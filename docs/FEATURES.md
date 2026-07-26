@@ -94,6 +94,64 @@ TRAFFIC_MIRROR_SURICATA_HOST=172.20.0.100
 
 ## 🌐 Network Features
 
+### 🕶️ Dual-Mode Overlay (WireGuard + OpenZiti)
+
+Tobogganing supports multiple overlay networks simultaneously for flexible deployment scenarios:
+
+#### WireGuard Overlay (Default)
+- **Layer 3 VPN**: Kernel-level tunnel with transparent routing
+- **Performance**: Line-rate throughput with minimal overhead
+- **Configuration**: Automatic certificate management and peer provisioning
+- **Failover**: Multi-hub connectivity with automatic failover
+
+#### OpenZiti Overlay (Optional)
+- **Dark Services**: Network resources invisible to port scanners
+- **Layer 7 Access**: Application-level connection handling
+- **Zero Trust**: Enhanced identity verification in connection handshake
+- **Coexistence**: Runs simultaneously with WireGuard for flexibility
+
+#### Dual-Mode Operation
+- **Clients default to `dual` mode**: Both overlays active simultaneously
+- **Layer Separation**: L3 routing (WireGuard) + L7 dark services (OpenZiti)
+- **Graceful Degradation**: If OpenZiti unavailable, WireGuard remains functional
+- **Policy Routing**: `scope` field directs rules to specific overlays
+
+**Configuration Example:**
+```yaml
+# Hub-Router Configuration
+overlay:
+  type: dual  # "wireguard", "openziti", or "dual"
+  wireguard:
+    port: 51820
+  openziti:
+    identity_file: /etc/tobogganing/ziti-identity.json
+    service_name: tobogganing-headend
+
+# Client Configuration
+overlay_type: dual
+openziti:
+  identity_file: ~/.tobogganing/ziti-identity.json
+```
+
+**Policy Scope Example:**
+```yaml
+policies:
+  - name: "Allow internal APIs (WireGuard only)"
+    scope: "wireguard"
+    sources: "10.0.0.0/8"
+    action: allow
+
+  - name: "Dark service access (OpenZiti only)"
+    scope: "openziti"
+    sources: "contractors"
+    action: allow
+
+  - name: "Public HTTPS (all overlays)"
+    scope: ""  # empty = apply to all
+    destinations: "443"
+    action: allow
+```
+
 ### 🔀 VRF & OSPF Support
 
 Enterprise-grade network segmentation using FRR (Free Range Routing):
@@ -128,6 +186,71 @@ Administrators can configure proxy listening ports through the web interface:
 - **UDP Port Ranges**: Configure multiple UDP port ranges
 - **Real-time Updates**: Changes applied without restart
 - **Web UI Management**: Beautiful interface for port configuration
+
+### ⚡ XDP Edge Protection (Optional)
+
+Enterprise-grade DDoS and flood protection at the NIC driver layer:
+
+#### What is XDP?
+
+**eXpress Data Path** provides kernel-level packet filtering before packets enter the network stack,
+enabling line-rate protection against network attacks with minimal CPU overhead.
+
+#### Protection Features
+
+- **IP Blocklist Enforcement**: Instant drop of blocklisted IPs from kernel space
+- **SYN Flood Protection**: Per-source-IP token buckets for TCP SYN packets
+- **UDP Flood Protection**: Per-source-IP rate limiting for UDP protocols
+- **General Rate Limiting**: Per-source-IP packet rate across all protocols
+- **Zero-Copy Processing**: AF_XDP sockets bypass kernel stack for complex inspection
+
+#### Deployment Models
+
+| Model | XDP | CNI | Use Case |
+|-------|-----|-----|----------|
+| **Kubernetes (Cilium)** | Optional | eBPF | Cilium handles L3/L4 filtering |
+| **Bare Metal / VMs** | Required | None | High-performance on dedicated hardware |
+| **Spoke K8s (flannel/calico)** | Required | Basic | Deployments without eBPF CNI |
+
+#### Configuration
+
+```yaml
+xdp:
+  enabled: true                          # Enable XDP protection
+  interface: eth0                        # Network interface to protect
+  rate_limit_pps: 10000                 # General rate limit (packets/sec)
+  syn_rate_limit_pps: 1000              # SYN flood limit
+  udp_rate_limit_pps: 5000              # UDP flood limit
+  blocklist_sync_url: http://hub-api:8080/api/v1/security/blocklist
+```
+
+#### Metrics
+
+```prometheus
+tobogganing_xdp_packets_total{action="pass|drop|ratelimit"}     # Packet decisions
+tobogganing_xdp_syn_flood_drops_total                           # SYN flood blocks
+tobogganing_xdp_udp_flood_drops_total                           # UDP flood blocks
+tobogganing_xdp_blocklist_size                                  # Active IP blocklist
+tobogganing_xdp_cpu_cycles_per_packet                           # Performance metric
+```
+
+#### NUMA Awareness
+
+On multi-socket servers, XDP/AF_XDP automatically:
+- Detects NUMA node of network interface
+- Allocates packet buffers on same node
+- Pins worker threads to local cores
+- Minimizes cross-socket memory latency
+
+#### Safe Default Build
+
+Without XDP build tag (`-tags xdp`), all XDP operations are safe no-ops:
+- Setting `xdp.enabled: true` causes no crashes
+- System gracefully skips XDP initialization
+- WireGuard and policy enforcement remain fully functional
+- Useful for development and non-critical deployments
+
+For details, see [XDP_GUIDE.md](./XDP_GUIDE.md) and [HUB_ROUTER_DEPLOYMENT.md](./HUB_ROUTER_DEPLOYMENT.md).
 
 ---
 
@@ -271,17 +394,17 @@ wireguard:
 #### Environment Variables
 ```bash
 # Core configuration
-export SASEWADDLE_MANAGER_URL="https://manager.example.com:8000"
-export SASEWADDLE_API_KEY="your-api-key"
-export SASEWADDLE_LOG_LEVEL="info"
+export TOBOGGANING_MANAGER_URL="https://manager.example.com:8080"
+export TOBOGGANING_API_KEY="your-api-key"
+export TOBOGGANING_LOG_LEVEL="info"
 
 # GUI-specific (GUI builds only)
-export SASEWADDLE_SYSTEM_TRAY="true"
-export SASEWADDLE_AUTO_UPDATE="true"
+export TOBOGGANING_SYSTEM_TRAY="true"
+export TOBOGGANING_AUTO_UPDATE="true"
 
 # Headless-specific
-export SASEWADDLE_DAEMON_MODE="true"
-export SASEWADDLE_PID_FILE="/var/run/tobogganing.pid"
+export TOBOGGANING_DAEMON_MODE="true"
+export TOBOGGANING_PID_FILE="/var/run/tobogganing.pid"
 ```
 
 ---

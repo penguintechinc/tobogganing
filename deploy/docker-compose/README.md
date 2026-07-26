@@ -1,6 +1,6 @@
-# SASEWaddle Docker Compose Deployment
+# Tobogganing Docker Compose Deployment
 
-This directory contains Docker Compose configurations for deploying SASEWaddle in different environments.
+This directory contains Docker Compose configurations for deploying Tobogganing in different environments.
 
 ## Files
 
@@ -15,8 +15,8 @@ This directory contains Docker Compose configurations for deploying SASEWaddle i
 
 1. **Clone and configure**:
    ```bash
-   git clone https://github.com/your-org/sasewaddle.git
-   cd sasewaddle/deploy/docker-compose
+   git clone https://github.com/your-org/tobogganing.git
+   cd tobogganing/deploy/docker-compose
    cp .env.example .env
    ```
 
@@ -32,7 +32,7 @@ This directory contains Docker Compose configurations for deploying SASEWaddle i
    ```
 
 4. **Access services**:
-   - Manager API: http://localhost:8000
+   - Manager API: http://localhost:8080
    - Headend Proxy: http://localhost:8080
    - Redis: localhost:6379
 
@@ -40,8 +40,8 @@ This directory contains Docker Compose configurations for deploying SASEWaddle i
    ```bash
    docker-compose -f docker-compose.dev.yml --profile tools up -d
    ```
-   - Adminer: http://localhost:8081
-   - Redis Commander: http://localhost:8082
+   - Adminer: http://localhost:8082
+   - Redis Commander: http://localhost:8083
    - Mailhog: http://localhost:8025
 
 ### Production Deployment
@@ -109,7 +109,7 @@ MANAGER_DOMAIN=manager.yourdomain.com
 HEADEND_DOMAIN=headend.yourdomain.com
 
 # Ports
-MANAGER_PORT=8000
+MANAGER_PORT=8080
 WIREGUARD_PORT=51820
 HEADEND_PROXY_PORT=8080
 
@@ -130,11 +130,11 @@ events {
 
 http {
     upstream manager {
-        server manager:8000;
+        server hub-api:8080;
     }
     
     upstream headend {
-        server headend:8080;
+        server hub-router:8080;
     }
     
     server {
@@ -165,14 +165,14 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'sasewaddle-manager'
+  - job_name: 'tobogganing-hub-api'
     static_configs:
-      - targets: ['manager:8000']
+      - targets: ['hub-api:8080']
     metrics_path: /metrics
 
-  - job_name: 'sasewaddle-headend'
+  - job_name: 'tobogganing-headend'
     static_configs:
-      - targets: ['headend:8080']
+      - targets: ['hub-router:8080']
     metrics_path: /metrics
 ```
 
@@ -184,7 +184,7 @@ scrape_configs:
 docker-compose up -d
 
 # Specific service
-docker-compose up -d manager
+docker-compose up -d hub-api
 
 # With profiles
 docker-compose --profile monitoring up -d
@@ -205,7 +205,7 @@ docker-compose down -v
 docker-compose logs -f
 
 # Specific service
-docker-compose logs -f manager
+docker-compose logs -f hub-api
 
 # Last 100 lines
 docker-compose logs --tail 100 headend
@@ -214,7 +214,7 @@ docker-compose logs --tail 100 headend
 ### Scaling Services
 ```bash
 # Scale manager to 3 instances
-docker-compose up -d --scale manager=3
+docker-compose up -d --scale hub-api=3
 
 # Note: headend cannot be scaled due to WireGuard constraints
 ```
@@ -225,7 +225,7 @@ docker-compose up -d --scale manager=3
 docker-compose ps
 
 # Check specific service
-docker inspect sasewaddle-manager --format='{{.State.Health.Status}}'
+docker inspect tobogganing-hub-api --format='{{.State.Health.Status}}'
 ```
 
 ## Backup and Recovery
@@ -233,17 +233,17 @@ docker inspect sasewaddle-manager --format='{{.State.Health.Status}}'
 ### Data Backup
 ```bash
 # Create backup
-docker run --rm -v sasewaddle_manager_data:/data -v $(pwd):/backup alpine \
+docker run --rm -v tobogganing_hub_api_data:/data -v $(pwd):/backup debian:bookworm \
   tar czf /backup/manager-data-$(date +%Y%m%d).tar.gz -C /data .
 
-docker run --rm -v sasewaddle_manager_certs:/data -v $(pwd):/backup alpine \
+docker run --rm -v tobogganing_hub_api_certs:/data -v $(pwd):/backup debian:bookworm \
   tar czf /backup/manager-certs-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
 ### Data Restore
 ```bash
 # Restore backup
-docker run --rm -v sasewaddle_manager_data:/data -v $(pwd):/backup alpine \
+docker run --rm -v tobogganing_hub_api_data:/data -v $(pwd):/backup debian:bookworm \
   tar xzf /backup/manager-data-backup.tar.gz -C /data
 ```
 
@@ -269,18 +269,18 @@ docker run --rm -v sasewaddle_manager_data:/data -v $(pwd):/backup alpine \
    ```bash
    # Check container networking
    docker network ls
-   docker network inspect sasewaddle_sasewaddle-internal
+   docker network inspect tobogganing_tobogganing-internal
    ```
 
 ### Logs and Debugging
 ```bash
 # Container logs
-docker-compose logs -f manager
-docker-compose logs -f headend
+docker-compose logs -f hub-api
+docker-compose logs -f hub-router
 
 # Container shell access
-docker-compose exec manager /bin/bash
-docker-compose exec headend /bin/sh
+docker-compose exec hub-api /bin/bash
+docker-compose exec hub-router /bin/sh
 
 # Service status
 docker-compose ps

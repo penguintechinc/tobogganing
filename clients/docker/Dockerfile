@@ -1,20 +1,19 @@
-# Multi-architecture Docker client for SASEWaddle SASE solution
-FROM alpine:3.19
+# Multi-architecture Docker client for Tobogganing SASE solution
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 
 # Install runtime dependencies for WireGuard client and SASE functionality
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     wireguard-tools \
     iptables \
-    ip6tables \
     iproute2 \
     curl \
     jq \
     openssl \
     ca-certificates \
     bash \
-    bind-tools \
+    dnsutils \
     tcpdump \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Create directories for configuration and certificates
 RUN mkdir -p /app /etc/wireguard /certs /config
@@ -30,10 +29,10 @@ COPY config/ /app/config/
 RUN chmod +x /app/entrypoint.sh /app/scripts/*.sh
 
 # Create non-root user for security
-RUN addgroup -S sasewaddle && adduser -S -G sasewaddle sasewaddle
+RUN useradd -m -s /bin/bash tobogganing
 
 # Set ownership of relevant directories
-RUN chown -R sasewaddle:sasewaddle /etc/wireguard /certs /config
+RUN chown -R tobogganing:tobogganing /etc/wireguard /certs /config
 
 # Environment variables for SASE client configuration
 ENV MANAGER_URL=""
@@ -46,10 +45,10 @@ ENV HEARTBEAT_INTERVAL="30"
 ENV CONFIG_REFRESH_INTERVAL="300"
 
 # Labels for multi-architecture support
-LABEL org.opencontainers.image.title="SASEWaddle Docker Client"
+LABEL org.opencontainers.image.title="Tobogganing Docker Client"
 LABEL org.opencontainers.image.description="Multi-architecture SASE client with WireGuard VPN and dual authentication"
 LABEL org.opencontainers.image.version="1.0.0"
-LABEL org.opencontainers.image.vendor="SASEWaddle"
+LABEL org.opencontainers.image.vendor="Tobogganing"
 
 # Health check to ensure client connectivity
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \

@@ -1,4 +1,4 @@
-// Package config provides configuration management for SASEWaddle client.
+// Package config provides configuration management for Tobogganing client.
 //
 // The config manager handles:
 // - Automatic configuration updates from the Manager service
@@ -15,13 +15,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/tobogganing/clients/native/internal/logger"
 )
+
+var log = logger.Get() //nolint:gochecknoglobals
+
+// schedulerSleepDuration is the interval between scheduler checks.
+// It is a package-level variable so tests can shorten it without changing production behaviour.
+var schedulerSleepDuration = 1 * time.Minute //nolint:gochecknoglobals
 
 // Manager handles configuration updates and scheduling
 type Manager struct {
@@ -53,7 +62,7 @@ func NewConfigManager(cfg *Config) *Manager {
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: cfg.InsecureSkipVerify(), // For development
+				InsecureSkipVerify: cfg.InsecureSkipVerify(), // #nosec G402
 			},
 		},
 	}
@@ -68,7 +77,7 @@ func NewConfigManager(cfg *Config) *Manager {
 
 // Start begins the automatic configuration update scheduler
 func (cm *Manager) Start() error {
-	log.Println("Starting configuration manager")
+	log.Info("starting configuration manager")
 	
 	// Schedule the next update randomly between 45-60 minutes
 	cm.scheduleNextUpdate()
@@ -81,7 +90,7 @@ func (cm *Manager) Start() error {
 
 // Stop gracefully stops the configuration manager
 func (cm *Manager) Stop() error {
-	log.Println("Stopping configuration manager")
+	log.Info("stopping configuration manager")
 	
 	cm.cancel()
 	
@@ -122,11 +131,11 @@ func (cm *Manager) PullConfig() error {
 		cm.updateMutex.Unlock()
 	}()
 	
-	log.Println("Pulling configuration from Manager service")
+	log.Info("pulling configuration from manager service")
 	
 	err := cm.fetchAndUpdateConfig()
 	if err != nil {
-		log.Printf("Failed to pull configuration: %v", err)
+		log.Error("failed to pull configuration", zap.Error(err))
 		return err
 	}
 	
@@ -137,7 +146,7 @@ func (cm *Manager) PullConfig() error {
 	
 	cm.scheduleNextUpdate()
 	
-	log.Println("Configuration updated successfully")
+	log.Info("configuration updated")
 	return nil
 }
 
@@ -154,7 +163,7 @@ func (cm *Manager) runScheduler() {
 				// Time for an update
 				go func() {
 					if err := cm.PullConfig(); err != nil {
-						log.Printf("Scheduled configuration update failed: %v", err)
+						log.Error("scheduled configuration update failed", zap.Error(err))
 						// Retry after a shorter interval on failure
 						cm.scheduleRetryUpdate()
 					}
@@ -165,7 +174,7 @@ func (cm *Manager) runScheduler() {
 			}
 			
 			// Sleep for a short interval before checking again
-			time.Sleep(1 * time.Minute)
+			time.Sleep(schedulerSleepDuration)
 		}
 	}
 }
@@ -175,16 +184,16 @@ func (cm *Manager) scheduleNextUpdate() {
 	// Random interval between 45 and 60 minutes
 	minMinutes := 45
 	maxMinutes := 60
-	
-	randomMinutes := minMinutes + rand.Intn(maxMinutes-minMinutes+1)
+
+	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1) // #nosec G404 -- scheduling jitter, not crypto
 	nextUpdateTime := time.Now().Add(time.Duration(randomMinutes) * time.Minute)
 	
 	cm.updateMutex.Lock()
 	cm.nextUpdate = nextUpdateTime
 	cm.updateMutex.Unlock()
 	
-	log.Printf("Next configuration update scheduled for %s (in %d minutes)",
-		nextUpdateTime.Format("15:04:05"), randomMinutes)
+	log.Info("next configuration update scheduled",
+		zap.String("at", nextUpdateTime.Format("15:04:05")), zap.Int("in_minutes", randomMinutes))
 }
 
 // scheduleRetryUpdate schedules a retry update after a shorter interval (5-10 minutes)
@@ -192,16 +201,16 @@ func (cm *Manager) scheduleRetryUpdate() {
 	// Shorter random interval for retries: 5-10 minutes
 	minMinutes := 5
 	maxMinutes := 10
-	
-	randomMinutes := minMinutes + rand.Intn(maxMinutes-minMinutes+1)
+
+	randomMinutes := minMinutes + rand.IntN(maxMinutes-minMinutes+1) // #nosec G404 -- scheduling jitter, not crypto
 	nextUpdateTime := time.Now().Add(time.Duration(randomMinutes) * time.Minute)
 	
 	cm.updateMutex.Lock()
 	cm.nextUpdate = nextUpdateTime
 	cm.updateMutex.Unlock()
 	
-	log.Printf("Configuration update retry scheduled for %s (in %d minutes)",
-		nextUpdateTime.Format("15:04:05"), randomMinutes)
+	log.Info("configuration update retry scheduled",
+		zap.String("at", nextUpdateTime.Format("15:04:05")), zap.Int("in_minutes", randomMinutes))
 }
 
 // fetchAndUpdateConfig fetches configuration from the Manager service and updates local config
@@ -271,7 +280,7 @@ func (cm *Manager) fetchAndUpdateConfig() error {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 	
-	log.Printf("Configuration updated successfully (version %d)", configResp.Version)
+	log.Info("configuration updated", zap.Int("version", configResp.Version))
 	return nil
 }
 
@@ -295,7 +304,7 @@ func (cm *Manager) validateAndSaveConfig(configData string) error {
 		return fmt.Errorf("failed to write configuration file: %w", err)
 	}
 	
-	log.Printf("Configuration saved to %s", configPath)
+	log.Info("configuration saved", zap.String("path", configPath))
 	return nil
 }
 
@@ -327,7 +336,7 @@ func (cfg *Config) GetManagerURL() string {
 	if cfg.ManagerURL != "" {
 		return cfg.ManagerURL
 	}
-	return "https://manager.sasewaddle.com"
+	return "https://hub-api.tobogganing.local:8080"
 }
 
 func (cfg *Config) GetClientID() string {
@@ -344,7 +353,7 @@ func (cfg *Config) GetAPIKey() string {
 }
 
 func (cfg *Config) GetUserAgent() string {
-	return fmt.Sprintf("SASEWaddle-Client/%s", cfg.GetVersion())
+	return fmt.Sprintf("Tobogganing-Client/%s", cfg.GetVersion())
 }
 
 func (cfg *Config) GetVersion() string {
@@ -388,7 +397,7 @@ func (cm *Manager) IsUpdateInProgress() bool {
 
 // ForceUpdate forces an immediate configuration update, bypassing the schedule
 func (cm *Manager) ForceUpdate() error {
-	log.Println("Forcing immediate configuration update")
+	log.Info("forcing immediate configuration update")
 	return cm.PullConfig()
 }
 

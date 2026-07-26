@@ -1,7 +1,7 @@
 ## Tobogganing - Beta Environment Overrides
 ## Moderate resources for staging/QA
 
-namespace: tobogganing-beta
+namespace: tobogganing
 
 hubApi:
   replicas: 2
@@ -52,7 +52,7 @@ config:
 
 ## Ingress
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -72,3 +72,17 @@ ingress:
     - secretName: tobogganing-tls
       hosts:
         - tobogganing.penguintech.cloud
+
+## HTTPRoute (Cilium Gateway API)
+httproute:
+  enabled: true
+  gatewayName: shared
+  gatewayNamespace: gateway
+  host: "tobogganing.penguintech.cloud"
+  rules:
+    - path: /api
+      service: "hub-api"
+      port: 8080
+    - path: /
+      service: "hub-webui"
+      port: 80

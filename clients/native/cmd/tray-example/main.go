@@ -1,9 +1,9 @@
-// Example application demonstrating SASEWaddle tray icon functionality
+// Example application demonstrating Tobogganing tray icon functionality
 package main
 
 import (
-	"flag"
-	"log"
+	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,63 +14,42 @@ import (
 )
 
 func main() {
-	var configPath = flag.String("config", "config.yaml", "Path to configuration file")
-	flag.Parse()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	log.Println("Starting SASEWaddle Client with System Tray...")
+	if err := run(ctx, "config.yaml"); err != nil {
+		fmt.Fprintf(os.Stderr, "tray-example: %v\n", err)
+		os.Exit(1)
+	}
+}
 
+// run starts the tray example with the given context. configPath may be empty to use defaults.
+func run(ctx context.Context, configPath string) error {
 	// Load configuration
 	cfg := config.DefaultConfig()
-	if *configPath != "" {
-		if err := config.LoadFromFile(cfg, *configPath); err != nil {
-			log.Fatalf("Failed to load configuration from %s: %v", *configPath, err)
+	if configPath != "" {
+		if err := config.LoadFromFile(cfg, configPath); err != nil {
+			return fmt.Errorf("failed to load configuration from %s: %w", configPath, err)
 		}
 	}
 
-	// Create VPN manager
+	// Create managers
 	vpnManager := vpn.NewManager(cfg)
-
-	// Create configuration manager
 	configManager := config.NewConfigManager(cfg)
-	
-	// Start configuration manager
+
 	if err := configManager.Start(); err != nil {
-		log.Fatalf("Failed to start configuration manager: %v", err)
+		return fmt.Errorf("failed to start configuration manager: %w", err)
 	}
-	defer func() {
-		if err := configManager.Stop(); err != nil {
-			log.Printf("Error stopping configuration manager: %v", err)
-		}
-	}()
+	defer func() { _ = configManager.Stop() }()
 
-	// Create tray manager
 	trayManager := tray.NewTrayManager(vpnManager, configManager)
+	defer trayManager.Stop()
 
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
+	// Context cancellation stops the tray manager
 	go func() {
-		<-sigChan
-		log.Println("Received shutdown signal, cleaning up...")
-		
-		// Stop managers
-		if err := configManager.Stop(); err != nil {
-			log.Printf("Error stopping configuration manager: %v", err)
-		}
-		if err := vpnManager.Stop(); err != nil {
-			log.Printf("Error stopping VPN manager: %v", err)
-		}
+		<-ctx.Done()
 		trayManager.Stop()
-		
-		os.Exit(0)
 	}()
 
-	// Run tray (this blocks until the application exits)
-	log.Println("System tray started. Right-click the tray icon to access options.")
-	if err := trayManager.Run(); err != nil {
-		log.Printf("Tray manager failed: %v", err)
-		// Return and let defer handle cleanup
-		return
-	}
+	return trayManager.Run()
 }

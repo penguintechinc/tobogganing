@@ -1,4 +1,4 @@
-"""Analytics dashboard API routes for SASEWaddle Manager."""
+"""Analytics dashboard API routes for Tobogganing Manager."""
 
 import os
 from datetime import datetime, timedelta

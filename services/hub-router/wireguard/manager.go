@@ -1,4 +1,4 @@
-// Package wireguard implements WireGuard VPN management for the SASEWaddle headend.
+// Package wireguard implements WireGuard VPN management for the Tobogganing headend.
 //
 // The WireGuard manager provides:
 // - VPN interface creation and lifecycle management
@@ -47,16 +47,59 @@ type WireGuardManager = Manager
 // PeerConfig alias for wgtypes.PeerConfig for backward compatibility  
 type PeerConfig = wgtypes.PeerConfig
 
+// CmdExecutor is an interface for executing system commands (allows testing with mocks)
+type CmdExecutor interface {
+    Run(name string, args ...string) (string, error)
+}
+
+// DefaultCmdExecutor executes real system commands
+type DefaultCmdExecutor struct{}
+
+// Run executes a command and returns combined output
+func (d *DefaultCmdExecutor) Run(name string, args ...string) (string, error) {
+    cmd := exec.Command(name, args...) // #nosec G204 -- callers supply fixed command names (wg, ip); args validated before call
+    output, err := cmd.CombinedOutput()
+    return string(output), err
+}
+
+// WireGuardBackend abstracts kernel/wgctrl operations to allow testing with mocks.
+type WireGuardBackend interface {
+    ConfigureDevice(name string, cfg wgtypes.Config) error
+    Device(name string) (*wgtypes.Device, error)
+    Close() error
+}
+
+// wgctrlBackend wraps a real *wgctrl.Client and satisfies WireGuardBackend.
+type wgctrlBackend struct {
+    c *wgctrl.Client
+}
+
+func (w *wgctrlBackend) ConfigureDevice(name string, cfg wgtypes.Config) error {
+    return w.c.ConfigureDevice(name, cfg)
+}
+
+func (w *wgctrlBackend) Device(name string) (*wgtypes.Device, error) {
+    return w.c.Device(name)
+}
+
+func (w *wgctrlBackend) Close() error {
+    return w.c.Close()
+}
+
 // Manager handles WireGuard interface configuration and peer management
 type Manager struct {
     interfaceName string
     managerURL    string
-    client        *wgctrl.Client
+    backend       WireGuardBackend
     httpClient    *http.Client
     privateKey    wgtypes.Key
     publicKey     wgtypes.Key
     listenPort    int
     network       string
+    cmdExecutor   CmdExecutor
+    // keyDir overrides the default /etc/wireguard directory for key storage.
+    // Empty string means use the default.  Used in tests.
+    keyDir        string
 }
 
 // Peer represents a WireGuard peer configuration
@@ -75,35 +118,66 @@ func NewManager(config *Config) (*Manager, error) {
 
 // NewManagerWithParams creates a new WireGuard manager with explicit parameters
 func NewManagerWithParams(interfaceName, managerURL string, listenPort int, network string) (*Manager, error) {
-    client, err := wgctrl.New()
-    if err != nil {
-        return nil, fmt.Errorf("failed to create WireGuard client: %w", err)
+    return newManagerWithBackend(interfaceName, managerURL, listenPort, network, nil)
+}
+
+// newManagerWithBackend creates a Manager, optionally accepting a pre-built
+// WireGuardBackend.  If backend is nil a real wgctrl.Client is created.
+// This is the single construction path and is also used by tests.
+// privateKey may be the zero value, in which case initializeKeys is called to
+// load or generate one from disk.  Tests pass a pre-generated key to avoid
+// requiring /etc/wireguard.
+func newManagerWithBackend(interfaceName, managerURL string, listenPort int, network string, backend WireGuardBackend) (*Manager, error) {
+    return newManagerWithBackendAndKey(interfaceName, managerURL, listenPort, network, backend, wgtypes.Key{})
+}
+
+// newManagerWithBackendAndKey is the internal constructor that accepts an
+// optional pre-set private key.  When privateKey is the zero value, keys are
+// loaded from / generated to /etc/wireguard.
+func newManagerWithBackendAndKey(interfaceName, managerURL string, listenPort int, network string, backend WireGuardBackend, privateKey wgtypes.Key) (*Manager, error) {
+    if backend == nil {
+        c, err := wgctrl.New()
+        if err != nil {
+            return nil, fmt.Errorf("failed to create WireGuard client: %w", err)
+        }
+        backend = &wgctrlBackend{c: c}
     }
-    
+
     manager := &Manager{
         interfaceName: interfaceName,
         managerURL:    managerURL,
-        client:        client,
+        backend:       backend,
         httpClient: &http.Client{
             Timeout: 30 * time.Second,
         },
         listenPort: listenPort,
         network:    network,
+        cmdExecutor: &DefaultCmdExecutor{},
     }
-    
-    // Generate or load WireGuard keys
-    if err := manager.initializeKeys(); err != nil {
-        return nil, fmt.Errorf("failed to initialize WireGuard keys: %w", err)
+
+    var zeroKey wgtypes.Key
+    if privateKey == zeroKey {
+        // No pre-set key — load or generate from disk.
+        if err := manager.initializeKeys(); err != nil {
+            return nil, fmt.Errorf("failed to initialize WireGuard keys: %w", err)
+        }
+    } else {
+        manager.privateKey = privateKey
+        manager.publicKey = privateKey.PublicKey()
     }
-    
+
     return manager, nil
 }
 
 func (m *Manager) initializeKeys() error {
-    keyPath := fmt.Sprintf("/etc/wireguard/%s.key", m.interfaceName)
-    
+    keyDir := m.keyDir
+    if keyDir == "" {
+        keyDir = "/etc/wireguard"
+    }
+    keyPath := fmt.Sprintf("%s/%s.key", keyDir, m.interfaceName)
+
     // Try to load existing private key
-    if data, err := os.ReadFile(keyPath); err == nil {
+    if data, err := os.ReadFile(keyPath); err == nil { // #nosec G304 -- keyPath comes from admin config (WIREGUARD_KEY_FILE env var)
         key, err := wgtypes.ParseKey(strings.TrimSpace(string(data)))
         if err == nil {
             m.privateKey = key
@@ -112,25 +186,25 @@ func (m *Manager) initializeKeys() error {
             return nil
         }
     }
-    
+
     // Generate new private key
     privateKey, err := wgtypes.GeneratePrivateKey()
     if err != nil {
         return fmt.Errorf("failed to generate private key: %w", err)
     }
-    
+
     m.privateKey = privateKey
     m.publicKey = privateKey.PublicKey()
-    
+
     // Save private key
-    if err := os.MkdirAll("/etc/wireguard", 0700); err != nil {
-        return fmt.Errorf("failed to create /etc/wireguard directory: %w", err)
+    if err := os.MkdirAll(keyDir, 0700); err != nil {
+        return fmt.Errorf("failed to create %s directory: %w", keyDir, err)
     }
-    
+
     if err := os.WriteFile(keyPath, []byte(privateKey.String()), 0600); err != nil {
         return fmt.Errorf("failed to save private key: %w", err)
     }
-    
+
     log.Infof("Generated new WireGuard key for interface %s", m.interfaceName)
     return nil
 }
@@ -158,17 +232,17 @@ func (m *Manager) Initialize() error {
 
 func (m *Manager) createInterface() error {
     // Check if interface already exists
-    _, err := m.client.Device(m.interfaceName)
+    _, err := m.backend.Device(m.interfaceName)
     if err == nil {
         return nil // Interface already exists
     }
-    
+
     // Create interface using ip link
-    cmd := exec.Command("ip", "link", "add", "dev", m.interfaceName, "type", "wireguard")
-    if output, err := cmd.CombinedOutput(); err != nil {
+    output, err := m.cmdExecutor.Run("ip", "link", "add", "dev", m.interfaceName, "type", "wireguard")
+    if err != nil {
         return fmt.Errorf("failed to create interface: %v, output: %s", err, output)
     }
-    
+
     log.Infof("Created WireGuard interface: %s", m.interfaceName)
     return nil
 }
@@ -178,31 +252,31 @@ func (m *Manager) configureInterface() error {
     // Parse network to get first IP
     // For simplicity, assuming 10.200.0.1 for headend
     headendIP := "10.200.0.1/16"
-    
-    cmd := exec.Command("ip", "addr", "add", headendIP, "dev", m.interfaceName)
-    if output, err := cmd.CombinedOutput(); err != nil {
+
+    output, err := m.cmdExecutor.Run("ip", "addr", "add", headendIP, "dev", m.interfaceName)
+    if err != nil {
         // Ignore if address already exists
-        if !strings.Contains(string(output), "File exists") {
+        if !strings.Contains(output, "File exists") {
             return fmt.Errorf("failed to set IP address: %v, output: %s", err, output)
         }
     }
-    
+
     // Bring interface up
-    cmd = exec.Command("ip", "link", "set", "up", "dev", m.interfaceName)
-    if output, err := cmd.CombinedOutput(); err != nil {
+    output, err = m.cmdExecutor.Run("ip", "link", "set", "up", "dev", m.interfaceName)
+    if err != nil {
         return fmt.Errorf("failed to bring interface up: %v, output: %s", err, output)
     }
-    
+
     // Configure WireGuard
     config := wgtypes.Config{
         PrivateKey: &m.privateKey,
         ListenPort: &m.listenPort,
     }
-    
-    if err := m.client.ConfigureDevice(m.interfaceName, config); err != nil {
+
+    if err := m.backend.ConfigureDevice(m.interfaceName, config); err != nil {
         return fmt.Errorf("failed to configure WireGuard device: %w", err)
     }
-    
+
     log.Infof("Configured WireGuard interface %s with IP %s", m.interfaceName, headendIP)
     return nil
 }
@@ -272,7 +346,7 @@ func (m *Manager) syncPeers() error {
         ReplacePeers: true,
     }
     
-    if err := m.client.ConfigureDevice(m.interfaceName, config); err != nil {
+    if err := m.backend.ConfigureDevice(m.interfaceName, config); err != nil {
         return fmt.Errorf("failed to configure peers: %w", err)
     }
     
@@ -343,10 +417,14 @@ func (m *Manager) parseAllowedIPs(allowedIPsStr string) ([]net.IPNet, error) {
     return allowedIPs, nil
 }
 
+// periodicSyncInterval controls the WireGuard peer sync frequency.
+// Overridable in tests to avoid waiting 5 minutes for a tick.
+var periodicSyncInterval = 5 * time.Minute
+
 // StartPeriodicSync starts a background goroutine to periodically sync peers
 func (m *Manager) StartPeriodicSync(ctx context.Context) {
     go func() {
-        ticker := time.NewTicker(5 * time.Minute)
+        ticker := time.NewTicker(periodicSyncInterval)
         defer ticker.Stop()
         
         for {
@@ -365,13 +443,13 @@ func (m *Manager) StartPeriodicSync(ctx context.Context) {
 
 // GetStats returns WireGuard interface statistics
 func (m *Manager) GetStats() (*wgtypes.Device, error) {
-    return m.client.Device(m.interfaceName)
+    return m.backend.Device(m.interfaceName)
 }
 
-// Close closes the WireGuard client
+// Close closes the WireGuard backend
 func (m *Manager) Close() error {
-    if m.client != nil {
-        return m.client.Close()
+    if m.backend != nil {
+        return m.backend.Close()
     }
     return nil
 }

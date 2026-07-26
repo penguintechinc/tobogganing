@@ -1,6 +1,6 @@
-# SASEWaddle Analytics System
+# Tobogganing Analytics System
 
-The SASEWaddle Analytics system provides comprehensive monitoring and reporting capabilities for the SASE infrastructure, including client operating system analytics, traffic monitoring, and advanced search functionality.
+The Tobogganing Analytics system provides comprehensive monitoring and reporting capabilities for the SASE infrastructure, including client operating system analytics, traffic monitoring, and advanced search functionality.
 
 ## Features
 
@@ -32,7 +32,7 @@ client_analytics:
 - os_name (string): Operating system name (Windows, macOS, Linux, etc.)
 - os_version (string): OS version (10.0.19041, 12.6.1, 5.15.0-56, etc.)
 - architecture (string): CPU architecture (x64, arm64, x86)
-- client_version (string): SASEWaddle client version
+- client_version (string): Tobogganing client version
 - ip_address (string): Client IP address
 - connected_headend (string): Currently connected headend
 - connection_duration (integer): Connection time in seconds

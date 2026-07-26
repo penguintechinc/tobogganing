@@ -16,8 +16,8 @@
     <string>manual</string>
     <key>provisioningProfiles</key>
     <dict>
-        <key>com.sasewaddle.mobile</key>
-        <string>SASEWaddle Mobile App Store</string>
+        <key>com.tobogganing.mobile</key>
+        <string>Tobogganing Mobile App Store</string>
     </dict>
     <key>destination</key>
     <string>upload</string>

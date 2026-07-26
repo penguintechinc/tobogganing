@@ -1,6 +1,6 @@
 """
-User Management System for SASEWaddle Manager
-Supports role-based access control with admin and reporter roles
+User Management System for Tobogganing Hub API
+Supports role-based access control with admin, maintainer, and viewer roles
 """
 
 import hashlib
@@ -19,7 +19,8 @@ logger = structlog.get_logger()
 
 class UserRole(Enum):
     ADMIN = "admin"
-    REPORTER = "reporter"
+    MAINTAINER = "maintainer"
+    VIEWER = "viewer"
 
 @dataclass
 class User:
@@ -103,7 +104,7 @@ class UserManager:
         cursor.execute("""
             INSERT INTO users (id, username, email, password_hash, role)
             VALUES (?, ?, ?, ?, ?)
-        """, (admin_id, "admin", "admin@sasewaddle.local", password_hash, "admin"))
+        """, (admin_id, "admin", "admin@tobogganing.local", password_hash, "admin"))
         
         logger.warning("Created default admin user", 
                       username="admin", 
@@ -371,16 +372,29 @@ class UserManager:
         if user.role == UserRole.ADMIN:
             return True  # Admin has all permissions
         
-        if user.role == UserRole.REPORTER:
-            # Reporter has read-only permissions
+        if user.role == UserRole.MAINTAINER:
+            # Maintainer has read/write permissions but no user management
             return permission in [
                 "view_dashboard",
-                "view_metrics", 
+                "view_metrics",
                 "view_clients",
                 "view_clusters",
-                "view_status"
+                "view_status",
+                "manage_clients",
+                "manage_clusters",
+                "manage_policies",
             ]
-        
+
+        if user.role == UserRole.VIEWER:
+            # Viewer has read-only permissions
+            return permission in [
+                "view_dashboard",
+                "view_metrics",
+                "view_clients",
+                "view_clusters",
+                "view_status",
+            ]
+
         return False
     
     def require_permission(self, user: User, permission: str):

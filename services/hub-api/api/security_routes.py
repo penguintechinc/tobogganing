@@ -1,4 +1,4 @@
-"""Security management API endpoints for SASEWaddle Manager."""
+"""Security management API endpoints for Tobogganing Manager."""
 
 import json
 import logging

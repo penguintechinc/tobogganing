@@ -27,10 +27,10 @@ func (a *App) Stop() error {
 
 // ShowWindow is a no-op for headless builds
 func (a *App) ShowWindow() {
-    // No-op
+    _ = a // no-op
 }
 
 // HideWindow is a no-op for headless builds
 func (a *App) HideWindow() {
-    // No-op
+    _ = a // no-op
 }

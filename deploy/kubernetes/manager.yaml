@@ -1,31 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: manager
-  namespace: sasewaddle
+  name: hub-api
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
-    app.kubernetes.io/component: manager
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
     app.kubernetes.io/version: "1.0.0"
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app.kubernetes.io/name: sasewaddle
-      app.kubernetes.io/component: manager
+      app.kubernetes.io/name: tobogganing
+      app.kubernetes.io/component: hub-api
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: sasewaddle
-        app.kubernetes.io/component: manager
+        app.kubernetes.io/name: tobogganing
+        app.kubernetes.io/component: hub-api
         app.kubernetes.io/version: "1.0.0"
     spec:
-      serviceAccountName: sasewaddle
+      serviceAccountName: tobogganing
       containers:
-      - name: manager
-        image: ghcr.io/your-org/sasewaddle/manager:latest
+      - name: hub-api
+        image: ghcr.io/your-org/tobogganing/hub-api:latest
         ports:
-        - containerPort: 8000
+        - containerPort: 8080
           name: http
         env:
         - name: REDIS_URL
@@ -33,35 +33,35 @@ spec:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: sasewaddle-secrets
+              name: tobogganing-secrets
               key: redis-password
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: sasewaddle-secrets
+              name: tobogganing-secrets
               key: jwt-secret
         - name: LOG_LEVEL
           value: "info"
         - name: ADMIN_EMAIL
           valueFrom:
             configMapKeyRef:
-              name: sasewaddle-config
+              name: tobogganing-config
               key: admin-email
         - name: ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: sasewaddle-secrets
+              name: tobogganing-secrets
               key: admin-password
         - name: DB_PATH
-          value: "/app/data/sasewaddle.db"
+          value: "/app/data/tobogganing.db"
         - name: CERT_DIR
           value: "/app/certs"
         - name: PYTHONUNBUFFERED
           value: "1"
         volumeMounts:
-        - name: manager-data
+        - name: hub-api-data
           mountPath: /app/data
-        - name: manager-certs
+        - name: hub-api-certs
           mountPath: /app/certs
         resources:
           requests:
@@ -73,51 +73,51 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8000
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
-            port: 8000
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
       volumes:
-      - name: manager-data
+      - name: hub-api-data
         persistentVolumeClaim:
-          claimName: manager-data-pvc
-      - name: manager-certs
+          claimName: hub-api-data-pvc
+      - name: hub-api-certs
         persistentVolumeClaim:
-          claimName: manager-certs-pvc
+          claimName: hub-api-certs-pvc
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: manager
-  namespace: sasewaddle
+  name: hub-api
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
-    app.kubernetes.io/component: manager
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
 spec:
   type: ClusterIP
   ports:
-  - port: 8000
-    targetPort: 8000
+  - port: 8080
+    targetPort: 8080
     name: http
   selector:
-    app.kubernetes.io/name: sasewaddle
-    app.kubernetes.io/component: manager
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: manager-data-pvc
-  namespace: sasewaddle
+  name: hub-api-data-pvc
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
-    app.kubernetes.io/component: manager
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
 spec:
   accessModes:
   - ReadWriteOnce
@@ -129,11 +129,11 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: manager-certs-pvc
-  namespace: sasewaddle
+  name: hub-api-certs-pvc
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
-    app.kubernetes.io/component: manager
+    app.kubernetes.io/name: tobogganing
+    app.kubernetes.io/component: hub-api
 spec:
   accessModes:
   - ReadWriteMany  # Shared across manager replicas

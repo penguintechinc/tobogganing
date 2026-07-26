@@ -1,5 +1,5 @@
 """
-JWT Token Management for SASEWaddle Manager Service
+JWT Token Management for Tobogganing Hub API Service
 Handles JWT token generation, validation, and refresh for nodes and clients
 """
 
@@ -20,7 +20,7 @@ logger = structlog.get_logger()
 
 class JWTManager:
     """
-    Async JWT token management for high-throughput SASE authentication
+    Async JWT token management for high-throughput Tobogganing authentication
     Supports thousands of concurrent requests with Redis caching
     """
     

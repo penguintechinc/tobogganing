@@ -1,14 +1,17 @@
 //go:build nogui || !(linux || darwin || windows)
 
-// Package tray provides system tray icon functionality for SASEWaddle client.
+// Package tray provides system tray icon functionality for Tobogganing client.
 // This is the no-GUI stub implementation.
 package tray
 
 import (
 	"context"
-	"log"
 	"time"
+
+	"github.com/tobogganing/clients/native/internal/logger"
 )
+
+var log = logger.Get() //nolint:gochecknoglobals
 
 // VPNManager interface defines the methods needed to control VPN connections
 type VPNManager interface {
@@ -47,7 +50,7 @@ func NewTrayManager(vpn VPNManager, config ConfigManager) *TrayManager {
 
 // Run starts the system tray and blocks until the context is canceled (stub implementation)
 func (t *TrayManager) Run() error {
-	log.Println("System tray not available in this build (no GUI support)")
+	log.Info("system tray not available in this build (no GUI support)")
 	<-t.ctx.Done()
 	return nil
 }
@@ -59,6 +62,6 @@ func (t *TrayManager) Stop() {
 
 // Run starts the system tray manager with the given configuration (stub implementation)
 func Run(cfg interface{}) error {
-	log.Println("System tray not available in this build (no GUI support)")
+	log.Info("system tray not available in this build (no GUI support)")
 	return nil
 }

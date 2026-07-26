@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# SASEWaddle Local Build Script
+# Tobogganing Local Build Script
 # Builds all React-based applications locally and generates screenshots
 
 set -e
 
-echo "===========================================" 
-echo "  SASEWaddle Local Application Builder"
+echo "==========================================="
+echo "  Tobogganing Local Application Builder"
 echo "==========================================="
 
 # Configuration
@@ -103,13 +103,13 @@ build_mobile_app() {
 export const BUILD_CONFIG = {
   VERSION: '$VERSION',
   BUILD_TYPE: '$BUILD_TYPE',
-  API_ENDPOINT: 'https://api${BUILD_TYPE == 'production' ? '' : '-dev'}.sasewaddle.com'
+  API_ENDPOINT: 'https://api${BUILD_TYPE == 'production' ? '' : '-dev'}.tobogganing.io'
 };
 
 export const API_ENDPOINTS = {
-  development: 'https://api-dev.sasewaddle.com',
-  staging: 'https://api-staging.sasewaddle.com', 
-  production: 'https://api.sasewaddle.com'
+  development: 'https://api-dev.tobogganing.io',
+  staging: 'https://api-staging.tobogganing.io',
+  production: 'https://api.tobogganing.io'
 };
 
 export const getApiEndpoint = (buildType: string = BUILD_CONFIG.BUILD_TYPE) => {
@@ -167,8 +167,8 @@ build_website() {
     cat > .env.local << EOF
 NEXT_PUBLIC_VERSION=$VERSION
 NEXT_PUBLIC_BUILD_TYPE=$BUILD_TYPE
-NEXT_PUBLIC_API_URL=https://api${BUILD_TYPE == 'production' ? '' : '-dev'}.sasewaddle.com
-NEXT_PUBLIC_MANAGER_URL=https://manager${BUILD_TYPE == 'production' ? '' : '-dev'}.sasewaddle.com
+NEXT_PUBLIC_API_URL=https://api${BUILD_TYPE == 'production' ? '' : '-dev'}.tobogganing.io
+NEXT_PUBLIC_MANAGER_URL=https://manager${BUILD_TYPE == 'production' ? '' : '-dev'}.tobogganing.io
 EOF
     
     # Build the website
@@ -264,7 +264,7 @@ async function generateScreenshots() {
     
     // Create simple HTML mockups for mobile app screens
     const mobileScreens = [
-        { name: 'connection-screen', title: 'VPN Connection', content: 'Connected to SASEWaddle' },
+        { name: 'connection-screen', title: 'VPN Connection', content: 'Connected to Tobogganing' },
         { name: 'settings-screen', title: 'Settings', content: 'Auto-connect enabled' },
         { name: 'configuration-screen', title: 'Configuration', content: 'Manager URL configured' }
     ];
@@ -278,7 +278,7 @@ async function generateScreenshots() {
                 <html>
                 <head>
                     <meta charset="utf-8">
-                    <title>SASEWaddle Mobile - ${screen.title}</title>
+                    <title>Tobogganing Mobile - ${screen.title}</title>
                     <style>
                         body {
                             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -328,7 +328,7 @@ async function generateScreenshots() {
                     <div class="content">
                         <div class="logo">🛡️</div>
                         <div class="status">${screen.content}</div>
-                        <button class="button">SASEWaddle Mobile</button>
+                        <button class="button">Tobogganing Mobile</button>
                     </div>
                 </body>
                 </html>
@@ -423,38 +423,38 @@ interface AppShowcaseProps {
 }
 
 export const AppShowcase: React.FC<AppShowcaseProps> = ({ 
-    title = "SASEWaddle Applications" 
+    title = "Tobogganing Applications" 
 }) => {
     const screenshots = [
         {
             name: 'Desktop Homepage',
             src: '/images/screenshots/homepage-desktop.png',
-            alt: 'SASEWaddle homepage on desktop'
+            alt: 'Tobogganing homepage on desktop'
         },
         {
             name: 'Mobile App - Connection',
-            src: '/images/screenshots/mobile-connection-screen.png', 
-            alt: 'SASEWaddle mobile app connection screen'
+            src: '/images/screenshots/mobile-connection-screen.png',
+            alt: 'Tobogganing mobile app connection screen'
         },
         {
             name: 'Features Overview',
             src: '/images/screenshots/features-desktop.png',
-            alt: 'SASEWaddle features overview'
+            alt: 'Tobogganing features overview'
         },
         {
             name: 'Architecture Diagram',
             src: '/images/screenshots/architecture-desktop.png',
-            alt: 'SASEWaddle architecture diagram'
+            alt: 'Tobogganing architecture diagram'
         },
         {
             name: 'Mobile App - Settings',
             src: '/images/screenshots/mobile-settings-screen.png',
-            alt: 'SASEWaddle mobile app settings'
+            alt: 'Tobogganing mobile app settings'
         },
         {
             name: 'Use Cases',
             src: '/images/screenshots/use-cases-desktop.png',
-            alt: 'SASEWaddle use cases'
+            alt: 'Tobogganing use cases'
         }
     ];
 
@@ -466,7 +466,7 @@ export const AppShowcase: React.FC<AppShowcaseProps> = ({
                         {title}
                     </h2>
                     <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                        Experience SASEWaddle across all platforms with our intuitive interfaces
+                        Experience Tobogganing across all platforms with our intuitive interfaces
                         and comprehensive security management tools.
                     </p>
                 </div>
@@ -514,7 +514,7 @@ generate_build_report() {
     log_info "Generating build report..."
     
     cat > "$ROOT_DIR/build/BUILD_REPORT.md" << EOF
-# SASEWaddle Local Build Report
+# Tobogganing Local Build Report
 
 **Build Date:** $(date)
 **Version:** $VERSION
@@ -565,7 +565,7 @@ EOF
 # Main execution
 main() {
     echo
-    log_info "Starting SASEWaddle local build process..."
+    log_info "Starting Tobogganing local build process..."
     log_info "Version: $VERSION"
     log_info "Build Type: $BUILD_TYPE"
     log_info "Root Directory: $ROOT_DIR"
@@ -586,8 +586,8 @@ main() {
     generate_build_report
     
     echo
-    log_success "=====================================
-    log_success "  SASEWaddle Build Completed! 
+    log_success "====================================="
+    log_success "  Tobogganing Build Completed!"
     log_success "====================================="
     echo
     log_info "Build artifacts location: $ROOT_DIR/build/"
@@ -602,7 +602,7 @@ main() {
 # Handle script arguments
 case "${1:-}" in
     --help|-h)
-        echo "SASEWaddle Local Build Script"
+        echo "Tobogganing Local Build Script"
         echo
         echo "Usage: $0 [OPTIONS]"
         echo

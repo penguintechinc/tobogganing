@@ -1,6 +1,6 @@
-// Package main implements the SASEWaddle headend proxy server.
+// Package main implements the Tobogganing hub-router proxy server.
 //
-// The headend proxy is a high-performance, multi-protocol proxy server that:
+// The hub-router proxy is a high-performance, multi-protocol proxy server that:
 // - Terminates WireGuard VPN connections from clients
 // - Provides HTTP/HTTPS/TCP/UDP proxying with authentication
 // - Implements comprehensive firewall rules and traffic filtering
@@ -14,7 +14,6 @@ package main
 
 import (
     "context"
-    "crypto/tls"
     "fmt"
     "net"
     "net/http"
@@ -28,16 +27,20 @@ import (
     "time"
 
     "github.com/gin-gonic/gin"
+    "github.com/penguintechinc/penguin-libs/packages/go-aaa/authn"
+    pglog "github.com/penguintechinc/penguin-libs/packages/go-common/logging"
     "github.com/prometheus/client_golang/prometheus/promhttp"
     log "github.com/sirupsen/logrus"
     "github.com/spf13/viper"
 
-    "github.com/tobogganing/headend/proxy/auth"
-    "github.com/tobogganing/headend/proxy/firewall"
-    "github.com/tobogganing/headend/proxy/mirror"
-    "github.com/tobogganing/headend/proxy/middleware"
-    "github.com/tobogganing/headend/proxy/ports"
-    "github.com/tobogganing/headend/proxy/syslog"
+    "github.com/tobogganing/hub-router/internal/overlay"
+    "github.com/tobogganing/hub-router/internal/xdp"
+    "github.com/tobogganing/hub-router/proxy/auth"
+    "github.com/tobogganing/hub-router/proxy/firewall"
+    "github.com/tobogganing/hub-router/proxy/mirror"
+    "github.com/tobogganing/hub-router/proxy/middleware"
+    "github.com/tobogganing/hub-router/proxy/ports"
+    "github.com/tobogganing/hub-router/proxy/syslog"
 )
 
 type ProxyServer struct {
@@ -47,11 +50,15 @@ type ProxyServer struct {
     udpProxy        *UDPProxy
     portManager     *ports.PortManager
     authProvider    auth.Provider
+    oidcRP          *authn.OIDCRelyingParty // go-aaa OIDC relying party for gin middleware
     mirrorManager   *mirror.Manager
     firewallManager *firewall.Manager
     syslogLogger    *syslog.SyslogLogger
     wgRouter        *WireGuardRouter
-    proxies         map[string]*httputil.ReverseProxy
+    overlayManager  *overlay.Manager
+    zitiListener    net.Listener
+    xdpProtection   *xdp.XDPProtection
+    egressProxy     *httputil.ReverseProxy // single proxy to proxy-egress
     mu              sync.RWMutex
 }
 
@@ -79,9 +86,7 @@ func main() {
     initConfig()
     initLogging()
 
-    server := &ProxyServer{
-        proxies: make(map[string]*httputil.ReverseProxy),
-    }
+    server := &ProxyServer{}
 
     if err := server.Initialize(); err != nil {
         log.Fatalf("Failed to initialize server: %v", err)
@@ -123,11 +128,19 @@ func initConfig() {
     viper.SetDefault("syslog.host", "")
     viper.SetDefault("syslog.port", "514")
     viper.SetDefault("syslog.facility", "local0")
-    viper.SetDefault("syslog.tag", "sasewaddle-headend")
+    viper.SetDefault("syslog.tag", "tobogganing-hub-router")
     viper.SetDefault("ports.dynamic_enabled", true)
     viper.SetDefault("ports.headend_id", "")
     viper.SetDefault("ports.cluster_id", "default")
     viper.SetDefault("ports.refresh_interval", "60s")
+    viper.SetDefault("overlay.type", "wireguard")
+    viper.SetDefault("overlay.openziti.identity_file", "/etc/tobogganing/ziti-identity.json")
+    viper.SetDefault("overlay.openziti.service_name", "tobogganing-headend")
+    viper.SetDefault("xdp.enabled", false)
+    viper.SetDefault("xdp.interface", "eth0")
+    viper.SetDefault("xdp.rate_limit_pps", 10000)
+    viper.SetDefault("xdp.syn_rate_limit_pps", 1000)
+    viper.SetDefault("xdp.udp_rate_limit_pps", 5000)
 
     if err := viper.ReadInConfig(); err != nil {
         log.Warnf("No config file found, using environment variables: %v", err)
@@ -142,6 +155,12 @@ func initLogging() {
     }
     log.SetLevel(level)
     log.SetFormatter(&log.JSONFormatter{})
+
+    // Initialize go-common structured logger (penguin-libs standard)
+    _, err = pglog.NewSanitizedLogger("hub-router")
+    if err != nil {
+        log.WithError(err).Warn("Failed to initialize go-common structured logger, using logrus only")
+    }
 }
 
 func (s *ProxyServer) Initialize() error {
@@ -160,31 +179,55 @@ func (s *ProxyServer) Initialize() error {
         log.Info("WireGuard-aware routing enabled")
     }
 
-    // Initialize auth provider - supports JWT, OAuth2, or SAML2
-    authType := viper.GetString("auth.type")
-    switch authType {
-    case "jwt":
-        s.authProvider, err = auth.NewJWTProvider(
-            viper.GetString("auth.manager_url"),
-            viper.GetString("auth.jwt_public_key_path"),
-        )
-    case "oauth2":
-        s.authProvider, err = auth.NewOAuth2Provider(
-            viper.GetString("auth.oauth2.issuer"),
-            viper.GetString("auth.oauth2.client_id"),
-            viper.GetString("auth.oauth2.client_secret"),
-        )
-    case "saml2":
-        s.authProvider, err = auth.NewSAML2Provider(
-            viper.GetString("auth.saml2.idp_metadata_url"),
-            viper.GetString("auth.saml2.sp_entity_id"),
-        )
-    default:
-        return fmt.Errorf("unsupported auth type: %s", authType)
+    // Initialize auth provider - supports JWT, OAuth2, or SAML2.
+    // Skip if already set (allows tests to inject a mock provider).
+    if s.authProvider == nil {
+        authType := viper.GetString("auth.type")
+        switch authType {
+        case "jwt":
+            s.authProvider, err = auth.NewJWTProvider(
+                viper.GetString("auth.manager_url"),
+                viper.GetString("auth.jwt_public_key_path"),
+            )
+        case "oauth2":
+            s.authProvider, err = auth.NewOAuth2Provider(
+                viper.GetString("auth.oauth2.issuer"),
+                viper.GetString("auth.oauth2.client_id"),
+                viper.GetString("auth.oauth2.client_secret"),
+            )
+        case "saml2":
+            s.authProvider, err = auth.NewSAML2Provider(
+                viper.GetString("auth.saml2.idp_metadata_url"),
+                viper.GetString("auth.saml2.sp_entity_id"),
+            )
+        default:
+            return fmt.Errorf("unsupported auth type: %s", authType)
+        }
+
+        if err != nil {
+            return fmt.Errorf("failed to initialize auth provider: %w", err)
+        }
     }
 
-    if err != nil {
-        return fmt.Errorf("failed to initialize auth provider: %w", err)
+    // Initialize go-aaa OIDC relying party for gin middleware token validation.
+    // Reads OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET from the environment.
+    // If OIDC_ISSUER_URL is not set we log a warning and skip OIDC setup — the server
+    // will start in dev mode with token validation disabled.
+    oidcIssuer := os.Getenv("OIDC_ISSUER_URL")
+    if oidcIssuer == "" {
+        log.Warn("OIDC_ISSUER_URL not set — running in dev mode, gin middleware token validation is DISABLED")
+    } else {
+        rpCfg := authn.OIDCRPConfig{
+            IssuerURL:    oidcIssuer,
+            ClientID:     os.Getenv("OIDC_CLIENT_ID"),
+            ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
+        }
+        rp, rpErr := authn.NewOIDCRelyingParty(context.Background(), rpCfg)
+        if rpErr != nil {
+            return fmt.Errorf("failed to initialize OIDC relying party: %w", rpErr)
+        }
+        s.oidcRP = rp
+        log.Infof("OIDC relying party initialized (issuer: %s)", oidcIssuer)
     }
 
     // Initialize traffic mirroring if enabled
@@ -228,6 +271,68 @@ func (s *ProxyServer) Initialize() error {
         log.Info("Firewall manager enabled and started")
     } else {
         log.Info("Firewall manager disabled")
+    }
+
+    // Initialize overlay manager
+    overlayMgr := overlay.NewManager()
+
+    // Always register WireGuard provider (default)
+    wgProvider := overlay.NewWireGuardProvider(overlay.WireGuardConfig{
+        Interface: viper.GetString("wireguard.interface"),
+        Network:   viper.GetString("wireguard.network"),
+    })
+    overlayMgr.RegisterProvider(wgProvider)
+
+    overlayType := viper.GetString("overlay.type")
+
+    if overlayType == "openziti" {
+        zitiProvider := overlay.NewOpenZitiProvider(overlay.OpenZitiConfig{
+            IdentityFile: viper.GetString("overlay.openziti.identity_file"),
+            ServiceName:  viper.GetString("overlay.openziti.service_name"),
+        })
+        overlayMgr.RegisterProvider(zitiProvider)
+
+        ctx := context.Background()
+        if err := zitiProvider.Initialize(ctx); err != nil {
+            return fmt.Errorf("failed to initialize OpenZiti provider: %w", err)
+        }
+        if err := zitiProvider.Connect(ctx); err != nil {
+            return fmt.Errorf("failed to connect OpenZiti provider: %w", err)
+        }
+        if err := overlayMgr.SetPrimary("openziti"); err != nil {
+            return fmt.Errorf("failed to set OpenZiti as primary: %w", err)
+        }
+        s.zitiListener = zitiProvider.Listener()
+        log.Info("OpenZiti overlay active — accepting Ziti dark service connections")
+    } else {
+        if err := overlayMgr.SetPrimary("wireguard"); err != nil {
+            return fmt.Errorf("failed to set WireGuard as primary: %w", err)
+        }
+        log.Info("WireGuard overlay active (default)")
+    }
+
+    s.overlayManager = overlayMgr
+
+    // Initialize XDP edge protection if enabled
+    if viper.GetBool("xdp.enabled") {
+        xdpCfg := xdp.XDPConfig{
+            Enabled:         true,
+            Interface:       viper.GetString("xdp.interface"),
+            RateLimitPPS:    viper.GetInt("xdp.rate_limit_pps"),
+            SYNRateLimitPPS: viper.GetInt("xdp.syn_rate_limit_pps"),
+            UDPRateLimitPPS: viper.GetInt("xdp.udp_rate_limit_pps"),
+            BlocklistSyncURL: viper.GetString("xdp.blocklist_sync_url"),
+        }
+        s.xdpProtection = xdp.New(xdpCfg)
+        if err := s.xdpProtection.Attach(xdpCfg.Interface); err != nil {
+            log.Warnf("Failed to attach XDP protection: %v (continuing without XDP)", err)
+            s.xdpProtection = nil
+        } else {
+            s.xdpProtection.SetRateLimit(xdpCfg.RateLimitPPS)
+            s.xdpProtection.SetSYNRateLimit(xdpCfg.SYNRateLimitPPS)
+            s.xdpProtection.SetUDPRateLimit(xdpCfg.UDPRateLimitPPS)
+            log.Info("XDP edge protection active")
+        }
     }
 
     // Initialize syslog logger if enabled
@@ -289,7 +394,7 @@ func (s *ProxyServer) Initialize() error {
                     log.Infof("Dynamic port manager started with %d listeners", s.portManager.GetListenerCount())
                     
                     // Start periodic config refresh
-                    go s.refreshPortConfig(configClient)
+                    go s.refreshPortConfig(context.Background(), configClient)
                 }
             }
         }
@@ -303,8 +408,20 @@ func (s *ProxyServer) Initialize() error {
     }
     
     if err := s.initializeUDPProxy(); err != nil {
-        return fmt.Errorf("failed to initialize UDP proxy: %w", err)  
+        return fmt.Errorf("failed to initialize UDP proxy: %w", err)
     }
+
+    // Initialize reverse proxy to proxy-egress
+    egressURL := os.Getenv("PROXY_EGRESS_URL")
+    if egressURL == "" {
+        egressURL = "http://proxy-egress:10000"
+    }
+    parsed, err := url.Parse(egressURL)
+    if err != nil {
+        return fmt.Errorf("invalid PROXY_EGRESS_URL: %w", err)
+    }
+    s.egressProxy = httputil.NewSingleHostReverseProxy(parsed) // #nosec G704 -- URL from EGRESS_PROXY_URL env var (admin config)
+    log.Infof("Reverse proxy to proxy-egress initialized (URL: %s)", egressURL)
 
     // Setup HTTP routes
     s.setupRoutes()
@@ -331,12 +448,12 @@ func (s *ProxyServer) setupRoutes() {
         authGroup.POST("/login", s.authProvider.LoginHandler())
         authGroup.GET("/callback", s.authProvider.CallbackHandler())
         authGroup.POST("/logout", s.authProvider.LogoutHandler())
-        authGroup.GET("/userinfo", middleware.AuthRequired(s.authProvider), s.userInfoHandler)
+        authGroup.GET("/userinfo", middleware.NewAuthMiddleware(oidcRPOrNil(s.oidcRP)), s.userInfoHandler)
     }
 
     // Proxy endpoints (require authentication)
     proxyGroup := s.router.Group("/proxy")
-    proxyGroup.Use(middleware.AuthRequired(s.authProvider))
+    proxyGroup.Use(middleware.NewAuthMiddleware(oidcRPOrNil(s.oidcRP)))
     {
         proxyGroup.Any("/*path", s.proxyHandler)
     }
@@ -351,7 +468,7 @@ func (s *ProxyServer) setupRoutes() {
         metricsRouter.GET("/metrics", s.metricsHandler)
         
         log.Infof("Metrics server listening on :%s", metricsPort)
-        if err := http.ListenAndServe(":"+metricsPort, metricsRouter); err != nil {
+        if err := http.ListenAndServe(":"+metricsPort, metricsRouter); err != nil { // #nosec G114 -- internal metrics endpoint; timeout not needed for Prometheus scrape
             log.Errorf("Metrics server failed: %v", err)
         }
     }()
@@ -380,6 +497,8 @@ func (s *ProxyServer) healthHandler(c *gin.Context) {
         "auth_provider": s.authProvider != nil,
         "tcp_proxy": s.tcpProxy != nil,
         "udp_proxy": s.udpProxy != nil,
+        "overlay_type": viper.GetString("overlay.type"),
+        "ziti_listener_active": s.zitiListener != nil,
     })
 }
 
@@ -440,115 +559,37 @@ func (s *ProxyServer) metricsHandler(c *gin.Context) {
 }
 
 func (s *ProxyServer) userInfoHandler(c *gin.Context) {
-    user := c.MustGet("user").(auth.User)
-    c.JSON(http.StatusOK, user)
+    claims := c.MustGet("claims").(*authn.Claims)
+    c.JSON(http.StatusOK, gin.H{
+        "sub":    claims.Sub,
+        "iss":    claims.Iss,
+        "tenant": claims.Tenant,
+        "scope":  claims.Scope,
+        "roles":  claims.Roles,
+        "teams":  claims.Teams,
+    })
 }
 
 func (s *ProxyServer) proxyHandler(c *gin.Context) {
-    targetHost := c.GetHeader("X-Target-Host")
-    if targetHost == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Missing X-Target-Host header"})
-        return
-    }
+    claims := c.MustGet("claims").(*authn.Claims)
 
-    user := c.MustGet("user").(auth.User)
-    sourceIP := c.ClientIP()
-    method := c.Request.Method
-    path := c.Request.URL.Path
-    userAgent := c.GetHeader("User-Agent")
-    requestID := c.GetHeader("X-Request-ID")
-    
-    // Check firewall rules if firewall manager is enabled
-    var allowed bool
-    if s.firewallManager != nil {
-        allowed = s.firewallManager.CheckAccess(user.ID, targetHost)
-    } else {
-        allowed = true
-    }
-        
-    if !allowed {
-            log.Warnf("Firewall blocked access for user %s to %s", user.ID, targetHost)
-            
-            // Log denied access to syslog
-            if s.syslogLogger != nil {
-                s.syslogLogger.LogHTTPAccess(user.ID, user.Name, sourceIP, targetHost, method, path, userAgent, requestID, 403, 0, false)
-            }
-            
-            c.JSON(http.StatusForbidden, gin.H{"error": "Access denied by firewall policy"})
-            return
-    }
-        
-    log.Debugf("Firewall allowed access for user %s to %s", user.ID, targetHost)
+    // Enrich request with identity headers for proxy-egress enforcement.
+    // proxy-egress uses pre-compiled rules from hub-policy (levers), not per-request checks.
+    c.Request.Header.Set("X-User-ID", claims.Sub)
+    c.Request.Header.Set("X-User-Groups", strings.Join(claims.Teams, ","))
+    c.Request.Header.Set("X-Overlay-Scope", s.overlayScope())
 
-    // Get or create proxy for target
-    proxy := s.getOrCreateProxy(targetHost)
-
-    // Create response writer wrapper for monitoring
-    wrapper := &responseWriterWrapper{
-        ResponseWriter: c.Writer,
-        mirrorManager:  s.mirrorManager,
-        syslogLogger:   s.syslogLogger,
-        request:        c.Request,
-        user:           user,
-        targetHost:     targetHost,
-        sourceIP:       sourceIP,
-        method:         method,
-        path:           path,
-        userAgent:      userAgent,
-        requestID:      requestID,
-    }
-    c.Writer = wrapper
-
-    // Proxy the request
-    proxy.ServeHTTP(c.Writer, c.Request)
-    
-    // Ensure logging and mirroring happens
-    if wrapper, ok := c.Writer.(*responseWriterWrapper); ok {
-        wrapper.Flush()
-    }
+    // Forward to proxy-egress
+    s.egressProxy.ServeHTTP(c.Writer, c.Request)
 }
 
-func (s *ProxyServer) getOrCreateProxy(targetHost string) *httputil.ReverseProxy {
-    s.mu.RLock()
-    proxy, exists := s.proxies[targetHost]
-    s.mu.RUnlock()
-
-    if exists {
-        return proxy
+// overlayScope returns the configured overlay type: "wireguard" or "openziti", defaulting to "wireguard".
+func (s *ProxyServer) overlayScope() string {
+    overlayType := viper.GetString("overlay.type")
+    if overlayType == "openziti" {
+        return "openziti"
     }
-
-    s.mu.Lock()
-    defer s.mu.Unlock()
-
-    // Double-check after acquiring write lock
-    if proxy, exists := s.proxies[targetHost]; exists {
-        return proxy
-    }
-
-    // Create new proxy
-    targetURL, _ := url.Parse(fmt.Sprintf("https://%s", targetHost))
-    proxy = httputil.NewSingleHostReverseProxy(targetURL)
-
-    // Configure proxy
-    proxy.Transport = &http.Transport{
-        TLSClientConfig: &tls.Config{
-            InsecureSkipVerify: viper.GetBool("proxy.skip_tls_verify"),
-        },
-        MaxIdleConns:        100,
-        MaxIdleConnsPerHost: 10,
-        IdleConnTimeout:     90 * time.Second,
-    }
-
-    proxy.ModifyResponse = func(resp *http.Response) error {
-        // Add security headers
-        resp.Header.Set("X-Frame-Options", "DENY")
-        resp.Header.Set("X-Content-Type-Options", "nosniff")
-        resp.Header.Set("X-XSS-Protection", "1; mode=block")
-        return nil
-    }
-
-    s.proxies[targetHost] = proxy
-    return proxy
+    return "wireguard"
 }
 
 func (s *ProxyServer) initializeTCPProxy() error {
@@ -643,7 +684,17 @@ func (s *ProxyServer) Run() error {
         if s.portManager != nil {
             s.portManager.Stop()
         }
-        
+
+        if s.overlayManager != nil {
+            s.overlayManager.CloseAll()
+        }
+
+        if s.xdpProtection != nil {
+            if err := s.xdpProtection.Close(); err != nil {
+                log.Warnf("xdpProtection.Close: %v", err)
+            }
+        }
+
         // Close TCP and UDP proxies
         if s.tcpProxy != nil && s.tcpProxy.listener != nil {
             if err := s.tcpProxy.listener.Close(); err != nil {
@@ -661,8 +712,13 @@ func (s *ProxyServer) Run() error {
         }
     }()
 
+    // Start Ziti connection accept loop if overlay is OpenZiti
+    if s.zitiListener != nil {
+        go s.serveZitiConnections(context.Background(), s.zitiListener)
+    }
+
     log.Infof("Starting headend HTTP proxy on port %s", httpPort)
-    
+
     if certFile != "" && keyFile != "" {
         return s.httpServer.ListenAndServeTLS(certFile, keyFile)
     }
@@ -670,70 +726,6 @@ func (s *ProxyServer) Run() error {
     return s.httpServer.ListenAndServe()
 }
 
-type responseWriterWrapper struct {
-    gin.ResponseWriter
-    mirrorManager *mirror.Manager
-    syslogLogger  *syslog.SyslogLogger
-    request       *http.Request
-    user          auth.User
-    targetHost    string
-    sourceIP      string
-    method        string
-    path          string
-    userAgent     string
-    requestID     string
-    statusCode    int
-    bytesWritten  int64
-    written       []byte
-}
-
-func (w *responseWriterWrapper) WriteHeader(code int) {
-    w.statusCode = code
-    w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *responseWriterWrapper) Write(data []byte) (int, error) {
-    // Only store data for mirroring if mirror is enabled
-    if w.mirrorManager != nil {
-        w.written = append(w.written, data...)
-    }
-    w.bytesWritten += int64(len(data))
-    
-    // Mirror and log are handled by worker queues for performance
-    // Just track the data here, actual work is deferred
-    
-    return w.ResponseWriter.Write(data)
-}
-
-// Flush handles final logging and mirroring when the response is complete
-func (w *responseWriterWrapper) Flush() {
-    // Send to mirror asynchronously if enabled
-    if w.mirrorManager != nil && len(w.written) > 0 {
-        go w.mirrorManager.MirrorHTTP(w.request, w.statusCode, w.written)
-    }
-    
-    // Log to syslog - uses internal worker queue for performance
-    if w.syslogLogger != nil {
-        w.syslogLogger.LogHTTPAccess(
-            w.user.ID,
-            w.user.Name,
-            w.sourceIP,
-            w.targetHost,
-            w.method,
-            w.path,
-            w.userAgent,
-            w.requestID,
-            w.statusCode,
-            w.bytesWritten,
-            true, // allowed (we wouldn't get here if not allowed)
-        )
-    }
-    
-    // Call the underlying Flush if available
-    if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-        flusher.Flush()
-    }
-}
 
 // TCP Proxy Implementation
 func (t *TCPProxy) Start() {
@@ -1039,34 +1031,40 @@ func (u *UDPProxy) extractTargetFromUDPPacket(data []byte) string {
     return ""
 }
 
-// refreshPortConfig periodically fetches updated port configuration from the Manager
-func (s *ProxyServer) refreshPortConfig(configClient *ports.ConfigClient) {
+// refreshPortConfig periodically fetches updated port configuration from the Manager.
+// The loop exits when ctx is cancelled, enabling clean shutdown and test control.
+func (s *ProxyServer) refreshPortConfig(ctx context.Context, configClient *ports.ConfigClient) {
 	refreshInterval, err := time.ParseDuration(viper.GetString("ports.refresh_interval"))
 	if err != nil {
 		refreshInterval = 60 * time.Second
 	}
-	
+
 	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
-	
-	for range ticker.C {
-		config, err := configClient.FetchConfig()
-		if err != nil {
-			log.Errorf("Failed to refresh port config: %v", err)
-			continue
-		}
-		
-		// Validate the configuration
-		if err := configClient.ValidateConfig(config); err != nil {
-			log.Errorf("Invalid port config received: %v", err)
-			continue
-		}
-		
-		// Update port manager configuration
-		if err := s.updatePortConfiguration(config); err != nil {
-			log.Errorf("Failed to update port configuration: %v", err)
-		} else {
-			log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			config, err := configClient.FetchConfig()
+			if err != nil {
+				log.Errorf("Failed to refresh port config: %v", err)
+				continue
+			}
+
+			// Validate the configuration
+			if err := configClient.ValidateConfig(config); err != nil {
+				log.Errorf("Invalid port config received: %v", err)
+				continue
+			}
+
+			// Update port manager configuration
+			if err := s.updatePortConfiguration(config); err != nil {
+				log.Errorf("Failed to update port configuration: %v", err)
+			} else {
+				log.Infof("Updated port configuration: TCP=%s, UDP=%s", config.TCPRanges, config.UDPRanges)
+			}
 		}
 	}
 }
@@ -1324,4 +1322,131 @@ func (s *ProxyServer) extractJWTFromUDPPacket(data []byte) string {
 
 func (s *ProxyServer) extractTargetFromUDPPacket(data []byte) string {
 	return s.extractTargetFromTCPPacket(data) // Same implementation
+}
+
+// serveZitiConnections accepts connections from the OpenZiti dark service listener
+// and handles each in a goroutine. This is the L7 equivalent of the TCP proxy's
+// accept loop, but for connections arriving through the Ziti overlay.
+func (s *ProxyServer) serveZitiConnections(ctx context.Context, listener net.Listener) {
+	log.Info("Starting Ziti connection accept loop")
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				log.Info("Ziti accept loop shutting down")
+				return
+			default:
+				log.WithError(err).Error("Ziti accept error")
+				continue
+			}
+		}
+
+		go s.handleZitiConnection(conn)
+	}
+}
+
+// handleZitiConnection handles a single connection from the OpenZiti overlay.
+// It reuses the same JWT+HOST protocol as the TCP proxy — the client sends
+// "JWT:<token>\nHOST:<target>\n" as the first payload, followed by the actual
+// application data.
+//
+// Because the OpenZiti SDK doesn't expose caller identity on accepted connections,
+// authentication must happen at the application layer via this JWT handshake.
+func (s *ProxyServer) handleZitiConnection(conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Debugf("Error closing Ziti connection: %v", err)
+		}
+	}()
+
+	// Read first packet to extract JWT token and target host
+	buffer := make([]byte, 4096)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		log.WithError(err).Error("Ziti connection read error")
+		return
+	}
+
+	// Extract JWT and target using the same protocol as TCP proxy
+	token := s.extractJWTFromTCPPacket(buffer[:n])
+	if token == "" {
+		log.Error("No JWT token found in Ziti connection handshake")
+		return
+	}
+
+	user, err := s.authProvider.ValidateToken(token)
+	if err != nil {
+		log.WithError(err).Error("Ziti connection authentication failed")
+		return
+	}
+
+	targetHost := s.extractTargetFromTCPPacket(buffer[:n])
+	if targetHost == "" {
+		log.Error("No target host found in Ziti connection handshake")
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"user":    user.ID,
+		"target":  targetHost,
+		"overlay": "openziti",
+	}).Info("Ziti connection authenticated")
+
+	// Check firewall rules
+	if s.firewallManager != nil {
+		if !s.firewallManager.CheckAccess(user.ID, targetHost) {
+			log.Warnf("Firewall blocked Ziti connection for user %s to %s", user.ID, targetHost)
+			if s.syslogLogger != nil {
+				s.syslogLogger.LogTCPAccess(user.ID, user.Name, "ziti-overlay", targetHost, false)
+			}
+			return
+		}
+	}
+
+	// Log allowed access
+	if s.syslogLogger != nil {
+		s.syslogLogger.LogTCPAccess(user.ID, user.Name, "ziti-overlay", targetHost, true)
+	}
+
+	// Use WireGuard router if available for intelligent routing to target
+	if s.wgRouter != nil {
+		if err := s.wgRouter.RouteTraffic(targetHost, conn); err != nil {
+			log.Errorf("WireGuard routing failed for Ziti connection to %s: %v", targetHost, err)
+		}
+		return
+	}
+
+	// Fallback to direct connection
+	targetConn, err := net.Dial("tcp", targetHost)
+	if err != nil {
+		log.Errorf("Failed to connect to target %s from Ziti connection: %v", targetHost, err)
+		return
+	}
+	defer func() {
+		if err := targetConn.Close(); err != nil {
+			log.Debugf("Error closing target connection: %v", err)
+		}
+	}()
+
+	// Mirror traffic if enabled
+	if s.mirrorManager != nil {
+		go s.mirrorManager.MirrorTCP("ziti-overlay", targetHost, buffer[:n])
+	}
+
+	// Bidirectional proxy
+	go s.proxyTCPData(conn, targetConn, "ziti-client->target")
+	s.proxyTCPData(targetConn, conn, "target->ziti-client")
+}
+
+// oidcRPOrNil converts a *authn.OIDCRelyingParty to a middleware.TokenValidator interface,
+// returning nil (not a typed-nil interface value) when the pointer is nil. This prevents
+// the common Go pitfall where a nil concrete pointer becomes a non-nil interface value,
+// which would cause the dev-mode nil check in NewAuthMiddleware to fail.
+func oidcRPOrNil(rp *authn.OIDCRelyingParty) middleware.TokenValidator {
+	if rp == nil {
+		return nil
+	}
+	return rp
 }

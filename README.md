@@ -82,11 +82,11 @@
 
 ## 🏗️ Architecture
 
-SASEWaddle implements a comprehensive SASE architecture with three main components:
+Tobogganing implements a comprehensive SASE architecture with three main components:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           SASEWADDLE ARCHITECTURE                        │
+│                           TOBOGGANING ARCHITECTURE                       │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │   ┌──────────────┐        ┌──────────────┐        ┌──────────────┐    │
@@ -136,8 +136,8 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-org/sasewaddle.git
-   cd sasewaddle/deploy/docker-compose
+   git clone https://github.com/your-org/tobogganing.git
+   cd tobogganing/deploy/docker-compose
    ```
 
 2. **Configure environment**:
@@ -152,34 +152,34 @@ SASEWaddle implements a comprehensive SASE architecture with three main componen
    ```
 
 4. **Access the interface**:
-   - Manager Web UI: http://localhost:8000
-   - API Documentation: http://localhost:8000/api/docs
+   - Manager Web UI: http://localhost:8080
+   - API Documentation: http://localhost:8080/api/docs
 
 ### Native Client Installation
 
-SASEWaddle provides two types of client applications optimized for different use cases:
+Tobogganing provides two types of client applications optimized for different use cases:
 
 #### 🖼️ **Desktop GUI Clients** (Recommended for End Users)
 **Full system tray integration with one-click connect/disconnect**
 
 ```bash
 # Quick install with GUI support
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-gui.sh | bash
 
 # Manual download
 # macOS (Universal - Intel + Apple Silicon)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-darwin-universal -o tobogganing-client
 
 # Linux (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64 -o tobogganing-client
 
 # Windows (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64.exe -o sasewaddle-client.exe
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-windows-amd64.exe -o tobogganing-client.exe
 ```
 
 **GUI Features:**
 - ✅ System tray icon with real-time status
-- ✅ Connect/disconnect with single click  
+- ✅ Connect/disconnect with single click
 - ✅ Connection statistics and monitoring
 - ✅ Automatic configuration updates
 - ✅ Settings and about dialogs
@@ -190,10 +190,10 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Quick install headless version
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
+curl -sSL https://github.com/penguintechinc/tobogganing/releases/latest/download/install-headless.sh | bash
 
 # Manual download - add "-headless" to any platform name
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
+curl -L https://github.com/penguintechinc/tobogganing/releases/latest/download/tobogganing-client-linux-amd64-headless -o tobogganing-client
 ```
 
 **Headless Features:**
@@ -208,25 +208,25 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Initialize client (both GUI and headless)
-./sasewaddle-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
+./tobogganing-client init --manager-url https://manager.example.com:8080 --api-key YOUR_API_KEY
 
 # GUI Mode - Start with system tray
-./sasewaddle-client gui
+./tobogganing-client gui
 
 # Headless Mode - Connect as daemon
-./sasewaddle-client connect --daemon
+./tobogganing-client connect --daemon
 
 # Check connection status
-./sasewaddle-client status
+./tobogganing-client status
 ```
 
 ## 📖 Documentation
 
-- **[Installation Guide](https://docs.sasewaddle.com/installation)** - Get up and running quickly
-- **[Architecture Guide](https://docs.sasewaddle.com/architecture)** - Understand the system design
-- **[Deployment Guide](https://docs.sasewaddle.com/deployment)** - Production deployment instructions
-- **[API Reference](https://docs.sasewaddle.com/api)** - Complete API documentation
-- **[Use Cases](https://docs.sasewaddle.com/use-cases)** - Real-world examples and configurations
+- **[Installation Guide](https://docs.tobogganing.io/installation)** - Get up and running quickly
+- **[Architecture Guide](https://docs.tobogganing.io/architecture)** - Understand the system design
+- **[Deployment Guide](https://docs.tobogganing.io/deployment)** - Production deployment instructions
+- **[API Reference](https://docs.tobogganing.io/api)** - Complete API documentation
+- **[Use Cases](https://docs.tobogganing.io/use-cases)** - Real-world examples and configurations
 
 ## 🛠️ Development
 
@@ -240,24 +240,24 @@ curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sa
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/sasewaddle.git
-cd sasewaddle
+git clone https://github.com/your-org/tobogganing.git
+cd tobogganing
 
 # Quick build all React applications + screenshots
 ./scripts/build-apps.sh
 
 # Alternative: Build individual components
 ./scripts/build-apps.sh --mobile-only      # Mobile app only
-./scripts/build-apps.sh --website-only     # Website only  
+./scripts/build-apps.sh --website-only     # Website only
 ./scripts/build-apps.sh --screenshots-only # Screenshots only
 
 # Build Manager Service
-cd manager
+cd services/hub-api
 pip install -r requirements.txt
-python -m manager.main
+python -m main
 
 # Build Headend Server
-cd headend
+cd services/hub-router
 go build -o build/headend ./cmd
 
 # Build Native Client
@@ -271,10 +271,10 @@ make local  # Build for current platform only
 
 ```bash
 # Python tests
-cd manager && pytest
+cd services/hub-api && pytest
 
 # Go tests (headend)
-cd headend && go test ./...
+cd services/hub-router && go test ./...
 
 # Go tests (client)
 cd clients/native && go test ./...
@@ -343,7 +343,7 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 
 Security is our top priority. We follow responsible disclosure practices:
 
-- Report security issues to: security@sasewaddle.com
+- Report security issues to: security@tobogganing.io
 - See our [Security Policy](SECURITY.md) for details
 - Regular security audits and updates
 
@@ -379,4 +379,4 @@ See [LICENSE.md](docs/LICENSE.md) for complete licensing details.
 
 **Made with ❤️ by the open source community**
 
-*SASEWaddle - Secure Access, Simplified*
+*Tobogganing - Slide Into Zero Trust Security*

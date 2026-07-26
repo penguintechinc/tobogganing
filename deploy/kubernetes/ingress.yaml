@@ -1,10 +1,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sasewaddle-manager
-  namespace: sasewaddle
+  name: tobogganing-hub-api
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/name: tobogganing
     app.kubernetes.io/component: ingress
   annotations:
     # NGINX Ingress Controller annotations
@@ -33,28 +33,28 @@ spec:
   ingressClassName: nginx  # Use appropriate ingress class
   tls:
   - hosts:
-    - manager.sasewaddle.example.com
-    secretName: sasewaddle-tls
+    - hub-api.tobogganing.example.com
+    secretName: tobogganing-tls
   rules:
-  - host: manager.sasewaddle.example.com
+  - host: hub-api.tobogganing.example.com
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: manager
+            name: hub-api
             port:
-              number: 8000
+              number: 8080
 ---
-# Optional: Ingress for headend proxy (if exposing HTTP proxy)
+# Optional: Ingress for hub-router proxy (if exposing HTTP proxy)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sasewaddle-headend
-  namespace: sasewaddle
+  name: tobogganing-hub-router
+  namespace: tobogganing
   labels:
-    app.kubernetes.io/name: sasewaddle
+    app.kubernetes.io/name: tobogganing
     app.kubernetes.io/component: ingress
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
@@ -68,10 +68,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - headend.sasewaddle.example.com
-    secretName: sasewaddle-headend-tls
+    - headend.tobogganing.example.com
+    secretName: tobogganing-headend-tls
   rules:
-  - host: headend.sasewaddle.example.com
+  - host: headend.tobogganing.example.com
     http:
       paths:
       - path: /

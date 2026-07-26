@@ -1,7 +1,7 @@
-# SASEWaddle Native Client Makefile
+# Tobogganing Native Client Makefile
 # Supports cross-compilation for Mac Universal, Windows, and Linux
 
-APP_NAME := sasewaddle-client
+APP_NAME := tobogganing-client
 VERSION := 1.0.0
 BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo 'unknown')
@@ -142,7 +142,7 @@ info:
 # Help
 .PHONY: help
 help:
-	@echo "SASEWaddle Native Client Build System"
+	@echo "Tobogganing Native Client Build System"
 	@echo ""
 	@echo "Targets:"
 	@echo "  all       - Build for all platforms (macOS Universal, Windows, Linux)"

@@ -1,4 +1,4 @@
-# SASEWaddle Terraform Outputs
+# Tobogganing Terraform Outputs
 
 # VPC Outputs
 output "vpc_id" {
@@ -127,12 +127,12 @@ output "headend_domain" {
 # Secrets Manager Outputs
 output "secrets_manager_arn" {
   description = "ARN of the Secrets Manager secret"
-  value       = aws_secretsmanager_secret.sasewaddle_secrets.arn
+  value       = aws_secretsmanager_secret.tobogganing_secrets.arn
 }
 
 output "secrets_manager_name" {
   description = "Name of the Secrets Manager secret"
-  value       = aws_secretsmanager_secret.sasewaddle_secrets.name
+  value       = aws_secretsmanager_secret.tobogganing_secrets.name
 }
 
 # IAM Outputs
@@ -148,10 +148,10 @@ output "cluster_service_account_role_arn" {
 
 # Connection Information
 output "connection_info" {
-  description = "Connection information for SASEWaddle services"
+  description = "Connection information for Tobogganing services"
   value = {
-    manager_url = var.domain_name != "" ? "https://manager.${var.domain_name}" : "https://${module.alb.dns_name}"
-    headend_url = var.domain_name != "" ? "headend.${var.domain_name}" : aws_lb.headend_nlb.dns_name
+    hub_api_url = var.domain_name != "" ? "https://hub-api.${var.domain_name}" : "https://${module.alb.dns_name}"
+    hub_router_url = var.domain_name != "" ? "hub-router.${var.domain_name}" : aws_lb.headend_nlb.dns_name
     wireguard_port = 51820
     cluster_name = var.cluster_name
     environment = var.environment
@@ -164,17 +164,17 @@ output "kubectl_commands" {
   value = [
     "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}",
     "kubectl get nodes",
-    "kubectl get pods -n sasewaddle"
+    "kubectl get pods -n tobogganing"
   ]
 }
 
 # Helm commands for deployment
 output "helm_commands" {
-  description = "Commands to deploy SASEWaddle using Helm"
+  description = "Commands to deploy Tobogganing using Helm"
   value = [
-    "helm repo add sasewaddle https://charts.sasewaddle.com",
+    "helm repo add tobogganing https://charts.tobogganing.io",
     "helm repo update",
-    "helm install sasewaddle sasewaddle/sasewaddle -n sasewaddle --create-namespace --set manager.image=${var.manager_image} --set headend.image=${var.headend_image}"
+    "helm install tobogganing tobogganing/tobogganing -n tobogganing --create-namespace --set hub-api.image=${var.manager_image} --set hub-router.image=${var.headend_image}"
   ]
 }
 
@@ -207,7 +207,7 @@ output "resource_summary" {
 output "cost_allocation_tags" {
   description = "Tags for cost allocation and tracking"
   value = {
-    Project     = "SASEWaddle"
+    Project     = "Tobogganing"
     Environment = var.environment
     Owner       = "Platform-Team"
     CostCenter  = "Infrastructure"

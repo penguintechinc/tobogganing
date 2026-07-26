@@ -61,6 +61,7 @@ hubRouter:
       memory: "1Gi"
       cpu: "1000m"
   securityContext:
+    # ROOT EXCEPTION (approved): requires NET_ADMIN + SYS_MODULE for XDP/WireGuard networking
     runAsNonRoot: false
     runAsUser: 0
     allowPrivilegeEscalation: true
@@ -155,7 +156,7 @@ redis:
 
 ## Ingress
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -175,6 +176,14 @@ ingress:
     - secretName: tobogganing-tls
       hosts:
         - tobogganing.penguintech.io
+
+## HTTPRoute (Cilium Gateway API)
+httproute:
+  enabled: false
+  gatewayName: shared
+  gatewayNamespace: gateway
+  host: ""
+  rules: []
 
 ## Autoscaling
 autoscaling:
@@ -209,3 +218,14 @@ config:
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
   dbType: "sqlite"
+
+## OpenZiti Overlay
+openziti:
+  enabled: false
+  edgeRouterPort: 443
+  identitySecretName: "ziti-hub-router-identity"
+
+## XDP Edge Protection
+xdp:
+  enabled: false
+  # Only needed on bare metal / non-Cilium deployments

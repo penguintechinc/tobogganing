@@ -1,0 +1,36 @@
+# gitleaks configuration for tobogganing
+# Allowlists false positives: test fixtures, doc placeholders, example keys
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixture tokens and dummy keys in test files"
+paths = [
+    '''.*_test\.go''',
+    '''test_.*\.py''',
+    '''.*_test\.py''',
+]
+
+[[allowlists]]
+description = "Documentation placeholder tokens and example keys"
+paths = [
+    '''docs/.*''',
+    '''README\.md''',
+    '''SECURITY\.md''',
+]
+
+[[allowlists]]
+description = "Known dummy/example secret patterns"
+regexes = [
+    '''YOUR_[A-Z_]+_HERE''',
+    '''YOUR_[A-Z_]+''',
+    '''test[-_]key[-_][a-zA-Z0-9]+''',
+    '''sk_test_[a-zA-Z0-9]+''',
+    '''PENG-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}''',
+    '''SASE-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}''',
+    '''sk-live-[a-zA-Z0-9]+''',
+    '''ghp_abc[0-9a-zA-Z]+''',
+    '''test-api-key-[0-9]+''',
+    '''sk_test_abc[0-9a-zA-Z]+''',
+]

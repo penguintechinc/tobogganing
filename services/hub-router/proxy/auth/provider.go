@@ -1,4 +1,4 @@
-// Package auth implements authentication providers for the SASEWaddle headend proxy.
+// Package auth implements authentication providers for the Tobogganing headend proxy.
 //
 // The auth package provides a unified interface for multiple authentication methods:
 // - JWT token-based authentication for API access

@@ -1,8 +1,8 @@
-# SASEWaddle Project Summary
+# Tobogganing Project Summary
 
 ## 🎯 Project Completion Status: ✅ COMPLETE
 
-**SASEWaddle v1.0.0** is a fully-featured, production-ready Open Source SASE (Secure Access Service Edge) solution implementing Zero Trust Network Architecture (ZTNA) principles.
+**Tobogganing v1.0.0** is a fully-featured, production-ready Open Source SASE (Secure Access Service Edge) solution implementing Zero Trust Network Architecture (ZTNA) principles.
 
 ## 📊 Final Statistics
 
@@ -18,7 +18,7 @@
 ### Core Components
 
 #### 1. Manager Service (Python 3.12)
-- **Location**: `/manager/`
+- **Location**: `/services/hub-api/`
 - **Technology**: py4web + asyncio + multithreading
 - **Features**: 
   - Central orchestration and coordination
@@ -30,7 +30,7 @@
   - SSO/SAML2 integration
 
 #### 2. Headend Server (Go 1.21)
-- **Location**: `/headend/`
+- **Location**: `/services/hub-router/`
 - **Technology**: Go with goroutines + WireGuard
 - **Features**:
   - WireGuard VPN termination
@@ -257,7 +257,7 @@
 
 ## 🏆 Final Assessment
 
-**SASEWaddle v1.0.0** represents a complete, production-ready Open Source SASE solution that successfully implements:
+**Tobogganing v1.0.0** represents a complete, production-ready Open Source SASE solution that successfully implements:
 
 1. ✅ **Zero Trust Architecture** with dual authentication
 2. ✅ **Enterprise-Grade Security** with comprehensive audit trails

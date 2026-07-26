@@ -1,9 +1,9 @@
-# SASEWaddle Terraform Variables
+# Tobogganing Terraform Variables
 
 variable "cluster_name" {
-  description = "Name of the SASEWaddle cluster"
+  description = "Name of the Tobogganing cluster"
   type        = string
-  default     = "sasewaddle"
+  default     = "tobogganing"
 }
 
 variable "environment" {
@@ -104,7 +104,7 @@ variable "rds_allocated_storage" {
 variable "rds_username" {
   description = "RDS master username"
   type        = string
-  default     = "sasewaddle"
+  default     = "tobogganing"
 }
 
 variable "rds_password" {
@@ -156,14 +156,14 @@ variable "jwt_secret" {
 }
 
 variable "admin_password" {
-  description = "Admin password for SASEWaddle Manager"
+  description = "Admin password for Tobogganing Manager"
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "admin_email" {
-  description = "Admin email for SASEWaddle Manager"
+  description = "Admin email for Tobogganing Manager"
   type        = string
   default     = "admin@example.com"
 }
@@ -172,19 +172,19 @@ variable "admin_email" {
 variable "manager_image" {
   description = "Docker image for Manager service"
   type        = string
-  default     = "ghcr.io/your-org/sasewaddle/manager:latest"
+  default     = "ghcr.io/your-org/tobogganing/hub-api:latest"
 }
 
 variable "headend_image" {
   description = "Docker image for Headend service"
   type        = string
-  default     = "ghcr.io/your-org/sasewaddle/headend:latest"
+  default     = "ghcr.io/your-org/tobogganing/hub-router:latest"
 }
 
 variable "client_image" {
   description = "Docker image for Client"
   type        = string
-  default     = "ghcr.io/your-org/sasewaddle/client:latest"
+  default     = "ghcr.io/your-org/tobogganing/client:latest"
 }
 
 # Monitoring Configuration

@@ -21,7 +21,7 @@ class ComplianceReporter:
     def __init__(self):
         self.db = get_db()
         self.audit_logger = audit_logger
-        self.reports_dir = Path(os.getenv('COMPLIANCE_REPORTS_DIR', '/var/log/sasewaddle/compliance'))
+        self.reports_dir = Path(os.getenv('COMPLIANCE_REPORTS_DIR', '/var/log/tobogganing/compliance'))
         self.reports_dir.mkdir(parents=True, exist_ok=True)
     
     def generate_soc2_report(self, start_date: datetime, end_date: datetime, 

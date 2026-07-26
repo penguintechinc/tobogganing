@@ -1,4 +1,4 @@
-// Package config implements configuration management for the SASEWaddle headend.
+// Package config implements configuration management for the Tobogganing headend.
 //
 // The config manager provides:
 // - Centralized configuration retrieval from Manager service
@@ -24,7 +24,7 @@ import (
     log "github.com/sirupsen/logrus"
 )
 
-// Manager handles configuration retrieval from SASEWaddle Manager Service
+// Manager handles configuration retrieval from Tobogganing Manager Service
 type Manager struct {
     managerURL   string
     apiKey       string
@@ -138,8 +138,8 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
     }
     
     url := fmt.Sprintf("%s/api/v1/clusters/%s/headend-config", cm.managerURL, clusterID)
-    
-    req, err := http.NewRequest("GET", url, nil)
+
+    req, err := http.NewRequest("GET", url, nil) // #nosec G704 -- URL from admin-configured env var
     if err != nil {
         return nil, fmt.Errorf("failed to create request: %w", err)
     }
@@ -148,7 +148,7 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
     req.Header.Set("Authorization", "Bearer "+cm.apiKey)
     req.Header.Set("Content-Type", "application/json")
     
-    resp, err := cm.httpClient.Do(req)
+    resp, err := cm.httpClient.Do(req) // #nosec G704 -- URL from admin-configured env var
     if err != nil {
         return nil, fmt.Errorf("failed to fetch config: %w", err)
     }

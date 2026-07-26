@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/running-pre-commit-checks/SKILL.md

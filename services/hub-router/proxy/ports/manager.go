@@ -1,4 +1,4 @@
-// Package ports implements dynamic port management for the SASEWaddle headend proxy.
+// Package ports implements dynamic port management for the Tobogganing headend proxy.
 //
 // The port manager provides:
 // - Dynamic TCP and UDP port listening based on Manager configuration

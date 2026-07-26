@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Initialize security tables and default configuration for SASEWaddle Manager."""
+"""Initialize security tables and default configuration for Tobogganing Manager."""
 
 import os
 import sys

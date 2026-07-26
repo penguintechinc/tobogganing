@@ -1,4 +1,4 @@
-"""Security middleware and rate limiting for SASEWaddle Manager."""
+"""Security middleware and rate limiting for Tobogganing Manager."""
 
 import os
 import time

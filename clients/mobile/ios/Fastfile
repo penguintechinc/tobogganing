@@ -1,4 +1,4 @@
-# Fastfile for SASEWaddle Mobile iOS builds
+# Fastfile for Tobogganing Mobile iOS builds
 
 default_platform(:ios)
 
@@ -19,7 +19,7 @@ platform :ios do
       skip_submission: true,
       skip_waiting_for_build_processing: false,
       apple_id: ENV["APPLE_ID"],
-      app_identifier: "com.sasewaddle.mobile",
+      app_identifier: "com.tobogganing.mobile",
       distribute_external: false,
       changelog: "Manual build upload via GitHub Actions"
     )
@@ -28,16 +28,16 @@ platform :ios do
   desc "Build for App Store"
   lane :build_appstore do
     # Increment build number
-    increment_build_number(xcodeproj: "SASEWaddleMobile.xcodeproj")
+    increment_build_number(xcodeproj: "TobogganingMobile.xcodeproj")
     
     # Build the app
     build_app(
-      scheme: "SASEWaddleMobile",
+      scheme: "TobogganingMobile",
       configuration: "Release",
       export_method: "app-store",
       export_options: "ExportOptions-AppStore.plist",
       output_directory: "./build",
-      output_name: "SASEWaddleMobile.ipa",
+      output_name: "TobogganingMobile.ipa",
       include_bitcode: false,
       include_symbols: true
     )
@@ -47,12 +47,12 @@ platform :ios do
   lane :build_development do
     # Build the app
     build_app(
-      scheme: "SASEWaddleMobile", 
+      scheme: "TobogganingMobile", 
       configuration: "Debug",
       export_method: "development",
       export_options: "ExportOptions-Debug.plist",
       output_directory: "./build",
-      output_name: "SASEWaddleMobile-Debug.ipa",
+      output_name: "TobogganingMobile-Debug.ipa",
       include_bitcode: false,
       include_symbols: true
     )

@@ -78,7 +78,7 @@ Set the license key via environment variable in your Manager deployment:
 ```bash
 # In your docker-compose.yml or Kubernetes deployment
 environment:
-  - SASEWADDLE_LICENSE_KEY=PENG-A1B2-C3D4-E5F6-G7H8-9IJK
+  - TOBOGGANING_LICENSE_KEY=PENG-A1B2-C3D4-E5F6-G7H8-9IJK
   - LICENSE_SERVER_URL=https://license.penguintech.io  # Optional, this is default
 ```
 
@@ -89,14 +89,14 @@ environment:
 ```yaml
 services:
   manager:
-    image: tobogganing/manager:latest
+    image: tobogganing/hub-api:latest
     environment:
-      - SASEWADDLE_LICENSE_KEY=${SASEWADDLE_LICENSE_KEY}
+      - TOBOGGANING_LICENSE_KEY=${TOBOGGANING_LICENSE_KEY}
       - DB_HOST=mysql
       - DB_USER=tobogganing
       - DB_PASSWORD=${DB_PASSWORD}
     ports:
-      - "8000:8000"
+      - "8080:8080"
 ```
 
 ### Kubernetes ConfigMap Example
@@ -107,7 +107,7 @@ kind: ConfigMap
 metadata:
   name: tobogganing-config
 data:
-  SASEWADDLE_LICENSE_KEY: "SASE-A1B2-C3D4-E5F6-G7H8-9IJK"
+  TOBOGGANING_LICENSE_KEY: "PENG-A1B2-C3D4-E5F6-G7H8-9IJK"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -206,7 +206,7 @@ Contact sales@tobogganing.com for upgrade options
 #### License Not Recognized
 ```bash
 # Check if license key is set
-echo $SASEWADDLE_LICENSE_KEY
+echo $TOBOGGANING_LICENSE_KEY
 
 # Test license validation manually
 curl -X POST https://license.penguintech.io/api/tobogganing/validate \

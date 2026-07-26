@@ -1,4 +1,4 @@
-package com.sasewaddle.mobile;
+package com.tobogganing.mobile;
 
 import android.app.Application;
 

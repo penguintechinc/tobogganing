@@ -41,7 +41,7 @@ const DEFAULT_CONFIG: ConfigurationData = {
   managerURL: '',
   clientID: '',
   apiKey: '',
-  serverName: 'SASEWaddle Server',
+  serverName: 'Tobogganing Server',
   serverIP: '',
   publicKey: '',
   wireguardConfig: '',
@@ -68,7 +68,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const loadConfiguration = async () => {
     try {
-      const savedConfig = await AsyncStorage.getItem('sasewaddle_config');
+      const savedConfig = await AsyncStorage.getItem('tobogganing_config');
       if (savedConfig) {
         const parsedConfig = JSON.parse(savedConfig);
         setConfig({
@@ -90,7 +90,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const saveConfiguration = async (newConfig: ConfigurationData) => {
     try {
-      await AsyncStorage.setItem('sasewaddle_config', JSON.stringify(newConfig));
+      await AsyncStorage.setItem('tobogganing_config', JSON.stringify(newConfig));
       await AsyncStorage.setItem('wireguard_config', newConfig.wireguardConfig);
       await AsyncStorage.setItem('vpn_config', JSON.stringify({
         serverName: newConfig.serverName,
@@ -153,7 +153,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const configURL = `${config.managerURL}/api/v1/clients/${config.clientID}/config`;
       
       const headers: { [key: string]: string } = {
-        'User-Agent': 'SASEWaddle-Mobile/1.0.0',
+        'User-Agent': 'Tobogganing-Mobile/1.0.0',
         'X-Client-ID': config.clientID,
         'X-Client-Version': '1.0.0',
       };
@@ -296,7 +296,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const importConfigFromFile = useCallback(async (configString: string) => {
     try {
-      // Try to parse as JSON first (SASEWaddle config format)
+      // Try to parse as JSON first (Tobogganing config format)
       let importedConfig: Partial<ConfigurationData>;
       
       try {
@@ -305,7 +305,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           managerURL: jsonConfig.managerURL,
           clientID: jsonConfig.clientID,
           apiKey: jsonConfig.apiKey,
-          serverName: jsonConfig.serverName || 'SASEWaddle Server',
+          serverName: jsonConfig.serverName || 'Tobogganing Server',
           wireguardConfig: jsonConfig.wireguardConfig || '',
         };
       } catch {

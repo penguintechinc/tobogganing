@@ -1,11 +1,24 @@
-# SASEWaddle Development Docker Compose Configuration
+# ==========================================================================
+# DEPRECATED: Docker Compose support has been deprecated.
+# Kubernetes (microk8s) with Helm v3 is now the standard deployment method.
+#
+# Use instead:
+#   Alpha:  make k8s-alpha-deploy
+#   Beta:   make k8s-beta-deploy
+#   Prod:   make k8s-prod-deploy
+#
+# See k8s/helm/tobogganing/ for Helm charts and values files.
+# This file is retained for reference only and will be removed in a future release.
+# ==========================================================================
+
+# Tobogganing Development Docker Compose Configuration
 version: '3.8'
 
 services:
   # Redis for development
   redis:
-    image: redis:7-alpine
-    container_name: sasewaddle-dev-redis
+    image: redis:7-bookworm@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0
+    container_name: tobogganing-dev-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -13,59 +26,59 @@ services:
     volumes:
       - redis_dev_data:/data
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
 
   # Manager Service - Development
-  manager:
-    image: ghcr.io/your-org/sasewaddle/manager:dev
-    container_name: sasewaddle-dev-manager
+  hub-api:
+    image: ghcr.io/your-org/tobogganing/hub-api:dev
+    container_name: tobogganing-dev-hub-api
     restart: unless-stopped
     depends_on:
       - redis
     ports:
-      - "8000:8000"
+      - "8080:8080"
     environment:
       - REDIS_URL=redis://:devpassword@redis:6379
       - JWT_SECRET=dev-jwt-secret-not-for-production
       - LOG_LEVEL=debug
       - ADMIN_EMAIL=dev@example.com
       - ADMIN_PASSWORD=devpassword
-      - DB_PATH=/app/data/sasewaddle.db
+      - DB_PATH=/app/data/tobogganing.db
       - CERT_DIR=/app/certs
       - PYTHONUNBUFFERED=1
       - FLASK_ENV=development
       - DEBUG=true
     volumes:
-      - manager_dev_data:/app/data
-      - manager_dev_certs:/app/certs
+      - hub_api_dev_data:/app/data
+      - hub_api_dev_certs:/app/certs
       # Mount source code for development (if building locally)
-      # - ../../manager:/app:ro
+      # - ../../services/hub-api:/app:ro
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
 
   # Headend Server - Development
-  headend:
-    image: ghcr.io/your-org/sasewaddle/headend:dev
-    container_name: sasewaddle-dev-headend
+  hub-router:
+    image: ghcr.io/your-org/tobogganing/hub-router:dev
+    container_name: tobogganing-dev-hub-router
     restart: unless-stopped
     depends_on:
-      - manager
+      - hub-api
     ports:
       - "51820:51820/udp"
-      - "8080:8080"
+      - "8081:8080"
     environment:
-      - MANAGER_API_URL=http://manager:8000
+      - MANAGER_API_URL=http://hub-api:8080
       - LOG_LEVEL=debug
       - CLUSTER_ID=dev-cluster
-      - NODE_ID=headend-dev-01
+      - NODE_ID=hub-router-dev-01
       - TRAFFIC_MIRROR_ENABLED=false
     volumes:
-      - headend_dev_data:/app/data
-      - headend_dev_wireguard:/etc/wireguard
+      - hub_router_dev_data:/app/data
+      - hub_router_dev_wireguard:/etc/wireguard
       # Mount source code for development (if building locally)
-      # - ../../headend:/app:ro
+      # - ../../services/hub-router:/app:ro
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -78,11 +91,11 @@ services:
 
   # Client container for testing
   client:
-    image: ghcr.io/your-org/sasewaddle/client:dev
-    container_name: sasewaddle-dev-client
+    image: ghcr.io/your-org/tobogganing/client:dev
+    container_name: tobogganing-dev-client
     restart: "no"  # Manual start for testing
     environment:
-      - MANAGER_URL=http://manager:8000
+      - MANAGER_URL=http://hub-api:8080
       - API_KEY=dev-api-key-12345
       - CLIENT_NAME=dev-client-01
       - LOG_LEVEL=debug
@@ -90,67 +103,67 @@ services:
     volumes:
       - client_dev_data:/app/data
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
     cap_add:
       - NET_ADMIN
     devices:
       - /dev/net/tun:/dev/net/tun
     privileged: true
     depends_on:
-      - manager
-      - headend
+      - hub-api
+      - hub-router
     profiles:
       - testing
 
   # Development tools
   adminer:
-    image: adminer:latest
-    container_name: sasewaddle-dev-adminer
+    image: adminer:latest@sha256:16a72c6140f64d00a3a9edf8d3d3b18a7b0a29ca31b0453378d9eb71f01f9e34
+    container_name: tobogganing-dev-adminer
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8082:8080"
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
     profiles:
       - tools
 
   # Redis Commander for Redis management
   redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: sasewaddle-dev-redis-commander
+    image: rediscommander/redis-commander:latest@sha256:19cd0c49f418779fa2822a0496c5e6516d0c792effc39ed20089e6268477e40a
+    container_name: tobogganing-dev-redis-commander
     restart: unless-stopped
     ports:
-      - "8082:8081"
+      - "8083:8081"
     environment:
       - REDIS_HOSTS=local:redis:6379:0:devpassword
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
     profiles:
       - tools
 
   # Mailhog for email testing
   mailhog:
-    image: mailhog/mailhog:latest
-    container_name: sasewaddle-dev-mailhog
+    image: mailhog/mailhog:latest@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
+    container_name: tobogganing-dev-mailhog
     restart: unless-stopped
     ports:
       - "1025:1025"  # SMTP
       - "8025:8025"  # Web UI
     networks:
-      - sasewaddle-dev
+      - tobogganing-dev
     profiles:
       - tools
 
 volumes:
   redis_dev_data:
-  manager_dev_data:
-  manager_dev_certs:
-  headend_dev_data:
-  headend_dev_wireguard:
+  hub_api_dev_data:
+  hub_api_dev_certs:
+  hub_router_dev_data:
+  hub_router_dev_wireguard:
   client_dev_data:
 
 networks:
-  sasewaddle-dev:
+  tobogganing-dev:
     driver: bridge
     ipam:
       config:

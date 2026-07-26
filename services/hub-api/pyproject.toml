@@ -1,0 +1,137 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tobogganing-hub-api"
+version = "2.0.0"
+description = "Tobogganing Hub API - Central management service"
+requires-python = ">=3.13"
+license = {text = "AGPL-3.0"}
+
+dependencies = [
+    "quart",
+    "quart-auth",
+    "quart-cors",
+    "hypercorn",
+    "penguin-dal",
+    "bcrypt",
+    "pyjwt",
+    "cryptography",
+    "prometheus-client",
+    "grpcio",
+    "grpcio-tools",
+    "protobuf",
+    "redis",
+    "structlog",
+    "pydantic>=2.5",
+    "pyyaml",
+    "python-dotenv",
+    "dnspython",
+    "httpx",
+    "aiofiles",
+    "psutil",
+    "boto3",
+    "penguin-aaa",
+    "penguin-sal",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "flake8",
+    "black",
+    "isort",
+    "mypy",
+    "bandit",
+    "penguin-aaa",
+    "penguin-sal",
+]
+
+[tool.black]
+line-length = 99
+
+[tool.isort]
+profile = "black"
+line_length = 99
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=90",
+    "--cov-config=pyproject.toml",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "*/test_*.py",
+    "setup.py",
+    "conftest.py",
+    "scripts/*",
+    "templates/*",
+    ".venv/*",
+    "venv/*",
+    "htmlcov/*",
+    "web/templates/*",
+    "init_security.py",
+    "init_security_feeds.py",
+    # py4web route handlers — require a running py4web app (integration tests only)
+    "web/*.py",
+    "api/routes.py",
+    "api/audit_routes.py",
+    "api/security_routes.py",
+    "api/security_scanner_routes.py",
+    "api/analytics_routes.py",
+    "api/backup_routes.py",
+    "app.py",
+    # External-service-dependent modules — require nmap, docker, live network
+    "security/scanner.py",
+    "security/feeds.py",
+    # py4web Fixture subclasses — require py4web runtime
+    "auth/oidc_fixture.py",
+    "auth/scope_fixture.py",
+    # Compliance report generator — pure reporting, covered by integration tests
+    "audit/compliance.py",
+    # SQLAlchemy model declarations — no runtime logic to test
+    "database/models.py",
+]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "pass",
+    "except ImportError:",
+    "if TYPE_CHECKING:",
+]

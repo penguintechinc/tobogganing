@@ -1,4 +1,4 @@
-// Package mirror implements traffic mirroring capabilities for the SASEWaddle headend proxy.
+// Package mirror implements traffic mirroring capabilities for the Tobogganing headend proxy.
 //
 // The mirror manager provides:
 // - Real-time packet duplication to external security tools
@@ -21,6 +21,7 @@ import (
     "fmt"
     "net"
     "net/http"
+    "os"
     "sync"
     "time"
 
@@ -64,7 +65,13 @@ func NewManager(destinations []string, protocol string, bufferSize int) *Manager
     if protocol == "" {
         protocol = "VXLAN"
     }
-    
+
+    // Add Cerberus mirror endpoint if configured
+    if endpoint := os.Getenv("CERBERUS_MIRROR_ENDPOINT"); endpoint != "" {
+        log.WithField("endpoint", endpoint).Info("mirror: Cerberus mirror endpoint configured")
+        destinations = append(destinations, endpoint)
+    }
+
     return &Manager{
         destinations: destinations,
         protocol:     protocol,
@@ -80,7 +87,13 @@ func NewManagerWithSuricata(destinations []string, protocol string, bufferSize i
     if protocol == "" {
         protocol = "VXLAN"
     }
-    
+
+    // Add Cerberus mirror endpoint if configured
+    if endpoint := os.Getenv("CERBERUS_MIRROR_ENDPOINT"); endpoint != "" {
+        log.WithField("endpoint", endpoint).Info("mirror: Cerberus mirror endpoint configured")
+        destinations = append(destinations, endpoint)
+    }
+
     return &Manager{
         destinations:    destinations,
         protocol:        protocol,
@@ -419,8 +432,12 @@ func (m *Manager) reconnect(dest string) {
     log.Infof("Reconnected to mirror destination %s", dest)
 }
 
+// statsReportInterval controls how often mirror statistics are logged.
+// Overridable in tests to avoid waiting 60 seconds.
+var statsReportInterval = 60 * time.Second
+
 func (m *Manager) reportStats() {
-    ticker := time.NewTicker(60 * time.Second)
+    ticker := time.NewTicker(statsReportInterval)
     defer ticker.Stop()
     
     for {
@@ -483,7 +500,7 @@ func (m *Manager) prepareSuricataData(packet *MirrorPacket) []byte {
         "flow_id":      fmt.Sprintf("%x", packet.Timestamp.UnixNano()),
         "event_type":   "mirror",
         "mirror":       envelope,
-        "sasewaddle": map[string]interface{}{
+        "tobogganing": map[string]interface{}{
             "cluster": packet.Metadata["cluster_id"],
             "user":    packet.Metadata["user_id"],
         },

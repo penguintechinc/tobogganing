@@ -1,4 +1,4 @@
-# SASEWaddle .gitignore
+# Tobogganing .gitignore
 
 # Security - Never commit these
 # Next.js
@@ -118,9 +118,8 @@ obj/
 *.tmp
 vendor/
 
-# Lock files
-package-lock.json
-yarn.lock
+# Lock files — committed per dependency pinning standards (npm ci requires package-lock.json)
+# yarn.lock
 pnpm-lock.yaml
 Gemfile.lock
 Pipfile.lock
@@ -154,7 +153,10 @@ temp/
 *.bak
 
 # Build artifacts
-sasewaddle-*
+tobogganing-*
 releases/
 artifacts/
+
+# Git worktrees
+.worktrees/
 

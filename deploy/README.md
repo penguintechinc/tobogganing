@@ -1,6 +1,6 @@
-# SASEWaddle Deployment Guide
+# Tobogganing Deployment Guide
 
-This directory contains deployment configurations and documentation for SASEWaddle across different environments and platforms.
+This directory contains deployment configurations and documentation for Tobogganing across different environments and platforms.
 
 ## Deployment Options
 
@@ -25,8 +25,8 @@ This directory contains deployment configurations and documentation for SASEWadd
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/sasewaddle.git
-cd sasewaddle/deploy/docker-compose
+git clone https://github.com/your-org/tobogganing.git
+cd tobogganing/deploy/docker-compose
 
 # Configure environment
 cp .env.example .env
@@ -36,7 +36,7 @@ nano .env  # Edit configuration
 docker-compose -f docker-compose.dev.yml up -d
 
 # Access services
-# Manager: http://localhost:8000
+# Manager: http://localhost:8080
 # WireGuard: UDP 51820
 # Proxy: http://localhost:8080
 ```
@@ -45,7 +45,7 @@ docker-compose -f docker-compose.dev.yml up -d
 
 ```bash
 # Navigate to Kubernetes configs
-cd sasewaddle/deploy/kubernetes
+cd tobogganing/deploy/kubernetes
 
 # Review and customize configurations
 nano configmap.yaml
@@ -58,15 +58,15 @@ kubectl apply -f secrets.yaml
 kubectl apply -f .
 
 # Check deployment
-kubectl get pods -n sasewaddle
-kubectl get services -n sasewaddle
+kubectl get pods -n tobogganing
+kubectl get services -n tobogganing
 ```
 
 ### Cloud Deployment (Terraform)
 
 ```bash
 # Navigate to Terraform configs
-cd sasewaddle/deploy/terraform
+cd tobogganing/deploy/terraform
 
 # Configure variables
 cp terraform.tfvars.example terraform.tfvars
@@ -215,7 +215,7 @@ ufw allow from 10.200.0.0/16
 ### Metrics
 - Prometheus metrics collection
 - Grafana dashboards
-- Custom SASEWaddle metrics:
+- Custom Tobogganing metrics:
   - Active connections
   - Certificate expiry
   - Authentication failures
@@ -313,14 +313,14 @@ resources:
 
 ```bash
 # Kubernetes
-kubectl logs -f deployment/manager -n sasewaddle
-kubectl logs -f deployment/headend -n sasewaddle
-kubectl describe pod -l app=manager -n sasewaddle
+kubectl logs -f deployment/hub-api -n tobogganing
+kubectl logs -f deployment/hub-router -n tobogganing
+kubectl describe pod -l app=hub-api -n tobogganing
 
 # Docker Compose
-docker-compose logs -f manager
-docker-compose logs -f headend
-docker-compose exec manager /bin/bash
+docker-compose logs -f hub-api
+docker-compose logs -f hub-router
+docker-compose exec hub-api /bin/bash
 
 # Application logs
 tail -f /app/logs/manager.log
@@ -329,11 +329,11 @@ journalctl -u wireguard-wg0 -f
 
 ## Support and Documentation
 
-- **Issues**: https://github.com/your-org/sasewaddle/issues
-- **Documentation**: https://docs.sasewaddle.com
-- **API Reference**: https://api.sasewaddle.com/docs
-- **Community**: https://community.sasewaddle.com
+- **Issues**: https://github.com/your-org/tobogganing/issues
+- **Documentation**: https://docs.tobogganing.com
+- **API Reference**: https://api.tobogganing.com/docs
+- **Community**: https://community.tobogganing.com
 
 ## License
 
-SASEWaddle is open source software. See [LICENSE](../LICENSE) for details.
+Tobogganing is open source software. See [LICENSE](../LICENSE) for details.

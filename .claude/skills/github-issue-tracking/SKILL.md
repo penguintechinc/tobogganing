@@ -1,1 +1,0 @@
-/home/penguin/code/.claude/skills/github-issue-tracking/SKILL.md

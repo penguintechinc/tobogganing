@@ -1,0 +1,23 @@
+# v0.3.0
+## OpenZiti
+Have an optional setting to enable OpenZiti compatible options within our overlay/orchestration layer.
+
+## Native Squawk Support for DNS / NTP
+Our Squawk project (local clone ~/code/squawk iirc) is a secure DNS and NTP solution.
+- Enable optional native integration support for Squawk for DNS and NTP, integrate it into our clients as modules so we don't have to install more then 1 endpoint and cluster agent/daemon. 
+- Include it as a sub-chart in Helm by default and in kustomize references by default too.
+
+## Maintain proxy / networking performance metrics for within the extended fabric (user -> cluster, cluster -> cluster, etc. )
+We should leverage some of our own metrics gathering as well as natively integrate as optional our WaddlePerf project (local clone ~/code/waddleperf iirc) 
+- The intent is we can identify any performance issues where a node or cluster might be getting over worked or where our connetivity between clusters within our mesh is being strained
+- This will also help us determine if we are causing any performance degredation initially and upon new releases too (ie: new feature is slowing down our proxy times by 10ms more then before... )
+- This is similar to the "obersvability and metrics" options you get when you turn on cillium in GKE 
+
+## Input security
+- Ensure we have PYDANTIC input validations on all API calls 
+- Have input validation (forgetting the pydantic equalivent) for our webui
+- Leverage the standard libraries from penguin-libs as much as we can as they should have these built in for the front end especially
+- Ensure PYDAL has validators and requires setup
+
+## Documented Recommendations
+- Add recommended resourcing calculation (CPU, RAM, networking, and how many router nodes in general) for routers between clusters

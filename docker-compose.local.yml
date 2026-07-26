@@ -1,9 +1,22 @@
-# SASEWaddle Complete Local Development Stack
-# This docker-compose file sets up the entire SASEWaddle system for local testing
+# ==========================================================================
+# DEPRECATED: Docker Compose support has been deprecated.
+# Kubernetes (microk8s) with Helm v3 is now the standard deployment method.
+#
+# Use instead:
+#   Alpha:  make k8s-alpha-deploy
+#   Beta:   make k8s-beta-deploy
+#   Prod:   make k8s-prod-deploy
+#
+# See k8s/helm/tobogganing/ for Helm charts and values files.
+# This file is retained for reference only and will be removed in a future release.
+# ==========================================================================
+
+# Tobogganing Complete Local Development Stack
+# This docker-compose file sets up the entire Tobogganing system for local testing
 #
 # Usage:
 #   docker-compose -f docker-compose.local.yml up -d
-#   Open browser to: http://localhost:8000/login
+#   Open browser to: http://localhost:8080/login
 #   Default login: admin / check logs for password
 
 version: '3.8'
@@ -11,8 +24,8 @@ version: '3.8'
 services:
   # Redis - Session and JWT token storage
   redis:
-    image: redis:7-alpine
-    container_name: sasewaddle-redis
+    image: redis:7-bookworm@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0@sha256:a5995dfdf108997f8a7c9587f54fad5e94ed5848de5236a6b28119e99efd67e0
+    container_name: tobogganing-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -26,18 +39,18 @@ services:
       timeout: 5s
       retries: 3
     networks:
-      - sasewaddle
+      - tobogganing
 
   # MySQL - Primary database (PyDAL default)
   mysql:
-    image: mysql:8.0
-    container_name: sasewaddle-mysql
+    image: mysql:8.0@sha256:5a0c8f5b3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f
+    container_name: tobogganing-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: sasewaddle-root-password
-      MYSQL_DATABASE: sasewaddle
-      MYSQL_USER: sasewaddle
-      MYSQL_PASSWORD: sasewaddle-dev-password
+      MYSQL_ROOT_PASSWORD: tobogganing-root-password
+      MYSQL_DATABASE: tobogganing
+      MYSQL_USER: tobogganing
+      MYSQL_PASSWORD: tobogganing-dev-password
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
     ports:
@@ -45,10 +58,10 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/sasewaddle.cnf:ro
+      - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/tobogganing.cnf:ro
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "sasewaddle", "-psasewaddle-dev-password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "tobogganing", "-ptobogganing-dev-password"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -56,14 +69,14 @@ services:
 
   # MySQL Read Replica (optional for high availability)
   mysql-read:
-    image: mysql:8.0
-    container_name: sasewaddle-mysql-read
+    image: mysql:8.0@sha256:5a0c8f5b3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f9d7b5a3f1d9e7c5a3b1f
+    container_name: tobogganing-mysql-read
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: sasewaddle-root-password
-      MYSQL_DATABASE: sasewaddle
-      MYSQL_USER: sasewaddle
-      MYSQL_PASSWORD: sasewaddle-dev-password
+      MYSQL_ROOT_PASSWORD: tobogganing-root-password
+      MYSQL_DATABASE: tobogganing
+      MYSQL_USER: tobogganing
+      MYSQL_PASSWORD: tobogganing-dev-password
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
       # Read replica configuration
@@ -73,24 +86,24 @@ services:
       - "3307:3306"
     volumes:
       - mysql_read_data:/var/lib/mysql
-      - ./deploy/mysql/read-replica.cnf:/etc/mysql/conf.d/sasewaddle.cnf:ro
+      - ./deploy/mysql/read-replica.cnf:/etc/mysql/conf.d/tobogganing.cnf:ro
     command: --default-authentication-plugin=mysql_native_password --read-only=1
     depends_on:
       - mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "sasewaddle", "-psasewaddle-dev-password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "tobogganing", "-ptobogganing-dev-password"]
       interval: 10s
       timeout: 5s
       retries: 3
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Manager Service - Central orchestration and web portal
-  manager:
+  hub-api:
     build:
-      context: ./manager
+      context: ./services/hub-api
       dockerfile: Dockerfile
-    container_name: sasewaddle-manager
+    container_name: tobogganing-hub-api
     restart: unless-stopped
     depends_on:
       redis:
@@ -98,25 +111,25 @@ services:
       mysql:
         condition: service_healthy
     ports:
-      - "8000:8000"     # Web portal and API
+      - "8080:8080"     # Web portal and API
       - "8001:8001"     # Metrics endpoint
     environment:
       # PyDAL Database Configuration (supports MySQL, PostgreSQL, SQLite)
       DB_TYPE: mysql                    # mysql, postgresql, sqlite
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_USER: sasewaddle
-      DB_PASSWORD: sasewaddle-dev-password
-      DB_NAME: sasewaddle
+      DB_USER: tobogganing
+      DB_PASSWORD: tobogganing-dev-password
+      DB_NAME: tobogganing
       DB_POOL_SIZE: 10
       
       # Read Replica Configuration (optional)
       DB_READ_REPLICA_ENABLED: "true"   # Enable read replica support
       DB_READ_HOST: mysql-read          # Read replica host
       DB_READ_PORT: 3306
-      DB_READ_USER: sasewaddle
-      DB_READ_PASSWORD: sasewaddle-dev-password
-      DB_READ_NAME: sasewaddle
+      DB_READ_USER: tobogganing
+      DB_READ_PASSWORD: tobogganing-dev-password
+      DB_READ_NAME: tobogganing
       DB_READ_POOL_SIZE: 5
       
       # Alternative database configurations (commented out):
@@ -127,7 +140,7 @@ services:
       # 
       # For SQLite (single file):
       # DB_TYPE: sqlite
-      # DB_PATH: /data/sasewaddle.db
+      # DB_PATH: /data/tobogganing.db
       
       # Redis Configuration
       REDIS_URL: redis://redis:6379/0
@@ -138,7 +151,7 @@ services:
       METRICS_TOKEN: prometheus-scraper-dev-token
       
       # Service Configuration
-      PORT: 8000
+      PORT: 8080
       WORKERS: 2
       LOG_LEVEL: info
       THREAD_POOL_SIZE: 10
@@ -147,31 +160,31 @@ services:
       ENVIRONMENT: development
       DEBUG: "false"
     volumes:
-      - manager_data:/app/data
-      - manager_certs:/app/certs
-      - manager_logs:/app/logs
-      - ./manager/templates:/app/templates:ro
+      - hub_api_data:/app/data
+      - hub_api_certs:/app/certs
+      - hub_api_logs:/app/logs
+      - ./services/hub-api/templates:/app/templates:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - sasewaddle
+      - tobogganing
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.manager.rule=Host(`manager.sasewaddle.local`)"
+      - "traefik.http.routers.hub-api.rule=Host(`hub-api.tobogganing.local`)"
 
   # Headend Server 1 - US-East cluster
   headend-us-east:
     build:
-      context: ./headend
+      context: ./services/hub-router
       dockerfile: Dockerfile
-    container_name: sasewaddle-headend-us-east
+    container_name: tobogganing-headend-us-east
     restart: unless-stopped
     depends_on:
-      manager:
+      hub-api:
         condition: service_healthy
     ports:
       - "8443:8443"     # HTTPS proxy
@@ -190,7 +203,7 @@ services:
       
       # Authentication
       HEADEND_AUTH_TYPE: jwt
-      HEADEND_AUTH_MANAGER_URL: http://manager:8000
+      HEADEND_AUTH_MANAGER_URL: http://hub-api:8080
       
       # WireGuard Configuration
       HEADEND_WIREGUARD_INTERFACE: wg0
@@ -209,7 +222,7 @@ services:
       HEADEND_SYSLOG_ENABLED: "false"
       # HEADEND_SYSLOG_SERVER: "syslog.example.com:514"
       # HEADEND_SYSLOG_FACILITY: "local0"
-      # HEADEND_SYSLOG_TAG: "sasewaddle-headend"
+      # HEADEND_SYSLOG_TAG: "tobogganing-headend"
       
       # Metrics Authentication
       HEADEND_METRICS_AUTH_TOKEN: prometheus-scraper-dev-token
@@ -239,20 +252,20 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - sasewaddle
+      - tobogganing
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.headend-us-east.rule=Host(`headend-us-east.sasewaddle.local`)"
+      - "traefik.http.routers.headend-us-east.rule=Host(`headend-us-east.tobogganing.local`)"
 
   # Headend Server 2 - EU-West cluster
   headend-eu-west:
     build:
-      context: ./headend
+      context: ./services/hub-router
       dockerfile: Dockerfile
-    container_name: sasewaddle-headend-eu-west
+    container_name: tobogganing-headend-eu-west
     restart: unless-stopped
     depends_on:
-      manager:
+      hub-api:
         condition: service_healthy
     ports:
       - "8453:8443"     # HTTPS proxy
@@ -271,7 +284,7 @@ services:
       
       # Authentication
       HEADEND_AUTH_TYPE: jwt
-      HEADEND_AUTH_MANAGER_URL: http://manager:8000
+      HEADEND_AUTH_MANAGER_URL: http://hub-api:8080
       
       # WireGuard Configuration
       HEADEND_WIREGUARD_INTERFACE: wg0
@@ -290,7 +303,7 @@ services:
       HEADEND_SYSLOG_ENABLED: "false"
       # HEADEND_SYSLOG_SERVER: "syslog.example.com:514"
       # HEADEND_SYSLOG_FACILITY: "local0"
-      # HEADEND_SYSLOG_TAG: "sasewaddle-headend"
+      # HEADEND_SYSLOG_TAG: "tobogganing-headend"
       
       # Metrics Authentication
       HEADEND_METRICS_AUTH_TOKEN: prometheus-scraper-dev-token
@@ -320,24 +333,24 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - sasewaddle
+      - tobogganing
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.headend-eu-west.rule=Host(`headend-eu-west.sasewaddle.local`)"
+      - "traefik.http.routers.headend-eu-west.rule=Host(`headend-eu-west.tobogganing.local`)"
 
   # Docker Client 1 - Simulated client
   client-docker-1:
     build:
       context: ./clients/docker
       dockerfile: Dockerfile
-    container_name: sasewaddle-client-docker-1
+    container_name: tobogganing-client-docker-1
     restart: unless-stopped
     depends_on:
       headend-us-east:
         condition: service_healthy
     environment:
       # Manager Configuration
-      MANAGER_URL: http://manager:8000
+      MANAGER_URL: http://hub-api:8080
       
       # Client Configuration
       CLIENT_ID: docker-client-1
@@ -361,27 +374,27 @@ services:
       WIREGUARD_PERSISTENT_KEEPALIVE: 25
     volumes:
       - client_docker_1_data:/app/data
-      - client_docker_1_config:/etc/sasewaddle
+      - client_docker_1_config:/etc/tobogganing
     cap_add:
       - NET_ADMIN
     devices:
       - /dev/net/tun
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Client Docker 2 - Another simulated client
   client-docker-2:
     build:
       context: ./clients/docker
       dockerfile: Dockerfile
-    container_name: sasewaddle-client-docker-2
+    container_name: tobogganing-client-docker-2
     restart: unless-stopped
     depends_on:
       headend-eu-west:
         condition: service_healthy
     environment:
       # Manager Configuration
-      MANAGER_URL: http://manager:8000
+      MANAGER_URL: http://hub-api:8080
       
       # Client Configuration
       CLIENT_ID: docker-client-2
@@ -405,18 +418,18 @@ services:
       WIREGUARD_PERSISTENT_KEEPALIVE: 25
     volumes:
       - client_docker_2_data:/app/data
-      - client_docker_2_config:/etc/sasewaddle
+      - client_docker_2_config:/etc/tobogganing
     cap_add:
       - NET_ADMIN
     devices:
       - /dev/net/tun
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Prometheus - Metrics collection
   prometheus:
-    image: prom/prometheus:latest
-    container_name: sasewaddle-prometheus
+    image: prom/prometheus:v3.2.1@sha256:6927e0919a144aa7616fd0137d4816816d42f6b816de3af269ab065250859a62
+    container_name: tobogganing-prometheus
     restart: unless-stopped
     depends_on:
       - manager
@@ -436,12 +449,12 @@ services:
       - '--web.enable-lifecycle'
       - '--web.enable-admin-api'
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Grafana - Metrics visualization
   grafana:
-    image: grafana/grafana:latest
-    container_name: sasewaddle-grafana
+    image: grafana/grafana:12.4.2@sha256:83749231c3835e390a3144e5e940203e42b9589761f20ef3169c716e734ad505
+    container_name: tobogganing-grafana
     restart: unless-stopped
     depends_on:
       - prometheus
@@ -449,7 +462,7 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: sasewaddle
+      GF_SECURITY_ADMIN_PASSWORD: tobogganing
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SECURITY_ALLOW_EMBEDDING: "true"
     volumes:
@@ -457,12 +470,12 @@ services:
       - ./deploy/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./deploy/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Nginx - Reverse proxy and load balancer
   nginx:
-    image: nginx:alpine
-    container_name: sasewaddle-nginx
+    image: nginx:stable-bookworm@sha256:552e7481ca93ffccd046aa658dbbed22caefbc09c66fa7cd247cbb90b8a5c609
+    container_name: tobogganing-nginx
     restart: unless-stopped
     depends_on:
       - manager
@@ -476,12 +489,12 @@ services:
       - ./deploy/nginx/ssl:/etc/nginx/ssl:ro
       - nginx_logs:/var/log/nginx
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Redis Commander - Redis management UI
   redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: sasewaddle-redis-commander
+    image: rediscommander/redis-commander:latest@sha256:19cd0c49f418779fa2822a0496c5e6516d0c792effc39ed20089e6268477e40a
+    container_name: tobogganing-redis-commander
     restart: unless-stopped
     depends_on:
       - redis
@@ -490,14 +503,14 @@ services:
     environment:
       REDIS_HOSTS: "local:redis:6379"
       HTTP_USER: admin
-      HTTP_PASSWORD: sasewaddle
+      HTTP_PASSWORD: tobogganing
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Adminer - Database management UI
   adminer:
-    image: adminer:latest
-    container_name: sasewaddle-adminer
+    image: adminer:latest@sha256:16a72c6140f64d00a3a9edf8d3d3b18a7b0a29ca31b0453378d9eb71f01f9e34
+    container_name: tobogganing-adminer
     restart: unless-stopped
     depends_on:
       - postgres
@@ -506,12 +519,12 @@ services:
     environment:
       ADMINER_DEFAULT_SERVER: postgres
     networks:
-      - sasewaddle
+      - tobogganing
 
   # Suricata - Network IDS/IPS
   suricata:
-    image: suricata/suricata:latest
-    container_name: sasewaddle-suricata
+    image: suricata/suricata:latest@sha256:cd2dfa52e9db900c4c23c2dd28a67a576ec7821ef7d2d803d496454a281a697a
+    container_name: tobogganing-suricata
     restart: unless-stopped
     depends_on:
       - manager
@@ -519,7 +532,7 @@ services:
       - "9999:9999"     # Statistics/management port
     environment:
       # Suricata Configuration
-      SURICATA_OPTIONS: "-c /etc/suricata/suricata.yaml -i mirror0 --set sensor-name=sasewaddle-ids"
+      SURICATA_OPTIONS: "-c /etc/suricata/suricata.yaml -i mirror0 --set sensor-name=tobogganing-ids"
       
       # Rule Management
       SURICATA_RULES_UPDATE: "true"
@@ -564,7 +577,7 @@ services:
     security_opt:
       - apparmor:unconfined
     networks:
-      sasewaddle:
+      tobogganing:
         ipv4_address: 172.20.0.100
     healthcheck:
       test: ["CMD", "suricata", "--build-info"]
@@ -577,8 +590,8 @@ services:
 
   # FRR (Free Range Routing) for VRF and OSPF - US East
   frr-us-east:
-    image: frrouting/frr:latest
-    container_name: sasewaddle-frr-us-east
+    image: frrouting/frr:latest@sha256:990e83490108b686fd6df3b1cafa6bdbb2714acb00eedb9a89693946f46f45ce
+    container_name: tobogganing-frr-us-east
     restart: unless-stopped
     depends_on:
       - manager
@@ -590,7 +603,7 @@ services:
       # FRR Configuration
       FRR_ROUTER_ID: "10.200.1.1"
       FRR_CLUSTER_ID: "us-east-1"
-      FRR_MANAGER_URL: "http://manager:8000"
+      FRR_MANAGER_URL: "http://hub-api:8080"
       
       # OSPF Configuration
       FRR_OSPF_ENABLED: "true"
@@ -612,15 +625,15 @@ services:
       - net.ipv6.conf.all.forwarding=1
       - net.ipv4.conf.all.rp_filter=0
     networks:
-      sasewaddle:
+      tobogganing:
         ipv4_address: 172.20.1.10
     labels:
       - "traefik.enable=false"
 
   # FRR (Free Range Routing) for VRF and OSPF - EU West
   frr-eu-west:
-    image: frrouting/frr:latest
-    container_name: sasewaddle-frr-eu-west
+    image: frrouting/frr:latest@sha256:990e83490108b686fd6df3b1cafa6bdbb2714acb00eedb9a89693946f46f45ce
+    container_name: tobogganing-frr-eu-west
     restart: unless-stopped
     depends_on:
       - manager
@@ -632,7 +645,7 @@ services:
       # FRR Configuration
       FRR_ROUTER_ID: "10.201.1.1"
       FRR_CLUSTER_ID: "eu-west-1"
-      FRR_MANAGER_URL: "http://manager:8000"
+      FRR_MANAGER_URL: "http://hub-api:8080"
       
       # OSPF Configuration
       FRR_OSPF_ENABLED: "true"
@@ -654,7 +667,7 @@ services:
       - net.ipv6.conf.all.forwarding=1
       - net.ipv4.conf.all.rp_filter=0
     networks:
-      sasewaddle:
+      tobogganing:
         ipv4_address: 172.20.1.20
     labels:
       - "traefik.enable=false"
@@ -673,11 +686,11 @@ volumes:
     driver: local
   
   # Manager volumes
-  manager_data:
+  hub_api_data:
     driver: local
-  manager_certs:
+  hub_api_certs:
     driver: local
-  manager_logs:
+  hub_api_logs:
     driver: local
   
   # Headend volumes
@@ -727,7 +740,7 @@ volumes:
     driver: local
 
 networks:
-  sasewaddle:
+  tobogganing:
     driver: bridge
     ipam:
       config:

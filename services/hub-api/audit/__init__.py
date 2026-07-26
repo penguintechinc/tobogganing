@@ -1,4 +1,4 @@
-"""Audit logging and compliance reporting for SASEWaddle Manager."""
+"""Audit logging and compliance reporting for Tobogganing Manager."""
 
 import os
 import json

@@ -1,6 +1,6 @@
 //go:build !nogui
 
-// Package gui implements the graphical user interface for the SASEWaddle native client.
+// Package gui implements the graphical user interface for the Tobogganing native client.
 package gui
 
 import (
@@ -25,8 +25,8 @@ func NewApp() *App {
 
 // Run starts the GUI application
 func (a *App) Run(ctx context.Context) error {
-    w := a.fyneApp.NewWindow("SASEWaddle Client")
-    w.SetContent(widget.NewLabel("SASEWaddle Native Client"))
+    w := a.fyneApp.NewWindow("Tobogganing Client")
+    w.SetContent(widget.NewLabel("Tobogganing Native Client"))
     w.ShowAndRun()
     return nil
 }

@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package tobogganing.policy.v1;
+
+option go_package = "github.com/tobogganing/hub-router/internal/api/proto";
+
+// Policy rule as distributed to hub-routers
+message PolicyRule {
+  string id = 1;
+  string name = 2;
+  string action = 3;  // allow or deny
+  int32 priority = 4;
+  string domain_pattern = 5;
+  string port_range = 6;
+  string protocol = 7;
+  string src_cidr = 8;
+  string dst_cidr = 9;
+  string user_group = 10;
+  string identity_provider = 11;
+  bool enabled = 12;
+}
+
+message PolicySet {
+  repeated PolicyRule rules = 1;
+  int64 version = 2;
+  string timestamp = 3;
+}
+
+message FetchPoliciesRequest {
+  string hub_id = 1;
+  int64 last_version = 2;
+}
+
+message FetchPoliciesResponse {
+  PolicySet policies = 1;
+  bool has_changes = 2;
+}
+
+message PolicyUpdateEvent {
+  string event_type = 1;  // created, updated, deleted
+  PolicyRule rule = 2;
+  int64 version = 3;
+  string timestamp = 4;
+}
+
+message SubscribeRequest {
+  string hub_id = 1;
+}
+
+message RegisterHubRequest {
+  string hub_id = 1;
+  string cluster_id = 2;
+  string region = 3;
+  int32 capacity = 4;
+}
+
+message RegisterHubResponse {
+  bool success = 1;
+  string message = 2;
+  PolicySet initial_policies = 3;
+}
+
+message StatusRequest {
+  string hub_id = 1;
+}
+
+message StatusResponse {
+  string status = 1;
+  string version = 2;
+}
+
+service PolicyService {
+  rpc FetchPolicies(FetchPoliciesRequest) returns (FetchPoliciesResponse);
+  rpc SubscribePolicyUpdates(SubscribeRequest) returns (stream PolicyUpdateEvent);
+  rpc RegisterHub(RegisterHubRequest) returns (RegisterHubResponse);
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+}

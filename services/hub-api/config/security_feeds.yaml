@@ -1,4 +1,4 @@
-# Security Feeds and Scanning Configuration for SASEWaddle
+# Security Feeds and Scanning Configuration for Tobogganing
 
 # Global Security Settings
 security:
@@ -99,7 +99,7 @@ security_scanning:
         patterns: ["*"]
         limit: 10
       - type: "filesystem"
-        paths: ["/workspaces/SASEWaddle"]
+        paths: ["/workspaces/Tobogganing"]
         exclude: ["node_modules", ".git", "*.log"]
         
   # Port Scanning
@@ -141,9 +141,9 @@ security_scanning:
         config:
           verbose: false
     paths:
-      python: ["/workspaces/SASEWaddle/manager"]
-      nodejs: ["/workspaces/SASEWaddle/website"]
-      golang: ["/workspaces/SASEWaddle/headend", "/workspaces/SASEWaddle/clients"]
+      python: ["/workspaces/Tobogganing/manager"]
+      nodejs: ["/workspaces/Tobogganing/website"]
+      golang: ["/workspaces/Tobogganing/headend", "/workspaces/Tobogganing/clients"]
       
   # Container Scanning
   container_scan:
@@ -217,10 +217,10 @@ security_scanning:
       - path: "/var/log/nginx/access.log"
         enabled: true
         max_lines: 5000
-      - path: "/var/log/sasewaddle/proxy.log"
+      - path: "/var/log/tobogganing/proxy.log"
         enabled: true
         max_lines: 2000
-      - path: "/var/log/sasewaddle/manager.log"
+      - path: "/var/log/tobogganing/manager.log"
         enabled: true
         max_lines: 1000
     extraction:

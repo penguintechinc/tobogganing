@@ -1,4 +1,4 @@
-// Package auth implements authentication management for the SASEWaddle native client.
+// Package auth implements authentication management for the Tobogganing native client.
 //
 // The auth package provides:
 // - JWT token acquisition and renewal from Manager service
