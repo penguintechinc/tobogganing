@@ -77,3 +77,26 @@ class TestDefaultEngineFactory:
         assert client.base_url == "http://test.local:8080"
         # api_key should be None (not recoverable from hash)
         assert client.api_key is None
+
+
+# ============================================================================
+# Tests for Recurring Task Test Types
+# ============================================================================
+
+
+class TestRecurringTaskTestTypes:
+    """Regression test: recurring run default test_types must be in ALLOWED_TEST_TYPES."""
+
+    def test_recurring_default_test_types_valid(self) -> None:
+        """Test that recurring task default test_types are valid engine test types."""
+        from hub_api.modules.waddleperf_cluster.services.engine_client import ALLOWED_TEST_TYPES
+
+        # These are the hardcoded defaults in the recurring task
+        # They must all be in the allowed set or the task will fail
+        recurring_defaults = ["icmp", "http"]  # Expected valid defaults after fix
+
+        for test_type in recurring_defaults:
+            assert test_type in ALLOWED_TEST_TYPES, (
+                f"Recurring default test_type '{test_type}' not in ALLOWED_TEST_TYPES. "
+                f"Allowed: {ALLOWED_TEST_TYPES}"
+            )

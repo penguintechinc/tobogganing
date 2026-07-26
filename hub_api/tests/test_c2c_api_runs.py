@@ -130,6 +130,50 @@ async def test_create_run_readonly_forbidden(
 
 
 @pytest.mark.asyncio
+async def test_create_run_invalid_test_types(
+    app_with_c2c_runs_realdal: Quart, c2c_write_token_runs: str
+) -> None:
+    """Test run creation fails with invalid test_types."""
+    client = app_with_c2c_runs_realdal.test_client()
+
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/runs",
+        json={
+            "test_types": ["latency", "throughput"],  # Invalid, not in ALLOWED_TEST_TYPES
+            "endpoint_ids": ["ep-1", "ep-2"],
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_runs}"},
+    )
+
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert "error" in data
+    assert "invalid" in data.get("error", "").lower() or "invalid" in data.get("message", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_create_run_valid_test_types_passes_validation(
+    app_with_c2c_runs_realdal: Quart, c2c_write_token_runs: str
+) -> None:
+    """Test that valid test_types pass validation (may fail for other reasons)."""
+    client = app_with_c2c_runs_realdal.test_client()
+
+    response = await client.post(
+        "/api/v1/waddleperf_c2c/runs",
+        json={
+            "test_types": ["http", "icmp"],  # Valid test types
+            "endpoint_ids": ["ep-1", "ep-2"],
+        },
+        headers={"Authorization": f"Bearer {c2c_write_token_runs}"},
+    )
+
+    # Response may be 400 due to missing endpoints, but should NOT be due to invalid test_types
+    data = await response.get_json()
+    error_msg = data.get("error", "").lower() + data.get("message", "").lower()
+    assert "invalid test" not in error_msg, f"Valid test_types should not be rejected: {data}"
+
+
+@pytest.mark.asyncio
 async def test_list_runs_success(
     app_with_c2c_runs_realdal: Quart,
     c2c_readonly_token_runs: str,

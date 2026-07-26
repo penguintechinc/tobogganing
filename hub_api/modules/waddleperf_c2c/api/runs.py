@@ -1,16 +1,20 @@
 """Cluster-to-cluster matrix runs REST API blueprint."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, jsonify, request
+from quart import Blueprint, request
 
-from hub_api.auth.middleware import current_claims, require_scope, require_tenant
+from hub_api.auth.middleware import (current_claims, require_scope,
+                                     require_tenant)
 from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
 from hub_api.modules.waddleperf_c2c.services.run_manager import RunManager
+from hub_api.modules.waddleperf_cluster.services.engine_client import \
+    ALLOWED_TEST_TYPES
 
 logger = structlog.get_logger()
 
@@ -26,7 +30,7 @@ async def create_run() -> tuple[dict[str, Any], int]:
 
     Request body:
         {
-            "test_types": ["latency", "throughput"],
+            "test_types": ["http", "icmp"],
             "endpoint_ids": ["ep-1", "ep-2"]  # optional; defaults to all enabled
         }
 
@@ -51,6 +55,17 @@ async def create_run() -> tuple[dict[str, Any], int]:
             return {
                 "error": "Invalid test_types",
                 "message": "test_types must be a non-empty list",
+            }, 400
+
+        # Validate that all test_types are allowed by the engine
+        invalid_types = [t for t in test_types if t not in ALLOWED_TEST_TYPES]
+        if invalid_types:
+            allowed = sorted(ALLOWED_TEST_TYPES)
+            return {
+                "error": "Invalid test_types",
+                "message": (
+                    f"Invalid test types: {invalid_types}. " f"Allowed types: {allowed}"
+                ),
             }, 400
 
         manager = RunManager(db, tenant)
