@@ -1,10 +1,11 @@
 """Usage metering for license reporting."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,52 @@ class Usage:
     seats: int  # Distinct active identities (human or machine/AI)
     nodes: int  # Count of registered clusters/headends/testservers
     features: frozenset[str]  # Enabled Enterprise features
+
+
+async def count_active_seats(db: Any) -> int:
+    """Count distinct active identities (seats) from users table.
+
+    Args:
+        db: penguin-dal database connection
+
+    Returns:
+        Number of distinct active identities in the users table.
+    """
+    try:
+        # Query all users (both active and inactive; Phase 3 can add activity filter)
+        def query_users() -> int:
+            try:
+                result = db.users.select()
+                return len(result) if result else 0
+            except Exception as e:
+                logger.error(f"Error in query_users: {e}")
+                return 0
+
+        # Run sync DB query in thread pool to avoid blocking async context
+        count = await asyncio.to_thread(query_users)
+        return count
+    except Exception as e:
+        logger.error(f"Failed to count active seats: {e}")
+        return 0
+
+
+def count_registered_nodes(db: Any) -> int:
+    """Count registered clusters/orchestrators/nodes.
+
+    Args:
+        db: penguin-dal database connection
+
+    Returns:
+        Number of registered cluster/orchestrator nodes.
+    """
+    try:
+        # Query all clusters (registered orchestrators/headends)
+        # TODO(spec §8 #6): confirm node unit definition post-Phase 1
+        result = db.clusters.select()
+        return len(result) if result else 0
+    except Exception as e:
+        logger.error(f"Failed to count registered nodes: {e}")
+        return 0
 
 
 class UsageReporter:
@@ -51,11 +98,7 @@ class UsageReporter:
             # Count distinct active identities (seats) from users table
             seats = 0
             try:
-                # Count total users (both active and inactive for now)
-                # In Phase 1, we count all users; Phase 3 can add activity filter
-                # Use a condition that matches all rows (id != "")
-                result = await self.db(self.db.users.id != "").select()
-                seats = len(result) if result else 0
+                seats = await count_active_seats(self.db)
             except Exception as e:
                 logger.error(f"Failed to count users: {e}")
                 seats = 0
@@ -73,8 +116,8 @@ class UsageReporter:
             try:
                 from quart import current_app
 
-                registry = current_app.registry
-                for entitlement in registry._entitlements:
+                registry = current_app.registry  # type: ignore[attr-defined]
+                for entitlement in registry._entitlements:  # type: ignore[attr-defined]
                     # Only include Enterprise features that are enabled
                     if entitlement.tier.lower() == "enterprise":
                         # Check if the feature is enabled via flags
@@ -135,7 +178,7 @@ class UsageReporter:
                     return False
 
                 try:
-                    self.license_client.keepalive(usage_data)
+                    self.license_client.keepalive(usage_data)  # type: ignore[attr-defined]
                     logger.info(
                         f"Usage reported: seats={usage.seats}, nodes={usage.nodes}, "
                         f"features={len(usage.features)}"
