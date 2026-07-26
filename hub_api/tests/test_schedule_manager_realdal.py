@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from datetime import datetime
 
-from hub_api.modules.waddleperf_client.services.schedule_manager import (
+from hub_api.modules.perftest_client.services.schedule_manager import (
     ScheduleManager,
     TestScheduleDTO,
 )

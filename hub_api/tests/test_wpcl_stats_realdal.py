@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from hub_api.modules.waddleperf_cluster.services.stats_manager import StatsManager
+from hub_api.modules.perftest_cluster.services.stats_manager import StatsManager
 
 
 async def _seed_result(

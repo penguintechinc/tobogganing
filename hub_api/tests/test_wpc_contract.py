@@ -9,7 +9,7 @@ from quart import Quart
 
 @pytest.mark.asyncio
 async def test_wpc_module_registered(app_with_wpc: Quart) -> None:
-    """Test that waddleperf_cluster module is registered in the app.
+    """Test that perftest_cluster module is registered in the app.
 
     Args:
         app_with_wpc: Test app with WPC module.
@@ -19,13 +19,13 @@ async def test_wpc_module_registered(app_with_wpc: Quart) -> None:
 
     # Check all declared flags are present
     flags = registry.declared_flags()
-    assert "tobogganing.waddleperf_cluster.org_units" in flags
-    assert "tobogganing.waddleperf_cluster.devices" in flags
-    assert "tobogganing.waddleperf_cluster.enrollment" in flags
-    assert "tobogganing.waddleperf_cluster.tests" in flags
-    assert "tobogganing.waddleperf_cluster.stats" in flags
-    assert "tobogganing.waddleperf_cluster.live_test" in flags
-    assert "tobogganing.waddleperf_cluster.large_fleet" in flags
+    assert "tobogganing.perftest_cluster.org_units" in flags
+    assert "tobogganing.perftest_cluster.devices" in flags
+    assert "tobogganing.perftest_cluster.enrollment" in flags
+    assert "tobogganing.perftest_cluster.tests" in flags
+    assert "tobogganing.perftest_cluster.stats" in flags
+    assert "tobogganing.perftest_cluster.live_test" in flags
+    assert "tobogganing.perftest_cluster.large_fleet" in flags
 
 
 @pytest.mark.asyncio
@@ -40,11 +40,11 @@ async def test_wpc_routes_mounted(app_with_wpc: Quart) -> None:
     # Test that routes are registered (401/403/402 on unauthorized, not 404 on route not found)
     # These should give auth errors, not route not found
     routes_to_check = [
-        "/api/v1/waddleperf_cluster/org-units",
-        "/api/v1/waddleperf_cluster/devices",
-        "/api/v1/waddleperf_cluster/enrollment/secrets",  # enrollment has /secrets endpoints
-        "/api/v1/waddleperf_cluster/tests",
-        "/api/v1/waddleperf_cluster/stats/summary",
+        "/api/v1/perftest_cluster/org-units",
+        "/api/v1/perftest_cluster/devices",
+        "/api/v1/perftest_cluster/enrollment/secrets",  # enrollment has /secrets endpoints
+        "/api/v1/perftest_cluster/tests",
+        "/api/v1/perftest_cluster/stats/summary",
     ]
 
     for route in routes_to_check:
@@ -62,7 +62,7 @@ async def test_wpc_feature_flags_default_off() -> None:
     This test ensures the module contract declares the flags correctly, and that
     tests enable them explicitly to avoid false positives.
     """
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     contract = wpc_module()
     flag_names = [f.split(".")[-1] for f in contract.flags]
@@ -78,7 +78,7 @@ async def test_wpc_feature_flags_default_off() -> None:
     ]
 
     for flag in expected_flags:
-        assert flag in flag_names, f"Flag 'tobogganing.waddleperf_cluster.{flag}' not declared"
+        assert flag in flag_names, f"Flag 'tobogganing.perftest_cluster.{flag}' not declared"
 
 
 @pytest.mark.asyncio
@@ -91,16 +91,16 @@ async def test_wpc_entitlements_configured(app_with_wpc: Quart) -> None:
     registry = app_with_wpc.registry
 
     # Check community tier entitlements
-    org_units_ent = registry.entitlement_for("waddleperf_cluster.org_units")
+    org_units_ent = registry.entitlement_for("perftest_cluster.org_units")
     assert org_units_ent is not None
     assert org_units_ent.tier == "community"
 
-    devices_ent = registry.entitlement_for("waddleperf_cluster.devices")
+    devices_ent = registry.entitlement_for("perftest_cluster.devices")
     assert devices_ent is not None
     assert devices_ent.tier == "community"
 
     # Check professional tier entitlements
-    large_fleet_ent = registry.entitlement_for("waddleperf_cluster.large_fleet")
+    large_fleet_ent = registry.entitlement_for("perftest_cluster.large_fleet")
     assert large_fleet_ent is not None
     assert large_fleet_ent.tier == "professional"
 
@@ -127,7 +127,7 @@ async def test_wpc_migrations_declared(app_with_wpc: Quart) -> None:
     Args:
         app_with_wpc: Test app with WPC module.
     """
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     contract = wpc_module()
     assert contract.migrations == ["0010", "0011", "0012"]

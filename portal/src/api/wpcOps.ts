@@ -92,7 +92,7 @@ export interface AutoPerfState {
 /** API Functions - Alerts */
 export async function listAlertRules(): Promise<AlertRule[]> {
   console.log('[wpcOps] listAlertRules');
-  const response = await apiClient.get<AlertRulesResponse>('/waddleperf_cluster/alerts/rules');
+  const response = await apiClient.get<AlertRulesResponse>('/perftest_cluster/alerts/rules');
   return response.data.rules;
 }
 
@@ -108,25 +108,25 @@ export async function createAlertRule(payload: {
   enabled?: boolean;
 }): Promise<AlertRule> {
   console.log('[wpcOps] createAlertRule { metric:', payload.metric, '}');
-  const response = await apiClient.post<AlertRule>('/waddleperf_cluster/alerts/rules', payload);
+  const response = await apiClient.post<AlertRule>('/perftest_cluster/alerts/rules', payload);
   return response.data;
 }
 
 export async function deleteAlertRule(ruleId: string): Promise<void> {
   console.log('[wpcOps] deleteAlertRule { rule_id:', ruleId.slice(0, 8), '}');
-  await apiClient.delete(`/waddleperf_cluster/alerts/rules/${ruleId}`);
+  await apiClient.delete(`/perftest_cluster/alerts/rules/${ruleId}`);
 }
 
 export async function listAlertEvents(): Promise<AlertEvent[]> {
   console.log('[wpcOps] listAlertEvents');
-  const response = await apiClient.get<AlertEventsResponse>('/waddleperf_cluster/alerts/events');
+  const response = await apiClient.get<AlertEventsResponse>('/perftest_cluster/alerts/events');
   return response.data.events;
 }
 
 export async function listAlertChannels(): Promise<AlertChannel[]> {
   console.log('[wpcOps] listAlertChannels');
   const response = await apiClient.get<AlertChannelsResponse>(
-    '/waddleperf_cluster/alerts/channels'
+    '/perftest_cluster/alerts/channels'
   );
   return response.data.channels;
 }
@@ -139,7 +139,7 @@ export async function createAlertChannel(payload: {
 }): Promise<AlertChannel> {
   console.log('[wpcOps] createAlertChannel { kind:', payload.kind, '}');
   const response = await apiClient.post<AlertChannel>(
-    '/waddleperf_cluster/alerts/channels',
+    '/perftest_cluster/alerts/channels',
     payload
   );
   return response.data;
@@ -147,14 +147,14 @@ export async function createAlertChannel(payload: {
 
 export async function deleteAlertChannel(channelId: string): Promise<void> {
   console.log('[wpcOps] deleteAlertChannel { channel_id:', channelId.slice(0, 8), '}');
-  await apiClient.delete(`/waddleperf_cluster/alerts/channels/${channelId}`);
+  await apiClient.delete(`/perftest_cluster/alerts/channels/${channelId}`);
 }
 
 /** API Functions - Scheduled Tests */
 export async function listScheduledTests(): Promise<ScheduledTest[]> {
   console.log('[wpcOps] listScheduledTests');
   const response = await apiClient.get<ScheduledTestsResponse>(
-    '/waddleperf_cluster/scheduled-tests'
+    '/perftest_cluster/scheduled-tests'
   );
   return response.data.jobs;
 }
@@ -167,7 +167,7 @@ export async function createScheduledTest(payload: {
 }): Promise<ScheduledTest> {
   console.log('[wpcOps] createScheduledTest { device_id:', payload.device_id, '}');
   const response = await apiClient.post<ScheduledTest>(
-    '/waddleperf_cluster/scheduled-tests',
+    '/perftest_cluster/scheduled-tests',
     payload
   );
   return response.data;
@@ -179,7 +179,7 @@ export async function updateScheduledTest(
 ): Promise<ScheduledTest> {
   console.log('[wpcOps] updateScheduledTest { job_id:', jobId.slice(0, 8), '}');
   const response = await apiClient.patch<ScheduledTest>(
-    `/waddleperf_cluster/scheduled-tests/${jobId}`,
+    `/perftest_cluster/scheduled-tests/${jobId}`,
     payload
   );
   return response.data;
@@ -187,14 +187,14 @@ export async function updateScheduledTest(
 
 export async function deleteScheduledTest(jobId: string): Promise<void> {
   console.log('[wpcOps] deleteScheduledTest { job_id:', jobId.slice(0, 8), '}');
-  await apiClient.delete(`/waddleperf_cluster/scheduled-tests/${jobId}`);
+  await apiClient.delete(`/perftest_cluster/scheduled-tests/${jobId}`);
 }
 
 /** API Functions - AutoPerf */
 export async function listAutoPerfPolicies(): Promise<AutoPerfPolicy[]> {
   console.log('[wpcOps] listAutoPerfPolicies');
   const response = await apiClient.get<{ policies: AutoPerfPolicy[] }>(
-    '/waddleperf_cluster/autoperf/policies'
+    '/perftest_cluster/autoperf/policies'
   );
   return response.data.policies;
 }
@@ -211,7 +211,7 @@ export async function createAutoPerfPolicy(payload: {
 }): Promise<AutoPerfPolicy> {
   console.log('[wpcOps] createAutoPerfPolicy { name:', payload.name, '}');
   const response = await apiClient.post<AutoPerfPolicy>(
-    '/waddleperf_cluster/autoperf/policies',
+    '/perftest_cluster/autoperf/policies',
     payload
   );
   return response.data;
@@ -219,13 +219,13 @@ export async function createAutoPerfPolicy(payload: {
 
 export async function deleteAutoPerfPolicy(policyId: string): Promise<void> {
   console.log('[wpcOps] deleteAutoPerfPolicy { policy_id:', policyId.slice(0, 8), '}');
-  await apiClient.delete(`/waddleperf_cluster/autoperf/policies/${policyId}`);
+  await apiClient.delete(`/perftest_cluster/autoperf/policies/${policyId}`);
 }
 
 export async function getAutoPerfPolicyState(policyId: string): Promise<AutoPerfState> {
   console.log('[wpcOps] getAutoPerfPolicyState { policy_id:', policyId.slice(0, 8), '}');
   const response = await apiClient.get<AutoPerfState>(
-    `/waddleperf_cluster/autoperf/policies/${policyId}/state`
+    `/perftest_cluster/autoperf/policies/${policyId}/state`
   );
   return response.data;
 }

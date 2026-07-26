@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from quart import Quart
 from typing import Any
 
-from hub_api.modules.waddleperf_client.services.schedule_manager import TestScheduleDTO
+from hub_api.modules.perftest_client.services.schedule_manager import TestScheduleDTO
 
 
 def make_mock_schedule(
@@ -49,7 +49,7 @@ async def test_create_schedule_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -64,7 +64,7 @@ async def test_create_schedule_success(
         mock_mgr.create_schedule = AsyncMock(return_value=schedule)
 
         response = await client.post(
-            "/api/v1/waddleperf_client/schedules",
+            "/api/v1/perftest_client/schedules",
             json={
                 "test_type": "ping",
                 "target": "10.0.0.1",
@@ -98,7 +98,7 @@ async def test_create_schedule_missing_fields(
     client = app_with_wpc.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_client/schedules",
+        "/api/v1/perftest_client/schedules",
         json={"test_type": "ping"},
         headers={"Authorization": f"Bearer {wpc_write_token}"},
     )
@@ -121,7 +121,7 @@ async def test_create_schedule_requires_write_scope(
     client = app_with_wpc.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_client/schedules",
+        "/api/v1/perftest_client/schedules",
         json={
             "test_type": "ping",
             "target": "10.0.0.1",
@@ -146,7 +146,7 @@ async def test_list_schedules_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -159,7 +159,7 @@ async def test_list_schedules_success(
         mock_mgr.list_schedules = AsyncMock(return_value=schedules)
 
         response = await client.get(
-            "/api/v1/waddleperf_client/schedules",
+            "/api/v1/perftest_client/schedules",
             headers={"Authorization": f"Bearer {wpc_readonly_token}"},
         )
 
@@ -184,7 +184,7 @@ async def test_list_schedules_with_filter(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -196,7 +196,7 @@ async def test_list_schedules_with_filter(
         mock_mgr.list_schedules = AsyncMock(return_value=schedules)
 
         response = await client.get(
-            "/api/v1/waddleperf_client/schedules?org_unit_id=ou-1",
+            "/api/v1/perftest_client/schedules?org_unit_id=ou-1",
             headers={"Authorization": f"Bearer {wpc_readonly_token}"},
         )
 
@@ -222,7 +222,7 @@ async def test_get_schedule_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -232,7 +232,7 @@ async def test_get_schedule_success(
         mock_mgr.get_schedule = AsyncMock(return_value=schedule)
 
         response = await client.get(
-            "/api/v1/waddleperf_client/schedules/sched-456",
+            "/api/v1/perftest_client/schedules/sched-456",
             headers={"Authorization": f"Bearer {wpc_readonly_token}"},
         )
 
@@ -255,7 +255,7 @@ async def test_get_schedule_not_found(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -263,7 +263,7 @@ async def test_get_schedule_not_found(
         mock_mgr.get_schedule = AsyncMock(return_value=None)
 
         response = await client.get(
-            "/api/v1/waddleperf_client/schedules/nonexistent",
+            "/api/v1/perftest_client/schedules/nonexistent",
             headers={"Authorization": f"Bearer {wpc_readonly_token}"},
         )
 
@@ -283,7 +283,7 @@ async def test_update_schedule_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -296,7 +296,7 @@ async def test_update_schedule_success(
         mock_mgr.update_schedule = AsyncMock(return_value=updated_schedule)
 
         response = await client.put(
-            "/api/v1/waddleperf_client/schedules/sched-789",
+            "/api/v1/perftest_client/schedules/sched-789",
             json={"interval_seconds": 120},
             headers={"Authorization": f"Bearer {wpc_write_token}"},
         )
@@ -320,7 +320,7 @@ async def test_delete_schedule_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -328,7 +328,7 @@ async def test_delete_schedule_success(
         mock_mgr.delete_schedule = AsyncMock(return_value=True)
 
         response = await client.delete(
-            "/api/v1/waddleperf_client/schedules/sched-999",
+            "/api/v1/perftest_client/schedules/sched-999",
             headers={"Authorization": f"Bearer {wpc_write_token}"},
         )
 
@@ -350,7 +350,7 @@ async def test_delete_schedule_not_found(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -358,7 +358,7 @@ async def test_delete_schedule_not_found(
         mock_mgr.delete_schedule = AsyncMock(return_value=False)
 
         response = await client.delete(
-            "/api/v1/waddleperf_client/schedules/nonexistent",
+            "/api/v1/perftest_client/schedules/nonexistent",
             headers={"Authorization": f"Bearer {wpc_write_token}"},
         )
 
@@ -378,7 +378,7 @@ async def test_schedules_tenant_isolation(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.schedules.ScheduleManager"
+        "hub_api.modules.perftest_client.api.schedules.ScheduleManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -388,7 +388,7 @@ async def test_schedules_tenant_isolation(
         mock_mgr.create_schedule = AsyncMock(return_value=schedule)
 
         response = await client.post(
-            "/api/v1/waddleperf_client/schedules",
+            "/api/v1/perftest_client/schedules",
             json={
                 "test_type": "ping",
                 "target": "10.0.0.1",
@@ -415,7 +415,7 @@ async def test_create_schedule_missing_auth(app_with_wpc: Quart) -> None:
     client = app_with_wpc.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_client/schedules",
+        "/api/v1/perftest_client/schedules",
         json={
             "test_type": "ping",
             "target": "10.0.0.1",

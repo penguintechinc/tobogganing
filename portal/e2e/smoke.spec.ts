@@ -61,7 +61,7 @@ test.describe('Portal Smoke Tests', () => {
     const sidebar = page.locator('nav');
     await expect(sidebar).toBeVisible();
 
-    // Verify waddleperf_cluster module entries are in nav (scope to links —
+    // Verify perftest_cluster module entries are in nav (scope to links —
     // the labels also appear on dashboard module cards)
     await expect(page.getByRole('link', { name: 'Devices' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Tests' })).toBeVisible();
@@ -70,7 +70,7 @@ test.describe('Portal Smoke Tests', () => {
 
   test('direct navigation to protected route while logged out redirects to /login', async ({ page }) => {
     // Try to navigate to a real protected route
-    await page.goto('/m/waddleperf_cluster/devices');
+    await page.goto('/m/perftest_cluster/devices');
 
     // Verify redirect to login page
     await expect(page).toHaveURL('/login');
@@ -93,8 +93,8 @@ test.describe('Portal Smoke Tests', () => {
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL('/', { timeout: 5000 });
 
-    // waddleperf_cluster devices: two mocked rows
-    await page.goto('/m/waddleperf_cluster/devices');
+    // perftest_cluster devices: two mocked rows
+    await page.goto('/m/perftest_cluster/devices');
     await expect(page.getByText('edge-nyc-1')).toBeVisible();
     await expect(page.getByText('edge-lon-1')).toBeVisible();
 
@@ -105,6 +105,6 @@ test.describe('Portal Smoke Tests', () => {
     });
 
     // c2c nodes: one mocked row
-    await page.goto('/m/waddleperf_c2c/c2c-nodes');
+    await page.goto('/m/perftest_c2c/c2c-nodes');
     await expect(page.getByText('us-east-node')).toBeVisible();
   });

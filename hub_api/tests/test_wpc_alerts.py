@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from penguin_dal import AsyncDB
 
-from hub_api.modules.waddleperf_cluster.services.alert_evaluator import AlertEvaluator
+from hub_api.modules.perftest_cluster.services.alert_evaluator import AlertEvaluator
 from hub_api.notifications.service import NotificationService
 
 
@@ -574,7 +574,7 @@ class TestAlertComparators:
 
 @pytest_asyncio.fixture
 async def alerts_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
-    """Quart app with the waddleperf_cluster module mounted on a real DAL.
+    """Quart app with the perftest_cluster module mounted on a real DAL.
 
     Feature flags are controlled per-test via app._test_enabled_flags (a set
     of full flag keys); everything else is flag-off — so the flag-off 402
@@ -596,8 +596,8 @@ async def alerts_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
-    import hub_api.modules.waddleperf_cluster.api.alerts as alerts_api
-    import hub_api.modules.waddleperf_cluster.api.tests as tests_api
+    import hub_api.modules.perftest_cluster.api.alerts as alerts_api
+    import hub_api.modules.perftest_cluster.api.tests as tests_api
     monkeypatch.setattr(alerts_api, "get_db", lambda: real_dal)
     monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
 
@@ -608,7 +608,7 @@ async def alerts_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     test_app.registry.register(wpc_module())
     ctx = ModuleContext(config=test_app.config_obj, db=real_dal, key_provider=provider)
@@ -640,7 +640,7 @@ async def test_rules_api_flag_off_returns_402(alerts_app) -> None:
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/alerts/rules",
+        "/api/v1/perftest_cluster/alerts/rules",
         json={"name": "r", "metric": "latency_ms", "comparator": "gt", "threshold": 100},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -650,13 +650,13 @@ async def test_rules_api_flag_off_returns_402(alerts_app) -> None:
 @pytest.mark.asyncio
 async def test_rules_api_crud_roundtrip(alerts_app) -> None:
     """Flag on (Community tier): create, list, and delete a rule over HTTP."""
-    alerts_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.alerts")
+    alerts_app._test_enabled_flags.add("tobogganing.perftest_cluster.alerts")
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     headers = {"Authorization": f"Bearer {token}"}
 
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/alerts/rules",
+        "/api/v1/perftest_cluster/alerts/rules",
         json={"name": "hi-latency", "metric": "latency_ms", "comparator": "gt", "threshold": 250},
         headers=headers,
     )
@@ -664,13 +664,13 @@ async def test_rules_api_crud_roundtrip(alerts_app) -> None:
     rule = await resp.get_json()
     assert rule["metric"] == "latency_ms"
 
-    resp = await client.get("/api/v1/waddleperf_cluster/alerts/rules", headers=headers)
+    resp = await client.get("/api/v1/perftest_cluster/alerts/rules", headers=headers)
     assert resp.status_code == 200
     listed = await resp.get_json()
     assert any(r["id"] == rule["id"] for r in listed["rules"])
 
     resp = await client.delete(
-        f"/api/v1/waddleperf_cluster/alerts/rules/{rule['id']}", headers=headers
+        f"/api/v1/perftest_cluster/alerts/rules/{rule['id']}", headers=headers
     )
     assert resp.status_code in (200, 204)
 
@@ -678,11 +678,11 @@ async def test_rules_api_crud_roundtrip(alerts_app) -> None:
 @pytest.mark.asyncio
 async def test_email_channel_requires_only_alerts_flag(alerts_app) -> None:
     """Email channels are Community: alerts flag alone is enough for 201."""
-    alerts_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.alerts")
+    alerts_app._test_enabled_flags.add("tobogganing.perftest_cluster.alerts")
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/alerts/channels",
+        "/api/v1/perftest_cluster/alerts/channels",
         json={"name": "ops", "kind": "email", "config": {"to": ["ops@example.com"]}},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -697,14 +697,14 @@ async def test_webhook_channel_unlicensed_402_professional(alerts_app) -> None:
     """
     alerts_app._test_enabled_flags.update(
         {
-            "tobogganing.waddleperf_cluster.alerts",
-            "tobogganing.waddleperf_cluster.alert_routing",
+            "tobogganing.perftest_cluster.alerts",
+            "tobogganing.perftest_cluster.alert_routing",
         }
     )
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/alerts/channels",
+        "/api/v1/perftest_cluster/alerts/channels",
         json={
             "name": "hook",
             "kind": "webhook",
@@ -724,17 +724,17 @@ async def test_webhook_channel_licensed_201_redacts_secret(
     """Licensed Professional tier: webhook channel creates and redacts secret."""
     alerts_app._test_enabled_flags.update(
         {
-            "tobogganing.waddleperf_cluster.alerts",
-            "tobogganing.waddleperf_cluster.alert_routing",
+            "tobogganing.perftest_cluster.alerts",
+            "tobogganing.perftest_cluster.alert_routing",
         }
     )
-    import hub_api.modules.waddleperf_cluster.api.alerts as alerts_api
+    import hub_api.modules.perftest_cluster.api.alerts as alerts_api
 
     monkeypatch.setattr(alerts_api, "_is_licensed_for_tier", lambda tier: True)
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/alerts/channels",
+        "/api/v1/perftest_cluster/alerts/channels",
         json={
             "name": "hook",
             "kind": "webhook",

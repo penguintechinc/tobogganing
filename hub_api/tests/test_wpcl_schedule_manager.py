@@ -10,7 +10,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timezone
 
-from hub_api.modules.waddleperf_client.services.schedule_manager import (
+from hub_api.modules.perftest_client.services.schedule_manager import (
     ScheduleManager,
     TestScheduleDTO,
 )

@@ -10,12 +10,12 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.waddleperf_c2c.services.endpoint_manager import (
+from hub_api.modules.perftest_c2c.services.endpoint_manager import (
     EndpointManager,
     authenticate_node_global,
 )
-from hub_api.modules.waddleperf_c2c.services.run_manager import RunManager
-from hub_api.modules.waddleperf_c2c.services.matrix_service import MatrixService
+from hub_api.modules.perftest_c2c.services.run_manager import RunManager
+from hub_api.modules.perftest_c2c.services.matrix_service import MatrixService
 
 
 # ============================================================================

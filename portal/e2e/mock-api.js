@@ -38,8 +38,8 @@ app.post('/api/v1/auth/login', (req, res) => {
 });
 
 
-// GET /api/v1/waddleperf_cluster/devices — two rows for smoke assertions
-app.get('/api/v1/waddleperf_cluster/devices', (req, res) => {
+// GET /api/v1/perftest_cluster/devices — two rows for smoke assertions
+app.get('/api/v1/perftest_cluster/devices', (req, res) => {
   res.status(200).json({
     devices: [
       { id: 'd1', name: 'edge-nyc-1', org_unit_id: 'ou1', status: 'active', last_heartbeat: new Date().toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -54,8 +54,8 @@ app.get('/api/v1/sase/clusters', (req, res) => {
   res.status(200).json({ clusters: [], meta: { version: 1, timestamp: new Date().toISOString() } });
 });
 
-// GET /api/v1/waddleperf_c2c/endpoints — one row
-app.get('/api/v1/waddleperf_c2c/endpoints', (req, res) => {
+// GET /api/v1/perftest_c2c/endpoints — one row
+app.get('/api/v1/perftest_c2c/endpoints', (req, res) => {
   res.status(200).json({
     endpoints: [
       { id: 'e1', name: 'us-east-node', region: 'us-east', visibility: 'public', provider: 'aws', health_status: 'healthy', enabled: true, engine_url: 'https://e1.example.com', target: 't', created_at: new Date().toISOString() },
@@ -77,23 +77,23 @@ app.get('/api/v1/portal/manifest', (req, res) => {
         flags: {},
       },
       {
-        name: 'waddleperf_c2c',
+        name: 'perftest_c2c',
         nav: [
-          { label: 'C2C Nodes', path: '/api/v1/waddleperf_c2c/endpoints', icon: 'globe' },
+          { label: 'C2C Nodes', path: '/api/v1/perftest_c2c/endpoints', icon: 'globe' },
         ],
         flags: {},
       },
       {
-        name: 'waddleperf_cluster',
+        name: 'perftest_cluster',
         nav: [
-          { label: 'Devices', path: '/api/v1/waddleperf_cluster/devices', icon: 'laptop' },
-          { label: 'Tests', path: '/api/v1/waddleperf_cluster/tests', icon: 'activity' },
-          { label: 'Stats', path: '/api/v1/waddleperf_cluster/stats', icon: 'bar-chart-2' },
+          { label: 'Devices', path: '/api/v1/perftest_cluster/devices', icon: 'laptop' },
+          { label: 'Tests', path: '/api/v1/perftest_cluster/tests', icon: 'activity' },
+          { label: 'Stats', path: '/api/v1/perftest_cluster/stats', icon: 'bar-chart-2' },
         ],
         flags: {
-          'tobogganing.waddleperf_cluster.devices': true,
-          'tobogganing.waddleperf_cluster.tests': true,
-          'tobogganing.waddleperf_cluster.stats': true,
+          'tobogganing.perftest_cluster.devices': true,
+          'tobogganing.perftest_cluster.tests': true,
+          'tobogganing.perftest_cluster.stats': true,
         },
       },
     ],

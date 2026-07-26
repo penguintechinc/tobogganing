@@ -45,7 +45,7 @@ class JobManager:
 
         Args:
             tenant: Tenant ID for multi-tenancy scoping.
-            module: Module name (e.g., "waddleperf_cluster").
+            module: Module name (e.g., "perftest_cluster").
             job_type: Job type identifier (e.g., "server_test").
             payload: Job-specific parameters as dict.
             interval_seconds: Interval in seconds between runs (>= 30).

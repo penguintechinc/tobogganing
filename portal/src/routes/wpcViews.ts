@@ -7,7 +7,7 @@ import { ScheduledTestsPage } from '../pages/waddleperf/ScheduledTestsPage';
 import { AutoPerfPage } from '../pages/waddleperf/AutoPerfPage';
 import { LiveTestPage } from '../pages/waddleperf/LiveTestPage';
 
-/** View-slug -> page map for the waddleperf_cluster module. */
+/** View-slug -> page map for the perftest_cluster module. */
 export const wpcViews: Record<string, ComponentType> = {
   devices: DevicesPage,
   tests: TestsPage,

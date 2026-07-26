@@ -32,14 +32,14 @@ async def app_with_c2c_realdal(
     import hub_api.app
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.endpoints
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.endpoints, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.endpoints
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.endpoints, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.runs
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.runs, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.runs
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.runs, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.matrix
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.matrix, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.matrix
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.matrix, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
     return app_with_c2c
@@ -92,7 +92,7 @@ async def test_create_endpoint_success(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary-node",
@@ -117,7 +117,7 @@ async def test_create_endpoint_with_custom_api_key(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary-node",
@@ -141,7 +141,7 @@ async def test_create_endpoint_missing_fields(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary-node",
@@ -161,7 +161,7 @@ async def test_create_endpoint_readonly_forbidden(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary",
@@ -182,7 +182,7 @@ async def test_create_endpoint_no_token_forbidden(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary",
@@ -207,7 +207,7 @@ async def test_list_endpoints_empty(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
     )
 
@@ -228,7 +228,7 @@ async def test_list_endpoints_success(
 
     # Create endpoint
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary",
@@ -241,7 +241,7 @@ async def test_list_endpoints_success(
 
     # List endpoints
     response = await client.get(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
     )
 
@@ -267,7 +267,7 @@ async def test_get_endpoint_success(
 
     # Create endpoint
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary",
@@ -282,7 +282,7 @@ async def test_get_endpoint_success(
 
     # Get endpoint
     response = await client.get(
-        f"/api/v1/waddleperf_c2c/endpoints/{endpoint_id}",
+        f"/api/v1/perftest_c2c/endpoints/{endpoint_id}",
         headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
     )
 
@@ -300,7 +300,7 @@ async def test_get_endpoint_not_found(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/endpoints/nonexistent-id",
+        "/api/v1/perftest_c2c/endpoints/nonexistent-id",
         headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
     )
 
@@ -317,7 +317,7 @@ async def test_update_endpoint_success(
 
     # Create endpoint
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary",
@@ -332,7 +332,7 @@ async def test_update_endpoint_success(
 
     # Update endpoint
     response = await client.patch(
-        f"/api/v1/waddleperf_c2c/endpoints/{endpoint_id}",
+        f"/api/v1/perftest_c2c/endpoints/{endpoint_id}",
         json={"name": "primary-updated", "enabled": False},
         headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
     )
@@ -351,7 +351,7 @@ async def test_update_endpoint_not_found(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.patch(
-        "/api/v1/waddleperf_c2c/endpoints/nonexistent-id",
+        "/api/v1/perftest_c2c/endpoints/nonexistent-id",
         json={"name": "updated"},
         headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
     )
@@ -369,7 +369,7 @@ async def test_delete_endpoint_success(
 
     # Create endpoint
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "primary",
@@ -384,7 +384,7 @@ async def test_delete_endpoint_success(
 
     # Delete endpoint
     response = await client.delete(
-        f"/api/v1/waddleperf_c2c/endpoints/{endpoint_id}",
+        f"/api/v1/perftest_c2c/endpoints/{endpoint_id}",
         headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
     )
 
@@ -399,7 +399,7 @@ async def test_delete_endpoint_not_found(
     client = app_with_c2c_realdal.test_client()
 
     response = await client.delete(
-        "/api/v1/waddleperf_c2c/endpoints/nonexistent-id",
+        "/api/v1/perftest_c2c/endpoints/nonexistent-id",
         headers={"Authorization": f"Bearer {c2c_write_token_realdal}"},
     )
 
@@ -422,7 +422,7 @@ async def test_tenant_isolation_endpoint_list(
 
     # Create endpoint in test-tenant
     response = await client.post(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         json={
             "region": "us-west-2",
             "name": "tenant1-endpoint",
@@ -435,7 +435,7 @@ async def test_tenant_isolation_endpoint_list(
 
     # List should show it
     response = await client.get(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         headers={"Authorization": f"Bearer {c2c_readonly_token_realdal}"},
     )
     assert response.status_code == 200

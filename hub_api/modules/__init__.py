@@ -3,7 +3,7 @@
 __all__ = [
     "ping",
     "sase",
-    "waddleperf_cluster",
-    "waddleperf_client",
-    "waddleperf_c2c",
+    "perftest_cluster",
+    "perftest_client",
+    "perftest_c2c",
 ]

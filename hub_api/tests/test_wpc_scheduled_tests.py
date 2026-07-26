@@ -47,11 +47,11 @@ async def app_with_wpc_st(
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
 
     # Patch the tests API module to use real DAL too
-    import hub_api.modules.waddleperf_cluster.api.tests as tests_api
+    import hub_api.modules.perftest_cluster.api.tests as tests_api
     monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
 
     # Patch scheduled_tests API module
-    import hub_api.modules.waddleperf_cluster.api.scheduled_tests as st_api
+    import hub_api.modules.perftest_cluster.api.scheduled_tests as st_api
     monkeypatch.setattr(st_api, "get_db", lambda: real_dal)
 
     # Enable all wpc feature flags for tests (bypass flag server)
@@ -60,16 +60,16 @@ async def app_with_wpc_st(
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
         if flag_key.startswith(
-            "tobogganing.waddleperf_cluster."
-        ) or flag_key.startswith("tobogganing.waddleperf_client."):
+            "tobogganing.perftest_cluster."
+        ) or flag_key.startswith("tobogganing.perftest_client."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
     # Register WaddlePerf Cluster module via registry
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
-    from hub_api.modules.waddleperf_client import module as wpcl_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
+    from hub_api.modules.perftest_client import module as wpcl_module
 
     wpc_contract = wpc_module()
     wpcl_contract = wpcl_module()
@@ -150,7 +150,7 @@ async def test_scheduled_tests_flag_off(
 
     # Mock flag to return False for scheduled_tests
     def mock_flag_off(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key == "tobogganing.waddleperf_cluster.scheduled_tests":
+        if flag_key == "tobogganing.perftest_cluster.scheduled_tests":
             return False
         return True
 
@@ -158,7 +158,7 @@ async def test_scheduled_tests_flag_off(
 
     async with app_with_wpc.test_client() as client:
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "dev1",
                 "test_type": "http",
@@ -186,7 +186,7 @@ async def test_scheduled_tests_crud_round_trip(
     async with app_with_wpc_st.test_client() as client:
         # POST: Create scheduled test
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "dev-st-1",
                 "test_type": "http",
@@ -206,7 +206,7 @@ async def test_scheduled_tests_crud_round_trip(
 
         # GET: List scheduled tests
         response = await client.get(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             headers={"Authorization": f"Bearer {st_read_token}"},
         )
         assert response.status_code == 200
@@ -219,7 +219,7 @@ async def test_scheduled_tests_crud_round_trip(
 
         # PATCH: Disable job
         response = await client.patch(
-            f"/api/v1/waddleperf_cluster/scheduled-tests/{job_id}",
+            f"/api/v1/perftest_cluster/scheduled-tests/{job_id}",
             json={"enabled": False},
             headers={"Authorization": f"Bearer {st_write_token}"},
         )
@@ -229,7 +229,7 @@ async def test_scheduled_tests_crud_round_trip(
 
         # PATCH: Re-enable job
         response = await client.patch(
-            f"/api/v1/waddleperf_cluster/scheduled-tests/{job_id}",
+            f"/api/v1/perftest_cluster/scheduled-tests/{job_id}",
             json={"enabled": True},
             headers={"Authorization": f"Bearer {st_write_token}"},
         )
@@ -239,14 +239,14 @@ async def test_scheduled_tests_crud_round_trip(
 
         # DELETE: Remove job
         response = await client.delete(
-            f"/api/v1/waddleperf_cluster/scheduled-tests/{job_id}",
+            f"/api/v1/perftest_cluster/scheduled-tests/{job_id}",
             headers={"Authorization": f"Bearer {st_write_token}"},
         )
         assert response.status_code == 204
 
         # GET: Verify job is gone
         response = await client.get(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             headers={"Authorization": f"Bearer {st_read_token}"},
         )
         assert response.status_code == 200
@@ -270,7 +270,7 @@ async def test_scheduled_tests_input_validation(
     async with app_with_wpc_st.test_client() as client:
         # Missing required field
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "dev1",
                 "test_type": "http",
@@ -282,7 +282,7 @@ async def test_scheduled_tests_input_validation(
 
         # Empty device_id
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "",
                 "test_type": "http",
@@ -295,7 +295,7 @@ async def test_scheduled_tests_input_validation(
 
         # interval_seconds < 30
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "dev1",
                 "test_type": "http",
@@ -308,7 +308,7 @@ async def test_scheduled_tests_input_validation(
 
         # interval_seconds as string (should fail type check)
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "dev1",
                 "test_type": "http",
@@ -358,7 +358,7 @@ async def test_scheduled_tests_cross_tenant_isolation(
     async with app_with_wpc_st.test_client() as client:
         # Tenant 1: Create job
         response = await client.post(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             json={
                 "device_id": "dev-t1",
                 "test_type": "http",
@@ -373,14 +373,14 @@ async def test_scheduled_tests_cross_tenant_isolation(
 
         # Tenant 2: Try to delete tenant 1's job
         response = await client.delete(
-            f"/api/v1/waddleperf_cluster/scheduled-tests/{job_id}",
+            f"/api/v1/perftest_cluster/scheduled-tests/{job_id}",
             headers={"Authorization": f"Bearer {token_t2}"},
         )
         assert response.status_code == 404
 
         # Tenant 1: Verify job still exists
         response = await client.get(
-            "/api/v1/waddleperf_cluster/scheduled-tests",
+            "/api/v1/perftest_cluster/scheduled-tests",
             headers={"Authorization": f"Bearer {token_t1}"},
         )
         assert response.status_code == 200
@@ -409,7 +409,7 @@ async def test_scheduled_tests_job_due_visibility(
     # Create a job with next_run_at in the past
     job = await manager.create_job(
         tenant="test-tenant-job",
-        module="waddleperf_cluster",
+        module="perftest_cluster",
         job_type="server_test",
         payload={"device_id": "dev1", "test_type": "http", "target": "example.com"},
         interval_seconds=30,
@@ -445,9 +445,9 @@ async def test_run_server_test_task_stores_result(
     Args:
         real_dal: Real AsyncDB fixture.
     """
-    from hub_api.modules.waddleperf_cluster.worker.tasks import _run_server_test_async
-    from hub_api.modules.waddleperf_cluster.services.test_manager import TestManager
-    from hub_api.modules.waddleperf_cluster.services.device_manager import DeviceManager
+    from hub_api.modules.perftest_cluster.worker.tasks import _run_server_test_async
+    from hub_api.modules.perftest_cluster.services.test_manager import TestManager
+    from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
 
     tenant = "test-tenant-task"
 
@@ -477,7 +477,7 @@ async def test_run_server_test_task_stores_result(
     await _run_server_test_async(
         job_id="test-job-1",
         tenant=tenant,
-        module="waddleperf_cluster",
+        module="perftest_cluster",
         job_type="server_test",
         payload={
             "device_id": device.id,
@@ -510,10 +510,10 @@ async def test_run_server_test_task_engine_error(
     Args:
         real_dal: Real AsyncDB fixture.
     """
-    from hub_api.modules.waddleperf_cluster.worker.tasks import _run_server_test_async
-    from hub_api.modules.waddleperf_cluster.services.test_manager import TestManager
-    from hub_api.modules.waddleperf_cluster.services.device_manager import DeviceManager
-    from hub_api.modules.waddleperf_cluster.services.engine_client import EngineError
+    from hub_api.modules.perftest_cluster.worker.tasks import _run_server_test_async
+    from hub_api.modules.perftest_cluster.services.test_manager import TestManager
+    from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
+    from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
     tenant = "test-tenant-error"
 
@@ -539,7 +539,7 @@ async def test_run_server_test_task_engine_error(
     await _run_server_test_async(
         job_id="test-job-error",
         tenant=tenant,
-        module="waddleperf_cluster",
+        module="perftest_cluster",
         job_type="server_test",
         payload={
             "device_id": device.id,

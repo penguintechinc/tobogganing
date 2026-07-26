@@ -12,7 +12,7 @@ from penguin_dal import AsyncDB
 
 from hub_api.auth.jwt import encode_access_token
 from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
-from hub_api.modules.waddleperf_cluster.services.engine_client import EngineError
+from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
 
 @pytest_asyncio.fixture
@@ -27,8 +27,8 @@ async def app_with_c2c_node_health_realdal(
     import hub_api.app
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.recurring
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.recurring, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.recurring
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.recurring, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
     return app_with_c2c
@@ -67,7 +67,7 @@ async def test_recurring_job_type_matrix_run_default(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -85,7 +85,7 @@ async def test_recurring_job_type_matrix_run_default(
     client = app_with_c2c_node_health_realdal.test_client()
 
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"endpoint_ids": ["ep-1"], "interval_seconds": 300},
         headers={"Authorization": f"Bearer {c2c_write_token_node_health}"},
     )
@@ -116,9 +116,9 @@ async def test_recurring_job_type_node_health_requires_regions_flag(
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
         # Enable recurring_runs but NOT regions
-        if flag_key == "tobogganing.waddleperf_c2c.recurring_runs":
+        if flag_key == "tobogganing.perftest_c2c.recurring_runs":
             return True
-        if flag_key == "tobogganing.waddleperf_c2c.regions":
+        if flag_key == "tobogganing.perftest_c2c.regions":
             return False
         return original_flag_on(flag_key, distinct_id)
 
@@ -136,7 +136,7 @@ async def test_recurring_job_type_node_health_requires_regions_flag(
     client = app_with_c2c_node_health_realdal.test_client()
 
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"interval_seconds": 300, "job_type": "node_health"},
         headers={"Authorization": f"Bearer {c2c_write_token_node_health}"},
     )
@@ -156,7 +156,7 @@ async def test_recurring_job_type_invalid_value(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -174,7 +174,7 @@ async def test_recurring_job_type_invalid_value(
     client = app_with_c2c_node_health_realdal.test_client()
 
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"interval_seconds": 300, "job_type": "invalid_type"},
         headers={"Authorization": f"Bearer {c2c_write_token_node_health}"},
     )
@@ -194,7 +194,7 @@ async def test_recurring_job_type_node_health_with_regions_flag(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -212,7 +212,7 @@ async def test_recurring_job_type_node_health_with_regions_flag(
     client = app_with_c2c_node_health_realdal.test_client()
 
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"interval_seconds": 300, "job_type": "node_health"},
         headers={"Authorization": f"Bearer {c2c_write_token_node_health}"},
     )
@@ -237,7 +237,7 @@ async def test_recurring_job_type_node_health_with_regions_flag(
 @pytest.mark.asyncio
 async def test_node_health_healthy_endpoint(real_dal: AsyncDB) -> None:
     """node_health task marks endpoint as healthy on 200 response."""
-    from hub_api.modules.waddleperf_c2c.worker.tasks import _node_health
+    from hub_api.modules.perftest_c2c.worker.tasks import _node_health
 
     tenant = "test-tenant"
     endpoint_id = "ep-1"
@@ -275,7 +275,7 @@ async def test_node_health_healthy_endpoint(real_dal: AsyncDB) -> None:
     await _node_health(
         job_id="test-job-1",
         tenant=tenant,
-        module="waddleperf_c2c",
+        module="perftest_c2c",
         job_type="node_health",
         payload={},
         db=real_dal,
@@ -296,7 +296,7 @@ async def test_node_health_healthy_endpoint(real_dal: AsyncDB) -> None:
 @pytest.mark.asyncio
 async def test_node_health_unhealthy_endpoint(real_dal: AsyncDB) -> None:
     """node_health task marks endpoint as unhealthy on non-200 response."""
-    from hub_api.modules.waddleperf_c2c.worker.tasks import _node_health
+    from hub_api.modules.perftest_c2c.worker.tasks import _node_health
 
     tenant = "test-tenant"
     endpoint_id = "ep-2"
@@ -334,7 +334,7 @@ async def test_node_health_unhealthy_endpoint(real_dal: AsyncDB) -> None:
     await _node_health(
         job_id="test-job-2",
         tenant=tenant,
-        module="waddleperf_c2c",
+        module="perftest_c2c",
         job_type="node_health",
         payload={},
         db=real_dal,
@@ -355,7 +355,7 @@ async def test_node_health_unhealthy_endpoint(real_dal: AsyncDB) -> None:
 @pytest.mark.asyncio
 async def test_node_health_failing_endpoint_continues(real_dal: AsyncDB) -> None:
     """node_health: one failing endpoint doesn't stop sweep, others still updated."""
-    from hub_api.modules.waddleperf_c2c.worker.tasks import _node_health
+    from hub_api.modules.perftest_c2c.worker.tasks import _node_health
 
     tenant = "test-tenant"
 
@@ -401,7 +401,7 @@ async def test_node_health_failing_endpoint_continues(real_dal: AsyncDB) -> None
     await _node_health(
         job_id="test-job-3",
         tenant=tenant,
-        module="waddleperf_c2c",
+        module="perftest_c2c",
         job_type="node_health",
         payload={},
         db=real_dal,
@@ -430,7 +430,7 @@ async def test_node_health_failing_endpoint_continues(real_dal: AsyncDB) -> None
 @pytest.mark.asyncio
 async def test_node_health_foreign_tenant_endpoints_untouched(real_dal: AsyncDB) -> None:
     """node_health: foreign-tenant endpoints are not updated."""
-    from hub_api.modules.waddleperf_c2c.worker.tasks import _node_health
+    from hub_api.modules.perftest_c2c.worker.tasks import _node_health
 
     tenant_a = "tenant-a"
     tenant_b = "tenant-b"
@@ -485,7 +485,7 @@ async def test_node_health_foreign_tenant_endpoints_untouched(real_dal: AsyncDB)
     await _node_health(
         job_id="test-job-4",
         tenant=tenant_a,
-        module="waddleperf_c2c",
+        module="perftest_c2c",
         job_type="node_health",
         payload={},
         db=real_dal,

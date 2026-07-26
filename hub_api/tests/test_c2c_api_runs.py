@@ -25,8 +25,8 @@ async def app_with_c2c_runs_realdal(
     import hub_api.app
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.runs
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.runs, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.runs
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.runs, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
     return app_with_c2c
@@ -77,7 +77,7 @@ async def test_create_run_missing_test_types(
     client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/runs",
+        "/api/v1/perftest_c2c/runs",
         json={
             "endpoint_ids": ["ep-1", "ep-2"],
         },
@@ -95,7 +95,7 @@ async def test_create_run_missing_endpoint_ids(
     client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/runs",
+        "/api/v1/perftest_c2c/runs",
         json={
             "test_types": ["latency"],
         },
@@ -113,7 +113,7 @@ async def test_create_run_readonly_forbidden(
     client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/runs",
+        "/api/v1/perftest_c2c/runs",
         json={
             "test_types": ["latency"],
             "endpoint_ids": ["ep-1", "ep-2"],
@@ -137,7 +137,7 @@ async def test_create_run_invalid_test_types(
     client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/runs",
+        "/api/v1/perftest_c2c/runs",
         json={
             "test_types": ["latency", "throughput"],  # Invalid, not in ALLOWED_TEST_TYPES
             "endpoint_ids": ["ep-1", "ep-2"],
@@ -159,7 +159,7 @@ async def test_create_run_valid_test_types_passes_validation(
     client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_c2c/runs",
+        "/api/v1/perftest_c2c/runs",
         json={
             "test_types": ["http", "icmp"],  # Valid test types
             "endpoint_ids": ["ep-1", "ep-2"],
@@ -183,7 +183,7 @@ async def test_list_runs_success(
     client = app_with_c2c_runs_realdal.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/runs",
+        "/api/v1/perftest_c2c/runs",
         headers={"Authorization": f"Bearer {c2c_readonly_token_runs}"},
     )
 

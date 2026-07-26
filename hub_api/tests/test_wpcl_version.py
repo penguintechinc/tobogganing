@@ -22,7 +22,7 @@ async def test_get_version_success(app_with_wpc: Quart, wpc_readonly_token: str)
     client = app_with_wpc.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": f"Bearer {wpc_readonly_token}"},
     )
 
@@ -53,7 +53,7 @@ async def test_get_version_returns_configured_values(
     app_with_wpc.config["WPCL_DOWNLOAD_URL"] = "https://custom-download.com/wpcl"
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": f"Bearer {wpc_readonly_token}"},
     )
 
@@ -82,7 +82,7 @@ async def test_get_version_default_values(
     app_with_wpc.config.pop("WPCL_DOWNLOAD_URL", None)
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": f"Bearer {wpc_readonly_token}"},
     )
 
@@ -102,7 +102,7 @@ async def test_get_version_requires_tenant(app_with_wpc: Quart) -> None:
     """
     client = app_with_wpc.test_client()
 
-    response = await client.get("/api/v1/waddleperf_client/version")
+    response = await client.get("/api/v1/perftest_client/version")
 
     assert response.status_code == 403
 
@@ -117,7 +117,7 @@ async def test_get_version_requires_valid_token(app_with_wpc: Quart) -> None:
     client = app_with_wpc.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": "Bearer invalid-token"},
     )
 
@@ -137,7 +137,7 @@ async def test_get_version_meta_timestamp(
     client = app_with_wpc.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": f"Bearer {wpc_readonly_token}"},
     )
 
@@ -166,7 +166,7 @@ async def test_get_version_is_flag_gated(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.version.require_feature"
+        "hub_api.modules.perftest_client.api.version.require_feature"
     ) as mock_require_feature:
         # Mock the decorator to ensure it's applied
         def mock_decorator(module: str, feature: str):
@@ -178,7 +178,7 @@ async def test_get_version_is_flag_gated(
         mock_require_feature.side_effect = mock_decorator
 
         response = await client.get(
-            "/api/v1/waddleperf_client/version",
+            "/api/v1/perftest_client/version",
             headers={"Authorization": f"Bearer {wpc_readonly_token}"},
         )
 
@@ -199,7 +199,7 @@ async def test_get_version_no_write_scope_required(
     client = app_with_wpc.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": f"Bearer {wpc_readonly_token}"},
     )
 
@@ -219,7 +219,7 @@ async def test_get_version_malformed_auth_header(
     client = app_with_wpc.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_client/version",
+        "/api/v1/perftest_client/version",
         headers={"Authorization": "NotBearer token123"},
     )
 
