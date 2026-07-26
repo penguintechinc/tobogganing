@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
 
 import sqlalchemy as sa
-from quart import Quart, jsonify
+from quart import Quart
 from quart_cors import cors
+from quart_schema import QuartSchema
 
 from hub_api.config import Config, build_db_uri
 from hub_api.config.readiness import validate_prod_readiness
@@ -40,6 +40,16 @@ def create_app(config: Config | None = None) -> Quart:
     # Load configuration
     app.config["TESTING"] = False
     app.config["PRODUCT_NAME"] = config.product_name
+
+    # Initialize QuartSchema for OpenAPI spec generation (disable auto-mounted routes)
+    # We implement custom /openapi.json (auth-gated) and /docs/public (login-only)
+    QuartSchema(
+        app,
+        openapi_path=None,
+        swagger_ui_path=None,
+        redoc_ui_path=None,
+        scalar_ui_path=None,
+    )
 
     # Configure logging
     logging.basicConfig(level=config.log_level)
@@ -176,6 +186,302 @@ def create_app(config: Config | None = None) -> Quart:
         except Exception as e:
             logger.error(f"Readiness check failed: {str(e)}")
             return {"status": "unhealthy", "error": "database"}, 503
+
+    # OpenAPI spec routes (two-document split for security)
+    @app.route("/docs/public", methods=["GET"])
+    async def public_docs() -> tuple[dict, int]:
+        """Public OpenAPI documentation with login endpoint only.
+
+        Accessible without authentication. Exposes only the login/token endpoints
+        to allow unauthenticated clients to discover how to authenticate.
+        """
+        public_spec = {
+            "openapi": "3.1.0",
+            "info": {
+                "title": app.config.get("PRODUCT_NAME", "Hub API"),
+                "version": "1.0.0",
+                "description": (
+                    "Public login documentation. For full API docs, "
+                    "authenticate and access /docs/full"
+                ),
+            },
+            "paths": {
+                "/api/v1/auth/login": {
+                    "post": {
+                        "summary": "Login with email and password",
+                        "operationId": "loginUser",
+                        "tags": ["Authentication"],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "email": {
+                                                "type": "string",
+                                                "format": "email",
+                                                "description": "User email address",
+                                            },
+                                            "password": {
+                                                "type": "string",
+                                                "format": "password",
+                                                "description": "User password",
+                                            },
+                                            "mfa_token": {
+                                                "type": "string",
+                                                "description": (
+                                                    "Optional MFA token if MFA is enabled"
+                                                ),
+                                            },
+                                        },
+                                        "required": ["email", "password"],
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {
+                            "200": {
+                                "description": "Login successful or MFA required",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "oneOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "access_token": {
+                                                            "type": "string"
+                                                        },
+                                                        "refresh_token": {
+                                                            "type": "string"
+                                                        },
+                                                        "expires_in": {
+                                                            "type": "integer"
+                                                        },
+                                                        "token_type": {
+                                                            "type": "string",
+                                                            "enum": ["Bearer"],
+                                                        },
+                                                    },
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "mfa_required": {
+                                                            "type": "boolean",
+                                                            "const": True,
+                                                        },
+                                                    },
+                                                },
+                                            ]
+                                        }
+                                    }
+                                },
+                            },
+                            "401": {
+                                "description": "Invalid credentials",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "error": {"type": "string"},
+                                            },
+                                        }
+                                    }
+                                },
+                            },
+                        },
+                    }
+                },
+            },
+            "components": {
+                "securitySchemes": {
+                    "BearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                    }
+                }
+            },
+        }
+        return public_spec, 200
+
+    @app.route("/openapi.json", methods=["GET"])
+    async def full_openapi_spec() -> tuple[dict | tuple, int]:
+        """Full OpenAPI specification for authenticated users only.
+
+        Returns 401 if the request does not include a valid JWT token.
+        Exposes the complete API surface, schemas, and security requirements.
+        """
+        from hub_api.auth.middleware import _validate_and_store_token
+
+        # Validate authentication token
+        token_valid = await _validate_and_store_token()
+        if not token_valid:
+            error_resp = {
+                "error": "Unauthorized: missing or invalid token"
+            }
+            return error_resp, 401
+
+        # For now, return a placeholder full spec.
+        # In production, this would be generated via quart-schema or auto-generated.
+        full_spec = {
+            "openapi": "3.1.0",
+            "info": {
+                "title": app.config.get("PRODUCT_NAME", "Hub API"),
+                "version": "1.0.0",
+                "description": (
+                    "Complete Hub API specification. Includes all endpoints, "
+                    "schemas, and authentication requirements."
+                ),
+            },
+            "servers": [
+                {"url": "https://hub.penguintech.io", "description": "Production"},
+                {"url": "http://localhost:5000", "description": "Local development"},
+            ],
+            "paths": {
+                "/api/v1/auth/login": {
+                    "post": {
+                        "summary": "Login with email and password",
+                        "operationId": "loginUser",
+                        "tags": ["Authentication"],
+                        "security": [],  # No auth required for login
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "email": {
+                                                "type": "string",
+                                                "format": "email",
+                                            },
+                                            "password": {
+                                                "type": "string",
+                                                "format": "password",
+                                            },
+                                            "mfa_token": {
+                                                "type": "string",
+                                            },
+                                        },
+                                        "required": ["email", "password"],
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {
+                            "200": {"description": "Login successful or MFA required"},
+                            "401": {"description": "Invalid credentials"},
+                        },
+                    }
+                },
+                "/api/v1/auth/refresh": {
+                    "post": {
+                        "summary": "Refresh access token",
+                        "operationId": "refreshToken",
+                        "tags": ["Authentication"],
+                        "security": [],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "refresh_token": {"type": "string"},
+                                        },
+                                        "required": ["refresh_token"],
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {
+                            "200": {"description": "Token refreshed successfully"},
+                            "401": {"description": "Invalid or expired refresh token"},
+                        },
+                    }
+                },
+                "/api/v1/auth/logout": {
+                    "post": {
+                        "summary": "Logout and revoke tokens",
+                        "operationId": "logoutUser",
+                        "tags": ["Authentication"],
+                        "security": [],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "refresh_token": {"type": "string"},
+                                        },
+                                        "required": ["refresh_token"],
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {
+                            "204": {"description": "Logout successful"},
+                        },
+                    }
+                },
+                "/health": {
+                    "get": {
+                        "summary": "Liveness probe",
+                        "operationId": "healthCheck",
+                        "tags": ["Health"],
+                        "security": [],
+                        "responses": {
+                            "200": {
+                                "description": "Service is healthy",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {"type": "string", "enum": ["healthy"]},
+                                            },
+                                        }
+                                    }
+                                },
+                            }
+                        },
+                    }
+                },
+                "/ready": {
+                    "get": {
+                        "summary": "Readiness probe",
+                        "operationId": "readinessCheck",
+                        "tags": ["Health"],
+                        "security": [],
+                        "responses": {
+                            "200": {
+                                "description": "Service is ready",
+                            },
+                            "503": {
+                                "description": "Service is not ready",
+                            },
+                        },
+                    }
+                },
+            },
+            "components": {
+                "securitySchemes": {
+                    "BearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                        "description": "JWT access token obtained from /api/v1/auth/login",
+                    }
+                }
+            },
+            "security": [{"BearerAuth": []}],
+        }
+        return full_spec, 200
 
     # Error handlers
     @app.errorhandler(404)

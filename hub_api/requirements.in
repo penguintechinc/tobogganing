@@ -1,6 +1,7 @@
 # Production dependencies
 quart==0.20.0
 quart-cors==0.7.0
+quart-schema==0.19.0
 hypercorn==0.17.3
 penguin-dal[quart]>=0.1.0
 SQLAlchemy==2.0.36
