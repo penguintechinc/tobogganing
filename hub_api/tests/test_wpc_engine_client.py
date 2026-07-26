@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from hub_api.modules.waddleperf_cluster.services.engine_client import (
+from hub_api.modules.perftest_cluster.services.engine_client import (
     ALLOWED_TEST_TYPES,
     EngineClient,
     EngineError,

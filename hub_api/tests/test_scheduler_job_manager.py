@@ -19,7 +19,7 @@ async def test_create_job_round_trip(real_dal: Any) -> None:
     payload = {"device_id": "dev123", "test_type": "latency", "target": "example.com"}
     created = await manager.create_job(
         tenant="t1",
-        module="waddleperf_cluster",
+        module="perftest_cluster",
         job_type="server_test",
         payload=payload,
         interval_seconds=60,
@@ -28,7 +28,7 @@ async def test_create_job_round_trip(real_dal: Any) -> None:
 
     assert created["id"]
     assert created["tenant"] == "t1"
-    assert created["module"] == "waddleperf_cluster"
+    assert created["module"] == "perftest_cluster"
     assert created["job_type"] == "server_test"
     assert created["payload"] == payload  # Dict, not JSON string
     assert created["interval_seconds"] == 60

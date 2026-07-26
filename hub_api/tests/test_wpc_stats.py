@@ -45,9 +45,9 @@ async def test_get_summary_success(
     client = app_with_wpc_stats.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.get_db"
+        "hub_api.modules.perftest_cluster.api.stats.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.StatsManager"
+        "hub_api.modules.perftest_cluster.api.stats.StatsManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -64,7 +64,7 @@ async def test_get_summary_success(
         mock_mgr.summary = AsyncMock(return_value=mock_summary)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/stats/summary",
+            "/api/v1/perftest_cluster/stats/summary",
             headers={"Authorization": f"Bearer {stats_read_token}"},
         )
 
@@ -84,9 +84,9 @@ async def test_get_by_device_success(
     client = app_with_wpc_stats.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.get_db"
+        "hub_api.modules.perftest_cluster.api.stats.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.StatsManager"
+        "hub_api.modules.perftest_cluster.api.stats.StatsManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -105,7 +105,7 @@ async def test_get_by_device_success(
         mock_mgr.by_device = AsyncMock(return_value=mock_by_device)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/stats/by-device",
+            "/api/v1/perftest_cluster/stats/by-device",
             headers={"Authorization": f"Bearer {stats_read_token}"},
         )
 
@@ -125,9 +125,9 @@ async def test_get_by_type_success(
     client = app_with_wpc_stats.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.get_db"
+        "hub_api.modules.perftest_cluster.api.stats.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.StatsManager"
+        "hub_api.modules.perftest_cluster.api.stats.StatsManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -146,7 +146,7 @@ async def test_get_by_type_success(
         mock_mgr.by_type = AsyncMock(return_value=mock_by_type)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/stats/by-type",
+            "/api/v1/perftest_cluster/stats/by-type",
             headers={"Authorization": f"Bearer {stats_read_token}"},
         )
 
@@ -166,9 +166,9 @@ async def test_get_trends_success(
     client = app_with_wpc_stats.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.get_db"
+        "hub_api.modules.perftest_cluster.api.stats.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.StatsManager"
+        "hub_api.modules.perftest_cluster.api.stats.StatsManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -185,7 +185,7 @@ async def test_get_trends_success(
         mock_mgr.trends = AsyncMock(return_value=mock_trends)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/stats/trends?interval=daily&metric=success_rate",
+            "/api/v1/perftest_cluster/stats/trends?interval=daily&metric=success_rate",
             headers={"Authorization": f"Bearer {stats_read_token}"},
         )
 
@@ -204,9 +204,9 @@ async def test_get_recent_success(
     client = app_with_wpc_stats.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.get_db"
+        "hub_api.modules.perftest_cluster.api.stats.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.StatsManager"
+        "hub_api.modules.perftest_cluster.api.stats.StatsManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -228,7 +228,7 @@ async def test_get_recent_success(
         mock_mgr.recent = AsyncMock(return_value=mock_recent)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/stats/recent",
+            "/api/v1/perftest_cluster/stats/recent",
             headers={"Authorization": f"Bearer {stats_read_token}"},
         )
 
@@ -248,9 +248,9 @@ async def test_get_recent_with_limit_cap(
     client = app_with_wpc_stats.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.get_db"
+        "hub_api.modules.perftest_cluster.api.stats.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.stats.StatsManager"
+        "hub_api.modules.perftest_cluster.api.stats.StatsManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -261,7 +261,7 @@ async def test_get_recent_with_limit_cap(
 
         # Request with limit > 100
         response = await client.get(
-            "/api/v1/waddleperf_cluster/stats/recent?limit=200",
+            "/api/v1/perftest_cluster/stats/recent?limit=200",
             headers={"Authorization": f"Bearer {stats_read_token}"},
         )
 

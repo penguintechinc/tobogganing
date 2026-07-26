@@ -1,4 +1,4 @@
-"""Contract tests for the waddleperf_c2c module.
+"""Contract tests for the perftest_c2c module.
 
 These lock in the module wiring: Professional-tier entitlements resolve
 through the registry (a key-format mismatch would silently downgrade the
@@ -13,30 +13,30 @@ import pytest
 from quart import Quart
 
 from hub_api.entitlements.gate import tier_of
-from hub_api.modules.waddleperf_c2c import module as c2c_module
+from hub_api.modules.perftest_c2c import module as c2c_module
 
 
 C2C_FEATURES = ["endpoints", "runs", "matrix"]
 
 
 def test_c2c_registered_in_module_autodiscovery() -> None:
-    """waddleperf_c2c is listed for autodiscovery in hub_api.modules."""
+    """perftest_c2c is listed for autodiscovery in hub_api.modules."""
     import hub_api.modules
 
-    assert "waddleperf_c2c" in hub_api.modules.__all__
+    assert "perftest_c2c" in hub_api.modules.__all__
 
 
 def test_contract_entitlements_are_professional() -> None:
     """Every c2c feature entitlement is keyed '{module}.{feature}' at Professional tier.
 
-    Regression guard: the gate looks up entitlements by ``waddleperf_c2c.<feature>``
+    Regression guard: the gate looks up entitlements by ``perftest_c2c.<feature>``
     (no ``tobogganing.`` prefix). A prefixed key misses the registry and
     ``tier_of`` falls back to community, silently defeating the paid gate.
     """
     contract = c2c_module()
     keys = {e.feature: e.tier.lower() for e in contract.entitlements}
     for feature in C2C_FEATURES:
-        key = f"waddleperf_c2c.{feature}"
+        key = f"perftest_c2c.{feature}"
         assert key in keys, f"missing entitlement {key}; got {sorted(keys)}"
         assert keys[key] == "professional", f"{key} must be professional"
 
@@ -45,7 +45,7 @@ def test_contract_flags_and_migrations() -> None:
     """Flags carry the tobogganing prefix; migrations reference 0014/0015."""
     contract = c2c_module()
     for feature in C2C_FEATURES:
-        assert f"tobogganing.waddleperf_c2c.{feature}" in contract.flags
+        assert f"tobogganing.perftest_c2c.{feature}" in contract.flags
     assert contract.migrations == ["0014", "0015", "0020"]
 
 
@@ -53,16 +53,16 @@ def test_tier_of_resolves_professional_via_registry(app_with_c2c: Quart) -> None
     """The registry resolves each c2c feature to the professional tier."""
     registry = app_with_c2c.registry
     for feature in C2C_FEATURES:
-        assert tier_of(f"waddleperf_c2c.{feature}", registry) == "professional"
+        assert tier_of(f"perftest_c2c.{feature}", registry) == "professional"
 
 
 def test_c2c_blueprints_mounted(app_with_c2c: Quart) -> None:
-    """Blueprints mount under /api/v1/waddleperf_c2c/{endpoints,runs,matrix}."""
+    """Blueprints mount under /api/v1/perftest_c2c/{endpoints,runs,matrix}."""
     rules = {r.rule for r in app_with_c2c.url_map.iter_rules()}
     joined = "\n".join(sorted(rules))
-    assert "/api/v1/waddleperf_c2c/endpoints" in joined
-    assert "/api/v1/waddleperf_c2c/runs" in joined
-    assert "/api/v1/waddleperf_c2c/matrix" in joined
+    assert "/api/v1/perftest_c2c/endpoints" in joined
+    assert "/api/v1/perftest_c2c/runs" in joined
+    assert "/api/v1/perftest_c2c/matrix" in joined
 
 
 @pytest.mark.asyncio
@@ -87,14 +87,14 @@ async def test_unlicensed_professional_request_returns_402(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
     # NOTE: deliberately do NOT patch _is_licensed_for_tier — unlicensed path.
 
-    from hub_api.modules.waddleperf_c2c import module as c2c_mod
+    from hub_api.modules.perftest_c2c import module as c2c_mod
 
     app.registry.register(c2c_mod())
     ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
@@ -114,7 +114,7 @@ async def test_unlicensed_professional_request_returns_402(
 
     client = app.test_client()
     resp = await client.get(
-        "/api/v1/waddleperf_c2c/endpoints",
+        "/api/v1/perftest_c2c/endpoints",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 402

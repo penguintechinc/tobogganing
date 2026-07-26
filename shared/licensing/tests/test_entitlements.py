@@ -3,7 +3,7 @@ import shared.licensing.entitlements as ent
 
 def test_flag_off_denies(monkeypatch):
     monkeypatch.setattr(ent, "_flag_on", lambda key, did: False)
-    assert ent.feature_enabled("waddleperf_c2c", "region_matrix") is False
+    assert ent.feature_enabled("perftest_c2c", "region_matrix") is False
 
 
 def test_flag_on_unlicensed_feature_allows(monkeypatch):

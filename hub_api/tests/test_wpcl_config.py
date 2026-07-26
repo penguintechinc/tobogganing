@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from quart import Quart
 from typing import Any
 
-from hub_api.modules.waddleperf_client.services.schedule_manager import TestScheduleDTO
+from hub_api.modules.perftest_client.services.schedule_manager import TestScheduleDTO
 
 
 def make_mock_schedule(
@@ -59,12 +59,12 @@ async def test_get_client_config_success(app_with_wpc: Quart) -> None:
     test_api_key = "test-device-key-12345"
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global",
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global",
         new_callable=AsyncMock
     ) as mock_auth, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.ScheduleManager"
+        "hub_api.modules.perftest_client.api.client_config.ScheduleManager"
     ) as mock_mgr_class, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.get_db"
+        "hub_api.modules.perftest_client.api.client_config.get_db"
     ) as mock_get_db:
 
         device = make_mock_device()
@@ -83,7 +83,7 @@ async def test_get_client_config_success(app_with_wpc: Quart) -> None:
         mock_get_db.return_value = mock_db
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": f"Bearer {test_api_key}"},
         )
 
@@ -109,11 +109,11 @@ async def test_get_client_config_returns_resolved_schedules(
     test_api_key = "test-device-key-12345"
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.ScheduleManager"
+        "hub_api.modules.perftest_client.api.client_config.ScheduleManager"
     ) as mock_mgr_class, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.get_db"
+        "hub_api.modules.perftest_client.api.client_config.get_db"
     ) as mock_get_db:
 
         device = make_mock_device(device_id="dev-456", org_unit_id="ou-2")
@@ -135,7 +135,7 @@ async def test_get_client_config_returns_resolved_schedules(
         mock_get_db.return_value = mock_db
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": f"Bearer {test_api_key}"},
         )
 
@@ -160,11 +160,11 @@ async def test_get_client_config_includes_client_config(
     test_api_key = "test-device-key-12345"
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.ScheduleManager"
+        "hub_api.modules.perftest_client.api.client_config.ScheduleManager"
     ) as mock_mgr_class, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.get_db"
+        "hub_api.modules.perftest_client.api.client_config.get_db"
     ) as mock_get_db:
 
         device = make_mock_device()
@@ -182,7 +182,7 @@ async def test_get_client_config_includes_client_config(
         mock_get_db.return_value = mock_db
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": f"Bearer {test_api_key}"},
         )
 
@@ -200,7 +200,7 @@ async def test_get_client_config_missing_auth_header(app_with_wpc: Quart) -> Non
     """
     client = app_with_wpc.test_client()
 
-    response = await client.get("/api/v1/waddleperf_client/config")
+    response = await client.get("/api/v1/perftest_client/config")
 
     assert response.status_code == 401
     data = await response.get_json()
@@ -217,12 +217,12 @@ async def test_get_client_config_invalid_device_key(app_with_wpc: Quart) -> None
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth:
         mock_auth.return_value = None
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": "Bearer invalid-key"},
         )
 
@@ -242,9 +242,9 @@ async def test_get_client_config_feature_disabled(app_with_wpc: Quart) -> None:
     test_api_key = "test-device-key-12345"
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.feature_enabled"
+        "hub_api.modules.perftest_client.api.client_config.feature_enabled"
     ) as mock_feature:
 
         device = make_mock_device()
@@ -252,7 +252,7 @@ async def test_get_client_config_feature_disabled(app_with_wpc: Quart) -> None:
         mock_feature.return_value = False
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": f"Bearer {test_api_key}"},
         )
 
@@ -274,11 +274,11 @@ async def test_get_client_config_tenant_derived_from_device(
     test_api_key = "test-device-key-12345"
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.ScheduleManager"
+        "hub_api.modules.perftest_client.api.client_config.ScheduleManager"
     ) as mock_mgr_class, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.get_db"
+        "hub_api.modules.perftest_client.api.client_config.get_db"
     ) as mock_get_db:
 
         device = make_mock_device()
@@ -295,7 +295,7 @@ async def test_get_client_config_tenant_derived_from_device(
         mock_get_db.return_value = mock_db
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": f"Bearer {test_api_key}"},
         )
 
@@ -315,13 +315,13 @@ async def test_get_client_config_revoked_key(app_with_wpc: Quart) -> None:
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth:
         # authenticate_device_global returns None for revoked keys
         mock_auth.return_value = None
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": "Bearer revoked-key"},
         )
 
@@ -339,11 +339,11 @@ async def test_get_client_config_empty_schedules(app_with_wpc: Quart) -> None:
     test_api_key = "test-device-key-12345"
 
     with patch(
-        "hub_api.modules.waddleperf_client.api.client_config.authenticate_device_global"
+        "hub_api.modules.perftest_client.api.client_config.authenticate_device_global"
     ) as mock_auth, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.ScheduleManager"
+        "hub_api.modules.perftest_client.api.client_config.ScheduleManager"
     ) as mock_mgr_class, patch(
-        "hub_api.modules.waddleperf_client.api.client_config.get_db"
+        "hub_api.modules.perftest_client.api.client_config.get_db"
     ) as mock_get_db:
 
         device = make_mock_device()
@@ -359,7 +359,7 @@ async def test_get_client_config_empty_schedules(app_with_wpc: Quart) -> None:
         mock_get_db.return_value = mock_db
 
         response = await client.get(
-            "/api/v1/waddleperf_client/config",
+            "/api/v1/perftest_client/config",
             headers={"Authorization": f"Bearer {test_api_key}"},
         )
 
@@ -379,7 +379,7 @@ async def test_get_client_config_no_bearer_prefix(app_with_wpc: Quart) -> None:
     client = app_with_wpc.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_client/config",
+        "/api/v1/perftest_client/config",
         headers={"Authorization": "Basic dGVzdDp0ZXN0"},
     )
 

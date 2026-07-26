@@ -4,7 +4,7 @@ import { RunsPage } from '../pages/c2c/RunsPage';
 import { RecurringPage } from '../pages/c2c/RecurringPage';
 import { RegionsPage } from '../pages/c2c/RegionsPage';
 
-/** View-slug -> page map for the waddleperf_c2c module. */
+/** View-slug -> page map for the perftest_c2c module. */
 export const c2cViews: Record<string, ComponentType> = {
   'c2c-nodes': EndpointsPage,
   'c2c-runs': RunsPage,

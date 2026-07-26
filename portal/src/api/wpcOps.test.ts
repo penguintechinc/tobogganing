@@ -35,7 +35,7 @@ describe('wpcOps API', () => {
 
       const result = await wpcOps.listAlertRules();
       expect(result).toEqual(mockRules);
-      expect(mockApiClient.get).toHaveBeenCalledWith('/waddleperf_cluster/alerts/rules');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/perftest_cluster/alerts/rules');
     });
 
     it('creates an alert rule', async () => {
@@ -61,7 +61,7 @@ describe('wpcOps API', () => {
 
       expect(result).toEqual(newRule);
       expect(mockApiClient.post).toHaveBeenCalledWith(
-        '/waddleperf_cluster/alerts/rules',
+        '/perftest_cluster/alerts/rules',
         expect.objectContaining({ name: 'Low Throughput' })
       );
     });
@@ -70,7 +70,7 @@ describe('wpcOps API', () => {
       mockApiClient.delete.mockResolvedValue({} as Record<string, unknown>);
 
       await wpcOps.deleteAlertRule('rule-1');
-      expect(mockApiClient.delete).toHaveBeenCalledWith('/waddleperf_cluster/alerts/rules/rule-1');
+      expect(mockApiClient.delete).toHaveBeenCalledWith('/perftest_cluster/alerts/rules/rule-1');
     });
   });
 
@@ -93,7 +93,7 @@ describe('wpcOps API', () => {
 
       const result = await wpcOps.listAlertEvents();
       expect(result).toEqual(mockEvents);
-      expect(mockApiClient.get).toHaveBeenCalledWith('/waddleperf_cluster/alerts/events');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/perftest_cluster/alerts/events');
     });
   });
 
@@ -116,7 +116,7 @@ describe('wpcOps API', () => {
 
       const result = await wpcOps.listAlertChannels();
       expect(result).toEqual(mockChannels);
-      expect(mockApiClient.get).toHaveBeenCalledWith('/waddleperf_cluster/alerts/channels');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/perftest_cluster/alerts/channels');
     });
 
     it('creates an alert channel', async () => {
@@ -145,7 +145,7 @@ describe('wpcOps API', () => {
       mockApiClient.delete.mockResolvedValue({} as Record<string, unknown>);
 
       await wpcOps.deleteAlertChannel('ch-1');
-      expect(mockApiClient.delete).toHaveBeenCalledWith('/waddleperf_cluster/alerts/channels/ch-1');
+      expect(mockApiClient.delete).toHaveBeenCalledWith('/perftest_cluster/alerts/channels/ch-1');
     });
   });
 
@@ -219,7 +219,7 @@ describe('wpcOps API', () => {
 
       await wpcOps.deleteScheduledTest('job-1');
       expect(mockApiClient.delete).toHaveBeenCalledWith(
-        '/waddleperf_cluster/scheduled-tests/job-1'
+        '/perftest_cluster/scheduled-tests/job-1'
       );
     });
   });
@@ -281,7 +281,7 @@ describe('wpcOps API', () => {
 
       await wpcOps.deleteAutoPerfPolicy('policy-1');
       expect(mockApiClient.delete).toHaveBeenCalledWith(
-        '/waddleperf_cluster/autoperf/policies/policy-1'
+        '/perftest_cluster/autoperf/policies/policy-1'
       );
     });
 
@@ -297,7 +297,7 @@ describe('wpcOps API', () => {
       const result = await wpcOps.getAutoPerfPolicyState('policy-1');
       expect(result).toEqual(mockState);
       expect(mockApiClient.get).toHaveBeenCalledWith(
-        '/waddleperf_cluster/autoperf/policies/policy-1/state'
+        '/perftest_cluster/autoperf/policies/policy-1/state'
       );
     });
   });

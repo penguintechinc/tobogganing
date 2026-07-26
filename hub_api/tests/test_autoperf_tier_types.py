@@ -28,7 +28,7 @@ async def test_autoperf_tier_test_types_are_engine_supported(
     Before fix: Tier 3 included 'speedtest' which is not supported by the engine.
     After fix: Tier 3 only includes engine-supported types.
     """
-    from hub_api.modules.waddleperf_cluster.services.engine_client import (
+    from hub_api.modules.perftest_cluster.services.engine_client import (
         ALLOWED_TEST_TYPES,
     )
 

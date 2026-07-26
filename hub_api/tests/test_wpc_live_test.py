@@ -42,7 +42,7 @@ class TestLiveTestStreamHandler:
 
     def test_stream_message_serialization(self) -> None:
         """Test StreamMessage dataclass serialization."""
-        from hub_api.modules.waddleperf_cluster.api.live_test import StreamMessage
+        from hub_api.modules.perftest_cluster.api.live_test import StreamMessage
 
         msg = StreamMessage(
             event="test_complete",
@@ -66,7 +66,7 @@ class TestLiveTestHTTP:
         client = app_with_wpc.test_client()
 
         response = await client.post(
-            "/api/v1/waddleperf_cluster/live-test/run",
+            "/api/v1/perftest_cluster/live-test/run",
             json={
                 "test_type": "http",
                 "target": "example.com",
@@ -87,9 +87,9 @@ class TestLiveTestHTTP:
         with patch(
             "hub_api.entitlements.gate.feature_enabled", return_value=True
         ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.DeviceManager"
+            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
         ) as mock_dm_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.EngineClient"
+            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
         ) as mock_engine_class:
             # Mock DeviceManager
             mock_dm = AsyncMock()
@@ -109,7 +109,7 @@ class TestLiveTestHTTP:
             headers = {"Authorization": f"Bearer {wpc_readonly_token}"}
 
             response = await client.post(
-                "/api/v1/waddleperf_cluster/live-test/run",
+                "/api/v1/perftest_cluster/live-test/run",
                 json={
                     "test_type": "http",
                     "target": "example.com",
@@ -133,7 +133,7 @@ class TestLiveTestHTTP:
             headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
             response = await client.post(
-                "/api/v1/waddleperf_cluster/live-test/run",
+                "/api/v1/perftest_cluster/live-test/run",
                 json={
                     "test_type": "http",
                     "target": "example.com",
@@ -152,11 +152,11 @@ class TestLiveTestHTTP:
         with patch(
             "hub_api.entitlements.gate.feature_enabled", return_value=True
         ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.DeviceManager"
+            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
         ) as mock_dm_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.EngineClient"
+            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
         ) as mock_engine_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.TestManager"
+            "hub_api.modules.perftest_cluster.api.live_test.TestManager"
         ):
             # Mock DeviceManager
             mock_dm = AsyncMock()
@@ -192,7 +192,7 @@ class TestLiveTestHTTP:
             mock_manager.create_test = AsyncMock(return_value=test_record)
             mock_manager.record_result = AsyncMock(return_value=test_record)
 
-            from hub_api.modules.waddleperf_cluster.api.live_test import TestManager as TM
+            from hub_api.modules.perftest_cluster.api.live_test import TestManager as TM
 
             with patch.object(
                 TM, "create_test", mock_manager.create_test
@@ -203,7 +203,7 @@ class TestLiveTestHTTP:
                 headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
                 response = await client.post(
-                    "/api/v1/waddleperf_cluster/live-test/run",
+                    "/api/v1/perftest_cluster/live-test/run",
                     json={
                         "test_type": "http",
                         "target": "example.com",
@@ -230,7 +230,7 @@ class TestLiveTestHTTP:
             headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
             response = await client.post(
-                "/api/v1/waddleperf_cluster/live-test/run",
+                "/api/v1/perftest_cluster/live-test/run",
                 json={
                     "test_type": "http",
                     # missing "target"
@@ -248,14 +248,14 @@ class TestLiveTestHTTP:
         self, app_with_wpc, valid_wpc_token
     ) -> None:
         """Test that engine errors return 503."""
-        from hub_api.modules.waddleperf_cluster.services.engine_client import EngineError
+        from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
         with patch(
             "hub_api.entitlements.gate.feature_enabled", return_value=True
         ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.DeviceManager"
+            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
         ) as mock_dm_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.EngineClient"
+            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
         ) as mock_engine_class:
             # Mock DeviceManager
             mock_dm = AsyncMock()
@@ -275,7 +275,7 @@ class TestLiveTestHTTP:
             headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
             response = await client.post(
-                "/api/v1/waddleperf_cluster/live-test/run",
+                "/api/v1/perftest_cluster/live-test/run",
                 json={
                     "test_type": "http",
                     "target": "example.com",
@@ -293,14 +293,14 @@ class TestLiveTestHTTP:
         self, app_with_wpc, valid_wpc_token
     ) -> None:
         """Test that invalid test_type is rejected by engine."""
-        from hub_api.modules.waddleperf_cluster.services.engine_client import EngineError
+        from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
         with patch(
             "hub_api.entitlements.gate.feature_enabled", return_value=True
         ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.DeviceManager"
+            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
         ) as mock_dm_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.EngineClient"
+            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
         ) as mock_engine_class:
             # Mock DeviceManager
             mock_dm = AsyncMock()
@@ -320,7 +320,7 @@ class TestLiveTestHTTP:
             headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
             response = await client.post(
-                "/api/v1/waddleperf_cluster/live-test/run",
+                "/api/v1/perftest_cluster/live-test/run",
                 json={
                     "test_type": "badtest",
                     "target": "example.com",
@@ -342,9 +342,9 @@ class TestLiveTestHTTP:
         with patch(
             "hub_api.entitlements.gate.feature_enabled", return_value=True
         ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.DeviceManager"
+            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
         ) as mock_dm_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.EngineClient"
+            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
         ) as mock_engine_class:
             # Mock DeviceManager to return None for unknown device
             mock_dm = AsyncMock()
@@ -361,7 +361,7 @@ class TestLiveTestHTTP:
             headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
             response = await client.post(
-                "/api/v1/waddleperf_cluster/live-test/run",
+                "/api/v1/perftest_cluster/live-test/run",
                 json={
                     "test_type": "http",
                     "target": "example.com",
@@ -385,16 +385,16 @@ class TestLiveTestHTTP:
         Ensures device ownership is verified before recording test results.
         """
         with patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test._check_feature_flag",
+            "hub_api.modules.perftest_cluster.api.live_test._check_feature_flag",
             return_value=True,
         ), patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test._validate_websocket_auth"
+            "hub_api.modules.perftest_cluster.api.live_test._validate_websocket_auth"
         ) as mock_auth, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.DeviceManager"
+            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
         ) as mock_dm_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.EngineClient"
+            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
         ) as mock_engine_class, patch(
-            "hub_api.modules.waddleperf_cluster.api.live_test.TestManager"
+            "hub_api.modules.perftest_cluster.api.live_test.TestManager"
         ) as mock_tm_class:
             # Mock auth to return valid tenant/claims
             mock_auth.return_value = ("test-tenant", {"tenant": "test-tenant"})
@@ -424,7 +424,7 @@ class TestLiveTestHTTP:
                 # We verify the logic by ensuring the error handling works
                 # The actual full flow would be tested in integration tests
                 async with client.websocket(
-                    "/api/v1/waddleperf_cluster/live-test/stream",
+                    "/api/v1/perftest_cluster/live-test/stream",
                     headers={"Authorization": f"Bearer {valid_wpc_token}"},
                 ) as ws:
                     # Send test request with unknown device
@@ -464,7 +464,7 @@ class TestWebSocketSubprotocolAuth:
     can't leak into access logs or browser history.
     """
 
-    WS_PATH = "/api/v1/waddleperf_cluster/live-test/stream"
+    WS_PATH = "/api/v1/perftest_cluster/live-test/stream"
 
     async def _make_token(self, app) -> str:
         """Mint a valid access token for tenant-ws."""
@@ -486,7 +486,7 @@ class TestWebSocketSubprotocolAuth:
         self, app_with_wpc
     ) -> None:
         """A valid JWT offered as the second subprotocol authenticates the ws."""
-        from hub_api.modules.waddleperf_cluster.api.live_test import (
+        from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
@@ -505,7 +505,7 @@ class TestWebSocketSubprotocolAuth:
         self, app_with_wpc
     ) -> None:
         """Garbage token in the subprotocol is rejected."""
-        from hub_api.modules.waddleperf_cluster.api.live_test import (
+        from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
@@ -526,7 +526,7 @@ class TestWebSocketSubprotocolAuth:
 
         Prevents the credential-in-URL leak; only the header path authenticates.
         """
-        from hub_api.modules.waddleperf_cluster.api.live_test import (
+        from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
@@ -544,7 +544,7 @@ class TestWebSocketSubprotocolAuth:
         self, app_with_wpc
     ) -> None:
         """Sentinel present but no token value → rejected."""
-        from hub_api.modules.waddleperf_cluster.api.live_test import (
+        from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
@@ -562,7 +562,7 @@ class TestWebSocketSubprotocolAuth:
         self, app_with_wpc
     ) -> None:
         """No header and no subprotocol → rejected."""
-        from hub_api.modules.waddleperf_cluster.api.live_test import (
+        from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
         )
 
@@ -582,7 +582,7 @@ class TestWebSocketSubprotocolAuth:
 
         A read-only token should be rejected with close code 1008.
         """
-        from hub_api.modules.waddleperf_cluster.api.live_test import (
+        from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
             _check_feature_flag,
         )

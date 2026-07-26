@@ -9,8 +9,8 @@ import { saseViews } from './saseViews';
  * work can proceed per-module without touching shared route code.
  */
 const registry: Record<string, Record<string, ComponentType>> = {
-  waddleperf_cluster: wpcViews,
-  waddleperf_c2c: c2cViews,
+  perftest_cluster: wpcViews,
+  perftest_c2c: c2cViews,
   sase: saseViews,
 };
 

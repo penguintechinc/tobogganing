@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 from quart import Quart
 
-from hub_api.modules.waddleperf_cluster.services.test_manager import PerfTestResult
+from hub_api.modules.perftest_cluster.services.test_manager import PerfTestResult
 
 
 # Use canonical fixtures from conftest.py (flags auto-enabled there)
@@ -91,7 +91,7 @@ async def app_with_wpc_realdb(
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
 
     # Patch the tests API module to use real DAL too
-    import hub_api.modules.waddleperf_cluster.api.tests as tests_api
+    import hub_api.modules.perftest_cluster.api.tests as tests_api
     monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
 
     # Enable all wpc feature flags for tests (bypass flag server)
@@ -100,16 +100,16 @@ async def app_with_wpc_realdb(
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
         if flag_key.startswith(
-            "tobogganing.waddleperf_cluster."
-        ) or flag_key.startswith("tobogganing.waddleperf_client."):
+            "tobogganing.perftest_cluster."
+        ) or flag_key.startswith("tobogganing.perftest_client."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
     # Register WaddlePerf Cluster module via registry
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
-    from hub_api.modules.waddleperf_client import module as wpcl_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
+    from hub_api.modules.perftest_client import module as wpcl_module
 
     wpc_contract = wpc_module()
     wpcl_contract = wpcl_module()
@@ -159,9 +159,9 @@ async def test_create_test_success(
     client = app_with_wpc_tests.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.get_db"
+        "hub_api.modules.perftest_cluster.api.tests.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.TestManager"
+        "hub_api.modules.perftest_cluster.api.tests.TestManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -171,7 +171,7 @@ async def test_create_test_success(
         mock_mgr.create_test = AsyncMock(return_value=mock_test_result)
 
         response = await client.post(
-            "/api/v1/waddleperf_cluster/tests",
+            "/api/v1/perftest_cluster/tests",
             json={
                 "device_id": "device-1",
                 "test_type": "latency",
@@ -197,9 +197,9 @@ async def test_list_tests_success(
     client = app_with_wpc_tests.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.get_db"
+        "hub_api.modules.perftest_cluster.api.tests.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.TestManager"
+        "hub_api.modules.perftest_cluster.api.tests.TestManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -209,7 +209,7 @@ async def test_list_tests_success(
         mock_mgr.list_results = AsyncMock(return_value=[mock_test_result])
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/tests",
+            "/api/v1/perftest_cluster/tests",
             headers={"Authorization": f"Bearer {tests_read_token}"},
         )
 
@@ -231,9 +231,9 @@ async def test_get_test_success(
     client = app_with_wpc_tests.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.get_db"
+        "hub_api.modules.perftest_cluster.api.tests.get_db"
     ) as mock_get_db, patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.TestManager"
+        "hub_api.modules.perftest_cluster.api.tests.TestManager"
     ) as mock_manager_class:
         mock_get_db.return_value = MagicMock()
 
@@ -243,7 +243,7 @@ async def test_get_test_success(
         mock_mgr.get_test = AsyncMock(return_value=mock_completed_result)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/tests/test-2",
+            "/api/v1/perftest_cluster/tests/test-2",
             headers={"Authorization": f"Bearer {tests_read_token}"},
         )
 
@@ -261,7 +261,7 @@ async def test_record_result_no_token(app_with_wpc_tests: Quart) -> None:
     client = app_with_wpc_tests.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_cluster/tests/test-1/results",
+        "/api/v1/perftest_cluster/tests/test-1/results",
         json={"device_id": "device-1", "status": "completed"},
     )
 
@@ -277,13 +277,13 @@ async def test_record_result_invalid_token(app_with_wpc_tests: Quart) -> None:
     mock_db = MagicMock()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.get_db", return_value=mock_db
+        "hub_api.modules.perftest_cluster.api.tests.get_db", return_value=mock_db
     ):
         # Mock invalid key lookup
         mock_db.device_api_keys.select = MagicMock(return_value=None)
 
         response = await client.post(
-            "/api/v1/waddleperf_cluster/tests/test-1/results",
+            "/api/v1/perftest_cluster/tests/test-1/results",
             headers={"Authorization": "Bearer invalid-key"},
             json={"device_id": "device-1", "status": "completed"},
         )
@@ -301,7 +301,7 @@ async def test_record_result_revoked_token(app_with_wpc_tests: Quart) -> None:
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.tests.get_db", return_value=mock_db
+        "hub_api.modules.perftest_cluster.api.tests.get_db", return_value=mock_db
     ):
         # Mock revoked key
         mock_key = MagicMock()
@@ -313,7 +313,7 @@ async def test_record_result_revoked_token(app_with_wpc_tests: Quart) -> None:
         mock_db.device_api_keys.select = MagicMock(return_value=mock_key)
 
         response = await client.post(
-            "/api/v1/waddleperf_cluster/tests/test-1/results",
+            "/api/v1/perftest_cluster/tests/test-1/results",
             headers={"Authorization": f"Bearer {api_key}"},
             json={"device_id": "device-1", "status": "completed"},
         )
@@ -386,7 +386,7 @@ async def test_record_result_success(
 
     # Record result with device API key
     response = await client.post(
-        f"/api/v1/waddleperf_cluster/tests/{test_id}/results",
+        f"/api/v1/perftest_cluster/tests/{test_id}/results",
         headers={"Authorization": f"Bearer {api_key}"},
         json={
             "device_id": device_id,
@@ -491,7 +491,7 @@ async def test_record_result_idor_device_cross_access(
 
     # Device B tries to upload results to Device A's test
     response = await client.post(
-        f"/api/v1/waddleperf_cluster/tests/{test_id}/results",
+        f"/api/v1/perftest_cluster/tests/{test_id}/results",
         headers={"Authorization": f"Bearer {device_b_key}"},
         json={
             "device_id": device_b_id,

@@ -71,21 +71,21 @@ export interface StatsTrendsResponse {
 export async function listDevices(): Promise<Device[]> {
   console.log('[waddleperf] listDevices');
   const response = await apiClient.get<DevicesResponse>(
-    '/waddleperf_cluster/devices'
+    '/perftest_cluster/devices'
   );
   return response.data.devices;
 }
 
 export async function listTests(): Promise<Test[]> {
   console.log('[waddleperf] listTests');
-  const response = await apiClient.get<TestsResponse>('/waddleperf_cluster/tests');
+  const response = await apiClient.get<TestsResponse>('/perftest_cluster/tests');
   return response.data.tests;
 }
 
 export async function getStatsSummary(): Promise<StatsSummary> {
   console.log('[waddleperf] getStatsSummary');
   const response = await apiClient.get<StatsSummaryResponse>(
-    '/waddleperf_cluster/stats/summary'
+    '/perftest_cluster/stats/summary'
   );
   return response.data.summary;
 }
@@ -93,7 +93,7 @@ export async function getStatsSummary(): Promise<StatsSummary> {
 export async function getStatsTrends(): Promise<TrendDataPoint[]> {
   console.log('[waddleperf] getStatsTrends');
   const response = await apiClient.get<StatsTrendsResponse>(
-    '/waddleperf_cluster/stats/trends'
+    '/perftest_cluster/stats/trends'
   );
   return response.data.trends;
 }

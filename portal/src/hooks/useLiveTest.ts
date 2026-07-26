@@ -55,7 +55,7 @@ export function useLiveTest(): LiveTestHookState {
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/v1/waddleperf_cluster/live-test/stream`;
+    const wsUrl = `${protocol}//${window.location.host}/api/v1/perftest_cluster/live-test/stream`;
 
     console.log('[useLiveTest] Connecting to WebSocket');
     setStatus('connecting');
@@ -131,7 +131,7 @@ export function useLiveTest(): LiveTestHookState {
 
     try {
       // First, trigger the HTTP POST to run the test
-      await apiClient.post('/waddleperf_cluster/live-test/run', {
+      await apiClient.post('/perftest_cluster/live-test/run', {
         device_id: payload.device_id,
         test_type: payload.test_type,
         target: payload.target,
