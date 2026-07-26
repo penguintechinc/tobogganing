@@ -32,6 +32,10 @@ The WaddlePerf merge produced a working control-plane skeleton (`core/`, Quart) 
 - **C · user/agent↔cluster/service:** **hub-client is the front door** — the universal ingress Inspection Point (§11) for all inbound access: penguin agent (**primary** WireGuard/OpenZiti; **fallback** OpenVPN-over-HTTPS/TCP-443 or IPsec IKEv2/MOBIKE when the primaries are blocked — per-end-user config from hub-api, shipped as a config file), contractors, clientless (*future*, Apache Guacamole), and vendor/customer site-to-site IPsec. Everything is inspected here before entering the fabric.
 - **Egress / bridge:** agentless targets (services, external/legacy networks) are reached via **bridge-router**, the second Inspection Point (§11); agent-equipped nodes reach hub-routers directly.
 
+## 3.1 Control-plane module taxonomy
+
+The `hub-api` brain is organized into functional modules named by what they do, not product lineage: **`sase`** (security proxy / Inspection Point layer + context-based/adaptive auth), **`sdwan`** (routing/overlay + basic firewall), **`perftest`** (network perf testing — was `waddleperf_*`), **`netsvcs`** (future — squawk/DNS). **Basic auth (username/password, API keys, JWT, PKI certs) is a core capability, not a module.** Today's monolithic `sase` module splits into `sase` + `sdwan` + core-auth. Full current→target mapping, hard seams, and sequencing: **`docs/architecture/module-taxonomy.md`**.
+
 ## 4. Key rules & standards
 
 - **Brain framework:** Quart + penguin-dal (runtime) + SQLAlchemy/Alembic (schema). py4web is fully sunset — `services/hub-api` is legacy to retire, not extend.
