@@ -600,3 +600,155 @@ class TestWebSocketSubprotocolAuth:
             scope = claims.get("scope", "")
             assert "tests:write" not in scope
             assert "*:*" not in scope
+
+
+class TestLiveTestRateLimiting:
+    """Test rate limiting for live-test endpoints.
+
+    Reuses SASE's Redis sliding window counter logic.
+    Covers both WS /stream and POST /run endpoints.
+    """
+
+    @pytest.mark.asyncio
+    async def test_live_test_rate_limiter_allows_under_limit(self) -> None:
+        """Under-limit test execution returns allowed."""
+        from hub_api.modules.perftest_cluster.security.live_test_ratelimit import (
+            LiveTestRateLimiter,
+        )
+
+        limiter = LiveTestRateLimiter(max_tests=3, window_seconds=60)
+
+        # First 3 calls should be allowed
+        for i in range(3):
+            allowed, retry_after = await limiter.is_allowed("tenant-1")
+            assert allowed is True, f"Call {i+1} should be allowed"
+            assert retry_after == 0
+
+    @pytest.mark.asyncio
+    async def test_live_test_rate_limiter_blocks_over_limit(self) -> None:
+        """Over-limit test execution returns blocked with retry_after."""
+        from hub_api.modules.perftest_cluster.security.live_test_ratelimit import (
+            LiveTestRateLimiter,
+        )
+
+        limiter = LiveTestRateLimiter(max_tests=2, window_seconds=60)
+
+        # First 2 calls allowed
+        allowed, _ = await limiter.is_allowed("tenant-1")
+        assert allowed is True
+
+        allowed, _ = await limiter.is_allowed("tenant-1")
+        assert allowed is True
+
+        # 3rd call blocked
+        allowed, retry_after = await limiter.is_allowed("tenant-1")
+        assert allowed is False
+        assert retry_after > 0, "retry_after should be > 0"
+
+    @pytest.mark.asyncio
+    async def test_live_test_rate_limiter_per_tenant(self) -> None:
+        """Rate limit is per-tenant, not global."""
+        from hub_api.modules.perftest_cluster.security.live_test_ratelimit import (
+            LiveTestRateLimiter,
+        )
+
+        limiter = LiveTestRateLimiter(max_tests=2, window_seconds=60)
+
+        # Tenant 1: 2 calls allowed
+        for _ in range(2):
+            allowed, _ = await limiter.is_allowed("tenant-1")
+            assert allowed is True
+
+        # Tenant 2: should still have 2 calls available (separate limit)
+        for _ in range(2):
+            allowed, _ = await limiter.is_allowed("tenant-2")
+            assert allowed is True
+
+        # Tenant 1: 3rd call blocked (per-tenant limit)
+        allowed, _ = await limiter.is_allowed("tenant-1")
+        assert allowed is False
+
+        # Tenant 2: 3rd call blocked (per-tenant limit)
+        allowed, _ = await limiter.is_allowed("tenant-2")
+        assert allowed is False
+
+    @pytest.mark.asyncio
+    async def test_post_run_rate_limited_returns_429(self, app_with_wpc, valid_wpc_token) -> None:
+        """POST /run returns 429 when rate limited.
+
+        Regression: live-test DoS protection — ensure rate limiter prevents
+        unbounded test execution via HTTP endpoint.
+        """
+        from hub_api.modules.perftest_cluster.security.live_test_ratelimit import (
+            LiveTestRateLimiter,
+        )
+
+        # Override limiter with tight limit for testing (2 tests per minute)
+        tight_limiter = LiveTestRateLimiter(max_tests=2, window_seconds=60)
+
+        # Monkeypatch the module's limiter
+        import hub_api.modules.perftest_cluster.api.live_test as lt_module
+
+        original_limiter = lt_module._rate_limiter
+        lt_module._rate_limiter = tight_limiter
+
+        try:
+            with patch(
+                "hub_api.entitlements.gate.feature_enabled", return_value=True
+            ), patch(
+                "hub_api.entitlements.gate._is_licensed_for_tier", return_value=True
+            ), patch(
+                "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
+            ) as mock_dm_class, patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class, patch(
+                "hub_api.modules.perftest_cluster.api.live_test.TestManager"
+            ):
+                # Mock DeviceManager
+                mock_dm = AsyncMock()
+                device_row = make_mock_row(
+                    {"id": "device-1", "tenant": "test-tenant", "device_id": "device-1"}
+                )
+                mock_dm.get_device = AsyncMock(return_value=device_row)
+                mock_dm_class.return_value = mock_dm
+
+                mock_engine = AsyncMock()
+                mock_engine.run_test = AsyncMock(
+                    return_value={"status": "success", "latency_ms": 50.0}
+                )
+                mock_engine_class.return_value = mock_engine
+
+                client = app_with_wpc.test_client()
+                headers = {"Authorization": f"Bearer {valid_wpc_token}"}
+
+                # First 2 requests allowed
+                for i in range(2):
+                    response = await client.post(
+                        "/api/v1/perftest_cluster/live-test/run",
+                        json={
+                            "test_type": "http",
+                            "target": f"example{i}.com",
+                            "device_id": "device-1",
+                        },
+                        headers=headers,
+                    )
+                    assert response.status_code == 200, f"Request {i+1} should be allowed"
+
+                # 3rd request rate limited (429)
+                response = await client.post(
+                    "/api/v1/perftest_cluster/live-test/run",
+                    json={
+                        "test_type": "http",
+                        "target": "example.com",
+                        "device_id": "device-1",
+                    },
+                    headers=headers,
+                )
+                assert response.status_code == 429
+                data = await response.get_json()
+                assert "rate" in data["error"].lower()
+                assert "retry_after" in data
+
+        finally:
+            # Restore original limiter
+            lt_module._rate_limiter = original_limiter

@@ -1,8 +1,9 @@
 """Live-test WebSocket blueprint for WaddlePerf cluster performance testing.
 
 Provides real-time streaming of test execution via WebSocket and optional
-synchronous HTTP trigger.
+synchronous HTTP trigger. Rate limiting prevents unbounded test execution.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,17 +15,31 @@ from typing import Any
 import structlog
 from quart import Blueprint, current_app, request, websocket
 
-from hub_api.auth.middleware import _scope_satisfied, current_claims, require_scope, require_tenant
+from hub_api.auth.middleware import (
+    _scope_satisfied,
+    current_claims,
+    require_scope,
+    require_tenant,
+)
 from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
 from hub_api.flags import feature_enabled
+from hub_api.modules.perftest_cluster.security.live_test_ratelimit import (
+    LiveTestRateLimiter,
+)
 from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
-from hub_api.modules.perftest_cluster.services.engine_client import EngineClient, EngineError
+from hub_api.modules.perftest_cluster.services.engine_client import (
+    EngineClient,
+    EngineError,
+)
 from hub_api.modules.perftest_cluster.services.test_manager import TestManager
 
 logger = structlog.get_logger()
 
 blueprint = Blueprint("wpc_live_test", __name__, url_prefix="/live-test")
+
+# Global rate limiter instance (10 tests per 60 seconds per tenant)
+_rate_limiter = LiveTestRateLimiter(max_tests=10, window_seconds=60)
 
 # Sentinel subprotocol the browser client sends ahead of the JWT so the token
 # rides in the Sec-WebSocket-Protocol header instead of the URL query string.
@@ -265,9 +280,29 @@ async def live_test_stream() -> None:
                 if not test_type or not target or not device_id:
                     error_msg = StreamMessage(
                         event="error",
-                        data={"message": "Missing required fields: test_type, target, device_id"},
+                        data={
+                            "message": "Missing required fields: test_type, target, device_id"
+                        },
                     )
                     await ws.send(error_msg.to_json())
+                    continue
+
+                # Rate limit: max N tests per tenant per window (default 10/min)
+                allowed, retry_after_secs = await _rate_limiter.is_allowed(tenant)
+                if not allowed:
+                    logger.warning(
+                        "websocket_rate_limited",
+                        tenant=tenant,
+                        retry_after_secs=retry_after_secs,
+                    )
+                    rate_limit_msg = StreamMessage(
+                        event="rate_limit",
+                        data={
+                            "message": "Rate limit exceeded",
+                            "retry_after": retry_after_secs,
+                        },
+                    )
+                    await ws.send(rate_limit_msg.to_json())
                     continue
 
                 # Verify the device belongs to the caller's tenant (prevent
@@ -421,6 +456,22 @@ async def run_test_sync() -> tuple[dict[str, Any], int]:
         tenant = claims.get("tenant")
         if not tenant:
             return {"error": "Missing tenant claim"}, 403
+
+        # Rate limit: max N tests per tenant per window (default 10/min)
+        allowed, retry_after_secs = await _rate_limiter.is_allowed(tenant)
+        if not allowed:
+            logger.warning(
+                "post_run_rate_limited",
+                tenant=tenant,
+                retry_after_secs=retry_after_secs,
+            )
+            return (
+                {
+                    "error": "Rate limit exceeded",
+                    "retry_after": retry_after_secs,
+                },
+                429,
+            )
 
         data = await request.get_json()
 
