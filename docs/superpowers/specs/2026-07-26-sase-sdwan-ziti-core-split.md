@@ -10,6 +10,18 @@
 
 ---
 
+## Context: Product Positioning
+
+Tobogganing is a **lightweight, open-source-driven alternative to ZScaler** (SASE/SSE). The module taxonomy reflects this positioning:
+- **`sdwan`** = Connectivity layer (overlay transport: WireGuard, IPsec, OpenVPN; routing via FRR/OSPF)
+- **`sase`** = Security-Service-Edge layer (inspection, threat-feeds, context-based auth, mirror hooks to external analysis tools)
+- **`ziti`** = Alternative identity overlay (greenfield; can coexist with or replace `sdwan` tunneling)
+- **core** = Infrastructure (auth, PKI, backup — the foundation all layers depend on)
+
+This decomposition makes clear what each component does and how it positions against ZScaler's architecture.
+
+---
+
 ## Goal
 
 Decompose the monolithic `hub_api/modules/sase/` module into four functional targets — **core** (management-plane), **`sdwan`** (overlay transport + routing), **`ziti`** (greenfield identity overlay), and **`sase`** (security inspection + context-auth) — such that:
@@ -19,6 +31,25 @@ Decompose the monolithic `hub_api/modules/sase/` module into four functional tar
 3. **Licensing is clear**: core (free), `sdwan` (Community→Professional), `ziti` (Professional→Enterprise), `sase` (Community→Enterprise, tiered).
 4. **Full test parity** is maintained across the split; no test coverage regressions.
 5. **Migrations** are properly partitioned and version sequencing is unbroken.
+
+---
+
+## SASE Traffic-Mirror Hooks & External Analysis Tools
+
+**SASE owns the traffic-mirror delivery layer.** The `sase` module provides:
+
+- **SPAN / monitor-port hooks** — intercept and mirror traffic from Inspection Points (hub-client, bridge-router) to external analysis tools
+- **Mirror integration adapters** — deliver mirrored streams to:
+  - **Arkime** (PCAP collection & indexing)
+  - **Zeek** (network analysis & IDS)
+  - **Suricata** (IDS/IPS threat detection)
+
+**Optional Helm Sub-Charts**: Arkime, Zeek, and Suricata are packaged as **optional Helm sub-charts** in the product's Helm deployment. They are:
+- **Off by default** — operators opt-in to deploy
+- **No hard dependency** — `sase` module functions without them; mirror hooks remain available but unused
+- **Deployment requirement**: if enabled, the operator must configure mirror destinations in `sase` config (Arkime endpoint, Zeek listener, Suricata interface)
+
+This decoupling keeps the baseline product lightweight while providing the analytical depth required for enterprise threat hunting and compliance audits.
 
 ---
 
@@ -56,6 +87,7 @@ The monolithic `hub_api/modules/sase/` directory splits as follows:
 | `security/feeds/` | Threat-feed integration | **`sase`** | Security inspection |
 | `security/scanner/` | Vulnerability scanner | **`sase`** | Security inspection |
 | `security/protection/` | DDoS/rate-limit/IPS | **`sase`** | Security inspection |
+| `security/mirror/` | Traffic-mirror hooks (SPAN/monitor-port) → Arkime, Zeek, Suricata | **`sase`** | Mirror delivery + optional Helm sub-charts |
 | (OpenZiti — no current code) | OpenZiti control + SDK integration | **`ziti`** | New module scaffold |
 | `hub_api/modules/waddleperf_*` | Perf testing (`perftest_cluster`, `perftest_client`, `perftest_c2c`) | **`perftest`** | Isolated rename; zero cross-module entanglement |
 

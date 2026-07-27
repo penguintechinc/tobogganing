@@ -2,6 +2,12 @@
 
 **Principle:** modules are named by **what they do**, not by product lineage. All *advanced* security lives in the `sase` module; strip `sase` away and only **basic firewall rules + basic authentication + overlay transport** remain (baseline/always-on).
 
+**Product Positioning:** Tobogganing is a **lightweight, open-source-driven alternative to ZScaler** (SASE/SSE). The module structure reflects this:
+- **`sdwan`** = Connectivity layer (overlay transport + routing)
+- **`sase`** = Security-Service-Edge layer (inspection, threat-feeds, context-auth, mirror hooks)
+- **`ziti`** = Alternative identity overlay (greenfield; optional coexistence)
+- **core** = Infrastructure foundation (auth, PKI, backup)
+
 > Status: finalized direction (2026-07-26). Placement rules: (1) **transport layer** (WireGuard, IPsec, OpenVPN tunneling AND routing) → `sdwan`; (2) **management-plane** (user logins, API keys, JWT, PKI certs, backup) → **core**; (3) **greenfield overlay auth** (OpenZiti) → new module **`ziti`** (standalone, no cross-wiring to `sdwan` transport). The `perftest` rename is isolated; the `sase`→`sase`+`sdwan`+`core`+`ziti` re-decomposition is finalized in `docs/superpowers/specs/2026-07-26-sase-sdwan-ziti-core-split.md`.
 
 ## Modules
@@ -11,7 +17,7 @@
 | *(core — not a module)* | **Management-plane / infrastructure**: username/password, API keys, JWT issue/validate, PKI (X.509) certs, encrypted backup. Always-on, zero licensing gate. | Free/Community |
 | **`sdwan`** | **Overlay transport + routing layer**: WireGuard/IPsec/OpenVPN tunneling, cluster/client orchestration, failover, VRF/OSPF/FRR routing, headend ports, and **basic firewall rules** (ACLs). Baseline data-plane policy. | Community → Professional |
 | **`ziti`** | **Greenfield identity overlay** — OpenZiti control-plane + client SDK integration. Standalone auth model (not wired to `sdwan` transport). Can coexist with `sdwan`; no mandatory dependency. | Professional → Enterprise (greenfield) |
-| **`sase`** | **Security proxy / Inspection Point layer** — the control plane for deep-inspection (hub-client + bridge-router): IDS/IPS threat-feeds, vuln scanner, DDoS/rate-limit protection, and **context-based / adaptive authentication** (threat intel, impossible travel, risk-based / step-up — anything beyond basic credentials). | Community → Enterprise (tiered) |
+| **`sase`** | **Security-Service-Edge layer** — the control plane for deep-inspection (hub-client + bridge-router): IDS/IPS threat-feeds, vuln scanner, DDoS/rate-limit protection, **context-based / adaptive authentication** (threat intel, impossible travel, risk-based / step-up), and **traffic-mirror hooks** (SPAN/monitor-port → Arkime, Zeek, Suricata). | Community → Enterprise (tiered) |
 | **`perftest`** | **Network performance testing** (was `waddleperf_*`): `perftest_cluster`, `perftest_client`, `perftest_c2c`. | Community → Professional |
 | **`netsvcs`** | **Network services** — reserved home for the future **squawk (DNS)** merge. Nothing current moves here. | (future) |
 
