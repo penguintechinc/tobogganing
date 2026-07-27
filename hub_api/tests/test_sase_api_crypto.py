@@ -13,7 +13,7 @@ from hub_api.auth.jwt import decode_token, encode_access_token
 from hub_api.core import CertificateManager
 from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.sase.certs import WireGuardKeyManager
+from hub_api.modules.sdwan.certs import WireGuardKeyManager
 from hub_api.registry import ModuleContext
 
 
@@ -580,7 +580,7 @@ async def test_wireguard_keys_generation_requires_tenant(
 
         # Request without Authorization header (no tenant)
         response = await client.post(
-            "/api/v1/sase/wireguard/keys",
+            "/api/v1/sdwan/wireguard/keys",
             json={
                 "node_id": "node-1",
                 "node_type": "client_docker",
@@ -608,7 +608,7 @@ async def test_wireguard_keys_generation_cluster_success(
     mock_cluster.tenant_id = "test-tenant"
 
     with patch(
-        "hub_api.modules.sase.api.wireguard.asyncio.to_thread"
+        "hub_api.modules.sdwan.api.wireguard.asyncio.to_thread"
     ) as mock_to_thread:
         mock_to_thread.return_value = mock_cluster
 
@@ -616,7 +616,7 @@ async def test_wireguard_keys_generation_cluster_success(
             mock_flag.return_value = True
 
             response = await client.post(
-                "/api/v1/sase/wireguard/keys",
+                "/api/v1/sdwan/wireguard/keys",
                 json={
                     "node_id": "cluster-1",
                     "node_type": "kubernetes_node",
@@ -660,7 +660,7 @@ async def test_wireguard_peers_list(
         mock_flag.return_value = True
 
         response = await client.get(
-            "/api/v1/sase/wireguard/peers",
+            "/api/v1/sdwan/wireguard/peers",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -697,7 +697,7 @@ async def test_wireguard_keys_revocation_success(
         mock_flag.return_value = True
 
         response = await client.delete(
-            "/api/v1/sase/wireguard/keys/node-1",
+            "/api/v1/sdwan/wireguard/keys/node-1",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -723,7 +723,7 @@ async def test_wireguard_keys_revocation_not_found(
         mock_flag.return_value = True
 
         response = await client.delete(
-            "/api/v1/sase/wireguard/keys/nonexistent-node",
+            "/api/v1/sdwan/wireguard/keys/nonexistent-node",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -815,7 +815,7 @@ async def test_wireguard_peers_tenant_isolation(
 
         # Test tenant sees only their peer
         response = await client.get(
-            "/api/v1/sase/wireguard/peers",
+            "/api/v1/sdwan/wireguard/peers",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
         assert response.status_code == 200
@@ -825,7 +825,7 @@ async def test_wireguard_peers_tenant_isolation(
 
         # Other tenant sees only their peer
         response = await client.get(
-            "/api/v1/sase/wireguard/peers",
+            "/api/v1/sdwan/wireguard/peers",
             headers={"Authorization": f"Bearer {cross_tenant_token}"},
         )
         assert response.status_code == 200
@@ -861,14 +861,14 @@ async def test_wireguard_revoke_cross_tenant_isolation(
 
         # Cross-tenant revoke attempt → 404 (node not found from caller's view)
         response = await client.delete(
-            "/api/v1/sase/wireguard/keys/node-1",
+            "/api/v1/sdwan/wireguard/keys/node-1",
             headers={"Authorization": f"Bearer {cross_tenant_token}"},
         )
         assert response.status_code == 404
 
         # Verify peer still exists for original tenant
         response = await client.get(
-            "/api/v1/sase/wireguard/peers",
+            "/api/v1/sdwan/wireguard/peers",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
         assert response.status_code == 200

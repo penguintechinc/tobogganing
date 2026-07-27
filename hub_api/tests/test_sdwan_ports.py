@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.network.port_manager import (
+from hub_api.modules.sdwan.network.port_manager import (
     PortConfigManager,
     PortProtocol,
     PortRangeConfig,

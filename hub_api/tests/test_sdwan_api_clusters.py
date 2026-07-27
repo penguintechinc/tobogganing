@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from quart import Quart
 
-from hub_api.modules.sase.orchestrator.cluster_manager import Cluster
+from hub_api.modules.sdwan.orchestrator.cluster_manager import Cluster
 
 
 @pytest.mark.asyncio
@@ -21,7 +21,7 @@ async def test_register_cluster_without_token(app_with_sase: Quart) -> None:
     client = app_with_sase.test_client()
 
     response = await client.post(
-        "/api/v1/sase/clusters",
+        "/api/v1/sdwan/clusters",
         json={
             "name": "test-cluster",
             "region": "us-east-1",
@@ -53,7 +53,7 @@ async def test_register_cluster_with_token(
 
     # Mock the cluster manager
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -79,7 +79,7 @@ async def test_register_cluster_with_token(
         mock_mgr.register_cluster = AsyncMock(return_value=(cluster, "test-api-key"))
 
         response = await client.post(
-            "/api/v1/sase/clusters",
+            "/api/v1/sdwan/clusters",
             json={
                 "name": "test-cluster",
                 "region": "us-east-1",
@@ -108,7 +108,7 @@ async def test_list_clusters_without_token(app_with_sase: Quart) -> None:
     """
     client = app_with_sase.test_client()
 
-    response = await client.get("/api/v1/sase/clusters")
+    response = await client.get("/api/v1/sdwan/clusters")
 
     assert response.status_code == 403
 
@@ -125,7 +125,7 @@ async def test_list_clusters_with_token(
     """
     client = app_with_sase.test_client()
 
-    with patch("hub_api.modules.sase.api.clusters.ClusterManager") as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
 
@@ -147,7 +147,7 @@ async def test_list_clusters_with_token(
             mock_flag.return_value = True
 
             response = await client.get(
-                "/api/v1/sase/clusters",
+                "/api/v1/sdwan/clusters",
                 headers={"Authorization": f"Bearer {valid_tenant_token}"},
             )
 
@@ -174,7 +174,7 @@ async def test_list_clusters_flag_disabled(
         mock_flag.return_value = False
 
         response = await client.get(
-            "/api/v1/sase/clusters",
+            "/api/v1/sdwan/clusters",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -195,7 +195,7 @@ async def test_list_clusters_tenant_isolation(
     """
     client = app_with_sase.test_client()
 
-    with patch("hub_api.modules.sase.api.clusters.ClusterManager") as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
 
@@ -206,7 +206,7 @@ async def test_list_clusters_tenant_isolation(
             mock_flag.return_value = True
 
             response = await client.get(
-                "/api/v1/sase/clusters",
+                "/api/v1/sdwan/clusters",
                 headers={"Authorization": f"Bearer {valid_tenant_token}"},
             )
 
@@ -227,7 +227,7 @@ async def test_cluster_heartbeat_without_token(app_with_sase: Quart) -> None:
     client = app_with_sase.test_client()
 
     response = await client.post(
-        "/api/v1/sase/clusters/cluster-1/heartbeat",
+        "/api/v1/sdwan/clusters/cluster-1/heartbeat",
         json={"client_count": 5},
     )
 
@@ -251,7 +251,7 @@ async def test_cluster_heartbeat_with_token(
     api_key = "test-cluster-api-key"
 
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -273,7 +273,7 @@ async def test_cluster_heartbeat_with_token(
         mock_mgr.update_heartbeat = AsyncMock(return_value=True)
 
         response = await client.post(
-            "/api/v1/sase/clusters/cluster-1/heartbeat",
+            "/api/v1/sdwan/clusters/cluster-1/heartbeat",
             json={"client_count": 5},
             headers={"Authorization": f"Bearer {api_key}"},
         )
@@ -298,7 +298,7 @@ async def test_cluster_heartbeat_with_invalid_key(app_with_sase: Quart) -> None:
     api_key = "invalid-key"
 
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -308,7 +308,7 @@ async def test_cluster_heartbeat_with_invalid_key(app_with_sase: Quart) -> None:
         mock_mgr.authenticate_cluster = AsyncMock(return_value=None)
 
         response = await client.post(
-            "/api/v1/sase/clusters/cluster-1/heartbeat",
+            "/api/v1/sdwan/clusters/cluster-1/heartbeat",
             json={"client_count": 5},
             headers={"Authorization": f"Bearer {api_key}"},
         )
@@ -331,7 +331,7 @@ async def test_cluster_heartbeat_cluster_id_mismatch(app_with_sase: Quart) -> No
     api_key = "cluster-a-key"
 
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -352,7 +352,7 @@ async def test_cluster_heartbeat_cluster_id_mismatch(app_with_sase: Quart) -> No
         mock_mgr.authenticate_cluster = AsyncMock(return_value=cluster_a)
 
         response = await client.post(
-            "/api/v1/sase/clusters/cluster-b/heartbeat",
+            "/api/v1/sdwan/clusters/cluster-b/heartbeat",
             json={"client_count": 5},
             headers={"Authorization": f"Bearer {api_key}"},
         )
@@ -375,7 +375,7 @@ async def test_get_headend_config_with_invalid_key(app_with_sase: Quart) -> None
     api_key = "invalid-key"
 
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -385,7 +385,7 @@ async def test_get_headend_config_with_invalid_key(app_with_sase: Quart) -> None
         mock_mgr.authenticate_cluster = AsyncMock(return_value=None)
 
         response = await client.get(
-            "/api/v1/sase/clusters/cluster-1/headend-config",
+            "/api/v1/sdwan/clusters/cluster-1/headend-config",
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
@@ -407,7 +407,7 @@ async def test_get_headend_config_cluster_id_mismatch(app_with_sase: Quart) -> N
     api_key = "tenant-a-cluster-key"
 
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -428,7 +428,7 @@ async def test_get_headend_config_cluster_id_mismatch(app_with_sase: Quart) -> N
         mock_mgr.authenticate_cluster = AsyncMock(return_value=cluster_a)
 
         response = await client.get(
-            "/api/v1/sase/clusters/tenant-b-cluster/headend-config",
+            "/api/v1/sdwan/clusters/tenant-b-cluster/headend-config",
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
@@ -448,7 +448,7 @@ async def test_get_headend_config_with_valid_key(app_with_sase: Quart) -> None:
     api_key = "test-cluster-key"
 
     with patch(
-        "hub_api.modules.sase.api.clusters.ClusterManager"
+        "hub_api.modules.sdwan.api.clusters.ClusterManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -468,7 +468,7 @@ async def test_get_headend_config_with_valid_key(app_with_sase: Quart) -> None:
         mock_mgr.authenticate_cluster = AsyncMock(return_value=cluster)
 
         response = await client.get(
-            "/api/v1/sase/clusters/cluster-1/headend-config",
+            "/api/v1/sdwan/clusters/cluster-1/headend-config",
             headers={"Authorization": f"Bearer {api_key}"},
         )
 

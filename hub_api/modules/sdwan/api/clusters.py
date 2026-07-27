@@ -16,7 +16,7 @@ from quart import Blueprint, current_app, jsonify, request
 from hub_api.auth.middleware import current_claims, require_scope, require_tenant
 from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.sase.orchestrator.cluster_manager import ClusterManager
+from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
 
 logger = structlog.get_logger()
 

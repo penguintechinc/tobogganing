@@ -52,18 +52,18 @@ export interface StatusData {
 
 export async function listClusters(): Promise<Cluster[]> {
   console.log('[sase] listClusters');
-  const response = await apiClient.get<ClustersResponse>('/sase/clusters');
+  const response = await apiClient.get<ClustersResponse>('/sdwan/clusters');
   return response.data.clusters;
 }
 
 export async function listClients(): Promise<Client[]> {
   console.log('[sase] listClients');
-  const response = await apiClient.get<ClientsResponse>('/sase/clients');
+  const response = await apiClient.get<ClientsResponse>('/sdwan/clients');
   return response.data.clients;
 }
 
 export async function getStatus(): Promise<StatusData> {
   console.log('[sase] getStatus');
-  const response = await apiClient.get<StatusData>('/sase/status');
+  const response = await apiClient.get<StatusData>('/sdwan/status');
   return response.data;
 }

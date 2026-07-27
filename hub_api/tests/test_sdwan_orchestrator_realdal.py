@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.orchestrator.cluster_manager import Cluster, ClusterManager
-from hub_api.modules.sase.orchestrator.client_registry import Client, ClientRegistry
+from hub_api.modules.sdwan.orchestrator.cluster_manager import Cluster, ClusterManager
+from hub_api.modules.sdwan.orchestrator.client_registry import Client, ClientRegistry
 
 
 @pytest.mark.asyncio
