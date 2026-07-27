@@ -106,18 +106,21 @@ async def test_wpc_entitlements_configured(app_with_wpc: Quart) -> None:
 
 
 @pytest.mark.asyncio
-async def test_sase_routes_unchanged(app_with_sase: Quart) -> None:
-    """Test that SASE module routes are still available (no regression).
+async def test_sase_transport_routes_moved_to_sdwan(app_with_sase: Quart) -> None:
+    """Transport routes moved from sase to the sdwan module.
+
+    After the sase -> core/sdwan/sase/ziti split, sase no longer serves the
+    transport endpoints; clusters now live at /api/v1/sdwan/clusters, so the
+    old /api/v1/sase/clusters path is gone (404).
 
     Args:
         app_with_sase: Test app with SASE module.
     """
     client = app_with_sase.test_client()
 
-    # Test SASE routes are still there
+    # clusters moved to the sdwan module; sase no longer owns this route
     response = await client.get("/api/v1/sase/clusters")
-    # Should be auth error, not route not found
-    assert response.status_code in [401, 403, 402]
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
