@@ -53,6 +53,14 @@ Decompose the monolithic `hub_api/modules/sase/` module into four functional tar
 
 This decoupling keeps the baseline product lightweight while providing the analytical depth required for enterprise threat hunting and compliance audits.
 
+### Detection → Block Feedback Loop
+
+**OUT-OF-BAND MANDATE (firm architectural rule).** All five analysis targets — Arkime, Zeek, Suricata, Strelka, CAPE — are strictly **out-of-band**: fed only by a traffic **mirror** (SPAN / monitor-port copy). Their analysis NEVER sits in the live traffic path and adds **zero latency**. No inline blocking anywhere — even Suricata runs IDS-on-the-mirror, not inline IPS. The mirror tap (the copy itself) cannot stop the in-flight flow, so **"allow a few things through" is accepted by design**; availability/latency wins over catching the very first packet.
+
+**Detection adapters** ship as a **sidecar with each optional sub-chart**. One adapter per target subscribes to its native output (Suricata EVE JSON / Zeek notices / Strelka YARA+file-scan hits / CAPE sandbox verdicts / Arkime session flags) and **normalizes to STIX 2.1 indicators** (chosen over OpenIOC: richer object model, patterning, active maintenance, ubiquitous feed/tooling support).
+
+**Verdict path** uses a **shared Valkey IOC/block-list store** (Valkey, not Redis — license-safe fork). Adapters **WRITE** normalized STIX indicators; **Inspection Points** (hub-client, bridge-router) **READ** the block-list and enforce it on **FUTURE** traffic (block the hash/IP/domain/URL going forward — IOC-based, never the in-flight flow). **hub-api CURATES** the store: merges external `security/feeds` threat-intel, TTL/expiry, dedup, audit. Decoupled async — no gRPC round-trip on the enforcement read path. Per-service **key-prefix ACLs** isolate adapter keys.
+
 ---
 
 ## Placement Rules

@@ -21,6 +21,14 @@
 | **`perftest`** | **Network performance testing** (was `waddleperf_*`): `perftest_cluster`, `perftest_client`, `perftest_c2c`. | Community → Professional |
 | **`netsvcs`** | **Network services** — reserved home for the future **squawk (DNS)** merge. Nothing current moves here. | (future) |
 
+## Detection → Block Feedback Loop (`sase`)
+
+The **`sase` module** owns the out-of-band analysis and verdict pipeline:
+- **Mirror targets** (Arkime, Zeek, Suricata, Strelka, CAPE) fed via SPAN/monitor-port; zero latency on live traffic (no inline blocking).
+- **Detection adapters** normalize analysis output (Suricata EVE, Zeek notices, file/sandbox verdicts) to **STIX 2.1 indicators**.
+- **Shared Valkey IOC store** curated by hub-api (dedup, TTL, threat-intel merge). Inspection Points read and enforce on FUTURE traffic (retroactive, IP/domain/hash/URL block lists).
+- Decoupled async — no gRPC round-trip on enforcement path.
+
 ## The auth line (important)
 
 - **Basic auth = CORE**, never gated behind a module: username/password, API keys, JWT, PKI certs.
