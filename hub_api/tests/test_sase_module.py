@@ -16,25 +16,23 @@ async def test_sase_module_returns_valid_contract() -> None:
     contract = sase_module()
 
     assert contract.name == "sase"
-    assert len(contract.blueprints) == 2  # certs and jwt only
-    assert len(contract.nav) == 0  # transport nav moved to sdwan
-    assert len(contract.flags) == 2  # certs and auth only
-    assert len(contract.entitlements) == 2  # certs and auth only
-    assert len(contract.migrations) == 3  # 0005, 0006, 0008 (user fields, per-tenant-unique, security tables)
+    assert len(contract.blueprints) == 0  # cert/jwt blueprints moved to core
+    assert len(contract.nav) == 1  # Security nav only
+    assert len(contract.flags) == 4  # threat_feeds, scanner, protection, context_auth
+    assert len(contract.entitlements) == 4  # threat_feeds, scanner, protection, context_auth
+    assert len(contract.migrations) == 2  # 0006, 0008 (per-tenant-unique, security tables)
     assert contract.health is None
 
-    # Verify blueprint names
+    # Verify no blueprints (moved to core)
     blueprint_names = {bp.name for bp in contract.blueprints}
-    expected_names = {
-        "sase_certs",
-        "sase_jwt",
-    }
-    assert blueprint_names == expected_names
+    assert len(blueprint_names) == 0
 
-    # Verify flags include SASE features (auth and certs only)
+    # Verify flags are security-focused (not certs/auth)
     expected_flags = {
-        "tobogganing.sase.certs",
-        "tobogganing.sase.auth",
+        "tobogganing.sase.threat_feeds",
+        "tobogganing.sase.scanner",
+        "tobogganing.sase.protection",
+        "tobogganing.sase.context_auth",
     }
     assert set(contract.flags) == expected_flags
 
@@ -52,11 +50,13 @@ async def test_sase_module_registered_in_app(app: Quart) -> None:
     # Verify by checking that we can get the contract from the registry
     flags = app.registry.declared_flags()
 
-    # Verify both ping and SASE module flags are present
+    # Verify both ping and SASE module flags are present (security-focused now)
     assert "tobogganing.ping.enabled" in flags
-    assert "tobogganing.sase.certs" in flags
-    assert "tobogganing.sase.auth" in flags
-    # Transport flags moved to sdwan
+    assert "tobogganing.sase.threat_feeds" in flags
+    assert "tobogganing.sase.scanner" in flags
+    assert "tobogganing.sase.protection" in flags
+    assert "tobogganing.sase.context_auth" in flags
+    # Transport flags (and cert/jwt auth) moved to sdwan/core respectively
     assert "tobogganing.sdwan.clusters" in flags
     assert "tobogganing.sdwan.clients" in flags
     assert "tobogganing.sdwan.status" in flags
@@ -70,6 +70,7 @@ async def test_sase_routes_registered_at_correct_urls() -> None:
 
     Verifies the URL map contains all expected SASE routes with proper paths.
     Creates a minimal app with SASE module and registry to verify routing.
+    Note: cert/jwt endpoints are now core-owned and served from /api/v1/{certs,jwt}
     """
     from unittest.mock import MagicMock
 
@@ -84,7 +85,7 @@ async def test_sase_routes_registered_at_correct_urls() -> None:
     mock_db = MagicMock()
     app.registry = ModuleRegistry()
 
-    # Register SASE module
+    # Register SASE module (now security-only, no cert/jwt blueprints)
     sase_contract = sase_module()
     app.registry.register(sase_contract)
 
@@ -95,18 +96,7 @@ async def test_sase_routes_registered_at_correct_urls() -> None:
     # Collect all registered routes from the app's URL map
     routes = {str(rule.rule) for rule in app.url_map.iter_rules()}
 
-    # Expected SASE routes (auth/certs only; transport moved to sdwan)
-    expected_routes = {
-        "/api/v1/sase/certs/certificates",  # POST
-        "/api/v1/sase/jwt/token",  # POST
-        "/api/v1/sase/jwt/refresh",  # POST
-        "/api/v1/sase/jwt/validate",  # POST
-        "/api/v1/sase/jwt/revoke",  # POST
-        "/api/v1/sase/jwt/public-key",  # GET
-    }
-
-    # Verify all expected routes exist
-    for expected_route in expected_routes:
-        assert (
-            expected_route in routes
-        ), f"Expected route {expected_route} not found in app routes.\nAvailable routes: {sorted(routes)}"
+    # SASE module no longer registers cert/jwt routes (moved to core)
+    # Verify no sase-prefixed cert/jwt routes exist
+    sase_routes = [r for r in routes if "/api/v1/sase" in r]
+    assert len(sase_routes) == 0, f"SASE should have no routes after Phase 4 reduction, found: {sase_routes}"

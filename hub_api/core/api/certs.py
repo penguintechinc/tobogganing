@@ -1,4 +1,4 @@
-"""Certificate management blueprint for SASE module."""
+"""Certificate management blueprint for core module."""
 from __future__ import annotations
 
 import hmac
@@ -15,7 +15,7 @@ from hub_api.entitlements.gate import require_feature
 
 logger = structlog.get_logger()
 
-blueprint = Blueprint("sase_certs", __name__, url_prefix="/certs")
+blueprint = Blueprint("core_certs", __name__, url_prefix="/api/v1/certs")
 
 
 @dataclass(slots=True)

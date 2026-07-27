@@ -142,7 +142,7 @@ async def test_certificate_generation_requires_enrollment_token(
 
         # Request without Authorization header
         response = await client.post(
-            "/api/v1/sase/certs/certificates",
+            "/api/v1/certs/certificates",
             json={
                 "type": "client",
                 "id": "node-1",
@@ -170,7 +170,7 @@ async def test_certificate_generation_with_invalid_token(
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/certs/certificates",
+            "/api/v1/certs/certificates",
             json={
                 "type": "client",
                 "id": "node-1",
@@ -198,7 +198,7 @@ async def test_certificate_generation_client_success(
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/certs/certificates",
+            "/api/v1/certs/certificates",
             json={
                 "type": "client",
                 "id": "client-1",
@@ -235,7 +235,7 @@ async def test_certificate_generation_headend_success(
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/certs/certificates",
+            "/api/v1/certs/certificates",
             json={
                 "type": "headend",
                 "id": "headend-1",
@@ -267,7 +267,7 @@ async def test_certificate_generation_invalid_type(
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/certs/certificates",
+            "/api/v1/certs/certificates",
             json={
                 "type": "invalid_type",
                 "id": "node-1",
@@ -297,7 +297,7 @@ async def test_certificate_generation_flag_off(
         mock_flag.return_value = False
 
         response = await client.post(
-            "/api/v1/sase/certs/certificates",
+            "/api/v1/certs/certificates",
             json={
                 "type": "client",
                 "id": "node-1",
@@ -330,7 +330,7 @@ async def test_jwt_token_generation_missing_fields(
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/token",
+            "/api/v1/jwt/token",
             json={
                 "node_id": "node-1",
                 # missing node_type and api_key
@@ -361,7 +361,7 @@ async def test_jwt_token_generation_cluster_authenticated(
     mock_cluster.tenant_id = "test-tenant"
 
     with patch(
-        "hub_api.modules.sase.api.jwt.asyncio.to_thread"
+        "hub_api.core.api.jwt.asyncio.to_thread"
     ) as mock_to_thread:
         mock_to_thread.return_value = mock_cluster
 
@@ -369,7 +369,7 @@ async def test_jwt_token_generation_cluster_authenticated(
             mock_flag.return_value = True
 
             response = await client.post(
-                "/api/v1/sase/jwt/token",
+                "/api/v1/jwt/token",
                 json={
                     "node_id": "cluster-1",
                     "node_type": "kubernetes_node",
@@ -399,7 +399,7 @@ async def test_jwt_token_generation_cluster_authentication_fails(
     client = app_with_sase.test_client()
 
     with patch(
-        "hub_api.modules.sase.api.jwt.asyncio.to_thread"
+        "hub_api.core.api.jwt.asyncio.to_thread"
     ) as mock_to_thread:
         mock_to_thread.return_value = None  # Authentication failed
 
@@ -407,7 +407,7 @@ async def test_jwt_token_generation_cluster_authentication_fails(
             mock_flag.return_value = True
 
             response = await client.post(
-                "/api/v1/sase/jwt/token",
+                "/api/v1/jwt/token",
                 json={
                     "node_id": "cluster-1",
                     "node_type": "kubernetes_node",
@@ -471,7 +471,7 @@ async def test_jwt_validate_token_success(
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/validate",
+            "/api/v1/jwt/validate",
             headers={"Authorization": f"Bearer {valid_token}"},
         )
 
@@ -496,7 +496,7 @@ async def test_jwt_validate_token_invalid(app_with_sase: Quart) -> None:
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/validate",
+            "/api/v1/jwt/validate",
             headers={"Authorization": "Bearer invalid-token-format"},
         )
 
@@ -528,7 +528,7 @@ async def test_jwt_refresh_token_success(app_with_sase: Quart) -> None:
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/refresh",
+            "/api/v1/jwt/refresh",
             json={"refresh_token": refresh_token},
         )
 
@@ -552,7 +552,7 @@ async def test_jwt_refresh_token_invalid(app_with_sase: Quart) -> None:
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/refresh",
+            "/api/v1/jwt/refresh",
             json={"refresh_token": "invalid-token"},
         )
 
@@ -889,7 +889,7 @@ async def test_jwt_revoke_requires_tenant(app_with_sase: Quart) -> None:
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/revoke",
+            "/api/v1/jwt/revoke",
             json={"node_id": "some-node"},
         )
 
@@ -920,7 +920,7 @@ async def test_jwt_revoke_requires_scope(app_with_sase: Quart) -> None:
         mock_flag.return_value = True
 
         response = await client.post(
-            "/api/v1/sase/jwt/revoke",
+            "/api/v1/jwt/revoke",
             json={"node_id": "some-node"},
             headers={"Authorization": f"Bearer {token_without_scope}"},
         )
