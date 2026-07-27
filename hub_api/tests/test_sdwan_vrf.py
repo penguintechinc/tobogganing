@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.network.vrf_manager import (
+from hub_api.modules.sdwan.network.vrf_manager import (
     VRFConfiguration,
     VRFManager,
     VRFStatus,

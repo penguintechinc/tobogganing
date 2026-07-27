@@ -31,7 +31,7 @@ describe('SASE API', () => {
 
       const result = await listClusters();
 
-      expect(mockApiClient.get).toHaveBeenCalledWith('/sase/clusters');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/sdwan/clusters');
       expect(result).toEqual(mockClusters);
     });
 
@@ -72,7 +72,7 @@ describe('SASE API', () => {
 
       const result = await listClients();
 
-      expect(mockApiClient.get).toHaveBeenCalledWith('/sase/clients');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/sdwan/clients');
       expect(result).toEqual(mockClients);
     });
 
@@ -105,7 +105,7 @@ describe('SASE API', () => {
 
       const result = await getStatus();
 
-      expect(mockApiClient.get).toHaveBeenCalledWith('/sase/status');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/sdwan/status');
       expect(result).toEqual(mockStatus);
     });
 

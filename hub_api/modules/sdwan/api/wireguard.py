@@ -12,7 +12,7 @@ from quart import Blueprint, current_app, request
 from hub_api.auth.middleware import current_claims, require_tenant
 from hub_api.core import CertificateManager
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.sase.certs import WireGuardKeyManager
+from hub_api.modules.sdwan.certs import WireGuardKeyManager
 
 logger = structlog.get_logger()
 

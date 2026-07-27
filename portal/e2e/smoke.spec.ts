@@ -99,7 +99,7 @@ test.describe('Portal Smoke Tests', () => {
     await expect(page.getByText('edge-lon-1')).toBeVisible();
 
     // sase clusters: empty state renders (no crash)
-    await page.goto('/m/sase/clusters');
+    await page.goto('/m/sdwan/clusters');
     await expect(page.getByText(/no .*found|no data|empty/i).first()).toBeVisible({
       timeout: 5000,
     });

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from hub_api.modules.sase.certs.certificate_manager import WireGuardKeyManager, WireGuardPeer
+from hub_api.modules.sdwan.certs import WireGuardKeyManager
+from hub_api.modules.sdwan.certs.wireguard_manager import WireGuardPeer
 
 
 @pytest.fixture

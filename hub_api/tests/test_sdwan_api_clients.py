@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from quart import Quart
 
-from hub_api.modules.sase.orchestrator.client_registry import Client
-from hub_api.modules.sase.orchestrator.cluster_manager import Cluster
+from hub_api.modules.sdwan.orchestrator.client_registry import Client
+from hub_api.modules.sdwan.orchestrator.cluster_manager import Cluster
 
 
 @pytest.mark.asyncio
@@ -22,7 +22,7 @@ async def test_register_client_without_token(app_with_sase: Quart) -> None:
     client = app_with_sase.test_client()
 
     response = await client.post(
-        "/api/v1/sase/clients",
+        "/api/v1/sdwan/clients",
         json={
             "name": "test-client",
             "type": "docker",
@@ -50,10 +50,10 @@ async def test_register_client_with_token(
     client = app_with_sase.test_client()
 
     with patch(
-        "hub_api.modules.sase.api.clients.ClusterManager"
+        "hub_api.modules.sdwan.api.clients.ClusterManager"
     ) as mock_cluster_class:
         with patch(
-            "hub_api.modules.sase.api.clients.ClientRegistry"
+            "hub_api.modules.sdwan.api.clients.ClientRegistry"
         ) as mock_client_class:
             # Mock cluster manager
             mock_cluster_mgr = AsyncMock()
@@ -96,7 +96,7 @@ async def test_register_client_with_token(
             )
 
             response = await client.post(
-                "/api/v1/sase/clients",
+                "/api/v1/sdwan/clients",
                 json={
                     "name": "test-client",
                     "type": "docker",
@@ -123,10 +123,10 @@ async def test_get_client_config_with_api_key(app_with_sase: Quart) -> None:
     api_key = "test-api-key"
 
     with patch(
-        "hub_api.modules.sase.api.clients.ClientRegistry"
+        "hub_api.modules.sdwan.api.clients.ClientRegistry"
     ) as mock_client_class:
         with patch(
-            "hub_api.modules.sase.api.clients.ClusterManager"
+            "hub_api.modules.sdwan.api.clients.ClusterManager"
         ) as mock_cluster_class:
             # Mock client registry
             mock_client_registry = AsyncMock()
@@ -170,7 +170,7 @@ async def test_get_client_config_with_api_key(app_with_sase: Quart) -> None:
             mock_cluster_mgr.get_cluster = AsyncMock(return_value=cluster)
 
             response = await client.get(
-                "/api/v1/sase/clients/client-1/config",
+                "/api/v1/sdwan/clients/client-1/config",
                 headers={"Authorization": f"Bearer {api_key}"},
             )
 
@@ -192,7 +192,7 @@ async def test_rotate_client_key(app_with_sase: Quart) -> None:
     api_key = "test-api-key"
 
     with patch(
-        "hub_api.modules.sase.api.clients.ClientRegistry"
+        "hub_api.modules.sdwan.api.clients.ClientRegistry"
     ) as mock_client_class:
         # Mock client registry
         mock_client_registry = AsyncMock()
@@ -216,7 +216,7 @@ async def test_rotate_client_key(app_with_sase: Quart) -> None:
         mock_client_registry.rotate_api_key = AsyncMock(return_value="new-api-key")
 
         response = await client.post(
-            "/api/v1/sase/clients/client-1/rotate-key",
+            "/api/v1/sdwan/clients/client-1/rotate-key",
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
@@ -239,7 +239,7 @@ async def test_list_clients_with_token(
     client = app_with_sase.test_client()
 
     with patch(
-        "hub_api.modules.sase.api.clients.ClientRegistry"
+        "hub_api.modules.sdwan.api.clients.ClientRegistry"
     ) as mock_client_class:
         mock_client_registry = AsyncMock()
         mock_client_class.return_value = mock_client_registry
@@ -264,7 +264,7 @@ async def test_list_clients_with_token(
             mock_flag.return_value = True
 
             response = await client.get(
-                "/api/v1/sase/clients",
+                "/api/v1/sdwan/clients",
                 headers={"Authorization": f"Bearer {valid_tenant_token}"},
             )
 
@@ -285,7 +285,7 @@ async def test_update_tunnel_config(app_with_sase: Quart) -> None:
     api_key = "test-api-key"
 
     with patch(
-        "hub_api.modules.sase.api.clients.ClientRegistry"
+        "hub_api.modules.sdwan.api.clients.ClientRegistry"
     ) as mock_client_class:
         mock_client_registry = AsyncMock()
         mock_client_class.return_value = mock_client_registry
@@ -311,7 +311,7 @@ async def test_update_tunnel_config(app_with_sase: Quart) -> None:
         mock_client_registry.update_client_status = AsyncMock(return_value=True)
 
         response = await client.put(
-            "/api/v1/sase/clients/client-1/tunnel-config",
+            "/api/v1/sdwan/clients/client-1/tunnel-config",
             json={
                 "tunnel_mode": "split",
                 "split_tunnel_routes": ["10.0.0.0/8", "example.com"],
@@ -336,7 +336,7 @@ async def test_submit_client_metrics(app_with_sase: Quart) -> None:
     api_key = "test-api-key"
 
     with patch(
-        "hub_api.modules.sase.api.clients.ClientRegistry"
+        "hub_api.modules.sdwan.api.clients.ClientRegistry"
     ) as mock_client_class:
         mock_client_registry = AsyncMock()
         mock_client_class.return_value = mock_client_registry
@@ -361,7 +361,7 @@ async def test_submit_client_metrics(app_with_sase: Quart) -> None:
         mock_client_registry.update_client_status = AsyncMock(return_value=True)
 
         response = await client.post(
-            "/api/v1/sase/clients/client-1/metrics",
+            "/api/v1/sdwan/clients/client-1/metrics",
             json={"metrics": {"cpu": 50, "memory": 1024}},
             headers={"Authorization": f"Bearer {api_key}"},
         )

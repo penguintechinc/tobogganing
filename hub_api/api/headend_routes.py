@@ -23,9 +23,9 @@ from hub_api.auth.middleware import current_claims, require_scope, require_tenan
 from hub_api.core import UserManager, CertificateManager
 from hub_api.crypto.keys import KeyProvider
 from hub_api.db import get_db
-from hub_api.modules.sase.firewall.access_control import AccessControlManager
-from hub_api.modules.sase.network.port_manager import PortConfigManager
-from hub_api.modules.sase.orchestrator.cluster_manager import ClusterManager
+from hub_api.modules.sdwan.firewall.access_control import AccessControlManager
+from hub_api.modules.sdwan.network.port_manager import PortConfigManager
+from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
 
 logger = structlog.get_logger()
 

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.firewall.access_control import (
+from hub_api.modules.sdwan.firewall.access_control import (
     AccessControlManager,
     AccessRule,
     AccessType,

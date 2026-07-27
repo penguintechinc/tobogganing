@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from quart import Quart
 
-from hub_api.modules.sase.orchestrator.client_registry import Client
-from hub_api.modules.sase.orchestrator.cluster_manager import Cluster
+from hub_api.modules.sdwan.orchestrator.client_registry import Client
+from hub_api.modules.sdwan.orchestrator.cluster_manager import Cluster
 
 
 @pytest.mark.asyncio
@@ -21,10 +21,10 @@ async def test_get_status(app_with_sase: Quart) -> None:
     client = app_with_sase.test_client()
 
     with patch(
-        "hub_api.modules.sase.api.status.ClusterManager"
+        "hub_api.modules.sdwan.api.status.ClusterManager"
     ) as mock_cluster_class:
         with patch(
-            "hub_api.modules.sase.api.status.ClientRegistry"
+            "hub_api.modules.sdwan.api.status.ClientRegistry"
         ) as mock_client_class:
             # Mock cluster manager
             mock_cluster_mgr = AsyncMock()
@@ -94,7 +94,7 @@ async def test_get_status(app_with_sase: Quart) -> None:
                 return_value=[test_client1, test_client2]
             )
 
-            response = await client.get("/api/v1/sase/status")
+            response = await client.get("/api/v1/sdwan/status")
 
             assert response.status_code == 200
             data = await response.get_json()

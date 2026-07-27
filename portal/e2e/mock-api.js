@@ -49,8 +49,8 @@ app.get('/api/v1/perftest_cluster/devices', (req, res) => {
   });
 });
 
-// GET /api/v1/sase/clusters — empty list exercises the empty state
-app.get('/api/v1/sase/clusters', (req, res) => {
+// GET /api/v1/sdwan/clusters — empty list exercises the empty state
+app.get('/api/v1/sdwan/clusters', (req, res) => {
   res.status(200).json({ clusters: [], meta: { version: 1, timestamp: new Date().toISOString() } });
 });
 
@@ -71,8 +71,8 @@ app.get('/api/v1/portal/manifest', (req, res) => {
       {
         name: 'sase',
         nav: [
-          { label: 'Clusters', path: '/api/v1/sase/clusters', icon: 'server' },
-          { label: 'Status', path: '/api/v1/sase/status', icon: 'activity' },
+          { label: 'Clusters', path: '/api/v1/sdwan/clusters', icon: 'server' },
+          { label: 'Status', path: '/api/v1/sdwan/status', icon: 'activity' },
         ],
         flags: {},
       },

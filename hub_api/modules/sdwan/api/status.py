@@ -8,8 +8,8 @@ from typing import Any
 from quart import Blueprint, jsonify
 
 from hub_api.db import get_db
-from hub_api.modules.sase.orchestrator.cluster_manager import ClusterManager
-from hub_api.modules.sase.orchestrator.client_registry import ClientRegistry
+from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
+from hub_api.modules.sdwan.orchestrator.client_registry import ClientRegistry
 
 logger = structlog.get_logger()
 

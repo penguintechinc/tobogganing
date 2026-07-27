@@ -16,42 +16,27 @@ async def test_sase_module_returns_valid_contract() -> None:
     contract = sase_module()
 
     assert contract.name == "sase"
-    assert len(contract.blueprints) == 6
-    assert len(contract.nav) == 3
-    assert len(contract.flags) == 7
-    assert len(contract.entitlements) == 7
-    assert len(contract.migrations) == 7
+    assert len(contract.blueprints) == 2  # certs and jwt only
+    assert len(contract.nav) == 0  # transport nav moved to sdwan
+    assert len(contract.flags) == 2  # certs and auth only
+    assert len(contract.entitlements) == 2  # certs and auth only
+    assert len(contract.migrations) == 3  # 0005, 0006, 0008 (user fields, per-tenant-unique, security tables)
     assert contract.health is None
 
     # Verify blueprint names
     blueprint_names = {bp.name for bp in contract.blueprints}
     expected_names = {
-        "sase_clusters",
-        "sase_clients",
-        "sase_status",
         "sase_certs",
         "sase_jwt",
-        "sase_wireguard",
     }
     assert blueprint_names == expected_names
 
-    # Verify flags include SASE features
+    # Verify flags include SASE features (auth and certs only)
     expected_flags = {
-        "tobogganing.sase.clusters",
-        "tobogganing.sase.clients",
-        "tobogganing.sase.status",
         "tobogganing.sase.certs",
         "tobogganing.sase.auth",
-        "tobogganing.sase.wireguard",
-        "tobogganing.sase.large_cluster",
     }
     assert set(contract.flags) == expected_flags
-
-    # Verify nav entries
-    nav_paths = {entry.path for entry in contract.nav}
-    assert "/api/v1/sase/clusters" in nav_paths
-    assert "/api/v1/sase/clients" in nav_paths
-    assert "/api/v1/sase/status" in nav_paths
 
 
 @pytest.mark.asyncio
@@ -69,13 +54,14 @@ async def test_sase_module_registered_in_app(app: Quart) -> None:
 
     # Verify both ping and SASE module flags are present
     assert "tobogganing.ping.enabled" in flags
-    assert "tobogganing.sase.clusters" in flags
-    assert "tobogganing.sase.clients" in flags
-    assert "tobogganing.sase.status" in flags
     assert "tobogganing.sase.certs" in flags
     assert "tobogganing.sase.auth" in flags
-    assert "tobogganing.sase.wireguard" in flags
-    assert "tobogganing.sase.large_cluster" in flags
+    # Transport flags moved to sdwan
+    assert "tobogganing.sdwan.clusters" in flags
+    assert "tobogganing.sdwan.clients" in flags
+    assert "tobogganing.sdwan.status" in flags
+    assert "tobogganing.sdwan.wireguard" in flags
+    assert "tobogganing.sdwan.large_cluster" in flags
 
 
 @pytest.mark.asyncio
@@ -109,27 +95,14 @@ async def test_sase_routes_registered_at_correct_urls() -> None:
     # Collect all registered routes from the app's URL map
     routes = {str(rule.rule) for rule in app.url_map.iter_rules()}
 
-    # Expected SASE routes based on the specification
+    # Expected SASE routes (auth/certs only; transport moved to sdwan)
     expected_routes = {
-        "/api/v1/sase/clusters",  # POST, GET
-        "/api/v1/sase/clusters/<cluster_id>/heartbeat",  # POST
-        "/api/v1/sase/clusters/<cluster_id>/headend-config",  # GET
-        "/api/v1/sase/clients",  # POST, GET
-        "/api/v1/sase/clients/<client_id>/config",  # GET
-        "/api/v1/sase/clients/<client_id>/tunnel-config",  # PUT
-        "/api/v1/sase/clients/<client_id>/rotate-key",  # POST
-        "/api/v1/sase/clients/<client_id>/metrics",  # POST
-        "/api/v1/sase/clients/headends/<headend_id>/metrics",  # POST
-        "/api/v1/sase/status",  # GET
         "/api/v1/sase/certs/certificates",  # POST
         "/api/v1/sase/jwt/token",  # POST
         "/api/v1/sase/jwt/refresh",  # POST
         "/api/v1/sase/jwt/validate",  # POST
         "/api/v1/sase/jwt/revoke",  # POST
         "/api/v1/sase/jwt/public-key",  # GET
-        "/api/v1/sase/wireguard/keys",  # POST
-        "/api/v1/sase/wireguard/peers",  # GET
-        "/api/v1/sase/wireguard/keys/<node_id>",  # DELETE
     }
 
     # Verify all expected routes exist
