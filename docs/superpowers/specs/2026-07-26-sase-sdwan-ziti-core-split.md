@@ -61,6 +61,15 @@ This decoupling keeps the baseline product lightweight while providing the analy
 
 **Verdict path** uses a **shared Valkey IOC/block-list store** (Valkey, not Redis — license-safe fork). Adapters **WRITE** normalized STIX indicators; **Inspection Points** (hub-client, bridge-router) **READ** the block-list and enforce it on **FUTURE** traffic (block the hash/IP/domain/URL going forward — IOC-based, never the in-flight flow). **hub-api CURATES** the store: merges external `security/feeds` threat-intel, TTL/expiry, dedup, audit. Decoupled async — no gRPC round-trip on the enforcement read path. **One shared Valkey instance, organized by per-data-type key prefixes with per-service key-prefix ACLs** (e.g., `sase:blocklist:*` for STIX/IOC verdicts, `sase:catcache:*` for category write-back cache).
 
+### Upstream Feed Update Cadence (Freshclam-Style Daily Pulls)
+
+**All upstream sources are NEVER called per-request.** Instead, hub-api's scheduler pulls feeds on a **DEFAULT DAILY schedule (configurable)**, ingests them into the local store (Radix tree / Valkey), and Inspection Points perform **local lookups only**. This model mirrors **ClamAV's freshclam** (daily virus-signature updates) and applies uniformly to:
+- **Category lists** (UT1, blocklistproject, cipher-oos, HaGeZi, StevenBlack, urlhaus/PhishTank)
+- **Threat-intel feeds** (`security/feeds` — IP reputation, domain blocklists, malware indicators)
+- **ClamAV virus signatures** (another daily-updated upstream AV source in the sase file-analysis tier)
+
+**Rationale**: Decouples Inspection Points from upstream latency; eliminates per-request I/O; enables local TTL/cache strategies; centralizes fetch failure handling (hub-api retries, fallback to last-known-good state).
+
 ---
 
 ## URL / Domain Category Filtering (Secure Web Gateway)
@@ -69,7 +78,8 @@ This decoupling keeps the baseline product lightweight while providing the analy
 
 ### Tier 1: Local, Inline, Microsecond-Fast (Radix Tree)
 
-**Source databases** — commercial-safe open-source categorized domain feeds:
+**Source databases** — open-source categorized domain feeds:
+- **UT1 (Toulouse)** (Creative Commons — richest open taxonomy, ~60–80 categories, 20M+ domains)
 - **blocklistproject** (MIT)
 - **cipher-oos/Categorized-Web-Filter-Blocklists** (permissive)
 - **HaGeZi/OISD** (CC0)
@@ -104,7 +114,7 @@ On an **uncategorized or new domain**:
 
 ### Licensing Note
 
-UT1 intentionally excluded for commercial-license reasons; the base uses commercial-safe (MIT/CC0/permissive) sources. Optional commercial category feeds available for Enterprise tiers to close coverage gaps.
+UT1 is Creative Commons–licensed and usable commercially. The full base = UT1 + blocklistproject + cipher-oos + HaGeZi/OISD + StevenBlack (MIT) + urlhaus/PhishTank (CC0), plus custom categories and an optional commercial feed for Enterprise coverage.
 
 ---
 
