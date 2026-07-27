@@ -59,7 +59,54 @@ This decoupling keeps the baseline product lightweight while providing the analy
 
 **Detection adapters** ship as a **sidecar with each optional sub-chart**. One adapter per target subscribes to its native output (Suricata EVE JSON / Zeek notices / Strelka YARA+file-scan hits / CAPE sandbox verdicts / Arkime session flags) and **normalizes to STIX 2.1 indicators** (chosen over OpenIOC: richer object model, patterning, active maintenance, ubiquitous feed/tooling support).
 
-**Verdict path** uses a **shared Valkey IOC/block-list store** (Valkey, not Redis — license-safe fork). Adapters **WRITE** normalized STIX indicators; **Inspection Points** (hub-client, bridge-router) **READ** the block-list and enforce it on **FUTURE** traffic (block the hash/IP/domain/URL going forward — IOC-based, never the in-flight flow). **hub-api CURATES** the store: merges external `security/feeds` threat-intel, TTL/expiry, dedup, audit. Decoupled async — no gRPC round-trip on the enforcement read path. Per-service **key-prefix ACLs** isolate adapter keys.
+**Verdict path** uses a **shared Valkey IOC/block-list store** (Valkey, not Redis — license-safe fork). Adapters **WRITE** normalized STIX indicators; **Inspection Points** (hub-client, bridge-router) **READ** the block-list and enforce it on **FUTURE** traffic (block the hash/IP/domain/URL going forward — IOC-based, never the in-flight flow). **hub-api CURATES** the store: merges external `security/feeds` threat-intel, TTL/expiry, dedup, audit. Decoupled async — no gRPC round-trip on the enforcement read path. **One shared Valkey instance, organized by per-data-type key prefixes with per-service key-prefix ACLs** (e.g., `sase:blocklist:*` for STIX/IOC verdicts, `sase:catcache:*` for category write-back cache).
+
+---
+
+## URL / Domain Category Filtering (Secure Web Gateway)
+
+**SASE owns inline category-based URL/domain filtering** — the fast, microsecond-latency tier of the SWG (Secure Web Gateway). ⚠️ **Note: This is INLINE, fast lookup only; it does NOT violate the out-of-band mandate, which applies only to deep file/packet analysis targets (Arkime, Zeek, Suricata, Strelka, CAPE).**
+
+### Tier 1: Local, Inline, Microsecond-Fast (Radix Tree)
+
+**Source databases** — open-source categorized domain feeds:
+- **UT1 (Toulouse)** taxonomy (~60–80 categories: adult, gambling, banking, social, malware, VPN-redirectors, etc.) — **⚠️ License verification required before adoption** (research vs. commercial; see Licensing note below)
+- **blocklistproject** (MIT license)
+- **cipher-oos/Categorized-Web-Filter-Blocklists** (permissive)
+- **HaGeZi/OISD** (CC0)
+- **Custom categories** (admin-defined, first-class policy; custom categorization wins on conflict)
+
+**Ingestion** — hub-api extends the existing `security/feeds` ingestion machinery to pull categorized domain DBs → Inspection Points receive a **reverse-ordered Radix tree** (e.g., `com.badsite.gambling`) for **O(k) subdomain-covering lookups**. Alternatives noted for future scaling: **LMDB** if the set outgrows RAM; **Cuckoo/Bloom filters** per-category for tight memory footprints. Tier 1 handles ~95% of traffic.
+
+**Policy** — per-tenant/user/group **category → action** mapping (ZScaler-style URL filtering):
+- `action: allow` — permit traffic
+- `action: block` — deny (HTTP 403 response)
+- `action: warn` — log but allow; optional client-side warning banner
+- `action: isolate` — apply network segmentation or sandboxed access
+
+### Tier 2: Out-of-Band Async AI (Uncategorized Domains)
+
+On an **uncategorized or new domain**:
+1. Tag `Uncategorized` and apply the **tenant's fail-open (allow) or fail-closed (block) default** policy
+2. **Push to async worker queue — NEVER block inline** (consistent with the out-of-band mandate + "allow a few through")
+3. Worker categorizes, writes back to **shared Valkey** (key prefix `sase:catcache:*` with per-service ACLs) **+ local Radix tree with TTL** (next hit is O(1) local)
+4. No gRPC round-trip on the enforcement read path
+
+**Secure scraper (prompt-injection defense — explicit requirement):**
+- **(1) Primary classifier is NON-generative** — FastText (→ IAB taxonomy) or DistilBERT/TinyBERT output a category label, not free-form text; they cannot be instruction-injected (main defense)
+- **(2) Pre-parse to metadata only** — BeautifulSoup extracts title, meta description, H1/H2, visible-text snippets; strips `<script>`/`<style>`/event handlers/hidden text; model never sees raw HTML/JS
+- **(3) Sandbox the fetcher** like the rest of the out-of-band plane — isolated egress (no path to internal fabric ⇒ no SSRF), no creds/cookies, no JS rendering (static fetch), size + time caps
+- **(4) LLM tier (optional)** — if added for hard cases, feed ONLY the pre-parsed metadata, fenced as untrusted DATA to classify (not instructions), with fixed category-enum structured output
+
+**Blast radius** — a successful prompt-injection trick results in a mis-category (a policy allow/block), not code exec/exfil. Admin/custom category overrides correct it.
+
+### Licensing Note (⚠️ Critical)
+
+**UT1 taxonomy license is disputed** across research literature (research/non-commercial vs. Creative Commons). Must be **VERIFIED before adoption**, since tobogganing is a commercial/licensed product. Commercial-safe fallbacks:
+- **StevenBlack** (MIT)
+- **urlhaus / PhishTank / HaGeZi** (CC0 / permissive)
+- **blocklistproject** (MIT) — verify current license
+- Consider a **commercial category feed provider** for paid license tiers
 
 ---
 
