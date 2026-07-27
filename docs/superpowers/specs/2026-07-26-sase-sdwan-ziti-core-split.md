@@ -118,6 +118,104 @@ UT1 is Creative Commons–licensed and usable commercially. The full base = UT1 
 
 ---
 
+## Enforcement Actions & Block Handling
+
+**SASE owns the enforcement-action layer** — how blocked/filtered traffic is handled and how users see block pages.
+
+### Action Options (Per-Rule, Per-Category Policy)
+
+Every rule and category policy declares one action:
+
+| Action | Behavior | Use Case |
+|---|---|---|
+| **`drop`** | Silently drop the connection; no response to client | Silent block (compliance, no user interaction) |
+| **`reject`** | Send active rejection (TCP RST or HTTP error response); optional block page | Standard block with optional user notification |
+| **`soft-block`** | Bypassable interstitial; user can acknowledge and continue (e.g., "risky site" warning) | Risk warnings, educational blocks, compliance acknowledgement |
+| **`log-only`** | Monitor mode — record the access, do not block | Testing, observability, baseline establishment |
+
+### Custom-Branded Block & Soft-Block Pages
+
+**Hub-webui includes a drag-and-drop page builder** (Wix/Odoo-style) for admins to design branded block and soft-block pages:
+
+- **Page builder canvas**: Logo, text sections, buttons, images, custom CSS, conditional content blocks
+- **Per-tenant branding**: Custom colors, fonts, logo, messaging
+- **Page variables** (server-rendered): blocked URL, category, timestamp, reason, user, org name, support link, appeal link
+- **Soft-block continuation button**: "I understand, continue anyway" with optional form fields (acknowledgement text, reason, etc.)
+- **Built pages stored in hub-api** and served by Inspection Points on block
+- **Version history**: draft/live toggle; revert to prior versions
+
+### Per-Source Block Pages
+
+The page served depends on **why the traffic was blocked**, not a single global page:
+
+| Block Source/Reason | Page Used |
+|---|---|
+| **Web category** (e.g., gambling, adult, malware) | Dedicated category block page (e.g., "Corp Webfilter Policy — Gambling") |
+| **Out-of-band threat analysis** (Strelka, CAPE, Suricata malware verdicts) | Threat/malware block page (e.g., "Malware Detected") |
+| **Custom rule** (admin-created policy) | Custom rule's own block page (e.g., "Suspicious Application") |
+| **Soft-block** (any category/source) | Corresponding soft-block acknowledgement page |
+
+Each source/category owns its visual identity and messaging; custom category policies can override defaults.
+
+### Rule Metadata for Governance & Audit
+
+All rules (including categories) carry metadata fields for governance:
+
+- **Created by**: username + timestamp
+- **Last modified by**: username + timestamp
+- **Ticket/link**: external reference (Jira, GitHub issue, internal ticket number)
+- **Notes/justification**: free-text governance notes
+- **Expiry / review date** (optional): automatic flag for review or auto-disable
+- **Scope**: global, per-tenant, per-group, per-user
+- **Risk level** (optional): low/medium/high (for soft-block auto-escalation)
+
+Stored in **hub-api** alongside the rule. Surfaced in **hub-webui** rule editor and audit logs (searchable, queryable by field).
+
+### External Redirect Block Handling
+
+A rule or category destination can point to an **external web server** instead of an internal block page:
+
+- **Block-routing config** specifies the external URL (e.g., `https://blocks.example.com`)
+- **Block redirect**: When traffic is blocked, Inspection Points redirect to the external target + pass context via **HTTP headers**:
+  - `X-Blocked-URL`: original blocked URL
+  - `X-Block-Category`: category (e.g., "gambling", "malware", "custom-policy")
+  - `X-Block-Rule-ID`: internal rule ID
+  - `X-Block-Source`: source of block verdict (e.g., `web-category`, `strelka`, `suricata`, `custom-rule`)
+  - `X-Block-User`: UUID of the blocked user
+  - `X-Block-Tenant`: tenant ID
+  - `X-Block-Reason`: human-readable reason (e.g., "Malware signature matched: W32.Emotet")
+- **Customer-run UX**: Customer can inspect headers and serve their own error/block/interstitial page (ZScaler/iBoss style)
+
+### Block-Routing Config (Unifying Surface)
+
+A **hub-webui config page** maps each block **source/type** → **destination** (internal page or external target):
+
+**Example table (per-tenant configuration):**
+
+| Source/Type | Destination | Notes |
+|---|---|---|
+| `web-category:gambling` | Page: "Corp Webfilter" | Admin-branded block page |
+| `web-category:adult` | Page: "Corp Webfilter" | Same page, category shown |
+| `web-category:uncategorized-allowed` | **(none)** | Fail-open; no block |
+| `oob-analysis:malware` | Page: "Threat Detected" | Threat-specific page |
+| `oob-analysis:suspicious` | Page: "Risk Assessment" | Soft-block with appeal |
+| `custom-rule:no-personal-shopping` | External: `https://blocks.acme.com/redirect` | Customer-run block page |
+| `suricata:exploit-attempt` | Page: "Attack Blocked" | IPS verdict |
+| `strelka:ransomware-detected` | External: `https://ir.acme.com/incident` | Incident response page |
+
+**Routing logic:**
+1. Block event occurs; Inspection Point queries hub-api for rule + routing config
+2. If route exists → apply destination (internal page OR external redirect)
+3. If route missing → default fallback (global default block page or deny all)
+4. If route is external URL → redirect with headers; customer handles UX
+
+**Benefits:**
+- Decouples per-source messaging (threat verdicts get threat pages; categories get category pages; custom rules get custom pages)
+- Allows customer to run their own block/IR server without modifying hub-api
+- Single config table to manage all block behaviors across all sources
+
+---
+
 ## Placement Rules
 
 | Component | Rule | Target |
