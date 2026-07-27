@@ -8,12 +8,12 @@ import pytest
 import pytest_asyncio
 from penguin_dal import AsyncDB
 
-from hub_api.modules.waddleperf_cluster.services.autoperf_manager import AutoPerfManager
+from hub_api.modules.perftest_cluster.services.autoperf_manager import AutoPerfManager
 
 
 @pytest_asyncio.fixture
 async def autoperf_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
-    """Quart app with the waddleperf_cluster module mounted on a real DAL.
+    """Quart app with the perftest_cluster module mounted on a real DAL.
 
     Feature flags are controlled per-test via app._test_enabled_flags (a set
     of full flag keys); everything else is flag-off — so the flag-off 402
@@ -35,7 +35,7 @@ async def autoperf_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
-    import hub_api.modules.waddleperf_cluster.api.autoperf as autoperf_api
+    import hub_api.modules.perftest_cluster.api.autoperf as autoperf_api
 
     monkeypatch.setattr(autoperf_api, "get_db", lambda: real_dal)
 
@@ -46,7 +46,7 @@ async def autoperf_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     test_app.registry.register(wpc_module())
     ctx = ModuleContext(config=test_app.config_obj, db=real_dal, key_provider=provider)
@@ -83,7 +83,7 @@ async def test_policies_api_flag_off_returns_402(autoperf_app) -> None:
     token = await _autoperf_token(autoperf_app)
     client = autoperf_app.test_client()
     resp = await client.get(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 402
@@ -92,7 +92,7 @@ async def test_policies_api_flag_off_returns_402(autoperf_app) -> None:
 @pytest.mark.asyncio
 async def test_policies_api_licensed_crud_roundtrip(autoperf_app, monkeypatch) -> None:
     """Licensed Professional tier: create, list, and delete a policy over HTTP."""
-    autoperf_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
     import hub_api.entitlements.gate as gate_module
 
     monkeypatch.setattr(gate_module, "_is_licensed_for_tier", lambda tier: True)
@@ -102,7 +102,7 @@ async def test_policies_api_licensed_crud_roundtrip(autoperf_app, monkeypatch) -
 
     # Create a policy
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         json={
             "name": "high-load-monitor",
             "device_id": str(uuid4()),
@@ -120,7 +120,7 @@ async def test_policies_api_licensed_crud_roundtrip(autoperf_app, monkeypatch) -
 
     # List policies
     resp = await client.get(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         headers=headers,
     )
     assert resp.status_code == 200
@@ -130,7 +130,7 @@ async def test_policies_api_licensed_crud_roundtrip(autoperf_app, monkeypatch) -
 
     # Get specific policy
     resp = await client.get(
-        f"/api/v1/waddleperf_cluster/autoperf/policies/{policy_id}",
+        f"/api/v1/perftest_cluster/autoperf/policies/{policy_id}",
         headers=headers,
     )
     assert resp.status_code == 200
@@ -139,14 +139,14 @@ async def test_policies_api_licensed_crud_roundtrip(autoperf_app, monkeypatch) -
 
     # Delete policy
     resp = await client.delete(
-        f"/api/v1/waddleperf_cluster/autoperf/policies/{policy_id}",
+        f"/api/v1/perftest_cluster/autoperf/policies/{policy_id}",
         headers=headers,
     )
     assert resp.status_code == 204
 
     # Verify it's gone
     resp = await client.get(
-        f"/api/v1/waddleperf_cluster/autoperf/policies/{policy_id}",
+        f"/api/v1/perftest_cluster/autoperf/policies/{policy_id}",
         headers=headers,
     )
     assert resp.status_code == 404
@@ -158,11 +158,11 @@ async def test_policies_api_unlicensed_402_professional(autoperf_app) -> None:
     the professional tier path. Fails if the entitlement key were prefixed
     (tier would fall back to community and the paid gate would silently pass).
     """
-    autoperf_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
     token = await _autoperf_token(autoperf_app)
     client = autoperf_app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         json={
             "name": "test",
             "device_id": str(uuid4()),
@@ -178,14 +178,14 @@ async def test_policies_api_unlicensed_402_professional(autoperf_app) -> None:
 @pytest.mark.asyncio
 async def test_policies_api_licensed_201(autoperf_app, monkeypatch: pytest.MonkeyPatch) -> None:
     """Licensed Professional tier: policy create works."""
-    autoperf_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
     import hub_api.entitlements.gate as gate_module
 
     monkeypatch.setattr(gate_module, "_is_licensed_for_tier", lambda tier: True)
     token = await _autoperf_token(autoperf_app)
     client = autoperf_app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         json={
             "name": "licensed-policy",
             "device_id": str(uuid4()),
@@ -201,7 +201,7 @@ async def test_policies_api_licensed_201(autoperf_app, monkeypatch: pytest.Monke
 @pytest.mark.asyncio
 async def test_policy_creation_validation(autoperf_app, monkeypatch) -> None:
     """Test policy creation validation: bad intervals."""
-    autoperf_app._test_enabled_flags.add("tobogganing.waddleperf_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
     import hub_api.entitlements.gate as gate_module
 
     monkeypatch.setattr(gate_module, "_is_licensed_for_tier", lambda tier: True)
@@ -210,7 +210,7 @@ async def test_policy_creation_validation(autoperf_app, monkeypatch) -> None:
 
     # Missing required field
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         json={
             "name": "bad-policy",
             # missing device_id
@@ -222,7 +222,7 @@ async def test_policy_creation_validation(autoperf_app, monkeypatch) -> None:
 
     # Bad interval order
     resp = await client.post(
-        "/api/v1/waddleperf_cluster/autoperf/policies",
+        "/api/v1/perftest_cluster/autoperf/policies",
         json={
             "name": "bad-interval",
             "device_id": str(uuid4()),
@@ -243,7 +243,7 @@ class TestAutoPerfCycleTask:
         self, real_dal: AsyncDB
     ) -> None:
         """Breach path: cycle detects alert_events, escalates tier, retunes interval."""
-        from hub_api.modules.waddleperf_cluster.worker.tasks import _autoperf_cycle_async
+        from hub_api.modules.perftest_cluster.worker.tasks import _autoperf_cycle_async
 
         tenant = str(uuid4())
         device_id = str(uuid4())
@@ -301,7 +301,7 @@ class TestAutoPerfCycleTask:
         await _autoperf_cycle_async(
             job_id="job1",
             tenant=tenant,
-            module="waddleperf_cluster",
+            module="perftest_cluster",
             job_type="autoperf_cycle",
             payload={"policy_id": policy_id},
             db=real_dal,
@@ -322,7 +322,7 @@ class TestAutoPerfCycleTask:
         self, real_dal: AsyncDB
     ) -> None:
         """Clean path: N clean cycles de-escalate one tier, reset counter."""
-        from hub_api.modules.waddleperf_cluster.worker.tasks import _autoperf_cycle_async
+        from hub_api.modules.perftest_cluster.worker.tasks import _autoperf_cycle_async
 
         tenant = str(uuid4())
         device_id = str(uuid4())
@@ -363,7 +363,7 @@ class TestAutoPerfCycleTask:
         await _autoperf_cycle_async(
             job_id="job2",
             tenant=tenant,
-            module="waddleperf_cluster",
+            module="perftest_cluster",
             job_type="autoperf_cycle",
             payload={"policy_id": policy_id},
             db=real_dal,
@@ -379,7 +379,7 @@ class TestAutoPerfCycleTask:
         await _autoperf_cycle_async(
             job_id="job3",
             tenant=tenant,
-            module="waddleperf_cluster",
+            module="perftest_cluster",
             job_type="autoperf_cycle",
             payload={"policy_id": policy_id},
             db=real_dal,
@@ -396,8 +396,8 @@ class TestAutoPerfCycleTask:
         self, real_dal: AsyncDB
     ) -> None:
         """Engine failure: test result marked failed, cycle still calls record_cycle."""
-        from hub_api.modules.waddleperf_cluster.worker.tasks import _autoperf_cycle_async
-        from hub_api.modules.waddleperf_cluster.services.engine_client import EngineError
+        from hub_api.modules.perftest_cluster.worker.tasks import _autoperf_cycle_async
+        from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
         tenant = str(uuid4())
         device_id = str(uuid4())
@@ -425,7 +425,7 @@ class TestAutoPerfCycleTask:
         await _autoperf_cycle_async(
             job_id="job4",
             tenant=tenant,
-            module="waddleperf_cluster",
+            module="perftest_cluster",
             job_type="autoperf_cycle",
             payload={"policy_id": policy_id},
             db=real_dal,

@@ -26,8 +26,8 @@ async def app_with_c2c_recurring_realdal(
     import hub_api.app
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.recurring
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.recurring, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.recurring
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.recurring, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
     return app_with_c2c
@@ -73,14 +73,14 @@ async def test_recurring_runs_unlicensed_returns_402(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
     # NOTE: deliberately do NOT patch _is_licensed_for_tier — unlicensed path.
 
-    from hub_api.modules.waddleperf_c2c import module as c2c_mod
+    from hub_api.modules.perftest_c2c import module as c2c_mod
 
     app.registry.register(c2c_mod())
     ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
@@ -100,7 +100,7 @@ async def test_recurring_runs_unlicensed_returns_402(
 
     client = app.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"endpoint_ids": ["ep-1", "ep-2"], "interval_seconds": 300},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -114,8 +114,8 @@ async def test_recurring_runs_unlicensed_returns_402(
 
 @pytest.mark.asyncio
 async def test_entitlement_key_is_bare_not_prefixed() -> None:
-    """Entitlement key must be 'waddleperf_c2c.recurring_runs', not 'tobogganing.waddleperf_c2c.recurring_runs'."""
-    from hub_api.modules.waddleperf_c2c import module as c2c_mod
+    """Entitlement key must be 'perftest_c2c.recurring_runs', not 'tobogganing.perftest_c2c.recurring_runs'."""
+    from hub_api.modules.perftest_c2c import module as c2c_mod
     from hub_api.registry import ModuleRegistry
 
     registry = ModuleRegistry()
@@ -123,13 +123,13 @@ async def test_entitlement_key_is_bare_not_prefixed() -> None:
     registry.register(contract)
 
     # Check that the bare key is registered
-    ent = registry.entitlement_for("waddleperf_c2c.recurring_runs")
-    assert ent is not None, "entitlement_for('waddleperf_c2c.recurring_runs') must not be None"
+    ent = registry.entitlement_for("perftest_c2c.recurring_runs")
+    assert ent is not None, "entitlement_for('perftest_c2c.recurring_runs') must not be None"
     assert ent.tier.lower() == "professional"
 
     # Check that the prefixed key is NOT registered (regression guard)
-    ent_prefixed = registry.entitlement_for("tobogganing.waddleperf_c2c.recurring_runs")
-    assert ent_prefixed is None, "entitlement_for('tobogganing.waddleperf_c2c.recurring_runs') must be None"
+    ent_prefixed = registry.entitlement_for("tobogganing.perftest_c2c.recurring_runs")
+    assert ent_prefixed is None, "entitlement_for('tobogganing.perftest_c2c.recurring_runs') must be None"
 
 
 # ============================================================================
@@ -151,7 +151,7 @@ async def test_recurring_crud_licensed(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -171,7 +171,7 @@ async def test_recurring_crud_licensed(
 
     # POST: Create a recurring job
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"endpoint_ids": ["ep-1", "ep-2"], "interval_seconds": 300},
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )
@@ -182,7 +182,7 @@ async def test_recurring_crud_licensed(
 
     # GET: List recurring jobs
     resp = await client.get(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )
     assert resp.status_code == 200
@@ -192,7 +192,7 @@ async def test_recurring_crud_licensed(
 
     # PATCH: Toggle enabled
     resp = await client.patch(
-        f"/api/v1/waddleperf_c2c/recurring/{job_id}",
+        f"/api/v1/perftest_c2c/recurring/{job_id}",
         json={"enabled": False},
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )
@@ -200,7 +200,7 @@ async def test_recurring_crud_licensed(
 
     # DELETE: Remove job
     resp = await client.delete(
-        f"/api/v1/waddleperf_c2c/recurring/{job_id}",
+        f"/api/v1/perftest_c2c/recurring/{job_id}",
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )
     assert resp.status_code == 204
@@ -215,7 +215,7 @@ async def test_recurring_crud_licensed(
 async def test_start_recurring_run_creates_run(real_dal: AsyncDB) -> None:
     """start_recurring_run task creates a run row via RunManager."""
     from datetime import datetime, timezone
-    from hub_api.modules.waddleperf_c2c.worker.tasks import _start_recurring_run
+    from hub_api.modules.perftest_c2c.worker.tasks import _start_recurring_run
 
     # Create two test endpoints first
     tenant = "test-tenant"
@@ -245,7 +245,7 @@ async def test_start_recurring_run_creates_run(real_dal: AsyncDB) -> None:
     result = await _start_recurring_run(
         job_id="test-job-1",
         tenant=tenant,
-        module="waddleperf_c2c",
+        module="perftest_c2c",
         job_type="matrix_run",
         payload=payload,
         db=real_dal,
@@ -270,7 +270,7 @@ async def test_start_recurring_run_creates_run(real_dal: AsyncDB) -> None:
 @pytest.mark.asyncio
 async def test_start_recurring_run_handles_error(real_dal: AsyncDB) -> None:
     """start_recurring_run logs errors but does not raise out."""
-    from hub_api.modules.waddleperf_c2c.worker.tasks import _start_recurring_run
+    from hub_api.modules.perftest_c2c.worker.tasks import _start_recurring_run
 
     payload = {"endpoint_ids": ["nonexistent"], "interval_seconds": 300}
 
@@ -278,7 +278,7 @@ async def test_start_recurring_run_handles_error(real_dal: AsyncDB) -> None:
     result = await _start_recurring_run(
         job_id="test-job-2",
         tenant="test-tenant",
-        module="waddleperf_c2c",
+        module="perftest_c2c",
         job_type="matrix_run",
         payload=payload,
         db=real_dal,
@@ -309,7 +309,7 @@ async def test_recurring_validation_interval_too_low(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -326,7 +326,7 @@ async def test_recurring_validation_interval_too_low(
 
     client = app_with_c2c_recurring_realdal.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"endpoint_ids": ["ep-1", "ep-2"], "interval_seconds": 20},
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )
@@ -346,7 +346,7 @@ async def test_recurring_validation_endpoint_ids_empty_list(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -363,7 +363,7 @@ async def test_recurring_validation_endpoint_ids_empty_list(
 
     client = app_with_c2c_recurring_realdal.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"endpoint_ids": [], "interval_seconds": 300},
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )
@@ -383,7 +383,7 @@ async def test_recurring_validation_endpoint_ids_not_list(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -400,7 +400,7 @@ async def test_recurring_validation_endpoint_ids_not_list(
 
     client = app_with_c2c_recurring_realdal.test_client()
     resp = await client.post(
-        "/api/v1/waddleperf_c2c/recurring",
+        "/api/v1/perftest_c2c/recurring",
         json={"endpoint_ids": "ep-1,ep-2", "interval_seconds": 300},
         headers={"Authorization": f"Bearer {c2c_write_token_recurring}"},
     )

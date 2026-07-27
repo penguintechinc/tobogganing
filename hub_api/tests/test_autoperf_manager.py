@@ -10,7 +10,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_create_policy_round_trip(real_dal: Any) -> None:
     """Create policy with state and scheduler job, verify round-trip."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
     from hub_api.scheduler.job_manager import JobManager
@@ -50,7 +50,7 @@ async def test_create_policy_round_trip(real_dal: Any) -> None:
     assert state["escalated_at"] is None
 
     # Verify scheduler job was created with t1 interval
-    jobs = await jm.list_jobs("tenant1", "waddleperf_cluster")
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
     assert len(jobs) == 1
     assert jobs[0]["job_type"] == "autoperf_cycle"
     assert jobs[0]["payload"]["policy_id"] == created["id"]
@@ -60,7 +60,7 @@ async def test_create_policy_round_trip(real_dal: Any) -> None:
 @pytest.mark.asyncio
 async def test_create_policy_interval_validation(real_dal: Any) -> None:
     """Interval validation: >=30, t3<=t2<=t1."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
 
@@ -109,7 +109,7 @@ async def test_create_policy_interval_validation(real_dal: Any) -> None:
 @pytest.mark.asyncio
 async def test_create_policy_tenant_isolation(real_dal: Any) -> None:
     """Tenant A's policies not visible to tenant B."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
 
@@ -149,7 +149,7 @@ async def test_create_policy_tenant_isolation(real_dal: Any) -> None:
 @pytest.mark.asyncio
 async def test_record_cycle_breach_escalates(real_dal: Any) -> None:
     """Breach escalates tier T1->T2->T3, caps at 3."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
 
@@ -193,7 +193,7 @@ async def test_record_cycle_breach_escalates(real_dal: Any) -> None:
 @pytest.mark.asyncio
 async def test_record_cycle_clean_counts_and_deescalates(real_dal: Any) -> None:
     """Clean cycle increments counter, deescalates after N clean cycles."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
 
@@ -242,7 +242,7 @@ async def test_record_cycle_clean_counts_and_deescalates(real_dal: Any) -> None:
 @pytest.mark.asyncio
 async def test_record_cycle_tier_retunes_interval(real_dal: Any) -> None:
     """Tier change updates scheduler job interval_seconds."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
     from hub_api.scheduler.job_manager import JobManager
@@ -262,31 +262,31 @@ async def test_record_cycle_tier_retunes_interval(real_dal: Any) -> None:
     )
 
     # Initial job interval is t1 (300)
-    jobs = await jm.list_jobs("tenant1", "waddleperf_cluster")
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
     assert jobs[0]["interval_seconds"] == 300
 
     # Breach to T2: interval should become 120
     await manager.record_cycle("tenant1", policy["id"], breached=True)
-    jobs = await jm.list_jobs("tenant1", "waddleperf_cluster")
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
     assert jobs[0]["interval_seconds"] == 120
 
     # Breach to T3: interval should become 60
     await manager.record_cycle("tenant1", policy["id"], breached=True)
-    jobs = await jm.list_jobs("tenant1", "waddleperf_cluster")
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
     assert jobs[0]["interval_seconds"] == 60
 
     # Deescalate to T2: interval should become 120
     await manager.record_cycle("tenant1", policy["id"], breached=False)
     await manager.record_cycle("tenant1", policy["id"], breached=False)
     await manager.record_cycle("tenant1", policy["id"], breached=False)
-    jobs = await jm.list_jobs("tenant1", "waddleperf_cluster")
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
     assert jobs[0]["interval_seconds"] == 120
 
 
 @pytest.mark.asyncio
 async def test_delete_policy_removes_all(real_dal: Any) -> None:
     """Delete policy removes policy + state + scheduler job."""
-    from hub_api.modules.waddleperf_cluster.services.autoperf_manager import (
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
         AutoPerfManager,
     )
     from hub_api.scheduler.job_manager import JobManager
@@ -311,7 +311,7 @@ async def test_delete_policy_removes_all(real_dal: Any) -> None:
     state = await manager.get_state("tenant1", policy_id)
     assert state is not None
 
-    jobs = await jm.list_jobs("tenant1", "waddleperf_cluster")
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
     assert len(jobs) == 1
     job_id = jobs[0]["id"]
 

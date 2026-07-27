@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from quart import Quart
 from typing import Any
 
-from hub_api.modules.waddleperf_cluster.services.org_unit_manager import OrgUnit
+from hub_api.modules.perftest_cluster.services.org_unit_manager import OrgUnit
 
 
 def make_mock_ou(
@@ -100,7 +100,7 @@ async def test_create_org_unit_success(
     mock_db = app_with_wpc.db
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -119,7 +119,7 @@ async def test_create_org_unit_success(
         mock_mgr.create_ou = AsyncMock(return_value=ou)
 
         response = await client.post(
-            "/api/v1/waddleperf_cluster/org-units",
+            "/api/v1/perftest_cluster/org-units",
             json={
                 "name": "Engineering",
                 "description": "Engineering department",
@@ -149,7 +149,7 @@ async def test_create_org_unit_missing_name(
     client = app_with_wpc.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_cluster/org-units",
+        "/api/v1/perftest_cluster/org-units",
         json={"description": "No name provided"},
         headers={"Authorization": f"Bearer {valid_write_token}"},
     )
@@ -172,7 +172,7 @@ async def test_list_org_units_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -203,7 +203,7 @@ async def test_list_org_units_success(
         mock_mgr.list_ous = AsyncMock(return_value=ous)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/org-units",
+            "/api/v1/perftest_cluster/org-units",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -229,7 +229,7 @@ async def test_list_org_units_with_parent_filter(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -250,7 +250,7 @@ async def test_list_org_units_with_parent_filter(
         mock_mgr.list_ous = AsyncMock(return_value=ous)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/org-units?parent_id=ou-1",
+            "/api/v1/perftest_cluster/org-units?parent_id=ou-1",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -274,7 +274,7 @@ async def test_get_org_unit_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -293,7 +293,7 @@ async def test_get_org_unit_success(
         mock_mgr.get_ou = AsyncMock(return_value=ou)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/org-units/ou-1",
+            "/api/v1/perftest_cluster/org-units/ou-1",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -316,7 +316,7 @@ async def test_get_org_unit_not_found(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -324,7 +324,7 @@ async def test_get_org_unit_not_found(
         mock_mgr.get_ou = AsyncMock(return_value=None)
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/org-units/nonexistent",
+            "/api/v1/perftest_cluster/org-units/nonexistent",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 
@@ -346,7 +346,7 @@ async def test_update_org_unit_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -365,7 +365,7 @@ async def test_update_org_unit_success(
         mock_mgr.update_ou = AsyncMock(return_value=ou)
 
         response = await client.put(
-            "/api/v1/waddleperf_cluster/org-units/ou-1",
+            "/api/v1/perftest_cluster/org-units/ou-1",
             json={"name": "Engineering Updated", "description": "Updated description"},
             headers={"Authorization": f"Bearer {valid_write_token}"},
         )
@@ -389,7 +389,7 @@ async def test_update_org_unit_not_found(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -397,7 +397,7 @@ async def test_update_org_unit_not_found(
         mock_mgr.update_ou = AsyncMock(return_value=None)
 
         response = await client.put(
-            "/api/v1/waddleperf_cluster/org-units/nonexistent",
+            "/api/v1/perftest_cluster/org-units/nonexistent",
             json={"name": "Updated"},
             headers={"Authorization": f"Bearer {valid_write_token}"},
         )
@@ -420,7 +420,7 @@ async def test_delete_org_unit_success(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -428,7 +428,7 @@ async def test_delete_org_unit_success(
         mock_mgr.delete_ou = AsyncMock(return_value=True)
 
         response = await client.delete(
-            "/api/v1/waddleperf_cluster/org-units/ou-1",
+            "/api/v1/perftest_cluster/org-units/ou-1",
             headers={"Authorization": f"Bearer {valid_write_token}"},
         )
 
@@ -451,7 +451,7 @@ async def test_delete_org_unit_not_found(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -459,7 +459,7 @@ async def test_delete_org_unit_not_found(
         mock_mgr.delete_ou = AsyncMock(return_value=False)
 
         response = await client.delete(
-            "/api/v1/waddleperf_cluster/org-units/nonexistent",
+            "/api/v1/perftest_cluster/org-units/nonexistent",
             headers={"Authorization": f"Bearer {valid_write_token}"},
         )
 
@@ -481,7 +481,7 @@ async def test_read_only_token_cannot_write(
     client = app_with_wpc.test_client()
 
     response = await client.post(
-        "/api/v1/waddleperf_cluster/org-units",
+        "/api/v1/perftest_cluster/org-units",
         json={"name": "Test OU"},
         headers={"Authorization": f"Bearer {read_only_token}"},
     )
@@ -498,7 +498,7 @@ async def test_no_auth_token_returns_403(app_with_wpc: Quart) -> None:
     """
     client = app_with_wpc.test_client()
 
-    response = await client.get("/api/v1/waddleperf_cluster/org-units")
+    response = await client.get("/api/v1/perftest_cluster/org-units")
 
     assert response.status_code == 403
 
@@ -516,7 +516,7 @@ async def test_tenant_isolation_read(
     client = app_with_wpc.test_client()
 
     with patch(
-        "hub_api.modules.waddleperf_cluster.api.org_units.OrgUnitManager"
+        "hub_api.modules.perftest_cluster.api.org_units.OrgUnitManager"
     ) as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
@@ -526,7 +526,7 @@ async def test_tenant_isolation_read(
         mock_mgr.list_ous = AsyncMock(return_value=[])
 
         response = await client.get(
-            "/api/v1/waddleperf_cluster/org-units",
+            "/api/v1/perftest_cluster/org-units",
             headers={"Authorization": f"Bearer {valid_tenant_token}"},
         )
 

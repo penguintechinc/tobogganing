@@ -24,8 +24,8 @@ async def app_with_c2c_matrix_realdal(
     import hub_api.app
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.matrix
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.matrix, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.matrix
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.matrix, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
     return app_with_c2c
@@ -76,7 +76,7 @@ async def test_get_latest_matrix_missing_test_type(
     client = app_with_c2c_matrix_realdal.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/matrix/latest",
+        "/api/v1/perftest_c2c/matrix/latest",
         headers={"Authorization": f"Bearer {c2c_readonly_token_matrix}"},
     )
 
@@ -91,7 +91,7 @@ async def test_get_latest_matrix_readonly(
     client = app_with_c2c_matrix_realdal.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/matrix/latest?test_type=latency",
+        "/api/v1/perftest_c2c/matrix/latest?test_type=latency",
         headers={"Authorization": f"Bearer {c2c_readonly_token_matrix}"},
     )
 
@@ -106,7 +106,7 @@ async def test_get_latest_matrix_no_token(
     client = app_with_c2c_matrix_realdal.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/matrix/latest?test_type=latency",
+        "/api/v1/perftest_c2c/matrix/latest?test_type=latency",
     )
 
     assert response.status_code == 403

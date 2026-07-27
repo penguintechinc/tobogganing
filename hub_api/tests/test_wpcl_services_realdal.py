@@ -10,11 +10,11 @@ import pytest
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from hub_api.modules.waddleperf_cluster.services.device_manager import DeviceManager
-from hub_api.modules.waddleperf_cluster.services.org_unit_manager import OrgUnitManager
-from hub_api.modules.waddleperf_cluster.services.enrollment_manager import EnrollmentManager
-from hub_api.modules.waddleperf_cluster.services.test_manager import TestManager
-from hub_api.modules.waddleperf_cluster.services.device_auth import authenticate_device_global
+from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
+from hub_api.modules.perftest_cluster.services.org_unit_manager import OrgUnitManager
+from hub_api.modules.perftest_cluster.services.enrollment_manager import EnrollmentManager
+from hub_api.modules.perftest_cluster.services.test_manager import TestManager
+from hub_api.modules.perftest_cluster.services.device_auth import authenticate_device_global
 
 
 @pytest.mark.asyncio

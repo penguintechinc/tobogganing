@@ -82,9 +82,9 @@ describe('App', () => {
 });
 
 describe('ModuleViewRoute', () => {
-  it('renders DevicesPage for waddleperf_cluster/devices', () => {
+  it('renders DevicesPage for perftest_cluster/devices', () => {
     render(
-      <MemoryRouter initialEntries={['/m/waddleperf_cluster/devices']}>
+      <MemoryRouter initialEntries={['/m/perftest_cluster/devices']}>
         <Routes>
           <Route path="/m/:module/:view" element={<ModuleViewRoute />} />
         </Routes>
@@ -94,9 +94,9 @@ describe('ModuleViewRoute', () => {
     expect(screen.getByTestId('devices-page')).toBeInTheDocument();
   });
 
-  it('renders TestsPage for waddleperf_cluster/tests', () => {
+  it('renders TestsPage for perftest_cluster/tests', () => {
     render(
-      <MemoryRouter initialEntries={['/m/waddleperf_cluster/tests']}>
+      <MemoryRouter initialEntries={['/m/perftest_cluster/tests']}>
         <Routes>
           <Route path="/m/:module/:view" element={<ModuleViewRoute />} />
         </Routes>
@@ -106,9 +106,9 @@ describe('ModuleViewRoute', () => {
     expect(screen.getByTestId('tests-page')).toBeInTheDocument();
   });
 
-  it('renders StatsPage for waddleperf_cluster/stats', () => {
+  it('renders StatsPage for perftest_cluster/stats', () => {
     render(
-      <MemoryRouter initialEntries={['/m/waddleperf_cluster/stats']}>
+      <MemoryRouter initialEntries={['/m/perftest_cluster/stats']}>
         <Routes>
           <Route path="/m/:module/:view" element={<ModuleViewRoute />} />
         </Routes>

@@ -12,10 +12,10 @@ def register_job_handler(module: str, job_type: str, task_name: str) -> None:
     """Register a handler task for a (module, job_type) pair.
 
     Args:
-        module: Module name (e.g., "waddleperf_cluster").
+        module: Module name (e.g., "perftest_cluster").
         job_type: Job type identifier (e.g., "server_test").
         task_name: Fully-qualified Celery task name (e.g.,
-            "hub_api.modules.waddleperf_cluster.worker.tasks.run_server_test").
+            "hub_api.modules.perftest_cluster.worker.tasks.run_server_test").
     """
     key = (module, job_type)
     _handlers[key] = task_name

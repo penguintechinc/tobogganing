@@ -49,7 +49,7 @@ describe('c2c API', () => {
       const result = await listEndpoints();
 
       expect(result).toEqual(mockEndpoints);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/endpoints');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/endpoints');
     });
   });
 
@@ -71,7 +71,7 @@ describe('c2c API', () => {
       const result = await getEndpoint('ep-1');
 
       expect(result).toEqual(mockEndpoint);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/endpoints/ep-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/endpoints/ep-1');
     });
   });
 
@@ -93,7 +93,7 @@ describe('c2c API', () => {
       const result = await createEndpoint(payload);
 
       expect(result).toEqual(mockEndpoint);
-      expect(apiClient.post).toHaveBeenCalledWith('/waddleperf_c2c/endpoints', payload);
+      expect(apiClient.post).toHaveBeenCalledWith('/perftest_c2c/endpoints', payload);
     });
   });
 
@@ -116,7 +116,7 @@ describe('c2c API', () => {
       const result = await updateEndpoint('ep-1', updatePayload);
 
       expect(result).toEqual(mockEndpoint);
-      expect(apiClient.patch).toHaveBeenCalledWith('/waddleperf_c2c/endpoints/ep-1', updatePayload);
+      expect(apiClient.patch).toHaveBeenCalledWith('/perftest_c2c/endpoints/ep-1', updatePayload);
     });
   });
 
@@ -126,7 +126,7 @@ describe('c2c API', () => {
 
       await deleteEndpoint('ep-1');
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/waddleperf_c2c/endpoints/ep-1');
+      expect(apiClient.delete).toHaveBeenCalledWith('/perftest_c2c/endpoints/ep-1');
     });
   });
 
@@ -151,7 +151,7 @@ describe('c2c API', () => {
       const result = await listRuns();
 
       expect(result).toEqual(mockRuns);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/runs');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/runs');
     });
   });
 
@@ -171,7 +171,7 @@ describe('c2c API', () => {
       const result = await getRun('run-1');
 
       expect(result).toEqual(mockRun);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/runs/run-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/runs/run-1');
     });
   });
 
@@ -186,7 +186,7 @@ describe('c2c API', () => {
       const result = await createRun(payload);
 
       expect(result).toEqual({ run_id: 'run-1', total_pairs: 10 });
-      expect(apiClient.post).toHaveBeenCalledWith('/waddleperf_c2c/runs', payload);
+      expect(apiClient.post).toHaveBeenCalledWith('/perftest_c2c/runs', payload);
     });
   });
 
@@ -204,7 +204,7 @@ describe('c2c API', () => {
       const result = await getLatestMatrix('http');
 
       expect(result).toEqual(mockMatrix);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/latest', {
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/matrix/latest', {
         params: { test_type: 'http' },
       });
     });
@@ -224,7 +224,7 @@ describe('c2c API', () => {
       const result = await getRunMatrix('run-1');
 
       expect(result).toEqual(mockMatrix);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/runs/run-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/matrix/runs/run-1');
     });
   });
 
@@ -244,7 +244,7 @@ describe('c2c API', () => {
       const result = await getMatrixTrends('us-west-2', 'us-east-1', 'http');
 
       expect(result).toEqual(mockTrends);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/trends', {
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/matrix/trends', {
         params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'http' },
       });
     });
@@ -264,7 +264,7 @@ describe('c2c API', () => {
       const result = await getMatrixTrends('us-west-2', 'us-east-1', 'http', 3600);
 
       expect(result).toEqual(mockTrends);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/matrix/trends', {
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/matrix/trends', {
         params: { source: 'us-west-2', dest: 'us-east-1', test_type: 'http', window: 3600 },
       });
     });
@@ -291,7 +291,7 @@ describe('c2c API', () => {
       const result = await listRecurringJobs();
 
       expect(result).toEqual(mockJobs);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/recurring');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/recurring');
     });
   });
 
@@ -315,7 +315,7 @@ describe('c2c API', () => {
       const result = await createRecurringJob(payload);
 
       expect(result).toEqual(mockJob);
-      expect(apiClient.post).toHaveBeenCalledWith('/waddleperf_c2c/recurring', payload);
+      expect(apiClient.post).toHaveBeenCalledWith('/perftest_c2c/recurring', payload);
     });
   });
 
@@ -325,7 +325,7 @@ describe('c2c API', () => {
 
       await deleteRecurringJob('job-1');
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/waddleperf_c2c/recurring/job-1');
+      expect(apiClient.delete).toHaveBeenCalledWith('/perftest_c2c/recurring/job-1');
     });
   });
 
@@ -339,7 +339,7 @@ describe('c2c API', () => {
 
       expect(result.id).toBe('job-1');
       expect(result.enabled).toBe(false);
-      expect(apiClient.patch).toHaveBeenCalledWith('/waddleperf_c2c/recurring/job-1', {
+      expect(apiClient.patch).toHaveBeenCalledWith('/perftest_c2c/recurring/job-1', {
         enabled: false,
       });
     });
@@ -366,7 +366,7 @@ describe('c2c API', () => {
       const result = await listRegions();
 
       expect(result).toEqual(mockRegions);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/regions');
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/regions');
     });
   });
 
@@ -393,7 +393,7 @@ describe('c2c API', () => {
       const result = await listVisibleNodes();
 
       expect(result).toEqual(mockNodes);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/regions/nodes', {
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/regions/nodes', {
         params: {},
       });
     });
@@ -420,7 +420,7 @@ describe('c2c API', () => {
       const result = await listVisibleNodes('us-west-2');
 
       expect(result).toEqual(mockNodes);
-      expect(apiClient.get).toHaveBeenCalledWith('/waddleperf_c2c/regions/nodes', {
+      expect(apiClient.get).toHaveBeenCalledWith('/perftest_c2c/regions/nodes', {
         params: { region: 'us-west-2' },
       });
     });

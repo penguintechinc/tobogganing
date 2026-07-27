@@ -408,15 +408,15 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_cluster.") or flag_key.startswith("tobogganing.waddleperf_client."):
+        if flag_key.startswith("tobogganing.perftest_cluster.") or flag_key.startswith("tobogganing.perftest_client."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
     # Register WaddlePerf Cluster module via registry (REAL auth, no monkeypatch)
-    from hub_api.modules.waddleperf_cluster import module as wpc_module
-    from hub_api.modules.waddleperf_client import module as wpcl_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
+    from hub_api.modules.perftest_client import module as wpcl_module
 
     wpc_contract = wpc_module()
     wpcl_contract = wpcl_module()
@@ -540,7 +540,7 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.waddleperf_c2c."):
+        if flag_key.startswith("tobogganing.perftest_c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -558,7 +558,7 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     )
 
     # Register WaddlePerf C2C module via registry (REAL auth, no monkeypatch)
-    from hub_api.modules.waddleperf_c2c import module as c2c_module
+    from hub_api.modules.perftest_c2c import module as c2c_module
 
     c2c_contract = c2c_module()
     app.registry.register(c2c_contract)

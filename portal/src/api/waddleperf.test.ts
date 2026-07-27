@@ -32,7 +32,7 @@ describe('waddleperf API', () => {
 
       const result = await waddleperf.listDevices();
 
-      expect(mockApiClient.get).toHaveBeenCalledWith('/waddleperf_cluster/devices');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/perftest_cluster/devices');
       expect(result).toEqual(mockDevices);
     });
   });
@@ -58,7 +58,7 @@ describe('waddleperf API', () => {
 
       const result = await waddleperf.listTests();
 
-      expect(mockApiClient.get).toHaveBeenCalledWith('/waddleperf_cluster/tests');
+      expect(mockApiClient.get).toHaveBeenCalledWith('/perftest_cluster/tests');
       expect(result).toEqual(mockTests);
     });
   });
@@ -80,7 +80,7 @@ describe('waddleperf API', () => {
       const result = await waddleperf.getStatsSummary();
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
-        '/waddleperf_cluster/stats/summary'
+        '/perftest_cluster/stats/summary'
       );
       expect(result).toEqual(mockSummary);
     });
@@ -100,7 +100,7 @@ describe('waddleperf API', () => {
       const result = await waddleperf.getStatsTrends();
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
-        '/waddleperf_cluster/stats/trends'
+        '/perftest_cluster/stats/trends'
       );
       expect(result).toEqual(mockTrends);
     });

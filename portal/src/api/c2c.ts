@@ -142,7 +142,7 @@ export interface NodesResponse {
 export async function listEndpoints(): Promise<Endpoint[]> {
   console.log('[c2c] listEndpoints');
   const response = await apiClient.get<EndpointsResponse>(
-    '/waddleperf_c2c/endpoints'
+    '/perftest_c2c/endpoints'
   );
   return response.data.endpoints;
 }
@@ -150,7 +150,7 @@ export async function listEndpoints(): Promise<Endpoint[]> {
 export async function getEndpoint(id: string): Promise<Endpoint> {
   console.log('[c2c] getEndpoint { id:', id, '}');
   const response = await apiClient.get(
-    `/waddleperf_c2c/endpoints/${id}`
+    `/perftest_c2c/endpoints/${id}`
   );
   return response.data as Endpoint;
 }
@@ -160,7 +160,7 @@ export async function createEndpoint(
 ): Promise<Endpoint> {
   console.log('[c2c] createEndpoint { region:', payload.region, ', name:', payload.name, '}');
   const response = await apiClient.post(
-    '/waddleperf_c2c/endpoints',
+    '/perftest_c2c/endpoints',
     payload
   );
   return response.data as Endpoint;
@@ -172,7 +172,7 @@ export async function updateEndpoint(
 ): Promise<Endpoint> {
   console.log('[c2c] updateEndpoint { id:', id, '}');
   const response = await apiClient.patch(
-    `/waddleperf_c2c/endpoints/${id}`,
+    `/perftest_c2c/endpoints/${id}`,
     payload
   );
   return response.data as Endpoint;
@@ -180,19 +180,19 @@ export async function updateEndpoint(
 
 export async function deleteEndpoint(id: string): Promise<void> {
   console.log('[c2c] deleteEndpoint { id:', id, '}');
-  await apiClient.delete(`/waddleperf_c2c/endpoints/${id}`);
+  await apiClient.delete(`/perftest_c2c/endpoints/${id}`);
 }
 
 export async function listRuns(): Promise<Run[]> {
   console.log('[c2c] listRuns');
-  const response = await apiClient.get<RunsResponse>('/waddleperf_c2c/runs');
+  const response = await apiClient.get<RunsResponse>('/perftest_c2c/runs');
   return response.data.runs;
 }
 
 export async function getRun(id: string): Promise<Run> {
   console.log('[c2c] getRun { id:', id, '}');
   const response = await apiClient.get(
-    `/waddleperf_c2c/runs/${id}`
+    `/perftest_c2c/runs/${id}`
   );
   return response.data as Run;
 }
@@ -200,7 +200,7 @@ export async function getRun(id: string): Promise<Run> {
 export async function createRun(payload: CreateRunPayload): Promise<{ run_id: string; total_pairs: number }> {
   console.log('[c2c] createRun { testTypes:', payload.test_types.length, '}');
   const response = await apiClient.post<{ run_id: string; total_pairs: number }>(
-    '/waddleperf_c2c/runs',
+    '/perftest_c2c/runs',
     payload
   );
   return {
@@ -212,7 +212,7 @@ export async function createRun(payload: CreateRunPayload): Promise<{ run_id: st
 export async function getLatestMatrix(testType: string): Promise<MatrixData> {
   console.log('[c2c] getLatestMatrix { testType:', testType, '}');
   const response = await apiClient.get<MatrixResponse>(
-    '/waddleperf_c2c/matrix/latest',
+    '/perftest_c2c/matrix/latest',
     { params: { test_type: testType } }
   );
   return {
@@ -224,7 +224,7 @@ export async function getLatestMatrix(testType: string): Promise<MatrixData> {
 export async function getRunMatrix(runId: string): Promise<MatrixData> {
   console.log('[c2c] getRunMatrix { runId:', runId, '}');
   const response = await apiClient.get<MatrixResponse>(
-    `/waddleperf_c2c/matrix/runs/${runId}`
+    `/perftest_c2c/matrix/runs/${runId}`
   );
   return {
     regions: response.data.regions,
@@ -240,7 +240,7 @@ export async function getMatrixTrends(
 ): Promise<TrendPoint[]> {
   console.log('[c2c] getMatrixTrends { source:', source, ', dest:', dest, '}');
   const response = await apiClient.get<TrendsResponse>(
-    '/waddleperf_c2c/matrix/trends',
+    '/perftest_c2c/matrix/trends',
     { params: { source, dest, test_type: testType, ...(window && { window }) } }
   );
   return response.data.trends;
@@ -249,7 +249,7 @@ export async function getMatrixTrends(
 export async function listRecurringJobs(): Promise<RecurringJob[]> {
   console.log('[c2c] listRecurringJobs');
   const response = await apiClient.get<RecurringJobsResponse>(
-    '/waddleperf_c2c/recurring'
+    '/perftest_c2c/recurring'
   );
   return response.data.jobs;
 }
@@ -259,7 +259,7 @@ export async function createRecurringJob(
 ): Promise<RecurringJob> {
   console.log('[c2c] createRecurringJob { jobType:', payload.job_type, '}');
   const response = await apiClient.post<RecurringJob>(
-    '/waddleperf_c2c/recurring',
+    '/perftest_c2c/recurring',
     payload
   );
   return response.data;
@@ -267,7 +267,7 @@ export async function createRecurringJob(
 
 export async function deleteRecurringJob(jobId: string): Promise<void> {
   console.log('[c2c] deleteRecurringJob { jobId:', jobId, '}');
-  await apiClient.delete(`/waddleperf_c2c/recurring/${jobId}`);
+  await apiClient.delete(`/perftest_c2c/recurring/${jobId}`);
 }
 
 export async function updateRecurringJob(
@@ -276,7 +276,7 @@ export async function updateRecurringJob(
 ): Promise<RecurringJob> {
   console.log('[c2c] updateRecurringJob { jobId:', jobId, ', enabled:', enabled, '}');
   const response = await apiClient.patch<{ enabled: boolean }>(
-    `/waddleperf_c2c/recurring/${jobId}`,
+    `/perftest_c2c/recurring/${jobId}`,
     { enabled }
   );
   return { id: jobId, enabled: response.data.enabled } as RecurringJob;
@@ -285,7 +285,7 @@ export async function updateRecurringJob(
 export async function listRegions(): Promise<Region[]> {
   console.log('[c2c] listRegions');
   const response = await apiClient.get<RegionsResponse>(
-    '/waddleperf_c2c/regions'
+    '/perftest_c2c/regions'
   );
   return response.data.regions;
 }
@@ -293,7 +293,7 @@ export async function listRegions(): Promise<Region[]> {
 export async function listVisibleNodes(region?: string): Promise<VisibleNode[]> {
   console.log('[c2c] listVisibleNodes { region:', region, '}');
   const response = await apiClient.get<NodesResponse>(
-    '/waddleperf_c2c/regions/nodes',
+    '/perftest_c2c/regions/nodes',
     { params: { ...(region && { region }) } }
   );
   return response.data.nodes;

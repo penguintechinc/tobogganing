@@ -15,7 +15,7 @@ import pytest_asyncio
 from penguin_dal import AsyncDB
 from quart import Quart
 
-from hub_api.modules.waddleperf_c2c.services.endpoint_manager import EndpointManager
+from hub_api.modules.perftest_c2c.services.endpoint_manager import EndpointManager
 
 
 # ============================================================================
@@ -358,11 +358,11 @@ async def app_with_c2c_realdal_regions(
     import hub_api.app
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.endpoints
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.endpoints, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.endpoints
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.endpoints, "get_db", get_db_func)
 
-    import hub_api.modules.waddleperf_c2c.api.regions
-    monkeypatch.setattr(hub_api.modules.waddleperf_c2c.api.regions, "get_db", get_db_func)
+    import hub_api.modules.perftest_c2c.api.regions
+    monkeypatch.setattr(hub_api.modules.perftest_c2c.api.regions, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
     return app_with_c2c
@@ -396,7 +396,7 @@ async def test_regions_api_flag_off_returns_402(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key == "tobogganing.waddleperf_c2c.regions":
+        if flag_key == "tobogganing.perftest_c2c.regions":
             return False
         return original_flag_on(flag_key, distinct_id)
 
@@ -405,7 +405,7 @@ async def test_regions_api_flag_off_returns_402(
     client = app_with_c2c_realdal_regions.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/regions",
+        "/api/v1/perftest_c2c/regions",
         headers={"Authorization": f"Bearer {c2c_read_token_regions}"},
     )
 
@@ -429,7 +429,7 @@ async def test_regions_api_unlicensed_returns_402_professional(
     client = app_with_c2c_realdal_regions.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/regions",
+        "/api/v1/perftest_c2c/regions",
         headers={"Authorization": f"Bearer {c2c_read_token_regions}"},
     )
 
@@ -466,7 +466,7 @@ async def test_regions_api_get_list_licensed(
     client = app_with_c2c_realdal_regions.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/regions",
+        "/api/v1/perftest_c2c/regions",
         headers={"Authorization": f"Bearer {c2c_read_token_regions}"},
     )
 
@@ -506,7 +506,7 @@ async def test_regions_api_get_nodes_licensed(
 
     # Get all nodes
     response = await client.get(
-        "/api/v1/waddleperf_c2c/regions/nodes",
+        "/api/v1/perftest_c2c/regions/nodes",
         headers={"Authorization": f"Bearer {c2c_read_token_regions}"},
     )
 
@@ -517,7 +517,7 @@ async def test_regions_api_get_nodes_licensed(
 
     # Filter by region
     response = await client.get(
-        "/api/v1/waddleperf_c2c/regions/nodes?region=us-east-1",
+        "/api/v1/perftest_c2c/regions/nodes?region=us-east-1",
         headers={"Authorization": f"Bearer {c2c_read_token_regions}"},
     )
 
@@ -549,7 +549,7 @@ async def test_regions_api_foreign_public_redacted_in_response(
     client = app_with_c2c_realdal_regions.test_client()
 
     response = await client.get(
-        "/api/v1/waddleperf_c2c/regions/nodes",
+        "/api/v1/perftest_c2c/regions/nodes",
         headers={"Authorization": f"Bearer {c2c_read_token_regions}"},
     )
 

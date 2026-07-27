@@ -59,7 +59,7 @@ describe('useLiveTest', () => {
     const wsUrl = call?.[0] as string;
     const subprotocols = call?.[1] as string[];
     // URL carries no credential
-    expect(wsUrl).toContain('/api/v1/waddleperf_cluster/live-test/stream');
+    expect(wsUrl).toContain('/api/v1/perftest_cluster/live-test/stream');
     expect(wsUrl).not.toContain('token');
     expect(wsUrl).not.toContain('test-token-123');
     // Token rides in the Sec-WebSocket-Protocol handshake header
@@ -81,7 +81,7 @@ describe('useLiveTest', () => {
 
     await waitFor(() => {
       expect(mockApiClient.default.post).toHaveBeenCalledWith(
-        '/waddleperf_cluster/live-test/run',
+        '/perftest_cluster/live-test/run',
         expect.objectContaining({
           device_id: 'device-1',
           test_type: 'http',
