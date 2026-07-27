@@ -1,4 +1,4 @@
-"""Tests for SASE backup module."""
+"""Tests for core backup module."""
 
 import json
 from pathlib import Path
@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hub_api.modules.sase.backup import BackupManager, S3Config, S3Manager
-from hub_api.modules.sase.backup.crypto import decrypt_file, encrypt_file
-from hub_api.modules.sase.backup.manager import _validate_backup_name, _validate_path_in_directory
+from hub_api.core.backup import BackupManager, S3Config, S3Manager
+from hub_api.core.backup.crypto import decrypt_file, encrypt_file
+from hub_api.core.backup.manager import _validate_backup_name, _validate_path_in_directory
 
 
 def _create_backup_mock_db() -> MagicMock:
@@ -192,7 +192,7 @@ class TestEncryption:
 
     def test_encrypt_kdf_parameters_match(self, tmp_path: Path) -> None:
         """Test that KDF parameters are consistent between encrypt/decrypt."""
-        from hub_api.modules.sase.backup.crypto import SCRYPT_N, SCRYPT_R, SCRYPT_P
+        from hub_api.core.backup.crypto import SCRYPT_N, SCRYPT_R, SCRYPT_P
 
         # Verify upgraded parameters per OWASP
         assert SCRYPT_N == 2**17, "KDF n parameter should be 2^17 (131072)"
@@ -581,7 +581,7 @@ class TestS3Manager:
         manager = S3Manager(config)
         assert manager.client is None
 
-    @patch("hub_api.modules.sase.backup.s3.boto3")
+    @patch("hub_api.core.backup.s3.boto3")
     def test_s3_manager_init_enabled(self, mock_boto3: MagicMock) -> None:
         """Test S3 manager when enabled."""
         config = S3Config(
@@ -602,7 +602,7 @@ class TestS3Manager:
         manager = S3Manager(config)
         assert manager.client is not None
 
-    @patch("hub_api.modules.sase.backup.s3.boto3")
+    @patch("hub_api.core.backup.s3.boto3")
     def test_s3_upload_backup(self, mock_boto3: MagicMock, tmp_path: Path) -> None:
         """Test S3 backup upload."""
         config = S3Config(
@@ -637,7 +637,7 @@ class TestS3Manager:
         assert result["size_bytes"] == 1024
         mock_client.upload_fileobj.assert_called_once()
 
-    @patch("hub_api.modules.sase.backup.s3.boto3")
+    @patch("hub_api.core.backup.s3.boto3")
     def test_s3_list_backups(self, mock_boto3: MagicMock) -> None:
         """Test S3 backup listing."""
         config = S3Config(

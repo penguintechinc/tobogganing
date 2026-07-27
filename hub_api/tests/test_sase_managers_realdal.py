@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.auth.user_manager import UserManager, UserRole
+from hub_api.core import UserManager, UserRole
 from hub_api.modules.sase.firewall.access_control import AccessControlManager, AccessRule, AccessType, RuleType
 from hub_api.modules.sase.network.port_manager import PortConfigManager, PortProtocol, PortRangeConfig
 from hub_api.modules.sase.network.vrf_manager import VRFManager, VRFConfiguration, VRFStatus, OSPFNeighbor

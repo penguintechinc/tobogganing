@@ -10,8 +10,9 @@ import structlog
 from quart import Blueprint, current_app, request
 
 from hub_api.auth.middleware import current_claims, require_tenant
+from hub_api.core import CertificateManager
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.sase.certs.certificate_manager import CertificateManager
+from hub_api.modules.sase.certs import WireGuardKeyManager
 
 logger = structlog.get_logger()
 
@@ -93,12 +94,15 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
         # Get managers from app config
         cluster_manager = current_app.config.get("CLUSTER_MANAGER")
         client_registry = current_app.config.get("CLIENT_REGISTRY")
-        cert_manager: CertificateManager = current_app.config.get(
+        wg_manager: WireGuardKeyManager = current_app.config.get(
+            "WIREGUARD_MANAGER"
+        )
+        pki_manager: CertificateManager = current_app.config.get(
             "CERT_MANAGER"
         )
 
-        if not cert_manager:
-            logger.error("cert_manager_not_configured")
+        if not wg_manager or not pki_manager:
+            logger.error("wg_manager_or_pki_manager_not_configured")
             return (
                 {"error": "Internal server error"},
                 500,
@@ -158,7 +162,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
 
         # Generate WireGuard keys
         try:
-            wg_config = await cert_manager.generate_wireguard_keys(
+            wg_config = await wg_manager.generate_wireguard_keys(
                 node_id, node_type, tenant_id=tenant_id
             )
         except Exception as e:
@@ -176,7 +180,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
         try:
             if node_type in ("headend", "kubernetes_node", "raw_compute"):
                 cert_key, cert_pem, ca_cert = (
-                    await cert_manager.generate_headend_certificate(
+                    await pki_manager.generate_headend_certificate(
                         node_id,
                         f"{node_type}-{node_id}",
                         [wg_config["ip_address"]],
@@ -184,7 +188,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
                 )
             else:
                 cert_key, cert_pem, ca_cert = (
-                    await cert_manager.generate_client_certificate(
+                    await pki_manager.generate_client_certificate(
                         node_id,
                         f"{node_type}-{node_id}",
                         node_type,
@@ -269,12 +273,12 @@ async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
 
         tenant_id = claims["tenant"]
 
-        # Get certificate manager
-        cert_manager: CertificateManager = current_app.config.get(
-            "CERT_MANAGER"
+        # Get WireGuard manager
+        wg_manager: WireGuardKeyManager = current_app.config.get(
+            "WIREGUARD_MANAGER"
         )
-        if not cert_manager:
-            logger.error("cert_manager_not_configured")
+        if not wg_manager:
+            logger.error("wg_manager_not_configured")
             return (
                 {"error": "Internal server error"},
                 500,
@@ -282,7 +286,7 @@ async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
 
         # Get all WireGuard peers for this tenant
         try:
-            peers = await cert_manager.get_all_wireguard_peers(
+            peers = await wg_manager.get_all_wireguard_peers(
                 tenant_id=tenant_id
             )
         except Exception as e:
@@ -347,12 +351,12 @@ async def revoke_wireguard_keys(node_id: str) -> tuple[dict[str, Any], int]:
 
         tenant_id = claims["tenant"]
 
-        # Get certificate manager
-        cert_manager: CertificateManager = current_app.config.get(
-            "CERT_MANAGER"
+        # Get WireGuard manager
+        wg_manager: WireGuardKeyManager = current_app.config.get(
+            "WIREGUARD_MANAGER"
         )
-        if not cert_manager:
-            logger.error("cert_manager_not_configured")
+        if not wg_manager:
+            logger.error("wg_manager_not_configured")
             return (
                 {"error": "Internal server error"},
                 500,
@@ -360,7 +364,7 @@ async def revoke_wireguard_keys(node_id: str) -> tuple[dict[str, Any], int]:
 
         # Revoke WireGuard keys (tenant-scoped)
         try:
-            success = await cert_manager.revoke_wireguard_keys(
+            success = await wg_manager.revoke_wireguard_keys(
                 node_id, tenant_id=tenant_id
             )
         except Exception as e:
