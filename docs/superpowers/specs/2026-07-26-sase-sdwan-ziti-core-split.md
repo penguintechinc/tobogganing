@@ -39,15 +39,17 @@ Decompose the monolithic `hub_api/modules/sase/` module into four functional tar
 **SASE owns the traffic-mirror delivery layer.** The `sase` module provides:
 
 - **SPAN / monitor-port hooks** — intercept and mirror traffic from Inspection Points (hub-client, bridge-router) to external analysis tools
-- **Mirror integration adapters** — deliver mirrored streams to:
-  - **Arkime** (PCAP collection & indexing)
-  - **Zeek** (network analysis & IDS)
+- **Mirror integration adapters** — deliver mirrored streams through a multi-layer pipeline: packet capture → network monitoring → IDS/IPS → file analysis → sandbox detonation:
+  - **Arkime** (packet capture & PCAP indexing)
+  - **Zeek** (network security monitoring & baseline NSM)
   - **Suricata** (IDS/IPS threat detection)
+  - **Strelka** (real-time file scanning & analysis)
+  - **CAPE** (malware sandbox detonation)
 
-**Optional Helm Sub-Charts**: Arkime, Zeek, and Suricata are packaged as **optional Helm sub-charts** in the product's Helm deployment. They are:
+**Optional Helm Sub-Charts**: Arkime, Zeek, Suricata, Strelka, and CAPE are packaged as **optional Helm sub-charts** in the product's Helm deployment. They are:
 - **Off by default** — operators opt-in to deploy
 - **No hard dependency** — `sase` module functions without them; mirror hooks remain available but unused
-- **Deployment requirement**: if enabled, the operator must configure mirror destinations in `sase` config (Arkime endpoint, Zeek listener, Suricata interface)
+- **Deployment requirement**: if enabled, the operator must configure mirror destinations in `sase` config (Arkime endpoint, Zeek listener, Suricata interface, Strelka scanner endpoint, CAPE sandbox API)
 
 This decoupling keeps the baseline product lightweight while providing the analytical depth required for enterprise threat hunting and compliance audits.
 
@@ -87,7 +89,7 @@ The monolithic `hub_api/modules/sase/` directory splits as follows:
 | `security/feeds/` | Threat-feed integration | **`sase`** | Security inspection |
 | `security/scanner/` | Vulnerability scanner | **`sase`** | Security inspection |
 | `security/protection/` | DDoS/rate-limit/IPS | **`sase`** | Security inspection |
-| `security/mirror/` | Traffic-mirror hooks (SPAN/monitor-port) → Arkime, Zeek, Suricata | **`sase`** | Mirror delivery + optional Helm sub-charts |
+| `security/mirror/` | Traffic-mirror hooks (SPAN/monitor-port) → Arkime, Zeek, Suricata, Strelka, CAPE | **`sase`** | Mirror delivery + optional Helm sub-charts |
 | (OpenZiti — no current code) | OpenZiti control + SDK integration | **`ziti`** | New module scaffold |
 | `hub_api/modules/waddleperf_*` | Perf testing (`perftest_cluster`, `perftest_client`, `perftest_c2c`) | **`perftest`** | Isolated rename; zero cross-module entanglement |
 
