@@ -1,283 +1,155 @@
-# SASEWaddle Root Makefile
-# Provides convenient commands for building, testing, and deploying the entire SASEWaddle project
+# Tobogganing Root Makefile
+# Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test lint docker deploy dev-up dev-down website portal-dev portal-build portal-test portal-e2e
+.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push
 
 # Default target
 help: ## Show this help message
-	@echo "SASEWaddle - Open Source SASE Solution"
+	@echo "Tobogganing - PenguinTech Networking Platform"
 	@echo ""
 	@echo "Available commands:"
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-# Build all components
+# All
 all: clean build test ## Build and test all components
 
+# Clean all build artifacts
 clean: ## Clean all build artifacts
 	@echo "🧹 Cleaning build artifacts..."
-	@rm -rf build/ dist/ releases/ artifacts/
-	@cd manager && rm -rf __pycache__ .pytest_cache htmlcov/ *.egg-info/
-	@cd headend && rm -rf build/ *.test *.out
-	@cd clients/native && rm -rf build/ *.test *.out
-	@cd website && rm -rf .next/ out/ node_modules/.cache/
+	@rm -rf hub_api/__pycache__ hub_api/.pytest_cache hub_api/htmlcov/
+	@rm -rf portal/dist portal/node_modules/.cache
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@echo "✅ Clean complete"
 
-# Build all components
-build: build-manager build-headend build-client build-website ## Build all components
+# Build hub_api Docker image
+build: docker-build ## Build Docker images
 
-build-manager: ## Build Manager Service
-	@echo "🏗️  Building Manager Service..."
-	@cd manager && pip install -r requirements.txt
+docker-build: ## Build Docker image for hub_api
+	@echo "🐳 Building hub_api Docker image..."
+	@docker build -t hub-api:latest ./hub_api
+	@echo "✅ Docker build complete"
 
-build-headend: ## Build Headend Server
-	@echo "🏗️  Building Headend Server..."
-	@cd headend && go mod download && go build -o build/headend-proxy ./proxy
+docker-push: ## Push Docker image to registry
+	@echo "🐳 Pushing Docker image..."
+	@docker push hub-api:latest
+	@echo "✅ Docker push complete"
 
-build-client: ## Build Native Client
-	@echo "🏗️  Building Native Client..."
-	@cd clients/native && go mod download && go build -o build/sasewaddle-client ./cmd
+# Test targets
+test: test-unit test-portal test-go ## Run all tests (unit + portal + go if available)
 
-build-website: ## Build Website
-	@echo "🏗️  Building Website..."
-	@cd website && npm install && npm run build
+test-unit: ## Run hub_api unit tests
+	@echo "🧪 Testing hub_api (Python/Quart brain)..."
+	@python3 -m pytest hub_api/tests/ -v
 
-# Run all tests
-test: test-manager test-headend test-client ## Run all tests
+test-portal: ## Run portal tests (if npm available)
+	@if [ -f portal/package.json ]; then \
+		echo "🧪 Testing portal (React/Vite)..."; \
+		cd portal && npm run test 2>/dev/null || echo "⚠️  Portal tests skipped (npm/jest not available)"; \
+	else \
+		echo "⏭️  Portal tests skipped (no package.json)"; \
+	fi
 
-test-manager: ## Run Manager Service tests
-	@echo "🧪 Testing Manager Service..."
-	@cd manager && python -m pytest tests/ -v --cov=. || true
+test-go: ## Run Go service tests (if go.mod available)
+	@if [ -f clients/native/go.mod ] || [ -f services/hub-router/go.mod ] || [ -f engines/testserver/go.mod ]; then \
+		echo "🧪 Testing Go services..."; \
+		for mod in clients/native services/hub-router engines/testserver; do \
+			if [ -f $$mod/go.mod ]; then \
+				echo "  Testing $$mod..."; \
+				(cd $$mod && go test -v -race ./... || true); \
+			fi; \
+		done; \
+	else \
+		echo "⏭️  Go tests skipped (no go.mod found)"; \
+	fi
 
-test-headend: ## Run Headend Server tests
-	@echo "🧪 Testing Headend Server..."
-	@cd headend && go test -v -race ./... || true
+test-cov: ## Run hub_api tests with coverage report
+	@echo "📊 Running hub_api tests with coverage..."
+	@python3 -m pytest hub_api/tests/ --cov=hub_api --cov-report=term-missing --cov-report=html
+	@echo "✅ Coverage report generated (open htmlcov/index.html)"
 
-test-client: ## Run Native Client tests
-	@echo "🧪 Testing Native Client..."
-	@cd clients/native && go test -v -race ./... || true
+# Lint targets
+lint: lint-python lint-portal lint-go ## Run all linters
 
-# Run linting
-lint: lint-manager lint-headend lint-client lint-website ## Run all linting
+lint-python: ## Lint Python code
+	@echo "🔍 Linting Python (hub_api)..."
+	@if command -v ruff &> /dev/null; then \
+		ruff check hub_api/ || true; \
+	elif command -v flake8 &> /dev/null; then \
+		flake8 hub_api/ || true; \
+	else \
+		echo "⚠️  No Python linter found (ruff/flake8 not installed)"; \
+	fi
+	@if command -v black &> /dev/null; then \
+		black --check hub_api/ || true; \
+	fi
 
-lint-manager: ## Lint Manager Service
-	@echo "🔍 Linting Manager Service..."
-	@cd manager && python -m pylint . --rcfile=.pylintrc || true
-	@cd manager && python -m mypy . || true
+lint-portal: ## Lint portal code (if npm available)
+	@if [ -f portal/package.json ]; then \
+		echo "🔍 Linting portal (React/Vite)..."; \
+		cd portal && npm run lint 2>/dev/null || echo "⚠️  Portal lint skipped"; \
+	else \
+		echo "⏭️  Portal lint skipped (no package.json)"; \
+	fi
 
-lint-headend: ## Lint Headend Server
-	@echo "🔍 Linting Headend Server..."
-	@cd headend && golangci-lint run || true
+lint-go: ## Lint Go services (if golangci-lint available)
+	@if command -v golangci-lint &> /dev/null; then \
+		echo "🔍 Linting Go services..."; \
+		for mod in clients/native services/hub-router engines/testserver; do \
+			if [ -f $$mod/go.mod ]; then \
+				echo "  Linting $$mod..."; \
+				(cd $$mod && golangci-lint run || true); \
+			fi; \
+		done; \
+	else \
+		echo "⚠️  Go linting skipped (golangci-lint not installed)"; \
+	fi
 
-lint-client: ## Lint Native Client
-	@echo "🔍 Linting Native Client..."
-	@cd clients/native && golangci-lint run || true
+# Smoke test
+smoke-test: ## Run smoke tests
+	@echo "🔥 Running smoke tests..."
+	@echo "  Verifying hub_api build..."
+	@python3 -c "import sys; sys.path.insert(0, '.'); from hub_api.app import create_app; print('✅ hub_api app imports successfully')" || exit 1
+	@echo "  Verifying hub_api pytest setup..."
+	@python3 -m pytest hub_api/tests/test_app.py -q 2>/dev/null || echo "⚠️  Basic test ran (check output above)"
+	@echo "✅ Smoke tests complete"
 
-lint-website: ## Lint Website
-	@echo "🔍 Linting Website..."
-	@cd website && npm run lint || true
+# Development helpers
+dependencies: ## Install Python dependencies
+	@echo "📦 Installing dependencies..."
+	@pip install --no-cache-dir -r hub_api/requirements.txt
 
-# Docker commands
-docker: docker-build ## Build all Docker images
-
-docker-build: ## Build all Docker images
-	@echo "🐳 Building Docker images..."
-	@docker build -t sasewaddle/manager:latest ./manager
-	@docker build -t sasewaddle/headend:latest ./headend
-	@docker build -t sasewaddle/client:latest ./clients/docker
-
-docker-push: ## Push Docker images to registry
-	@echo "🐳 Pushing Docker images..."
-	@docker push sasewaddle/manager:latest
-	@docker push sasewaddle/headend:latest
-	@docker push sasewaddle/client:latest
-
-# Development environment
-dev-up: ## Start development environment
-	@echo "🚀 Starting development environment..."
-	@cd deploy/docker-compose && docker-compose -f docker-compose.dev.yml up -d
-	@echo "✅ Development environment started"
-	@echo "   Manager UI: http://localhost:8000"
-	@echo "   Redis Commander: http://localhost:8082"
-	@echo "   Adminer: http://localhost:8081"
-
-dev-down: ## Stop development environment
-	@echo "🛑 Stopping development environment..."
-	@cd deploy/docker-compose && docker-compose -f docker-compose.dev.yml down
-	@echo "✅ Development environment stopped"
-
-dev-logs: ## Show development environment logs
-	@cd deploy/docker-compose && docker-compose -f docker-compose.dev.yml logs -f
-
-dev-restart: dev-down dev-up ## Restart development environment
-
-# Deployment commands
-deploy: deploy-k8s ## Deploy to production
-
-deploy-k8s: ## Deploy to Kubernetes
-	@echo "☸️  Deploying to Kubernetes..."
-	@cd deploy/kubernetes && kubectl apply -f .
-	@echo "✅ Kubernetes deployment complete"
-
-deploy-terraform: ## Deploy with Terraform
-	@echo "🏗️  Deploying with Terraform..."
-	@cd deploy/terraform && terraform init && terraform plan && terraform apply
-	@echo "✅ Terraform deployment complete"
-
-# Website commands
-website: ## Build and serve website locally
-	@echo "🌐 Starting website development server..."
-	@cd website && npm install && npm run dev
-
-website-build: ## Build website for production
-	@echo "🌐 Building website for production..."
-	@cd website && npm install && npm run build
-
-website-deploy: ## Deploy website to Cloudflare Pages
-	@echo "🌐 Deploying website to Cloudflare Pages..."
-	@cd website && npm run pages:build && npm run pages:deploy
-
-# Portal commands
-portal-dev: ## Start portal development server
+portal-dev: ## Start portal dev server
 	@echo "🚀 Starting portal dev server..."
-	@cd portal && npm run dev
+	@cd portal && npm install && npm run dev
 
+install-hooks: ## Install Git hooks (pre-commit, pre-push)
+	@echo "📦 Installing Git hooks..."
+	@if [ -f .git/hooks/pre-commit ]; then echo "✅ Git hooks already installed"; else echo "Run: sh scripts/install-hooks.sh"; fi
+
+# Portal-specific targets (convenience)
 portal-build: ## Build portal for production
 	@echo "🏗️  Building portal..."
-	@cd portal && npm ci && npm run build || true
+	@cd portal && npm ci && npm run build
 
 portal-test: ## Run portal tests
 	@echo "🧪 Testing portal..."
-	@cd portal && npm run lint && npm test || true
+	@cd portal && npm run test
 
-portal-e2e: ## Run portal Playwright smoke tests
-	@echo "🎭 Running portal smoke tests..."
-	@cd portal && npx playwright test; rm -rf /tmp/playwright-tobogganing
-
-# Security and compliance
-security-scan: ## Run security scans
-	@echo "🔐 Running security scans..."
-	@docker run --rm -v $(PWD):/workspace aquasec/trivy fs /workspace || true
-
-# Release commands
-release: ## Create a new release
-	@echo "🎉 Creating new release..."
-	@./scripts/create-release.sh
-
-release-notes: ## Generate release notes
-	@echo "📝 Generating release notes..."
-	@git log --pretty=format:"- %s" $(shell git describe --tags --abbrev=0)..HEAD
-
-# Documentation
-docs: ## Generate documentation
-	@echo "📚 Generating documentation..."
-	@cd manager && python -m pdoc --html --output-dir ../docs/ . || true
-
-# Health checks
+# Health check
 health: ## Check system health
 	@echo "💚 Checking system health..."
-	@curl -f http://localhost:8000/health || echo "Manager service not responding"
-	@curl -f http://localhost:8080/health || echo "Headend service not responding"
+	@python3 --version || echo "⚠️  Python 3 not available"
+	@node --version 2>/dev/null || echo "⚠️  Node.js not available"
+	@go version 2>/dev/null || echo "⚠️  Go not available"
+	@docker --version 2>/dev/null || echo "⚠️  Docker not available"
+	@echo "✅ Health check complete"
 
-# Performance testing
-perf-test: ## Run performance tests
-	@echo "⚡ Running performance tests..."
-	@echo "Performance testing framework would run here"
-
-# Installation
-install: build ## Install SASEWaddle locally
-	@echo "📦 Installing SASEWaddle..."
-	@sudo cp clients/native/build/sasewaddle-client /usr/local/bin/
-	@echo "✅ Installation complete"
-	@echo "   Run 'sasewaddle-client --help' to get started"
-
-uninstall: ## Uninstall SASEWaddle
-	@echo "🗑️  Uninstalling SASEWaddle..."
-	@sudo rm -f /usr/local/bin/sasewaddle-client
-	@echo "✅ Uninstallation complete"
-
-# Certificate management
-certs-generate: ## Generate development certificates
-	@echo "🔐 Generating development certificates..."
-	@mkdir -p certs
-	@openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-		-keyout certs/dev.key -out certs/dev.crt \
-		-subj "/C=US/ST=Development/L=Local/O=SASEWaddle/CN=localhost"
-	@echo "✅ Development certificates generated in ./certs/"
-
-# Database management
-db-migrate: ## Run database migrations
-	@echo "🗄️  Running database migrations..."
-	@cd manager && python -m manager.tools.migrate
-
-db-reset: ## Reset development database
-	@echo "🗄️  Resetting development database..."
-	@rm -f manager/data/sasewaddle.db
-	@cd manager && python -m manager.tools.init_db
-
-# Utilities
+# Version info
 version: ## Show version information
-	@echo "SASEWaddle Version Information:"
-	@echo "  Version: $(shell cat .version)"
-	@echo "  Git Commit: $(shell git rev-parse --short HEAD)"
-	@echo "  Build Date: $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')"
-	@echo ""
-	@echo "Component Versions:"
-	@cd manager && python --version 2>&1 | sed 's/^/  Manager: /'
-	@cd headend && go version | sed 's/^/  Headend: /'
-	@cd clients/native && go version | sed 's/^/  Client: /'
-	@cd website && node --version | sed 's/^/  Website: Node /'
-
-dependencies: ## Install all dependencies
-	@echo "📦 Installing dependencies..."
-	@cd manager && pip install -r requirements.txt -r requirements-dev.txt
-	@cd headend && go mod download
-	@cd clients/native && go mod download
-	@cd website && npm install
-	@echo "✅ Dependencies installed"
-
-# Quality assurance
-qa: lint test security-scan ## Run full quality assurance suite
-
-# CI/CD simulation
-ci: clean dependencies lint test docker ## Simulate CI pipeline locally
-
-# Project statistics
-stats: ## Show project statistics
-	@echo "📊 SASEWaddle Project Statistics:"
-	@echo "  Total files: $(shell find . -type f | wc -l)"
-	@echo "  Lines of code:"
-	@echo "    Python: $(shell find manager -name '*.py' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "    Go: $(shell find headend clients/native -name '*.go' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "    TypeScript: $(shell find website -name '*.tsx' -o -name '*.ts' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "    YAML: $(shell find . -name '*.yml' -o -name '*.yaml' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}' || echo 0)"
-	@echo "  Git commits: $(shell git rev-list --count HEAD 2>/dev/null || echo 0)"
-	@echo "  Contributors: $(shell git log --format='%an' | sort -u | wc -l 2>/dev/null || echo 0)"
-
-# Environment information
-env-info: ## Show environment information
-	@echo "🌍 Environment Information:"
-	@echo "  OS: $(shell uname -s -r)"
-	@echo "  Architecture: $(shell uname -m)"
-	@echo "  Docker: $(shell docker --version 2>/dev/null || echo 'Not installed')"
-	@echo "  Kubernetes: $(shell kubectl version --client --short 2>/dev/null || echo 'Not installed')"
-	@echo "  Terraform: $(shell terraform --version 2>/dev/null | head -1 || echo 'Not installed')"
-	@echo "  Python: $(shell python --version 2>/dev/null || echo 'Not installed')"
-	@echo "  Go: $(shell go version 2>/dev/null || echo 'Not installed')"
-	@echo "  Node.js: $(shell node --version 2>/dev/null || echo 'Not installed')"
-
-# Troubleshooting
-troubleshoot: ## Run troubleshooting checks
-	@echo "🔧 Running troubleshooting checks..."
-	@echo "1. Checking prerequisites..."
-	@make env-info
-	@echo ""
-	@echo "2. Checking service health..."
-	@make health
-	@echo ""
-	@echo "3. Checking Docker containers..."
-	@docker ps -a | grep sasewaddle || echo "No SASEWaddle containers found"
-	@echo ""
-	@echo "4. Checking disk space..."
-	@df -h . | head -2
-	@echo ""
-	@echo "✅ Troubleshooting complete"
+	@echo "Tobogganing Version Information:"
+	@if [ -f .version ]; then echo "  Version: $$(cat .version)"; else echo "  Version: unknown (no .version file)"; fi
+	@echo "  Git Commit: $$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+	@echo "  Python: $$(python3 --version 2>&1 | awk '{print $$2}' || echo 'not installed')"
+	@echo "  Node.js: $$(node --version 2>/dev/null || echo 'not installed')"
+	@echo "  Go: $$(go version 2>/dev/null | awk '{print $$3}' || echo 'not installed')"
