@@ -1,4 +1,4 @@
-"""JWT authentication blueprint for SASE module."""
+"""JWT authentication blueprint for core module."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from hub_api.entitlements.gate import require_feature
 
 logger = structlog.get_logger()
 
-blueprint = Blueprint("sase_jwt", __name__, url_prefix="/jwt")
+blueprint = Blueprint("core_jwt", __name__, url_prefix="/api/v1/jwt")
 
 # In-memory revocation list (Phase-2 placeholder; will move to DB in Phase-3)
 _REVOKED_TOKENS: set[str] = set()

@@ -62,12 +62,17 @@ def create_app(config: Config | None = None) -> Quart:
     from hub_api.api.auth_routes import auth_bp
     from hub_api.api.portal_routes import portal_bp
     from hub_api.api.headend_routes import headend_bp
+    from hub_api.core.api import certs_blueprint, jwt_blueprint
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(portal_bp)
     # Headend routes: flat app-level paths for hub-router headend service
     # Registered at app level (url_prefix='/api/v1') to bypass module prefixing
     app.register_blueprint(headend_bp, url_prefix="/api/v1")
+    # Core API blueprints: certificate and JWT management
+    # Registered directly (blueprints define their own full /api/v1/* prefixes)
+    app.register_blueprint(certs_blueprint)
+    app.register_blueprint(jwt_blueprint)
 
     # Set DATABASE_URI for penguin-dal init_dal()
     db_uri = build_db_uri(config)
