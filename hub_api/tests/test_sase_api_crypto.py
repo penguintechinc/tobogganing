@@ -605,7 +605,7 @@ async def test_wireguard_keys_generation_cluster_success(
 
     mock_cluster = MagicMock()
     mock_cluster.id = "cluster-1"
-    mock_cluster.tenant_id = "test-tenant"
+    mock_cluster.tenant = "test-tenant"
 
     with patch(
         "hub_api.modules.sdwan.api.wireguard.asyncio.to_thread"
