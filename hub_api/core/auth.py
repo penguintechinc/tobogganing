@@ -1,4 +1,4 @@
-"""User and session manager for SASE module using penguin-dal."""
+"""User and session manager for authentication."""
 from __future__ import annotations
 
 import secrets

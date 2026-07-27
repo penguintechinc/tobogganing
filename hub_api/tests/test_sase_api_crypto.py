@@ -10,9 +10,10 @@ import pytest_asyncio
 from quart import Quart
 
 from hub_api.auth.jwt import decode_token, encode_access_token
+from hub_api.core import CertificateManager
 from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.sase.certs.certificate_manager import CertificateManager
+from hub_api.modules.sase.certs import WireGuardKeyManager
 from hub_api.registry import ModuleContext
 
 
@@ -21,15 +22,26 @@ def cert_manager() -> CertificateManager:
     """Provide a CertificateManager instance for testing.
 
     Returns:
-        Initialized CertificateManager.
+        Initialized CertificateManager (PKI-only).
     """
     cm = CertificateManager()
     return cm
 
 
 @pytest.fixture
+def wg_manager() -> WireGuardKeyManager:
+    """Provide a WireGuardKeyManager instance for testing.
+
+    Returns:
+        Initialized WireGuardKeyManager.
+    """
+    wgm = WireGuardKeyManager()
+    return wgm
+
+
+@pytest.fixture
 def app_with_sase(
-    app: Quart, mock_db: MagicMock, cert_manager: CertificateManager
+    app: Quart, mock_db: MagicMock, cert_manager: CertificateManager, wg_manager: WireGuardKeyManager
 ) -> Quart:
     """Create a test app with SASE module registered.
 
@@ -46,6 +58,7 @@ def app_with_sase(
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
     app.config["CERT_MANAGER"] = cert_manager
+    app.config["WIREGUARD_MANAGER"] = wg_manager
 
     # Mock cluster and client managers
     cluster_manager = MagicMock()
@@ -624,22 +637,22 @@ async def test_wireguard_keys_generation_cluster_success(
 
 @pytest.mark.asyncio
 async def test_wireguard_peers_list(
-    app_with_sase: Quart, valid_tenant_token: str, cert_manager: CertificateManager
+    app_with_sase: Quart, valid_tenant_token: str, wg_manager: WireGuardKeyManager
 ) -> None:
     """Test getting list of WireGuard peers.
 
     Args:
         app_with_sase: Test app.
         valid_tenant_token: Valid tenant token.
-        cert_manager: Certificate manager with test peers.
+        wg_manager: WireGuard key manager with test peers.
     """
     client = app_with_sase.test_client()
 
     # Generate some peers first (for the test-tenant)
-    await cert_manager.generate_wireguard_keys(
+    await wg_manager.generate_wireguard_keys(
         "node-1", "client_docker", tenant_id="test-tenant"
     )
-    await cert_manager.generate_wireguard_keys(
+    await wg_manager.generate_wireguard_keys(
         "node-2", "client_native", tenant_id="test-tenant"
     )
 
@@ -664,19 +677,19 @@ async def test_wireguard_peers_list(
 
 @pytest.mark.asyncio
 async def test_wireguard_keys_revocation_success(
-    app_with_sase: Quart, valid_tenant_token: str, cert_manager: CertificateManager
+    app_with_sase: Quart, valid_tenant_token: str, wg_manager: WireGuardKeyManager
 ) -> None:
     """Test revoking WireGuard keys for a node.
 
     Args:
         app_with_sase: Test app.
         valid_tenant_token: Valid tenant token.
-        cert_manager: Certificate manager with test peers.
+        wg_manager: WireGuard key manager with test peers.
     """
     client = app_with_sase.test_client()
 
     # Generate keys first (for test-tenant)
-    await cert_manager.generate_wireguard_keys(
+    await wg_manager.generate_wireguard_keys(
         "node-1", "client_docker", tenant_id="test-tenant"
     )
 
@@ -777,7 +790,7 @@ async def test_wireguard_peers_tenant_isolation(
     app_with_sase: Quart,
     valid_tenant_token: str,
     cross_tenant_token: str,
-    cert_manager: CertificateManager,
+    wg_manager: WireGuardKeyManager,
 ) -> None:
     """Test that peer list only returns caller's tenant peers.
 
@@ -785,15 +798,15 @@ async def test_wireguard_peers_tenant_isolation(
         app_with_sase: Test app.
         valid_tenant_token: Token for test-tenant.
         cross_tenant_token: Token for other-tenant.
-        cert_manager: Certificate manager with test peers.
+        wg_manager: WireGuard key manager with test peers.
     """
     client = app_with_sase.test_client()
 
     # Generate peers for both tenants
-    await cert_manager.generate_wireguard_keys(
+    await wg_manager.generate_wireguard_keys(
         "node-1", "client_docker", tenant_id="test-tenant"
     )
-    await cert_manager.generate_wireguard_keys(
+    await wg_manager.generate_wireguard_keys(
         "node-2", "client_native", tenant_id="other-tenant"
     )
 
@@ -826,7 +839,7 @@ async def test_wireguard_revoke_cross_tenant_isolation(
     app_with_sase: Quart,
     valid_tenant_token: str,
     cross_tenant_token: str,
-    cert_manager: CertificateManager,
+    wg_manager: WireGuardKeyManager,
 ) -> None:
     """Test that cross-tenant WireGuard revoke returns 404 (not found).
 
@@ -834,12 +847,12 @@ async def test_wireguard_revoke_cross_tenant_isolation(
         app_with_sase: Test app.
         valid_tenant_token: Token for test-tenant.
         cross_tenant_token: Token for other-tenant.
-        cert_manager: Certificate manager with test peers.
+        wg_manager: WireGuard key manager with test peers.
     """
     client = app_with_sase.test_client()
 
     # Generate peer for test-tenant
-    await cert_manager.generate_wireguard_keys(
+    await wg_manager.generate_wireguard_keys(
         "node-1", "client_docker", tenant_id="test-tenant"
     )
 
