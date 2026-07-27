@@ -138,6 +138,52 @@ def create_app(config: Config | None = None) -> Quart:
                 logger.error(f"Failed to initialize encryptor: {e}")
                 raise
 
+            # Initialize usage reporter for license keepalive
+            try:
+                from hub_api.entitlements.metering import (
+                    UsageReporter,
+                    count_registered_nodes,
+                )
+                from shared.licensing.python_client import get_client
+
+                license_client = get_client()
+                if license_client is not None:
+                    # Create reporter with real node counter
+                    reporter = UsageReporter(
+                        db=db,
+                        license_client=license_client,
+                        node_counter=lambda: count_registered_nodes(db),
+                    )
+                    app.usage_reporter = reporter  # type: ignore[attr-defined]
+
+                    # Schedule hourly keepalive task
+                    async def hourly_keepalive() -> None:
+                        """Send usage report to license server hourly (best-effort)."""
+                        while True:
+                            try:
+                                await asyncio.sleep(3600)  # 1 hour
+                                success = await reporter.report()
+                                if not success:
+                                    logger.warning(
+                                        "Usage report failed (will retry in 1h)"
+                                    )
+                            except asyncio.CancelledError:
+                                logger.info("Hourly keepalive task cancelled")
+                                break
+                            except Exception as e:
+                                logger.error(f"Unexpected error in keepalive task: {e}")
+
+                    # Start the keepalive task in background (never await it here)
+                    app.keepalive_task = asyncio.create_task(hourly_keepalive())  # type: ignore[attr-defined]
+                    logger.info("Usage reporter initialized with hourly keepalive")
+                else:
+                    logger.warning(
+                        "License client not available; usage reporting disabled"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to initialize usage reporter: {e}")
+                # Non-fatal; continue startup
+
             logger.info("Services initialized on app startup")
 
     # Liveness probe endpoint (lightweight, no dependencies)
