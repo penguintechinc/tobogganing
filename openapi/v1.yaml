@@ -1,0 +1,249 @@
+openapi: 3.1.0
+info:
+  title: Tobogganing Hub API
+  version: 1.0.0
+  description: |
+    Tobogganing Hub API (hub-api) — SASE brain for cluster management, testing coordination, and integration services.
+
+    **Authentication**: All endpoints except `/api/v1/auth/*` require a valid JWT Bearer token.
+
+    **Public Documentation**: Only the login/refresh endpoints are documented unauthenticated at `/docs/public`.
+    For full API documentation, authenticate via `/api/v1/auth/login` and access the authenticated spec at `/openapi.json`.
+
+servers:
+  - url: https://hub.penguintech.io
+    description: Production
+  - url: http://localhost:5000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      description: Lightweight health check; returns 200 if the process is running. Does not check external dependencies.
+      operationId: healthCheck
+      tags:
+        - Health
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                required: [status]
+
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Readiness check that verifies database connectivity. Returns 200 if ready, 503 if database is unavailable.
+      operationId: readinessCheck
+      tags:
+        - Health
+      security: []
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                required: [status]
+        "503":
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [unhealthy]
+                  error:
+                    type: string
+                    enum: [database]
+                required: [status, error]
+
+  /api/v1/auth/login:
+    post:
+      summary: Authenticate user with email and password
+      description: |
+        Authenticate a user with email and password credentials.
+
+        Returns an access token and refresh token on success.
+        May return `mfa_required: true` if the user has MFA enabled; in that case, call this endpoint again with the `mfa_token`.
+      operationId: login
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                password:
+                  type: string
+                  format: password
+                  description: User password
+                mfa_token:
+                  type: string
+                  description: Optional MFA token if MFA is enabled on the account
+              required: [email, password]
+      responses:
+        "200":
+          description: Login successful or MFA required
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      access_token:
+                        type: string
+                        description: JWT access token for authenticated requests
+                      refresh_token:
+                        type: string
+                        description: Refresh token for obtaining new access tokens
+                      expires_in:
+                        type: integer
+                        description: Token expiration time in seconds (default 3600)
+                      token_type:
+                        type: string
+                        enum: [Bearer]
+                    required: [access_token, refresh_token, expires_in, token_type]
+                  - type: object
+                    properties:
+                      mfa_required:
+                        type: boolean
+                        const: true
+                    required: [mfa_required]
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [Invalid credentials]
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh access token
+      description: |
+        Refresh an access token using a refresh token.
+
+        Returns a new access token with the same expiration as the original.
+      operationId: refreshToken
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  description: Refresh token from a previous login
+              required: [refresh_token]
+      responses:
+        "200":
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: New JWT access token
+                  refresh_token:
+                    type: string
+                    description: Original refresh token (unchanged)
+                  expires_in:
+                    type: integer
+                    description: Token expiration time in seconds
+                  token_type:
+                    type: string
+                    enum: [Bearer]
+                required: [access_token, refresh_token, expires_in, token_type]
+        "400":
+          description: Missing refresh_token
+        "401":
+          description: Invalid or expired refresh token
+
+  /api/v1/auth/logout:
+    post:
+      summary: Logout and revoke refresh tokens
+      description: |
+        Revoke all refresh tokens for the authenticated user.
+
+        This endpoint is idempotent; logout is successful whether or not tokens were actually revoked.
+      operationId: logout
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  description: Refresh token to revoke
+              required: [refresh_token]
+      responses:
+        "204":
+          description: Logout successful (idempotent)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token obtained from `/api/v1/auth/login`.
+
+        All endpoints except authentication and health checks require a valid Bearer token.
+
+        Include as: `Authorization: Bearer <access_token>`
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Health
+    description: Service health and readiness checks
+  - name: Authentication
+    description: User authentication and token management
