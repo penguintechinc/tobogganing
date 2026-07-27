@@ -118,7 +118,11 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
                     cluster = await asyncio.to_thread(
                         cluster_manager.authenticate_cluster, api_key
                     )
-                    authenticated = cluster is not None
+                    authenticated = (
+                        cluster is not None
+                        and getattr(cluster, "id", None) == node_id
+                        and getattr(cluster, "tenant", None) == tenant_id
+                    )
                 except Exception as e:
                     logger.error(
                         "cluster_authentication_failed",
@@ -138,6 +142,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
                     authenticated = (
                         client is not None
                         and getattr(client, "id", None) == node_id
+                        and getattr(client, "tenant", None) == tenant_id
                     )
                 except Exception as e:
                     logger.error(
