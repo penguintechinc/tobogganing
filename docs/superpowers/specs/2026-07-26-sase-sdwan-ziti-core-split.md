@@ -69,12 +69,14 @@ This decoupling keeps the baseline product lightweight while providing the analy
 
 ### Tier 1: Local, Inline, Microsecond-Fast (Radix Tree)
 
-**Source databases** — open-source categorized domain feeds:
-- **UT1 (Toulouse)** taxonomy (~60–80 categories: adult, gambling, banking, social, malware, VPN-redirectors, etc.) — **⚠️ License verification required before adoption** (research vs. commercial; see Licensing note below)
-- **blocklistproject** (MIT license)
+**Source databases** — commercial-safe open-source categorized domain feeds:
+- **blocklistproject** (MIT)
 - **cipher-oos/Categorized-Web-Filter-Blocklists** (permissive)
 - **HaGeZi/OISD** (CC0)
+- **StevenBlack** (MIT)
+- **urlhaus / PhishTank** (CC0)
 - **Custom categories** (admin-defined, first-class policy; custom categorization wins on conflict)
+- **Optional commercial feed** (Enterprise tier) for expanded coverage
 
 **Ingestion** — hub-api extends the existing `security/feeds` ingestion machinery to pull categorized domain DBs → Inspection Points receive a **reverse-ordered Radix tree** (e.g., `com.badsite.gambling`) for **O(k) subdomain-covering lookups**. Alternatives noted for future scaling: **LMDB** if the set outgrows RAM; **Cuckoo/Bloom filters** per-category for tight memory footprints. Tier 1 handles ~95% of traffic.
 
@@ -100,13 +102,9 @@ On an **uncategorized or new domain**:
 
 **Blast radius** — a successful prompt-injection trick results in a mis-category (a policy allow/block), not code exec/exfil. Admin/custom category overrides correct it.
 
-### Licensing Note (⚠️ Critical)
+### Licensing Note
 
-**UT1 taxonomy license is disputed** across research literature (research/non-commercial vs. Creative Commons). Must be **VERIFIED before adoption**, since tobogganing is a commercial/licensed product. Commercial-safe fallbacks:
-- **StevenBlack** (MIT)
-- **urlhaus / PhishTank / HaGeZi** (CC0 / permissive)
-- **blocklistproject** (MIT) — verify current license
-- Consider a **commercial category feed provider** for paid license tiers
+UT1 intentionally excluded for commercial-license reasons; the base uses commercial-safe (MIT/CC0/permissive) sources. Optional commercial category feeds available for Enterprise tiers to close coverage gaps.
 
 ---
 
