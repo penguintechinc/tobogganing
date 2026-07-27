@@ -1,18 +1,33 @@
 # Module Taxonomy (functional naming)
 
-**Principle:** modules are named by **what they do**, not by product lineage. All *advanced* security lives in the `sase` module; strip `sase` away and only **basic firewall rules + basic authentication** remain (both baseline/always-on).
+**Principle:** modules are named by **what they do**, not by product lineage. All *advanced* security lives in the `sase` module; strip `sase` away and only **basic firewall rules + basic authentication + overlay transport** remain (baseline/always-on).
 
-> Status: agreed direction (2026-07-23). The `perftest` rename is a clean, isolated first step; the `sase`→`sase`+`sdwan`+core split is a re-decomposition that gets its own spec + plan. Nothing renamed yet.
+**Product Positioning:** Tobogganing is a **lightweight, open-source-driven alternative to ZScaler** (SASE/SSE). The module structure reflects this:
+- **`sdwan`** = Connectivity layer (overlay transport + routing)
+- **`sase`** = Security-Service-Edge layer (inspection, threat-feeds, context-auth, mirror hooks)
+- **`ziti`** = Alternative identity overlay (greenfield; optional coexistence)
+- **core** = Infrastructure foundation (auth, PKI, backup)
+
+> Status: finalized direction (2026-07-26). Placement rules: (1) **transport layer** (WireGuard, IPsec, OpenVPN tunneling AND routing) → `sdwan`; (2) **management-plane** (user logins, API keys, JWT, PKI certs, backup) → **core**; (3) **greenfield overlay auth** (OpenZiti) → new module **`ziti`** (standalone, no cross-wiring to `sdwan` transport). The `perftest` rename is isolated; the `sase`→`sase`+`sdwan`+`core`+`ziti` re-decomposition is finalized in `docs/superpowers/specs/2026-07-26-sase-sdwan-ziti-core-split.md`.
 
 ## Modules
 
 | Module | Function | Tier posture |
 |---|---|---|
-| *(core — not a module)* | **Basic authentication**: username/password, API keys, JWT issue/validate, PKI certs. Always-on. | Free/Community |
-| **`sase`** | **Security proxy / Inspection Point layer** — the control plane for the deep-inspection that hub-client + bridge-router enforce: IDS/IPS threat-feeds, vuln scanner, DDoS/rate-limit protection, and **context-based / adaptive authentication** (threat intel, impossible travel, risk-based / step-up — anything beyond basic credentials). | Community → Enterprise (tiered) |
-| **`sdwan`** | **Routing / overlay + baseline data-plane policy**: clusters, clients, status, WireGuard tunnels, cluster/client orchestration + failover, VRF/OSPF, headend ports, and **basic firewall rules**. | Community + Professional |
+| *(core — not a module)* | **Management-plane / infrastructure**: username/password, API keys, JWT issue/validate, PKI (X.509) certs, encrypted backup. Always-on, zero licensing gate. | Free/Community |
+| **`sdwan`** | **Overlay transport + routing layer**: WireGuard/IPsec/OpenVPN tunneling, cluster/client orchestration, failover, VRF/OSPF/FRR routing, headend ports, and **basic firewall rules** (ACLs). Baseline data-plane policy. | Community → Professional |
+| **`ziti`** | **Greenfield identity overlay** — OpenZiti control-plane + client SDK integration. Standalone auth model (not wired to `sdwan` transport). Can coexist with `sdwan`; no mandatory dependency. | Professional → Enterprise (greenfield) |
+| **`sase`** | **Security-Service-Edge layer** — the control plane for deep-inspection (hub-client + bridge-router): **URL/domain category filtering** (inline Radix tree + async AI tier), IDS/IPS threat-feeds, vuln scanner, DDoS/rate-limit protection, **context-based / adaptive authentication** (threat intel, impossible travel, risk-based / step-up), **traffic-mirror hooks** (SPAN/monitor-port → Arkime, Zeek, Suricata, Strelka, CAPE), and **enforcement actions + block-handling** (rule actions: drop/reject/soft-block/log-only; branded block pages via page builder; per-source routing; external block-server redirect). | Community → Enterprise (tiered) |
 | **`perftest`** | **Network performance testing** (was `waddleperf_*`): `perftest_cluster`, `perftest_client`, `perftest_c2c`. | Community → Professional |
 | **`netsvcs`** | **Network services** — reserved home for the future **squawk (DNS)** merge. Nothing current moves here. | (future) |
+
+## Detection → Block Feedback Loop (`sase`)
+
+The **`sase` module** owns the out-of-band analysis and verdict pipeline:
+- **Mirror targets** (Arkime, Zeek, Suricata, Strelka, CAPE) fed via SPAN/monitor-port; zero latency on live traffic (no inline blocking).
+- **Detection adapters** normalize analysis output (Suricata EVE, Zeek notices, file/sandbox verdicts) to **STIX 2.1 indicators**.
+- **Shared Valkey IOC store** curated by hub-api (dedup, TTL, threat-intel merge). Inspection Points read and enforce on FUTURE traffic (retroactive, IP/domain/hash/URL block lists).
+- Decoupled async — no gRPC round-trip on enforcement path.
 
 ## The auth line (important)
 
@@ -23,33 +38,47 @@ Rule of thumb: *if it's more than "are these credentials valid?", it's `sase`.*
 
 ## Current → target mapping (the `sase` re-decomposition)
 
-Today `hub_api/modules/sase/` is one monolithic module. It splits:
+Today `hub_api/modules/sase/` is one monolithic module. It splits across four targets:
 
 | Current area (`hub_api/modules/sase/…`) | → Target |
 |---|---|
+| `api/jwt`, `auth/user_manager`, `certs/certificate_manager.py` (X.509 PKI only), `backup/` | **core** (management-plane) |
+| `certs/certificate_manager.py` (WireGuard key mgmt: `generate_wireguard_keys`, `get_all_wireguard_peers`, `revoke_wireguard_keys`, `get_wireguard_config`) | **`sdwan`** (`WireGuardKeyManager`) |
+| `api/clusters`, `api/clients`, `api/status`, `api/wireguard`, `orchestrator/`, `network/vrf`, `network/port_manager` | **`sdwan`** (overlay transport + routing + orchestration) |
+| `firewall/access_control` (basic rules) | **`sdwan`** (baseline data-plane policy) |
 | `security/feeds`, `security/scanner`, `security/protection` | **`sase`** |
 | context-based auth (new — see above) | **`sase`** |
-| `api/jwt`, `auth/user_manager`, `certs` (PKI) | **core** (basic auth) |
-| `firewall/access_control` (basic rules) | **`sdwan`** |
-| `api/clusters`, `api/clients`, `api/status`, `api/wireguard`, `orchestrator/`, `network/vrf`, `network/port_manager` | **`sdwan`** |
-| `backup/` (encrypted S3 backup) | **OPEN** — core/ops, not `netsvcs` |
-| `hub_api/modules/waddleperf_*` | **`perftest`** (isolated rename, zero `sase` entanglement) |
+| (OpenZiti — greenfield code, not yet written) | **`ziti`** (scaffold + new control-plane) |
+| `hub_api/modules/waddleperf_*` | **`perftest`** (isolated rename, zero cross-module entanglement) |
 
-## Hard seams (what makes the `sase` split non-trivial)
+## Hard seams (what makes the split non-trivial)
 
-1. **`CertificateManager` is dual-purpose** (`hub_api/modules/sase/certs/certificate_manager.py`) — X.509 PKI **and** WireGuard key management in one class. Split: PKI → **core auth**, WireGuard keys (`generate_wireguard_keys`, `get_all_wireguard_peers`, …) → **`sdwan`**.
-2. **`hub_api/api/headend_routes.py`** (the flat data-plane API) fans into auth + firewall + ports + clusters + wireguard-peers — spans **core-auth + `sdwan`**; barely touches `sase`.
-3. **Migrations `0002`–`0008`** and the monolithic `ModuleContract` (blueprints, nav, `tobogganing.sase.*` flags, entitlements) must be **partitioned per new module**.
-4. `security/*`, `network/vrf`, `backup/*` are standalone (no wired blueprint) → **low-risk to relocate**; `network/port_manager` is the exception (wired via `headend_routes`).
+1. **Placement rules** — what belongs where:
+   - **core**: All management-plane / infrastructure (user logins, API keys, JWT, X.509 PKI certs, encrypted backup). Licensing: none (always free).
+   - **`sdwan`**: All transport layer (WireGuard/IPsec/OpenVPN tunneling, routing, clusters/clients, orchestration, failover, VRF/OSPF, ports, basic firewall ACLs). Licensing: Community → Professional.
+   - **`ziti`**: OpenZiti identity overlay (greenfield, no current code). Control-plane only; client SDK integration. Licensing: Professional → Enterprise. No hard dependency on `sdwan` transport; can coexist.
+   - **`sase`**: Security inspection + context-based auth (threat-feeds, scanner, protection, threat intel, impossible travel, risk-based step-up). Licensing: Community → Enterprise (tiered).
 
-## Flag keys
+2. **`CertificateManager` is dual-purpose** (`hub_api/modules/sase/certs/certificate_manager.py`) — X.509 PKI **and** WireGuard key management in one class. **Split**: PKI management (`generate_x509`, `revoke_x509`, etc.) → **core** (`CertificateManager`); WireGuard key operations (`generate_wireguard_keys`, `get_all_wireguard_peers`, `revoke_wireguard_keys`, `get_wireguard_config`) → **`sdwan`** (`WireGuardKeyManager`).
 
-Convention `tobogganing.{module}.{feature}` is unchanged; keys migrate with the modules:
-`tobogganing.waddleperf_*.*` → `tobogganing.perftest_*.*`, the security flags → `tobogganing.sase.*`, routing flags → `tobogganing.sdwan.*`.
+3. **`hub_api/api/headend_routes.py`** (flat data-plane API blueprint) imports `auth.user_manager` + `certs.certificate_manager` + `firewall.access_control` + `network.port_manager` + `orchestrator.cluster_manager`. Spans **core + `sdwan`**. Decision: keep in `sdwan` (transport home); re-export core helpers via shim so imports remain local.
 
-## Sequencing
+4. **Alembic migrations `0002`–`0008`** and the monolithic `ModuleContract` (blueprints, nav, `tobogganing.sase.*` flags, entitlements, tier gating) must be **partitioned per new module** — each module owns its own migrations and contract.
 
-1. **`perftest` rename** — isolated, ~`c2c`-scale (paths, flag keys, tests). Do first.
-2. **`sase` / `sdwan` / core-auth split** — own spec + plan; resolve the OPEN `backup/` home and the `CertificateManager` split first.
+5. **Flag-key migration**: `tobogganing.sase.{clusters,clients,status,wireguard,large_cluster}` → `tobogganing.sdwan.*`; `tobogganing.sase.{threat_feeds,scanner,protection,context_auth}` stay in `tobogganing.sase.*`; `tobogganing.ziti.*` new flags for OpenZiti features. Auth/PKI/backup are not module features (they are core, unflaged).
 
-See `docs/superpowers/specs/2026-07-22-hub-topology-quart-brain-design.md` for the surrounding hub-* architecture and `docs/architecture/hub-network-topology.md` for the network diagram.
+6. **Cross-module imports**: No `sdwan` → `sase` or `sase` → `sdwan` imports. Both can import from **core**. **`ziti`** does not import from `sdwan` or `sase` (greenfield identity, separate auth model).
+
+## Verification approach
+
+- **Per-module contract tests**: each module (`core`, `sdwan`, `ziti`, `sase`) declares its own `ModuleContract` with flags, nav, tier gating (default OFF for new modules).
+- **Cross-module import audit**: no `sdwan`↔`sase` imports; `ziti` standalone; all others can import **core** freely.
+- **Full suite parity**: after split, all existing tests pass with same coverage (≥90%).
+- **Migration audit**: Alembic migrations properly partitioned; version sequence unbroken.
+- **Flag scope validation**: flag keys renamed correctly (`tobogganing.sdwan.*` vs old `tobogganing.sase.{transport}.*`); tier gates applied.
+
+## Cross-references
+
+- **Hub topology & architecture**: see `docs/superpowers/specs/2026-07-22-hub-topology-quart-brain-design.md`
+- **Network diagram**: see `docs/architecture/hub-network-topology.md`
+- **Re-decomposition spec**: see `docs/superpowers/specs/2026-07-26-sase-sdwan-ziti-core-split.md`
