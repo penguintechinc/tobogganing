@@ -433,7 +433,7 @@ async def test_jwt_public_key_endpoint(app_with_sase: Quart) -> None:
     with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
 
-        response = await client.get("/api/v1/sase/jwt/public-key")
+        response = await client.get("/api/v1/jwt/public-key")
 
         assert response.status_code == 200
         data = await response.get_json()
