@@ -24,9 +24,10 @@ certs/
 certificates/
 secrets/
 .secrets
-# ...but the SASE certs source package is code, not TLS material — keep it tracked
-!core/modules/sase/certs/
-!core/modules/sase/certs/**
+# ...but module certs/ source packages are code, not TLS material — keep tracked
+# (path is hub_api/modules/*/certs/ after the core->hub_api rename; covers sase, sdwan, etc.)
+!hub_api/modules/**/certs/
+!hub_api/modules/**/certs/**
 
 # Configuration files with sensitive data
 config.yaml
