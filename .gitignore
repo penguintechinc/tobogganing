@@ -166,3 +166,6 @@ services/hub-router/headend-proxy*
 services/hub-router/headend-test
 services/hub-router/test-headend
 services/hub-router/proxy/headend-proxy
+
+# Git worktrees (local development only)
+.worktrees/

@@ -1,4 +1,4 @@
-"""Integration tests for SASE backup isolation with real penguin-dal AsyncDB."""
+"""Integration tests for core backup isolation with real penguin-dal AsyncDB."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-from hub_api.modules.sase.backup import BackupManager
+from hub_api.core.backup import BackupManager
 
 
 @pytest_asyncio.fixture

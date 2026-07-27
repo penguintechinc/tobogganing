@@ -1,4 +1,4 @@
-"""Tests for SASE user manager."""
+"""Tests for core user manager."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.auth import UserManager, User, Session, UserRole
+from hub_api.core import UserManager, User, Session, UserRole
 from hub_api.tests.conftest import make_mock_row, make_mock_rowset
 
 

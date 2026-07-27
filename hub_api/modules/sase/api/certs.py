@@ -10,8 +10,8 @@ from typing import Any
 import structlog
 from quart import Blueprint, current_app, request
 
+from hub_api.core import CertificateManager
 from hub_api.entitlements.gate import require_feature
-from hub_api.modules.sase.certs.certificate_manager import CertificateManager
 
 logger = structlog.get_logger()
 

@@ -20,10 +20,9 @@ from quart import Blueprint, current_app, request
 
 from hub_api.auth.jwt import decode_token, encode_access_token
 from hub_api.auth.middleware import current_claims, require_scope, require_tenant
+from hub_api.core import UserManager, CertificateManager
 from hub_api.crypto.keys import KeyProvider
 from hub_api.db import get_db
-from hub_api.modules.sase.auth.user_manager import UserManager
-from hub_api.modules.sase.certs.certificate_manager import CertificateManager
 from hub_api.modules.sase.firewall.access_control import AccessControlManager
 from hub_api.modules.sase.network.port_manager import PortConfigManager
 from hub_api.modules.sase.orchestrator.cluster_manager import ClusterManager

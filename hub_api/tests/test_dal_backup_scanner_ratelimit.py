@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.backup.manager import BackupManager
+from hub_api.core.backup.manager import BackupManager
 from hub_api.modules.sase.security.protection.ratelimit import RateLimiter
 from hub_api.modules.sase.security.scanner.core import ScanFinding, ScanSeverity, ScanType, SecurityScanner
 
