@@ -527,9 +527,14 @@ async def _extract_machine_identity(
         if not _scope_satisfied(required, token_scopes):
             return None, f"insufficient_scope:{required}"
 
-    # T4: Check denylist (jti revocation) — no-op until T4
-    # Hook: if await is_jti_revoked(claims.get("jti"), cache) then return None, "revoked"
-    # For now, skip (# T4 denylist hook)
+    # T4: Check denylist (jti revocation) using cache
+    cache = current_app.config.get("CACHE")
+    if cache:
+        from hub_api.auth.refresh import is_jti_revoked
+
+        jti = claims.get("jti")
+        if jti and await is_jti_revoked(jti, cache):
+            return None, "revoked"
 
     return claims, None
 
