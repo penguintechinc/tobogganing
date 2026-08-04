@@ -69,6 +69,50 @@ async def machine_jwt_metrics(app: Any, tenant: str = "acme") -> str:
 
 
 @pytest.mark.asyncio
+async def test_flag_off_accepts_static_token(
+    app: Any, mock_db: MagicMock
+) -> None:
+    """Test firewall/rules accepts static token when flag is OFF (dual-accept).
+
+    Regression: backward-compatibility during transition to machine-JWT.
+
+    Args:
+        app: Test app.
+        mock_db: Mock database.
+    """
+    static_token = "test-headend-static-token"
+    import shared.licensing.entitlements
+
+    with patch.dict(os.environ, {"HEADEND_API_TOKEN": static_token}):
+        with patch.object(
+            shared.licensing.entitlements, "_flag_on", return_value=False
+        ):
+            client = app.test_client()
+
+            # Mock UserManager.list_users to return empty list
+            with patch(
+                "hub_api.api.headend_routes.get_user_manager"
+            ) as mock_um_factory:
+                mock_um = MagicMock()
+                mock_um.list_users = AsyncMock(return_value=[])
+                mock_um_factory.return_value = mock_um
+
+                # Mock AccessControlManager
+                with patch(
+                    "hub_api.api.headend_routes.get_access_control_manager"
+                ) as mock_acm_factory:
+                    mock_acm = MagicMock()
+                    mock_acm_factory.return_value = mock_acm
+
+                    # Static token should be accepted when flag is OFF
+                    resp = await client.get(
+                        "/api/v1/firewall/rules",
+                        headers={"Authorization": f"Bearer {static_token}"},
+                    )
+                    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_dual_accept_flag_off_accepts_machine_jwt(
     app: Any, machine_jwt_firewall: str, mock_db: MagicMock
 ) -> None:
@@ -105,6 +149,107 @@ async def test_dual_accept_flag_off_accepts_machine_jwt(
                     headers={"Authorization": f"Bearer {machine_jwt_firewall}"},
                 )
                 assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_flag_on_rejects_static_token(
+    app: Any, mock_db: MagicMock
+) -> None:
+    """Test firewall/rules rejects static token when flag is ON (enforcement).
+
+    Regression: flag cutover must reject legacy tokens when enabled.
+
+    Args:
+        app: Test app.
+        mock_db: Mock database.
+    """
+    static_token = "test-headend-static-token"
+    import shared.licensing.entitlements
+
+    with patch.dict(os.environ, {"HEADEND_API_TOKEN": static_token}):
+        with patch.object(
+            shared.licensing.entitlements, "_flag_on", return_value=True
+        ):
+            client = app.test_client()
+
+            # Static token must be rejected when flag is ON
+            resp = await client.get(
+                "/api/v1/firewall/rules",
+                headers={"Authorization": f"Bearer {static_token}"},
+            )
+            assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_flag_on_accepts_machine_jwt(
+    app: Any, machine_jwt_firewall: str, mock_db: MagicMock
+) -> None:
+    """Test firewall/rules accepts machine-JWT when flag is ON.
+
+    Args:
+        app: Test app.
+        machine_jwt_firewall: Valid machine-JWT.
+        mock_db: Mock database.
+    """
+    # Flag ON
+    import shared.licensing.entitlements
+
+    with patch.object(
+        shared.licensing.entitlements, "_flag_on", return_value=True
+    ):
+        client = app.test_client()
+
+        # Mock UserManager.list_users to return empty list
+        with patch("hub_api.api.headend_routes.get_user_manager") as mock_um_factory:
+            mock_um = MagicMock()
+            mock_um.list_users = AsyncMock(return_value=[])
+            mock_um_factory.return_value = mock_um
+
+            # Mock AccessControlManager
+            with patch(
+                "hub_api.api.headend_routes.get_access_control_manager"
+            ) as mock_acm_factory:
+                mock_acm = MagicMock()
+                mock_acm_factory.return_value = mock_acm
+
+                # Machine-JWT must be accepted when flag is ON
+                resp = await client.get(
+                    "/api/v1/firewall/rules",
+                    headers={"Authorization": f"Bearer {machine_jwt_firewall}"},
+                )
+                assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_finding2_bootstrap_token_rejected_flag_on(
+    app: Any, mock_db: MagicMock
+) -> None:
+    """Test bootstrap token is rejected when flag is ON (Finding-2 enforcement).
+
+    Regression: security-review finding-2 (C6) — metrics must require machine-JWT
+    not shared bootstrap token. Test via firewall/rules endpoint which is always
+    available in test app.
+
+    Args:
+        app: Test app.
+        mock_db: Mock database.
+    """
+    bootstrap_token = "test-bootstrap-token"
+    import shared.licensing.entitlements
+
+    # Flag ON: enforce machine-JWT requirement (bootstrap token must be rejected)
+    with patch.dict(os.environ, {"ENROLLMENT_BOOTSTRAP_TOKEN": bootstrap_token}):
+        with patch.object(
+            shared.licensing.entitlements, "_flag_on", return_value=True
+        ):
+            client = app.test_client()
+
+            # Bootstrap token must be REJECTED when flag is ON
+            resp = await client.get(
+                "/api/v1/firewall/rules",
+                headers={"Authorization": f"Bearer {bootstrap_token}"},
+            )
+            assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
