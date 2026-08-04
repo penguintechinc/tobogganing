@@ -598,47 +598,44 @@ async def test_post_auth_token_cluster_identity_bound_correctly(
     mock_cluster_manager = MagicMock()
     app_with_sase.config["CLUSTER_MANAGER"] = mock_cluster_manager
 
-    # Mock successful cluster authentication
+    # Mock successful cluster authentication (AsyncMock, .tenant field not .tenant_id)
     mock_cluster = MagicMock(
         id="cluster-1",
         region="us-east-1",
         datacenter="dc1",
-        tenant_id="default",
+        tenant="default",
     )
-    mock_cluster_manager.authenticate_cluster = MagicMock(return_value=mock_cluster)
+    mock_cluster_manager.authenticate_cluster = AsyncMock(return_value=mock_cluster)
 
-    with patch("hub_api.api.headend_routes.asyncio.to_thread") as mock_thread:
-        mock_thread.return_value = mock_cluster
+    response = await client.post(
+        "/api/v1/auth/token",
+        json={
+            "node_id": "cluster-1",  # Matching authenticated cluster
+            "node_type": "kubernetes_node",
+            "api_key": "test-api-key",
+        },
+    )
 
-        response = await client.post(
-            "/api/v1/auth/token",
-            json={
-                "node_id": "cluster-1",  # Matching authenticated cluster
-                "node_type": "kubernetes_node",
-                "api_key": "test-api-key",
-            },
-        )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert "access_token" in data
 
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert "access_token" in data
+    # Decode token to verify sub claim
+    import jwt as pyjwt
 
-        # Decode token to verify sub claim
-        import jwt as pyjwt
+    provider = app_with_sase.config["KEY_PROVIDER"]
+    token = data["access_token"]
+    decoded = pyjwt.decode(
+        token,
+        provider.public_pem,
+        algorithms=["RS256"],
+        options={"verify_aud": False},
+    )
 
-        provider = app_with_sase.config["KEY_PROVIDER"]
-        token = data["access_token"]
-        decoded = pyjwt.decode(
-            token,
-            provider.public_pem,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-        )
-
-        # Sub must be the authenticated cluster's id, not trusting request body
-        assert (
-            decoded["sub"] == "cluster-1"
-        ), f"Expected sub='cluster-1', got sub='{decoded['sub']}'"
+    # Sub must be prefixed for machine JWT: cluster:cluster-1
+    assert (
+        decoded["sub"] == "cluster:cluster-1"
+    ), f"Expected sub='cluster:cluster-1', got sub='{decoded['sub']}'"
 
 
 # Regression tests for Security Finding B: Client-supplied tenant on GET /headend/<id>/ports

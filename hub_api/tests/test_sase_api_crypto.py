@@ -358,32 +358,31 @@ async def test_jwt_token_generation_cluster_authenticated(
     mock_cluster.id = "cluster-1"
     mock_cluster.region = "us-west"
     mock_cluster.datacenter = "us-west-1a"
-    mock_cluster.tenant_id = "test-tenant"
+    mock_cluster.tenant = "test-tenant"  # Field is .tenant, not .tenant_id
 
-    with patch(
-        "hub_api.core.api.jwt.asyncio.to_thread"
-    ) as mock_to_thread:
-        mock_to_thread.return_value = mock_cluster
+    # Mock cluster_manager.authenticate_cluster as async
+    cluster_manager = app_with_sase.config["CLUSTER_MANAGER"]
+    cluster_manager.authenticate_cluster = AsyncMock(return_value=mock_cluster)
 
-        with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
-            mock_flag.return_value = True
+    with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
+        mock_flag.return_value = True
 
-            response = await client.post(
-                "/api/v1/jwt/token",
-                json={
-                    "node_id": "cluster-1",
-                    "node_type": "kubernetes_node",
-                    "api_key": "secret-key",
-                },
-                headers={"Authorization": f"Bearer {valid_tenant_token}"},
-            )
+        response = await client.post(
+            "/api/v1/jwt/token",
+            json={
+                "node_id": "cluster-1",
+                "node_type": "kubernetes_node",
+                "api_key": "secret-key",
+            },
+            headers={"Authorization": f"Bearer {valid_tenant_token}"},
+        )
 
-            assert response.status_code == 200
-            data = await response.get_json()
-            assert "access_token" in data
-            assert "refresh_token" in data
-            assert data["expires_in"] == 3600
-            assert data["token_type"] == "Bearer"
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["expires_in"] == 3600
+        assert data["token_type"] == "Bearer"
 
 
 @pytest.mark.asyncio
@@ -398,27 +397,26 @@ async def test_jwt_token_generation_cluster_authentication_fails(
     """
     client = app_with_sase.test_client()
 
-    with patch(
-        "hub_api.core.api.jwt.asyncio.to_thread"
-    ) as mock_to_thread:
-        mock_to_thread.return_value = None  # Authentication failed
+    # Mock cluster_manager.authenticate_cluster as async returning None
+    cluster_manager = app_with_sase.config["CLUSTER_MANAGER"]
+    cluster_manager.authenticate_cluster = AsyncMock(return_value=None)
 
-        with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
-            mock_flag.return_value = True
+    with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
+        mock_flag.return_value = True
 
-            response = await client.post(
-                "/api/v1/jwt/token",
-                json={
-                    "node_id": "cluster-1",
-                    "node_type": "kubernetes_node",
-                    "api_key": "invalid-key",
-                },
-                headers={"Authorization": f"Bearer {valid_tenant_token}"},
-            )
+        response = await client.post(
+            "/api/v1/jwt/token",
+            json={
+                "node_id": "cluster-1",
+                "node_type": "kubernetes_node",
+                "api_key": "invalid-key",
+            },
+            headers={"Authorization": f"Bearer {valid_tenant_token}"},
+        )
 
-            assert response.status_code == 401
-            data = await response.get_json()
-            assert "Authentication failed" in data["error"]
+        assert response.status_code == 401
+        data = await response.get_json()
+        assert "Authentication failed" in data["error"]
 
 
 @pytest.mark.asyncio
