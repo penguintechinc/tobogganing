@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, current_app, request
+from quart import Blueprint, current_app, g, request
 
+from hub_api.auth.middleware import require_machine_jwt
 from hub_api.core import CertificateManager
 from hub_api.entitlements.gate import require_feature
 
@@ -64,11 +65,12 @@ def _verify_enrollment_token(token: str | None) -> bool:
 
 @blueprint.route("/certificates", methods=["POST"])
 @require_feature("sase", "certs")
+@require_machine_jwt("certs:issue")
 async def generate_certificate() -> tuple[dict[str, Any], int]:
     """Generate a signed X.509 certificate for a node.
 
-    Phase-0 endpoint: requires enrollment token (bootstrap token),
-    not a tenant JWT. Used during node onboarding.
+    Requires machine-JWT with certs:issue scope (or legacy enrollment token if flag OFF).
+    Used during node onboarding and cert renewal.
 
     Request body:
     {
@@ -83,19 +85,6 @@ async def generate_certificate() -> tuple[dict[str, Any], int]:
         JSON response with certificate type and PEM-encoded cert/key/CA.
     """
     try:
-        # Verify enrollment token (Phase-0 gating - not a tenant JWT)
-        auth_header = request.headers.get("Authorization")
-        enrollment_token = _extract_bearer_token(auth_header)
-
-        if not _verify_enrollment_token(enrollment_token):
-            logger.warning(
-                "certificate_generation_unauthorized",
-                reason="invalid_enrollment_token",
-            )
-            return (
-                {"error": "Unauthorized: enrollment token required"},
-                401,
-            )
 
         # Parse request body
         data = await request.get_json()

@@ -152,7 +152,8 @@ async def test_certificate_generation_requires_enrollment_token(
 
         assert response.status_code == 401
         data = await response.get_json()
-        assert "enrollment token" in data["error"].lower()
+        # With decorator, error message is generic "invalid authorization header"
+        assert "authorization" in data["error"].lower() or "unauthorized" in data["error"].lower()
 
 
 @pytest.mark.asyncio

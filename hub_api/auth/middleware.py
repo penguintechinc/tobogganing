@@ -2,11 +2,14 @@
 
 Supports both Bearer/JWT (via @require_scope, @require_tenant) and session cookie
 (via @require_session_user, @require_role, @require_permission) authentication paths.
+Also provides machine-JWT authentication for cluster/headend routes.
 """
 
 from __future__ import annotations
 
 import functools
+import hmac
+import os
 from datetime import datetime
 from typing import Any, Callable, Optional
 
@@ -14,6 +17,7 @@ import structlog
 from quart import current_app, g, jsonify, request, Response
 
 from hub_api.auth.jwt import decode_token
+from hub_api.flags import feature_enabled
 
 logger = structlog.get_logger()
 
@@ -445,6 +449,165 @@ def require_admin(func: Callable[..., Any]) -> Callable[..., Any]:
         return jsonify({"error": "Forbidden: admin role required"}), 403
 
     return wrapper
+
+
+def _verify_headend_token(token: str | None) -> bool:
+    """Verify headend API token using constant-time comparison.
+
+    Args:
+        token: The Bearer token to verify.
+
+    Returns:
+        True if token matches HEADEND_API_TOKEN, False otherwise.
+    """
+    expected = os.getenv("HEADEND_API_TOKEN", "")
+    if not expected or not token:
+        return False
+    return hmac.compare_digest(token, expected)
+
+
+def _verify_bootstrap_token(token: str | None) -> bool:
+    """Verify bootstrap token using constant-time comparison.
+
+    Args:
+        token: The token to verify.
+
+    Returns:
+        True if token matches ENROLLMENT_BOOTSTRAP_TOKEN, False otherwise.
+    """
+    expected = os.getenv("ENROLLMENT_BOOTSTRAP_TOKEN", "")
+    if not expected or not token:
+        return False
+    return hmac.compare_digest(token, expected)
+
+
+async def _extract_machine_identity(
+    token: str,
+    *required_scopes: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Extract and validate machine-JWT identity.
+
+    Decodes the token, checks aud=="headend" and required scopes.
+    T4 denylist hook: check jti revocation status (not implemented yet).
+
+    Args:
+        token: Bearer token to decode.
+        required_scopes: Required scopes (space-separated string expected in token).
+
+    Returns:
+        Tuple of (claims, error_message) if valid, (None, error_msg) otherwise.
+    """
+    key_provider = current_app.config.get("KEY_PROVIDER")
+    if not key_provider:
+        return None, "key_provider_not_configured"
+
+    claims = decode_token(token, key_provider)
+    if not claims:
+        return None, "invalid_or_expired_token"
+
+    # Machine-JWT must have aud=="headend"
+    if claims.get("aud") != "headend":
+        return None, "invalid_audience"
+
+    # Check required scopes
+    token_scope_str = claims.get("scope", "")
+    if not token_scope_str:
+        return None, "missing_scopes"
+
+    token_scopes = set(token_scope_str.split())
+
+    for required in required_scopes:
+        if not _scope_satisfied(required, token_scopes):
+            return None, f"insufficient_scope:{required}"
+
+    # T4: Check denylist (jti revocation) — no-op until T4
+    # Hook: if await is_jti_revoked(claims.get("jti"), cache) then return None, "revoked"
+    # For now, skip (# T4 denylist hook)
+
+    return claims, None
+
+
+def require_machine_jwt(*required_scopes: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorator to require machine-JWT with specific scopes.
+
+    Supports dual-accept: when flag `tobogganing.core.machine_jwt_required` is OFF,
+    accepts either a valid machine-JWT OR legacy static tokens (headend/bootstrap).
+    When flag is ON, requires machine-JWT only.
+
+    Sets g.machine_tenant and g.machine_sub on success.
+
+    Args:
+        required_scopes: Scopes required in the machine-JWT (e.g., "firewall:read").
+
+    Returns:
+        Decorator function.
+    """
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Extract Bearer token
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer "):
+                return jsonify({"error": "Unauthorized: invalid authorization header"}), 401
+
+            token = auth_header[7:].strip()
+            if not token:
+                return jsonify({"error": "Unauthorized: missing token"}), 401
+
+            # Try machine-JWT first
+            claims, error = await _extract_machine_identity(token, *required_scopes)
+            if claims:
+                # Valid machine-JWT: set context and proceed
+                g.machine_tenant = claims.get("tenant")
+                g.machine_sub = claims.get("sub")
+                logger.info(
+                    "machine_jwt_authenticated",
+                    sub=g.machine_sub,
+                    tenant=g.machine_tenant,
+                    scopes=required_scopes,
+                )
+                return await func(*args, **kwargs)
+
+            # Machine-JWT failed; check flag for legacy fallback
+            flag_on = feature_enabled("tobogganing.core", "machine_jwt_required")
+
+            if not flag_on:
+                # Dual-accept: try legacy static tokens
+                if _verify_headend_token(token) or _verify_bootstrap_token(token):
+                    # Legacy static token accepted
+                    g.machine_tenant = "default"
+                    g.machine_sub = "legacy"
+                    logger.info(
+                        "legacy_token_authenticated",
+                        tenant=g.machine_tenant,
+                        scopes=required_scopes,
+                    )
+                    return await func(*args, **kwargs)
+                # No valid auth
+                logger.warning(
+                    "machine_jwt_auth_failed_flag_off",
+                    error=error,
+                    scopes=required_scopes,
+                )
+                return jsonify({"error": "Unauthorized: invalid token"}), 401
+            else:
+                # Flag ON: machine-JWT required, legacy disabled
+                logger.warning(
+                    "machine_jwt_required_flag_on",
+                    error=error,
+                    scopes=required_scopes,
+                )
+                return (
+                    jsonify(
+                        {"error": "Unauthorized: machine-JWT required"}
+                    ),
+                    401,
+                )
+
+        return wrapper
+
+    return decorator
 
 
 def set_session_cookie(

@@ -36,7 +36,7 @@ def build_machine_claims(
         "iss": iss,
         "aud": aud,
         "tenant": tenant,
-        "scope": "firewall:read wireguard:read ports:read metrics:write",
+        "scope": "firewall:read wireguard:read ports:read metrics:write certs:issue",
         "jti": uuid.uuid4().hex,
     }
 
