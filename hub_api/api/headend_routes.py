@@ -19,6 +19,7 @@ import structlog
 from quart import Blueprint, current_app, request
 
 from hub_api.auth.jwt import decode_token, encode_access_token
+from hub_api.auth.machine_claims import build_machine_claims
 from hub_api.auth.middleware import current_claims, require_scope, require_tenant
 from hub_api.core import UserManager, CertificateManager
 from hub_api.crypto.keys import KeyProvider
@@ -356,9 +357,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
             # Authenticate cluster/headend nodes
             if cluster_manager:
                 try:
-                    cluster = await asyncio.to_thread(
-                        cluster_manager.authenticate_cluster, api_key
-                    )
+                    cluster = await cluster_manager.authenticate_cluster(api_key)
                     if cluster and getattr(cluster, "id", None) == node_id:
                         authenticated = True
                         authenticated_principal = cluster
@@ -370,7 +369,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                             "region": getattr(cluster, "region", "unknown"),
                             "datacenter": getattr(cluster, "datacenter", "unknown"),
                         }
-                        tenant_id = getattr(cluster, "tenant_id", "default")
+                        tenant_id = cluster.tenant
                 except Exception as e:
                     logger.error(
                         "cluster_authentication_failed",
@@ -384,9 +383,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
             # Authenticate client nodes
             if client_registry:
                 try:
-                    client = await asyncio.to_thread(
-                        client_registry.authenticate_client, api_key
-                    )
+                    client = await client_registry.authenticate_client(api_key)
                     if client and getattr(client, "id", None) == node_id:
                         authenticated = True
                         authenticated_principal = client
@@ -398,7 +395,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                             "client_type": getattr(client, "type", "unknown"),
                             "cluster_id": getattr(client, "cluster_id", "unknown"),
                         }
-                        tenant_id = getattr(client, "tenant_id", "default")
+                        tenant_id = client.tenant
                 except Exception as e:
                     logger.error(
                         "client_authentication_failed",
@@ -424,16 +421,20 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
         principal_id = getattr(
             authenticated_principal, "id", node_id
         )  # Fall back to node_id if no id attr
-        claims = {
-            "sub": principal_id,
-            "iss": "tobogganing",
-            "aud": "tobogganing",
-            "tenant": tenant_id,
-            "node_type": node_type,
-            "permissions": " ".join(permissions),
-            "scope": " ".join(permissions),
-            "metadata": metadata,
-        }
+
+        # Build machine JWT claims (includes jti, scope, tenant)
+        claims = build_machine_claims(
+            sub_id=principal_id,
+            node_type=node_type,
+            tenant=tenant_id,
+            iss="tobogganing",
+            aud="tobogganing",
+            token_type="access",
+        )
+        # Add node metadata (not part of standard machine-JWT)
+        claims["node_type"] = node_type
+        claims["permissions"] = " ".join(permissions)
+        claims["metadata"] = metadata
 
         # Generate access token (1 hour)
         try:
@@ -445,9 +446,19 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                 500,
             )
 
-        # Generate refresh token (24 hours)
-        refresh_claims = claims.copy()
-        refresh_claims["token_type"] = "refresh"
+        # Generate refresh token (24 hours) — rebuild from machine_claims with refresh type
+        refresh_claims = build_machine_claims(
+            sub_id=principal_id,
+            node_type=node_type,
+            tenant=tenant_id,
+            iss="tobogganing",
+            aud="tobogganing",
+            token_type="refresh",
+        )
+        # Add node metadata
+        refresh_claims["node_type"] = node_type
+        refresh_claims["permissions"] = " ".join(permissions)
+        refresh_claims["metadata"] = metadata
         try:
             refresh_token = await encode_access_token(
                 refresh_claims, key_provider, ttl_hours=24
