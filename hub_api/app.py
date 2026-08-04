@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 import sqlalchemy as sa
 from quart import Quart
 from quart_cors import cors
 from quart_schema import QuartSchema
 
+from hub_api.cache import CacheClient
 from hub_api.config import Config, build_db_uri
 from hub_api.config.readiness import validate_prod_readiness
 from hub_api.crypto.secrets import SecretEncryptor, set_encryptor
@@ -118,6 +120,15 @@ def create_app(config: Config | None = None) -> Quart:
     except Exception as e:
         logger.error(f"Failed to configure key provider: {e}")
         raise
+
+    # Initialize cache client from environment variables
+    app.config["CACHE"] = CacheClient(
+        host=os.getenv("CACHE_HOST", "localhost"),
+        port=int(os.getenv("CACHE_PORT", "6379")),
+        db=int(os.getenv("CACHE_DB", "0")),
+        user=os.getenv("CACHE_USER"),
+        password=os.getenv("CACHE_PASS"),
+    )
 
     @app.before_serving
     async def setup_services() -> None:
