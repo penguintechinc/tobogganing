@@ -253,6 +253,171 @@ async def test_finding2_bootstrap_token_rejected_flag_on(
 
 
 @pytest.mark.asyncio
+async def test_client_node_lacks_privileged_scopes(app: Any) -> None:
+    """Test client node types have minimal scopes (least privilege).
+
+    Regression: client_docker/client_native should NOT have
+    firewall:read, ports:read, metrics:write, or certs:issue.
+
+    Args:
+        app: Test app.
+    """
+    provider = app.config["KEY_PROVIDER"]
+
+    # Create machine-JWT for client node
+    claims = build_machine_claims(
+        sub_id="client-1",
+        node_type="client_docker",
+        tenant="acme",
+        iss="tobogganing",
+        aud="headend",
+    )
+
+    # Client should only have wireguard:read, NOT privileged scopes
+    assert "wireguard:read" in claims["scope"]
+    assert "firewall:read" not in claims["scope"]
+    assert "ports:read" not in claims["scope"]
+    assert "metrics:write" not in claims["scope"]
+    assert "certs:issue" not in claims["scope"]
+
+
+@pytest.mark.asyncio
+async def test_cluster_node_has_full_scopes(app: Any) -> None:
+    """Test cluster node types have full scopes.
+
+    Regression: kubernetes_node/raw_compute should have all scopes
+    including certs:issue for cert issuance operations.
+
+    Args:
+        app: Test app.
+    """
+    provider = app.config["KEY_PROVIDER"]
+
+    # Create machine-JWT for cluster node
+    claims = build_machine_claims(
+        sub_id="cluster-1",
+        node_type="kubernetes_node",
+        tenant="acme",
+        iss="tobogganing",
+        aud="headend",
+    )
+
+    # Cluster should have all scopes
+    assert "firewall:read" in claims["scope"]
+    assert "wireguard:read" in claims["scope"]
+    assert "ports:read" in claims["scope"]
+    assert "metrics:write" in claims["scope"]
+    assert "certs:issue" in claims["scope"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_headend_token_insufficient_scope_for_certs(
+    app: Any, mock_db: MagicMock
+) -> None:
+    """Test headend token cannot issue certs (scope enforcement).
+
+    Regression: legacy headend token should NOT have certs:issue scope;
+    attempting to access cert endpoint should return 403 (insufficient scope).
+
+    Args:
+        app: Test app.
+        mock_db: Mock database.
+    """
+    headend_token = "test-headend-token"
+    import shared.licensing.entitlements
+
+    # Flag OFF: legacy token fallback enabled
+    with patch.dict(os.environ, {"HEADEND_API_TOKEN": headend_token}):
+        with patch.object(
+            shared.licensing.entitlements, "_flag_on", return_value=False
+        ):
+            # Mock feature gate for certs endpoint
+            with patch("hub_api.entitlements.gate.feature_enabled", return_value=True):
+                client = app.test_client()
+
+                # Headend token attempting to access certs endpoint
+                # should fail with 403 (insufficient scope), not 200
+                resp = await client.post(
+                    "/api/v1/certs/certificates",
+                    headers={"Authorization": f"Bearer {headend_token}"},
+                    json={"type": "client", "id": "node-1", "name": "test"},
+                )
+                assert resp.status_code == 403
+                data = await resp.get_json()
+                assert "insufficient scope" in data["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_legacy_bootstrap_token_insufficient_scope_for_firewall(
+    app: Any, mock_db: MagicMock
+) -> None:
+    """Test bootstrap token cannot read firewall (scope enforcement).
+
+    Regression: legacy bootstrap token should NOT have firewall:read scope;
+    attempting to read firewall rules should return 403 (insufficient scope).
+
+    Args:
+        app: Test app.
+        mock_db: Mock database.
+    """
+    bootstrap_token = "test-bootstrap-token"
+    import shared.licensing.entitlements
+
+    # Flag OFF: legacy token fallback enabled
+    with patch.dict(os.environ, {"ENROLLMENT_BOOTSTRAP_TOKEN": bootstrap_token}):
+        with patch.object(
+            shared.licensing.entitlements, "_flag_on", return_value=False
+        ):
+            client = app.test_client()
+
+            # Bootstrap token attempting to read firewall rules
+            # should fail with 403 (insufficient scope), not 200
+            resp = await client.get(
+                "/api/v1/firewall/rules",
+                headers={"Authorization": f"Bearer {bootstrap_token}"},
+            )
+            assert resp.status_code == 403
+            data = await resp.get_json()
+            assert "insufficient scope" in data["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_legacy_bootstrap_token_can_issue_certs(
+    app: Any, mock_db: MagicMock
+) -> None:
+    """Test bootstrap token CAN issue certs (within its allowlist).
+
+    Regression: legacy bootstrap token should have certs:issue scope;
+    accessing cert endpoint should succeed (or fail on validation, not auth).
+
+    Args:
+        app: Test app.
+        mock_db: Mock database.
+    """
+    bootstrap_token = "test-bootstrap-token"
+    import shared.licensing.entitlements
+
+    # Flag OFF: legacy token fallback enabled
+    with patch.dict(os.environ, {"ENROLLMENT_BOOTSTRAP_TOKEN": bootstrap_token}):
+        with patch.object(
+            shared.licensing.entitlements, "_flag_on", return_value=False
+        ):
+            # Mock feature gate for certs endpoint
+            with patch("hub_api.entitlements.gate.feature_enabled", return_value=True):
+                client = app.test_client()
+
+                # Bootstrap token should be accepted for cert issuance
+                # (not rejected with 403 insufficient scope)
+                resp = await client.post(
+                    "/api/v1/certs/certificates",
+                    headers={"Authorization": f"Bearer {bootstrap_token}"},
+                    json={"type": "client", "id": "node-1", "name": "test"},
+                )
+                # Should NOT be 403 auth error; might be 400/500 validation error
+                assert resp.status_code != 403
+
+
+@pytest.mark.asyncio
 async def test_tenant_scoping_firewall_rules(app: Any, mock_db: MagicMock) -> None:
     """Test firewall/rules scoped to authenticated tenant (regression C2).
 

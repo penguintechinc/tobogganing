@@ -481,6 +481,13 @@ def _verify_bootstrap_token(token: str | None) -> bool:
     return hmac.compare_digest(token, expected)
 
 
+# Per-token scope allowlists for legacy tokens (least privilege enforcement)
+HEADEND_TOKEN_SCOPES = frozenset(
+    {"firewall:read", "wireguard:read", "ports:read", "metrics:write"}
+)
+BOOTSTRAP_TOKEN_SCOPES = frozenset({"certs:issue"})
+
+
 async def _extract_machine_identity(
     token: str,
     *required_scopes: str,
@@ -573,24 +580,45 @@ def require_machine_jwt(*required_scopes: str) -> Callable[[Callable[..., Any]],
             flag_on = feature_enabled("tobogganing.core", "machine_jwt_required")
 
             if not flag_on:
-                # Dual-accept: try legacy static tokens
-                if _verify_headend_token(token) or _verify_bootstrap_token(token):
-                    # Legacy static token accepted
-                    g.machine_tenant = "default"
-                    g.machine_sub = "legacy"
-                    logger.info(
-                        "legacy_token_authenticated",
-                        tenant=g.machine_tenant,
+                # Dual-accept: try legacy static tokens with per-token allowlists
+                allowed_scopes = None
+                if _verify_headend_token(token):
+                    allowed_scopes = HEADEND_TOKEN_SCOPES
+                elif _verify_bootstrap_token(token):
+                    allowed_scopes = BOOTSTRAP_TOKEN_SCOPES
+                else:
+                    # No valid legacy token
+                    logger.warning(
+                        "machine_jwt_auth_failed_flag_off",
+                        error=error,
                         scopes=required_scopes,
                     )
-                    return await func(*args, **kwargs)
-                # No valid auth
-                logger.warning(
-                    "machine_jwt_auth_failed_flag_off",
-                    error=error,
+                    return jsonify({"error": "Unauthorized: invalid token"}), 401
+
+                # Enforce required scopes against token's allowlist (least privilege)
+                required_scope_set = set(required_scopes)
+                if not required_scope_set.issubset(allowed_scopes):
+                    logger.warning(
+                        "legacy_token_insufficient_scope",
+                        required=required_scopes,
+                        allowed=list(allowed_scopes),
+                    )
+                    return (
+                        jsonify(
+                            {"error": "Forbidden: insufficient scope for legacy token"}
+                        ),
+                        403,
+                    )
+
+                # Legacy static token accepted with proper scopes
+                g.machine_tenant = "default"
+                g.machine_sub = "legacy"
+                logger.info(
+                    "legacy_token_authenticated",
+                    tenant=g.machine_tenant,
                     scopes=required_scopes,
                 )
-                return jsonify({"error": "Unauthorized: invalid token"}), 401
+                return await func(*args, **kwargs)
             else:
                 # Flag ON: machine-JWT required, legacy disabled
                 logger.warning(
