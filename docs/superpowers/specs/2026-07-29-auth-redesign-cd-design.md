@@ -50,7 +50,9 @@ New package: a single async-friendly Valkey client the whole app shares, replaci
 - **Access JWT** (1h): `sub="cluster:<id>"`, `iss`, `aud="headend"`, `tenant=<cluster.tenant>` (FIX C3: read `.tenant`, not `.tenant_id`), `scope="firewall:read wireguard:read ports:read metrics:write"`, `iat`, `exp`, `jti`.
 - **Refresh JWT** (short, default 8h — configurable; ≤24h per standards): `token_type="refresh"`, `sub`, `tenant`, `aud`, `jti`, `exp`.
 - FIX C4: `await authenticate_cluster(...)` directly (it is async); remove the `asyncio.to_thread` wrapper on the coroutine. Bind `cluster.id==node_id` (the existing A-fix) — which now actually runs.
-- Scope set derives from cluster role/type; keep a single machine scope-bundle for now (`machine`) expanded to the resource scopes above.
+- **Scope set derives from `node_type` (least-privilege — corrected after commit security review; a single union bundle was over-permissive):**
+  - clusters (`kubernetes_node`/`raw_compute`/`headend`) → `firewall:read wireguard:read ports:read metrics:write certs:issue` (clusters are the cert issuers)
+  - clients (`client_docker`/`client_native`) → `wireguard:read` (minimal; NO `certs:issue`/`firewall`/`ports`/`metrics`)
 
 ### 3. Rotating refresh + revocation — `hub_api/auth/refresh.py` (new) + Valkey
 
@@ -65,7 +67,7 @@ New package: a single async-friendly Valkey client the whole app shares, replaci
 
 New decorator `@require_machine_jwt(*scopes)`:
 - Extract Bearer token. Try machine-JWT decode first: valid + `aud=="headend"` + required scopes present + not denylisted → set `g.machine_tenant`, `g.machine_sub`; proceed.
-- If not a valid machine-JWT AND flag `tobogganing.core.machine_jwt_required` is **OFF** → fall back to `_verify_headend_token`/`_verify_bootstrap_token` (legacy static token), set `g.machine_tenant="default"` (legacy).
+- If not a valid machine-JWT AND flag `tobogganing.core.machine_jwt_required` is **OFF** → legacy fallback, but **each legacy token is bound to a fixed scope allowlist and `required_scopes` is enforced against it** (corrected after commit security review — a bare "accept either static token for any route" was a privilege-escalation window): `HEADEND_API_TOKEN → {firewall:read, wireguard:read, ports:read, metrics:write}`, `ENROLLMENT_BOOTSTRAP_TOKEN → {certs:issue}`. `required_scopes ⊄ allowlist` → 403. Set `g.machine_tenant="default"` (legacy). Net effect: a headend token can NOT issue certs; a bootstrap token can NOT read firewall.
 - If flag **ON** → legacy path disabled; static token → 401.
 - Applied to: `firewall/rules`, `wireguard/peers`, `headend/ports` (`headend_routes.py`), `submit_headend_metrics` (FIX C6 — replaces bootstrap), cert issuance (`core/api/certs.py`).
 - **Every query in these handlers is scoped to `g.machine_tenant`** (FIX C2), not `"default"`.
