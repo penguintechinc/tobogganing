@@ -501,7 +501,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
 
 @headend_bp.route("/auth/refresh", methods=["POST"])
 async def refresh_auth_token() -> tuple[dict[str, Any], int]:
-    """Refresh JWT access token using refresh token.
+    """Refresh JWT access token using refresh token with rotation.
 
     This is the FLAT equivalent of `/api/v1/sase/jwt/refresh`.
     Does NOT require a pre-existing JWT (uses refresh_token for auth).
@@ -512,12 +512,16 @@ async def refresh_auth_token() -> tuple[dict[str, Any], int]:
     }
 
     Returns:
-        - 200: {access_token, expires_in, token_type, meta}
+        - 200: {access_token, refresh_token, expires_in, token_type, meta}
         - 400: {error: "..."} if validation fails
-        - 401: {error: "..."} if token is invalid/expired
+        - 401: {error: "..."} if token is invalid/expired/replayed
+        - 503: {error: "...", retry_with_credentials: true} if cache unavailable
         - 500: {error: "..."} on server error
     """
     try:
+        from hub_api.auth.refresh import rotate_refresh, RefreshError
+        from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
+
         data = await request.get_json()
 
         refresh_token = data.get("refresh_token")
@@ -535,7 +539,24 @@ async def refresh_auth_token() -> tuple[dict[str, Any], int]:
                 500,
             )
 
-        # Decode and validate refresh token
+        cache = current_app.config.get("CACHE")
+        if not cache:
+            logger.error("cache_not_configured")
+            return (
+                {"error": "Internal server error"},
+                500,
+            )
+
+        # Get or create cluster manager (use default tenant or extract from token)
+        db = current_app.config.get("DAL")
+        if not db:
+            logger.error("dal_not_configured")
+            return (
+                {"error": "Internal server error"},
+                500,
+            )
+
+        # Decode refresh token to get tenant
         claims = decode_token(refresh_token, key_provider)
         if not claims:
             logger.warning("refresh_token_invalid_or_expired")
@@ -544,36 +565,28 @@ async def refresh_auth_token() -> tuple[dict[str, Any], int]:
                 401,
             )
 
-        # Verify this is actually a refresh token
-        if claims.get("token_type") != "refresh":
-            logger.warning("refresh_token_wrong_type")
-            return (
-                {"error": "Invalid token type"},
-                401,
-            )
+        tenant_id = claims.get("tenant", "default")
+        cluster_manager = ClusterManager(db, tenant_id)
 
-        # Generate new access token with same claims
-        access_claims = {k: v for k, v in claims.items() if k != "token_type"}
-
+        # Perform token rotation with replay protection
         try:
-            new_access_token = await encode_access_token(
-                access_claims, key_provider, ttl_hours=1
-            )
-        except ValueError as e:
-            logger.error("access_token_encoding_failed", error=str(e))
+            tokens = await rotate_refresh(refresh_token, cache, key_provider, cluster_manager)
+        except RefreshError as e:
+            logger.warning("refresh_rotation_failed", status=e.status, error=e.body.get("error"))
             return (
-                {"error": "Failed to generate token"},
-                500,
+                e.body,
+                e.status,
             )
 
         logger.info(
-            "jwt_token_refreshed",
+            "jwt_token_refreshed_and_rotated",
             node_id=claims.get("sub"),
         )
 
         return (
             {
-                "access_token": new_access_token,
+                "access_token": tokens["access_token"],
+                "refresh_token": tokens["refresh_token"],
                 "expires_in": 3600,
                 "token_type": "Bearer",
                 "meta": {
