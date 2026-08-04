@@ -110,6 +110,11 @@ class ClusterManager:
     ) -> Cluster | None:
         """Authenticate a cluster by API key.
 
+        The API key hash is looked up globally (without tenant scoping) because
+        the key itself IS the identity. Pre-authentication, the caller has no
+        tenant context. The machine JWT issued from this authentication carries
+        the cluster's real tenant ID, so downstream operations are tenant-scoped.
+
         Args:
             api_key: Unencrypted API key
 
@@ -162,6 +167,37 @@ class ClusterManager:
                 error=str(e),
             )
             return None
+
+    async def rotate_api_key(self, cluster_id: str) -> str | None:
+        """Rotate API key for a cluster.
+
+        Args:
+            cluster_id: Cluster identifier
+
+        Returns:
+            New unencrypted API key or None if cluster not found
+        """
+        new_api_key = secrets.token_urlsafe(32)
+        new_api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
+
+        rowset = await self.db(
+            (self.db.clusters.id == cluster_id) & (self.db.clusters.tenant == self.tenant_id)
+        ).select()
+        cluster_obj = rowset.first()
+        if not cluster_obj:
+            return None
+
+        await self.db(self.db.clusters.id == cluster_id).update(
+            api_key_hash=new_api_key_hash
+        )
+
+        logger.info(
+            "Rotated API key for cluster",
+            cluster_id=cluster_id,
+            tenant=self.tenant_id,
+            key_prefix=new_api_key_hash[:8],
+        )
+        return new_api_key
 
     async def update_heartbeat(
         self, cluster_id: str, client_count: int | None = None
