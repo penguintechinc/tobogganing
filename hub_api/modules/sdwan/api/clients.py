@@ -13,9 +13,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from quart import Blueprint, current_app, jsonify, request
+from quart import Blueprint, current_app, g, jsonify, request
 
-from hub_api.auth.middleware import current_claims, require_scope, require_tenant
+from hub_api.auth.middleware import (
+    current_claims,
+    require_machine_jwt,
+    require_scope,
+    require_tenant,
+)
 from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
 from hub_api.modules.sdwan.orchestrator.client_registry import ClientRegistry
@@ -446,10 +451,11 @@ async def submit_client_metrics(client_id: str) -> tuple[dict[str, Any], int]:
 
 
 @blueprint.route("/headends/<headend_id>/metrics", methods=["POST"])
+@require_machine_jwt("metrics:write")
 async def submit_headend_metrics(headend_id: str) -> tuple[dict[str, Any], int]:
     """Submit metrics from a headend/cluster.
 
-    Requires valid cluster authentication (bootstrap token or API key).
+    Requires valid machine-JWT with metrics:write scope.
     Verifies the authenticated cluster matches the headend_id in path.
 
     Args:
@@ -459,22 +465,8 @@ async def submit_headend_metrics(headend_id: str) -> tuple[dict[str, Any], int]:
         JSON response with status.
     """
     try:
-        # Extract and validate authentication token
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return {"error": "Invalid authorization header"}, 401
-
-        token = auth_header[len("Bearer "):].strip()
-        if not token:
-            return {"error": "Unauthorized: missing token"}, 401
-
         db = get_db()
-        tenant_id = "default"  # Phase-0: default tenant for cluster/headend auth
-
-        # Authenticate cluster/headend via bootstrap token (Phase-0)
-        # Future: Replace with ClusterManager.authenticate_cluster(token) when available
-        if not _verify_bootstrap_token(token):
-            return {"error": "Unauthorized: invalid credentials"}, 401
+        tenant_id = g.machine_tenant  # regression: security-review finding-2
 
         # Verify the headend/cluster exists and matches the path parameter
         cluster_mgr = ClusterManager(db, tenant_id)

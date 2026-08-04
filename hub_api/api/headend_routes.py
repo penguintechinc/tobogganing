@@ -16,11 +16,16 @@ from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, current_app, request
+from quart import Blueprint, current_app, g, request
 
 from hub_api.auth.jwt import decode_token, encode_access_token
 from hub_api.auth.machine_claims import build_machine_claims
-from hub_api.auth.middleware import current_claims, require_scope, require_tenant
+from hub_api.auth.middleware import (
+    current_claims,
+    require_machine_jwt,
+    require_scope,
+    require_tenant,
+)
 from hub_api.core import UserManager, CertificateManager
 from hub_api.crypto.keys import KeyProvider
 from hub_api.db import get_db
@@ -131,11 +136,12 @@ def get_certificate_manager(
 
 
 @headend_bp.route("/firewall/rules", methods=["GET"])
+@require_machine_jwt("firewall:read")
 async def get_firewall_rules() -> tuple[dict[str, Any], int]:
     """Get all firewall rules for headend consumption.
 
-    Requires headend authentication via Bearer token (HEADEND_API_TOKEN).
-    Returns rules for all active users in the default tenant.
+    Requires machine-JWT authentication (or legacy static token if flag OFF).
+    Returns rules for all active users in the authenticated tenant.
 
     Returns:
         - 200: {timestamp, rules_count, user_rules: {user_id: [rules]}}
@@ -143,11 +149,6 @@ async def get_firewall_rules() -> tuple[dict[str, Any], int]:
         - 500: {error: "..."} on server error
     """
     try:
-        # Authenticate headend
-        token = _extract_bearer_token()
-        if not _verify_headend_token(token):
-            return {"error": "Unauthorized: invalid headend token"}, 401
-
         db = get_db()
         if db is None:
             return {"error": "Database unavailable"}, 500
@@ -156,11 +157,10 @@ async def get_firewall_rules() -> tuple[dict[str, Any], int]:
         acm = get_access_control_manager(db)
         um = get_user_manager(db)
 
-        # Note: In a true multi-tenant setup, iterate all tenant configs
-        # For now, use default tenant (headend clients can provide via env)
-        tenant = "default"
+        # Use authenticated tenant from machine-JWT
+        tenant = g.machine_tenant
 
-        # Get all active users in the default tenant
+        # Get all active users in the authenticated tenant
         users = await um.list_users(tenant)
         all_rules: dict[str, Any] = {}
 
@@ -193,11 +193,12 @@ async def get_firewall_rules() -> tuple[dict[str, Any], int]:
 
 
 @headend_bp.route("/wireguard/peers", methods=["GET"])
+@require_machine_jwt("wireguard:read")
 async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
     """Get all WireGuard peer configurations for headend consumption.
 
-    Requires headend authentication via Bearer token (HEADEND_API_TOKEN).
-    Returns peer configurations for the default tenant.
+    Requires machine-JWT authentication (or legacy static token if flag OFF).
+    Returns peer configurations for the authenticated tenant.
 
     Returns:
         - 200: {peers: [...], total: N, meta: {...}}
@@ -205,20 +206,14 @@ async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
         - 500: {error: "..."} on server error
     """
     try:
-        # Authenticate headend
-        token = _extract_bearer_token()
-        if not _verify_headend_token(token):
-            return {"error": "Unauthorized: invalid headend token"}, 401
-
         # Get certificate manager from app config
         cert_manager: CertificateManager | None = current_app.config.get("CERT_MANAGER")
         if not cert_manager:
             logger.error("cert_manager_not_configured")
             return {"error": "Internal server error"}, 500
 
-        # Get all WireGuard peers for default tenant
-        # (headend operates at the cluster level, not tenant-scoped)
-        tenant = "default"
+        # Get all WireGuard peers for authenticated tenant
+        tenant = g.machine_tenant
         try:
             peers = await cert_manager.get_all_wireguard_peers(tenant_id=tenant)
         except Exception as e:
@@ -737,10 +732,11 @@ async def validate_auth_token() -> tuple[dict[str, Any], int]:
 
 
 @headend_bp.route("/headend/<headend_id>/ports", methods=["GET"])
+@require_machine_jwt("ports:read")
 async def get_headend_ports(headend_id: str) -> tuple[dict[str, Any], int]:
     """Get port configuration for a specific headend.
 
-    Requires headend authentication via Bearer token (HEADEND_API_TOKEN).
+    Requires machine-JWT authentication (or legacy static token if flag OFF).
     Optional query param: cluster_id (defaults to "cluster-{headend_id}").
 
     Args:
@@ -753,18 +749,12 @@ async def get_headend_ports(headend_id: str) -> tuple[dict[str, Any], int]:
         - 500: {error: "..."} on server error
     """
     try:
-        # Authenticate headend
-        token = _extract_bearer_token()
-        if not _verify_headend_token(token):
-            return {"error": "Unauthorized: invalid headend token"}, 401
-
         db = get_db()
         if db is None:
             return {"error": "Database unavailable"}, 500
 
-        # Get cluster from query params; tenant is always "default" (no client control)
-        # TODO(P-B §11): derive tenant from per-cluster machine-JWT
-        tenant = "default"
+        # Use authenticated tenant from machine-JWT
+        tenant = g.machine_tenant
         cluster_id = request.args.get("cluster_id", f"cluster-{headend_id}")
 
         pcm = get_port_config_manager(db)
