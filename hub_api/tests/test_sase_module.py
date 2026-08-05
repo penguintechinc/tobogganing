@@ -16,23 +16,24 @@ async def test_sase_module_returns_valid_contract() -> None:
     contract = sase_module()
 
     assert contract.name == "sase"
-    assert len(contract.blueprints) == 0  # cert/jwt blueprints moved to core
+    assert len(contract.blueprints) == 1  # blocklist blueprint
     assert len(contract.nav) == 1  # Security nav only
-    assert len(contract.flags) == 4  # threat_feeds, scanner, protection, context_auth
-    assert len(contract.entitlements) == 4  # threat_feeds, scanner, protection, context_auth
+    assert len(contract.flags) == 5  # threat_feeds, scanner, protection, context_auth, blocklist
+    assert len(contract.entitlements) == 5  # threat_feeds, scanner, protection, context_auth, blocklist
     assert len(contract.migrations) == 2  # 0006, 0008 (per-tenant-unique, security tables)
     assert contract.health is None
 
-    # Verify no blueprints (moved to core)
+    # Verify blocklist blueprint is present
     blueprint_names = {bp.name for bp in contract.blueprints}
-    assert len(blueprint_names) == 0
+    assert "sase_blocklist" in blueprint_names
 
-    # Verify flags are security-focused (not certs/auth)
+    # Verify flags include blocklist
     expected_flags = {
         "tobogganing.sase.threat_feeds",
         "tobogganing.sase.scanner",
         "tobogganing.sase.protection",
         "tobogganing.sase.context_auth",
+        "tobogganing.sase.blocklist",
     }
     assert set(contract.flags) == expected_flags
 
@@ -56,6 +57,7 @@ async def test_sase_module_registered_in_app(app: Quart) -> None:
     assert "tobogganing.sase.scanner" in flags
     assert "tobogganing.sase.protection" in flags
     assert "tobogganing.sase.context_auth" in flags
+    assert "tobogganing.sase.blocklist" in flags
     # Transport flags (and cert/jwt auth) moved to sdwan/core respectively
     assert "tobogganing.sdwan.clusters" in flags
     assert "tobogganing.sdwan.clients" in flags
@@ -96,7 +98,8 @@ async def test_sase_routes_registered_at_correct_urls() -> None:
     # Collect all registered routes from the app's URL map
     routes = {str(rule.rule) for rule in app.url_map.iter_rules()}
 
-    # SASE module no longer registers cert/jwt routes (moved to core)
-    # Verify no sase-prefixed cert/jwt routes exist
+    # SASE module registers blocklist blueprint at /api/v1/sase/blocklist
+    # Verify blocklist route is registered
     sase_routes = [r for r in routes if "/api/v1/sase" in r]
-    assert len(sase_routes) == 0, f"SASE should have no routes after Phase 4 reduction, found: {sase_routes}"
+    assert len(sase_routes) >= 1, f"SASE should have blocklist route, found: {sase_routes}"
+    assert "/api/v1/sase/blocklist/check" in routes, "Blocklist check route should be registered"
