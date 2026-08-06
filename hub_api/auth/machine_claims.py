@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 # Scope sets by node type (least privilege)
-CLUSTER_SCOPES = "firewall:read wireguard:read ports:read metrics:write certs:issue"
+CLUSTER_SCOPES = "firewall:read wireguard:read ports:read metrics:write certs:issue swg:read"
 CLIENT_SCOPES = "wireguard:read"
 
 
