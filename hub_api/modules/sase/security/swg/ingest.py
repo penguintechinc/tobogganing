@@ -69,7 +69,7 @@ class CategoryIngestManager:
 
         try:
             session = await self._get_session()
-            async with session.get(source.url, ssl=False) as resp:
+            async with session.get(source.url) as resp:
                 if resp.status != 200:
                     logger.warning(
                         "ingest_source_fetch_failed",
