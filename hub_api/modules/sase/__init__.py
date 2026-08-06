@@ -26,6 +26,7 @@ def module() -> ModuleContract:
             "tobogganing.sase.protection",
             "tobogganing.sase.context_auth",
             "tobogganing.sase.blocklist",
+            "tobogganing.sase.adapters",
         ],
         entitlements=[
             Entitlement("sase.threat_feeds", "community"),
@@ -33,6 +34,7 @@ def module() -> ModuleContract:
             Entitlement("sase.protection", "community"),
             Entitlement("sase.context_auth", "professional"),
             Entitlement("sase.blocklist", "community"),
+            Entitlement("sase.adapters", "community"),
         ],
         migrations=["0006", "0008"],
         health=None,
