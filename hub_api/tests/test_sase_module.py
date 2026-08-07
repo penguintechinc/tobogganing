@@ -16,18 +16,19 @@ async def test_sase_module_returns_valid_contract() -> None:
     contract = sase_module()
 
     assert contract.name == "sase"
-    assert len(contract.blueprints) == 1  # blocklist blueprint
+    assert len(contract.blueprints) == 2  # blocklist + swg blueprints
     assert len(contract.nav) == 1  # Security nav only
-    assert len(contract.flags) == 6  # threat_feeds, scanner, protection, context_auth, blocklist, adapters
-    assert len(contract.entitlements) == 6  # threat_feeds, scanner, protection, context_auth, blocklist, adapters
-    assert len(contract.migrations) == 2  # 0006, 0008 (per-tenant-unique, security tables)
+    assert len(contract.flags) == 7  # threat_feeds, scanner, protection, context_auth, blocklist, adapters, swg
+    assert len(contract.entitlements) == 7  # same set, per-entitlement
+    assert len(contract.migrations) == 4  # 0006, 0008, 0021, 0022
     assert contract.health is None
 
-    # Verify blocklist blueprint is present
+    # Verify blocklist and swg blueprints are present
     blueprint_names = {bp.name for bp in contract.blueprints}
     assert "sase_blocklist" in blueprint_names
+    assert "sase_swg" in blueprint_names
 
-    # Verify flags include blocklist and adapters
+    # Verify flags include blocklist, adapters, and swg
     expected_flags = {
         "tobogganing.sase.threat_feeds",
         "tobogganing.sase.scanner",
@@ -35,6 +36,7 @@ async def test_sase_module_returns_valid_contract() -> None:
         "tobogganing.sase.context_auth",
         "tobogganing.sase.blocklist",
         "tobogganing.sase.adapters",
+        "tobogganing.sase.swg",
     }
     assert set(contract.flags) == expected_flags
 
@@ -60,6 +62,7 @@ async def test_sase_module_registered_in_app(app: Quart) -> None:
     assert "tobogganing.sase.context_auth" in flags
     assert "tobogganing.sase.blocklist" in flags
     assert "tobogganing.sase.adapters" in flags
+    assert "tobogganing.sase.swg" in flags
     # Transport flags (and cert/jwt auth) moved to sdwan/core respectively
     assert "tobogganing.sdwan.clusters" in flags
     assert "tobogganing.sdwan.clients" in flags
