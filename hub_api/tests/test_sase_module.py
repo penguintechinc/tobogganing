@@ -18,8 +18,8 @@ async def test_sase_module_returns_valid_contract() -> None:
     assert contract.name == "sase"
     assert len(contract.blueprints) == 1  # blocklist blueprint
     assert len(contract.nav) == 1  # Security nav only
-    assert len(contract.flags) == 5  # threat_feeds, scanner, protection, context_auth, blocklist
-    assert len(contract.entitlements) == 5  # threat_feeds, scanner, protection, context_auth, blocklist
+    assert len(contract.flags) == 6  # threat_feeds, scanner, protection, context_auth, blocklist, adapters
+    assert len(contract.entitlements) == 6  # threat_feeds, scanner, protection, context_auth, blocklist, adapters
     assert len(contract.migrations) == 2  # 0006, 0008 (per-tenant-unique, security tables)
     assert contract.health is None
 
@@ -27,13 +27,14 @@ async def test_sase_module_returns_valid_contract() -> None:
     blueprint_names = {bp.name for bp in contract.blueprints}
     assert "sase_blocklist" in blueprint_names
 
-    # Verify flags include blocklist
+    # Verify flags include blocklist and adapters
     expected_flags = {
         "tobogganing.sase.threat_feeds",
         "tobogganing.sase.scanner",
         "tobogganing.sase.protection",
         "tobogganing.sase.context_auth",
         "tobogganing.sase.blocklist",
+        "tobogganing.sase.adapters",
     }
     assert set(contract.flags) == expected_flags
 
@@ -58,6 +59,7 @@ async def test_sase_module_registered_in_app(app: Quart) -> None:
     assert "tobogganing.sase.protection" in flags
     assert "tobogganing.sase.context_auth" in flags
     assert "tobogganing.sase.blocklist" in flags
+    assert "tobogganing.sase.adapters" in flags
     # Transport flags (and cert/jwt auth) moved to sdwan/core respectively
     assert "tobogganing.sdwan.clusters" in flags
     assert "tobogganing.sdwan.clients" in flags
