@@ -16,19 +16,20 @@ async def test_sase_module_returns_valid_contract() -> None:
     contract = sase_module()
 
     assert contract.name == "sase"
-    assert len(contract.blueprints) == 2  # blocklist + swg blueprints
+    assert len(contract.blueprints) == 3  # blocklist + swg + blockpages blueprints
     assert len(contract.nav) == 1  # Security nav only
-    assert len(contract.flags) == 8  # threat_feeds, scanner, protection, context_auth, blocklist, adapters, swg, swg_ai_categorizer
-    assert len(contract.entitlements) == 8  # same set, per-entitlement
-    assert len(contract.migrations) == 4  # 0006, 0008, 0021, 0022
+    assert len(contract.flags) == 9  # +blocklist, adapters, swg, swg_ai_categorizer, blockpages
+    assert len(contract.entitlements) == 9  # same set, per-entitlement
+    assert len(contract.migrations) == 6  # 0006, 0008, 0021, 0022, 0023, 0024
     assert contract.health is None
 
-    # Verify blocklist and swg blueprints are present
+    # Verify blocklist, swg, and blockpages blueprints are present
     blueprint_names = {bp.name for bp in contract.blueprints}
     assert "sase_blocklist" in blueprint_names
     assert "sase_swg" in blueprint_names
+    assert "sase_blockpages" in blueprint_names
 
-    # Verify flags include blocklist, adapters, swg, and swg_ai_categorizer
+    # Verify flags include blocklist, adapters, swg, swg_ai_categorizer, and blockpages
     expected_flags = {
         "tobogganing.sase.threat_feeds",
         "tobogganing.sase.scanner",
@@ -38,6 +39,7 @@ async def test_sase_module_returns_valid_contract() -> None:
         "tobogganing.sase.adapters",
         "tobogganing.sase.swg",
         "tobogganing.sase.swg_ai_categorizer",  # Slice E: AI Tier-2
+        "tobogganing.sase.blockpages",  # Slice C: block pages
     }
     assert set(contract.flags) == expected_flags
 
@@ -64,6 +66,7 @@ async def test_sase_module_registered_in_app(app: Quart) -> None:
     assert "tobogganing.sase.blocklist" in flags
     assert "tobogganing.sase.adapters" in flags
     assert "tobogganing.sase.swg" in flags
+    assert "tobogganing.sase.blockpages" in flags
     # Transport flags (and cert/jwt auth) moved to sdwan/core respectively
     assert "tobogganing.sdwan.clusters" in flags
     assert "tobogganing.sdwan.clients" in flags
