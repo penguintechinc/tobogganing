@@ -24,6 +24,7 @@ scikit-learn==1.5.2
 numpy==1.26.4
 scipy==1.14.1
 joblib==1.4.2
+celery==5.4.0
 
 # Test dependencies
 pytest==8.3.4
