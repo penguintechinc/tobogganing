@@ -18,8 +18,8 @@ async def test_sase_module_returns_valid_contract() -> None:
     assert contract.name == "sase"
     assert len(contract.blueprints) == 2  # blocklist + swg blueprints
     assert len(contract.nav) == 1  # Security nav only
-    assert len(contract.flags) == 7  # threat_feeds, scanner, protection, context_auth, blocklist, adapters, swg
-    assert len(contract.entitlements) == 7  # same set, per-entitlement
+    assert len(contract.flags) == 8  # threat_feeds, scanner, protection, context_auth, blocklist, adapters, swg, swg_ai_categorizer
+    assert len(contract.entitlements) == 8  # same set, per-entitlement
     assert len(contract.migrations) == 4  # 0006, 0008, 0021, 0022
     assert contract.health is None
 
@@ -28,7 +28,7 @@ async def test_sase_module_returns_valid_contract() -> None:
     assert "sase_blocklist" in blueprint_names
     assert "sase_swg" in blueprint_names
 
-    # Verify flags include blocklist, adapters, and swg
+    # Verify flags include blocklist, adapters, swg, and swg_ai_categorizer
     expected_flags = {
         "tobogganing.sase.threat_feeds",
         "tobogganing.sase.scanner",
@@ -37,6 +37,7 @@ async def test_sase_module_returns_valid_contract() -> None:
         "tobogganing.sase.blocklist",
         "tobogganing.sase.adapters",
         "tobogganing.sase.swg",
+        "tobogganing.sase.swg_ai_categorizer",  # Slice E: AI Tier-2
     }
     assert set(contract.flags) == expected_flags
 

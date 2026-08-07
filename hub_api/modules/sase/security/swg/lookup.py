@@ -134,22 +134,51 @@ class SwgLookup:
             return None
 
     async def _enqueue_uncategorized(self, domain: str, tenant: str) -> None:
-        """Enqueue an uncategorized domain for Slice-E processing.
+        """Enqueue an uncategorized domain for Slice-E AI categorization.
 
-        This is a no-op stub in Slice B. Slice E will hook here to categorize
-        unknown domains via AI and write results back to the radix.
+        Checks feature flag and Celery availability. If both enabled, dispatches
+        a background categorize_domain task. Otherwise, no-ops gracefully.
 
         Args:
             domain: Domain to categorize.
             tenant: Tenant ID.
         """
-        # Slice B: no-op stub
-        logger.info(
-            "uncategorized_enqueue_stub",
-            domain=domain,
-            tenant=tenant,
-            message="would enqueue for Slice-E AI categorization",
-        )
+        # Check feature flag (fail-safe: if flag unavailable, no-op)
+        try:
+            from hub_api.registry import feature_enabled
+
+            if not await feature_enabled("tobogganing.sase.swg_ai_categorizer"):
+                logger.debug(
+                    "uncategorized_enqueue_flag_off",
+                    domain=domain,
+                    tenant=tenant,
+                )
+                return
+        except Exception as e:
+            logger.debug("uncategorized_enqueue_flag_check_error", error=str(e))
+            return
+
+        # Try to enqueue Celery task
+        try:
+            from hub_api.modules.sase.security.swg.tasks import categorize_domain
+
+            categorize_domain.delay(domain, tenant)
+            logger.info(
+                "uncategorized_enqueued",
+                domain=domain,
+                tenant=tenant,
+                message="dispatched to Tier-2 AI categorizer",
+            )
+        except Exception as e:
+            logger.debug(
+                "uncategorized_enqueue_failed",
+                domain=domain,
+                tenant=tenant,
+                error=str(e),
+                message="Celery unavailable; domain remains uncategorized",
+            )
+            # Fail-soft: Celery unavailable, but do NOT break the inline lookup
+            return
 
 
 async def build_radix(db: Any) -> RadixTree:

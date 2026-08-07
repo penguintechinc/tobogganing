@@ -33,6 +33,7 @@ def module() -> ModuleContract:
             "tobogganing.sase.blocklist",
             "tobogganing.sase.adapters",
             "tobogganing.sase.swg",
+            "tobogganing.sase.swg_ai_categorizer",  # Slice E: AI Tier-2 (professional)
         ],
         entitlements=[
             Entitlement("sase.threat_feeds", "community"),
@@ -42,6 +43,7 @@ def module() -> ModuleContract:
             Entitlement("sase.blocklist", "community"),
             Entitlement("sase.adapters", "community"),
             Entitlement("sase.swg", "community"),
+            Entitlement("sase.swg_ai_categorizer", "professional"),  # Slice E: AI Tier-2
         ],
         migrations=["0006", "0008", "0021", "0022"],
         health=None,
