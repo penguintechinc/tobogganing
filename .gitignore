@@ -170,3 +170,8 @@ services/hub-router/proxy/headend-proxy
 
 # Git worktrees (local development only)
 .worktrees/
+
+# Helm: packaged local sub-chart archives are a `helm dependency
+# update`/`build` output regenerated from Chart.lock — the unpacked
+# k8s/helm/*/charts/<name>/ source directories themselves stay tracked.
+k8s/helm/*/charts/*.tgz
