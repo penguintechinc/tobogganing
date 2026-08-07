@@ -5,7 +5,12 @@ from dataclasses import dataclass
 
 from quart import Blueprint, jsonify, request
 
-from hub_api.auth.middleware import require_scope, require_tenant, require_machine_jwt
+from hub_api.auth.middleware import (
+    require_scope,
+    require_tenant,
+    require_machine_jwt,
+    current_claims,
+)
 from hub_api.entitlements.gate import require_feature
 
 from hub_api.modules.sase.security.enforcement import EnforcementAction
@@ -41,6 +46,9 @@ async def lookup_domain() -> tuple[dict, int]:
     Query parameters:
         domain: Domain to look up (required).
 
+    Derives tenant, user_id, and group_ids from authenticated JWT claims only.
+    X-* headers are not trusted for authorization context.
+
     Returns:
         200 with LookupResultDTO if successful
         400 if domain parameter missing or invalid
@@ -63,11 +71,16 @@ async def lookup_domain() -> tuple[dict, int]:
         if not lookup_engine:
             return jsonify({"error": "SWG lookup not configured"}), 500
 
-        # Perform lookup
-        tenant = request.headers.get("X-Tenant-ID", "")
-        user_id = request.headers.get("X-User-ID")
-        group_ids_str = request.headers.get("X-Group-IDs", "")
-        group_ids = tuple(g.strip() for g in group_ids_str.split(",") if g.strip()) if group_ids_str else None
+        # Get authenticated claims (tenant already validated by @require_tenant)
+        claims = current_claims()
+        if not claims:
+            return jsonify({"error": "Unauthorized: no valid JWT"}), 403
+
+        tenant = claims.get("tenant")
+        user_id = claims.get("sub")  # subject from JWT
+        # Extract group_ids from claims if present
+        group_ids_from_claims = claims.get("groups")
+        group_ids = tuple(group_ids_from_claims) if isinstance(group_ids_from_claims, (list, tuple)) else None
 
         result = await lookup_engine.lookup(
             domain, tenant=tenant, user_id=user_id, group_ids=group_ids
@@ -111,7 +124,7 @@ async def get_radix_artifact() -> tuple[dict, int]:
         # Serialize the radix tree
         artifact = radix.serialize()
 
-        # Return as base64 or hex (for easy JSON transmission)
+        # Return as base64 (for easy JSON transmission)
         import base64
 
         encoded = base64.b64encode(artifact).decode("utf-8")
@@ -130,35 +143,52 @@ async def get_radix_artifact() -> tuple[dict, int]:
 
 
 @blueprint.route("/categories", methods=["POST"])
+@require_tenant
 @require_scope("sase:write")
 async def upsert_category() -> tuple[dict, int]:
-    """Upsert a custom category for a domain.
+    """Upsert a custom category for a domain (authenticated tenant only).
 
     Request body:
         {
             "domain": "example.com",
-            "category": "blocked-shopping",
-            "tenant": "acme"
+            "category": "blocked-shopping"
         }
+
+    Tenant is derived from authenticated JWT claims. Request body tenant
+    field (if present) must match the authenticated tenant or is rejected.
 
     Returns:
         200 if successful
         400 if invalid input
-        403 if unauthorized
+        403 if tenant mismatch or unauthorized
     """
     try:
         data = await request.get_json()
 
         domain = data.get("domain", "").strip()
         category = data.get("category", "").strip()
-        tenant = data.get("tenant", "").strip()
+        request_tenant = data.get("tenant", "").strip()
 
-        if not domain or not category or not tenant:
+        if not domain or not category:
             return (
                 jsonify({
-                    "error": "Missing required fields: domain, category, tenant"
+                    "error": "Missing required fields: domain, category"
                 }),
                 400,
+            )
+
+        # Get authenticated tenant (already validated by @require_tenant)
+        claims = current_claims()
+        if not claims:
+            return jsonify({"error": "Unauthorized: no valid JWT"}), 403
+
+        tenant = claims.get("tenant")
+
+        # If request includes a tenant field, it must match the authenticated tenant
+        if request_tenant and request_tenant != tenant:
+            return (
+                jsonify({"error": "Tenant mismatch: cannot write to other tenant"}),
+                403,
             )
 
         from quart import current_app
@@ -167,7 +197,7 @@ async def upsert_category() -> tuple[dict, int]:
         if not ingest_mgr:
             return jsonify({"error": "SWG ingest not configured"}), 500
 
-        # Upsert the custom category
+        # Upsert the custom category under the authenticated tenant
         await ingest_mgr.upsert_custom(domain, category, tenant=tenant)
 
         return jsonify({"status": "success", "domain": domain, "category": category}), 200
@@ -177,24 +207,25 @@ async def upsert_category() -> tuple[dict, int]:
 
 
 @blueprint.route("/policy", methods=["GET"])
+@require_tenant
 @require_scope("sase:read")
 async def get_policies() -> tuple[dict, int]:
-    """Get all category policies for a tenant.
+    """Get all category policies for authenticated tenant.
 
-    Query parameters:
-        tenant: Tenant ID (required).
+    Returns only policies for the authenticated tenant (derived from JWT claims).
 
     Returns:
-        200 with list of policies
-        400 if tenant parameter missing
+        200 with list of policies scoped to authenticated tenant
         403 if unauthorized
     """
-    tenant = request.args.get("tenant", "").strip()
-
-    if not tenant:
-        return jsonify({"error": "Missing required query parameter: tenant"}), 400
-
     try:
+        # Get authenticated tenant (already validated by @require_tenant)
+        claims = current_claims()
+        if not claims:
+            return jsonify({"error": "Unauthorized: no valid JWT"}), 403
+
+        tenant = claims.get("tenant")
+
         from quart import current_app
 
         policy_mgr = current_app.config.get("SWG_POLICY_MANAGER")
@@ -221,39 +252,56 @@ async def get_policies() -> tuple[dict, int]:
 
 
 @blueprint.route("/policy", methods=["PUT"])
+@require_tenant
 @require_scope("sase:write")
 async def set_policy() -> tuple[dict, int]:
-    """Set a category policy.
+    """Set a category policy for authenticated tenant.
 
     Request body:
         {
-            "tenant": "acme",
             "scope": "user|group|tenant",
             "scope_id": "user123" (optional),
             "category": "gambling",
             "action": "block"
         }
 
+    Tenant is derived from authenticated JWT claims. Any tenant field in
+    the request body must match the authenticated tenant or is rejected.
+
     Returns:
         200 if successful
         400 if invalid input
-        403 if unauthorized
+        403 if tenant mismatch or unauthorized
     """
     try:
         data = await request.get_json()
 
-        tenant = data.get("tenant", "").strip()
+        request_tenant = data.get("tenant", "").strip()
         scope = data.get("scope", "").strip()
         scope_id = data.get("scope_id", "").strip() or None
         category = data.get("category", "").strip()
         action = data.get("action", "").strip()
 
-        if not tenant or not scope or not category or not action:
+        if not scope or not category or not action:
             return (
                 jsonify({
-                    "error": "Missing required fields: tenant, scope, category, action"
+                    "error": "Missing required fields: scope, category, action"
                 }),
                 400,
+            )
+
+        # Get authenticated tenant (already validated by @require_tenant)
+        claims = current_claims()
+        if not claims:
+            return jsonify({"error": "Unauthorized: no valid JWT"}), 403
+
+        tenant = claims.get("tenant")
+
+        # If request includes a tenant field, it must match the authenticated tenant
+        if request_tenant and request_tenant != tenant:
+            return (
+                jsonify({"error": "Tenant mismatch: cannot write to other tenant"}),
+                403,
             )
 
         from quart import current_app
@@ -262,7 +310,7 @@ async def set_policy() -> tuple[dict, int]:
         if not policy_mgr:
             return jsonify({"error": "SWG policy manager not configured"}), 500
 
-        # Set the policy
+        # Set the policy under the authenticated tenant
         await policy_mgr.set_policy(tenant, scope, scope_id, category, action)
 
         return (
