@@ -305,13 +305,13 @@ async def create_channel() -> tuple[dict[str, Any], int]:
         # Email requires the alerts feature; webhook additionally requires
         # the Professional-tier alert_routing feature.
         if kind == "email":
-            if not feature_enabled("perftest_cluster", "alerts"):
+            if not feature_enabled("perftest.cluster", "alerts"):
                 return {"error": "Feature not enabled"}, 402
         elif kind == "webhook":
-            if not feature_enabled("perftest_cluster", "alert_routing"):
+            if not feature_enabled("perftest.cluster", "alert_routing"):
                 return {"error": "Feature not enabled"}, 402
 
-            tier = tier_of("perftest_cluster.alert_routing", current_app.registry)
+            tier = tier_of("perftest.cluster.alert_routing", current_app.registry)
             if not _is_licensed_for_tier(tier):
                 return (
                     {

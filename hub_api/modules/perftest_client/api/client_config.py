@@ -64,7 +64,7 @@ async def get_client_config() -> tuple[dict[str, Any], int]:
         device, tenant_id = auth_result
 
         # Check if the feature flag is enabled for this tenant
-        is_enabled = feature_enabled("perftest_client", "config", distinct_id=tenant_id)
+        is_enabled = feature_enabled("perftest.client", "config", distinct_id=tenant_id)
 
         if not is_enabled:
             logger.warning(

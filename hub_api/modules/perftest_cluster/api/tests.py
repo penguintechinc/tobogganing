@@ -354,7 +354,7 @@ async def record_result(test_id: str) -> tuple[dict[str, Any], int]:
         try:
             from hub_api.entitlements.gate import feature_enabled
 
-            if feature_enabled("perftest_cluster", "alerts"):
+            if feature_enabled("perftest.cluster", "alerts"):
                 from hub_api.modules.perftest_cluster.services.alert_evaluator import (
                     AlertEvaluator,
                 )

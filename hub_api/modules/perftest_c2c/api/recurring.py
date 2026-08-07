@@ -60,7 +60,7 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
 
         # node_health requires the regions feature
         if job_type == "node_health":
-            is_regions_enabled = feature_enabled("perftest_c2c", "regions")
+            is_regions_enabled = feature_enabled("perftest.c2c", "regions")
             if not is_regions_enabled:
                 return {
                     "error": "Feature not available",
