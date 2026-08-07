@@ -154,15 +154,15 @@ async def create_page() -> tuple[dict, int]:
             return jsonify({"error": "Unauthorized"}), 403
 
         tenant = claims.get("tenant")
-        body_tenant = request.json.get("tenant") if request.json else None
+        data = await request.get_json() or {}
+        body_tenant = data.get("tenant")
 
         # Cross-tenant check: body tenant must match or be absent
         if body_tenant and body_tenant != tenant:
             return jsonify({"error": "Tenant mismatch"}), 403
 
-        data = await request.get_json()
-        name = data.get("name", "").strip()
-        markdown = data.get("markdown", "").strip()
+        name = (data.get("name") or "").strip()
+        markdown = (data.get("markdown") or "").strip()
 
         if not name or not markdown:
             return jsonify({"error": "Missing required fields: name, markdown"}), 400
@@ -223,8 +223,8 @@ async def update_page(page_id: str) -> tuple[dict, int]:
             return jsonify({"error": "Unauthorized"}), 403
 
         tenant = claims.get("tenant")
-        data = await request.get_json()
-        markdown = data.get("markdown", "").strip()
+        data = await request.get_json() or {}
+        markdown = (data.get("markdown") or "").strip()
 
         if not markdown:
             return jsonify({"error": "Missing markdown"}), 400
@@ -456,8 +456,8 @@ async def upsert_routes() -> tuple[dict, int]:
             return jsonify({"error": "Unauthorized"}), 403
 
         tenant = claims.get("tenant")
-        data = await request.get_json()
-        routes_data = data.get("routes", []) if data else []
+        data = await request.get_json() or {}
+        routes_data = data.get("routes", [])
 
         if not isinstance(routes_data, list):
             return jsonify({"error": "routes must be a list"}), 400
