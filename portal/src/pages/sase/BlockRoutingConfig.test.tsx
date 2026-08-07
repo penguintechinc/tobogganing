@@ -149,7 +149,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.click(addButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Add Route')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
       expect(screen.getByPlaceholderText('e.g., web-category:gambling')).toBeInTheDocument();
     });
   });
@@ -175,7 +175,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.click(screen.getByLabelText('Add new route'));
 
     await waitFor(() => {
-      expect(screen.getByText('Add Route')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
     });
 
     // Fill in source type
@@ -184,7 +184,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.change(sourceInputs[0]!, { target: { value: 'custom-rule:phishing' } });
 
     // Page is already selected by default
-    const saveButton = screen.getByText('Save');
+    const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -199,7 +199,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.click(screen.getByLabelText('Add new route'));
 
     await waitFor(() => {
-      expect(screen.getByText('Add Route')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
     });
 
     // Fill in source type
@@ -221,7 +221,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.change(urlInputs[0]!, { target: { value: 'https://external-block.example.com' } });
 
     // Save
-    const saveButton = screen.getByText('Save');
+    const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -236,7 +236,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.click(screen.getByLabelText('Add new route'));
 
     await waitFor(() => {
-      expect(screen.getByText('Add Route')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
     });
 
     // Fill in source type
@@ -262,7 +262,7 @@ describe('BlockRoutingConfig', () => {
     fireEvent.change(riskSelect[0]!, { target: { value: 'high' } });
 
     // Save
-    const saveButton = screen.getByText('Save');
+    const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -283,11 +283,11 @@ describe('BlockRoutingConfig', () => {
     fireEvent.click(screen.getByLabelText('Add new route'));
 
     await waitFor(() => {
-      expect(screen.getByText('Add Route')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
     });
 
     // Try to save without source type
-    const saveButton = screen.getByText('Save');
+    const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {

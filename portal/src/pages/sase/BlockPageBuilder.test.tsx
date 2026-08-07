@@ -4,6 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BlockPageBuilder } from './BlockPageBuilder';
 import * as saseApi from '../../api/sase';
 
+// Mock react-markdown to avoid ESM transform issues
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="markdown-preview">{children}</div>
+  ),
+}));
+
 // Mock the API
 jest.mock('../../api/sase');
 const mockedSaseApi = saseApi as jest.Mocked<typeof saseApi>;
