@@ -119,7 +119,7 @@ describe('RunsPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByPlaceholderText('latency, throughput')
+        screen.getByPlaceholderText('http, tcp, udp, icmp')
       ).toBeInTheDocument();
     });
 
@@ -128,7 +128,7 @@ describe('RunsPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByPlaceholderText('latency, throughput')
+        screen.queryByPlaceholderText('http, tcp, udp, icmp')
       ).not.toBeInTheDocument();
     });
   });
@@ -144,7 +144,7 @@ describe('RunsPage', () => {
     const createButton = screen.getByText('Create Run');
     await userEvent.click(createButton);
 
-    const testTypesInput = screen.getByPlaceholderText('latency, throughput');
+    const testTypesInput = screen.getByPlaceholderText('http, tcp, udp, icmp');
     const submitButton = screen.getByRole('button', { name: /Create/ });
 
     await userEvent.clear(testTypesInput);

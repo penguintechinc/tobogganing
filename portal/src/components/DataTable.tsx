@@ -153,7 +153,7 @@ export function DataTable<T extends { id?: string }>({
               >
                 {columns.map((col) => (
                   <td
-                    key={String(col.key)}
+                    key={`${row.id || idx}-${String(col.key)}`}
                     className="px-4 py-3 text-slate-200"
                   >
                     {col.render
