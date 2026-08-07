@@ -267,8 +267,7 @@ class CategoryIngestManager:
 
             if all_categories:
                 # Write to cache: sase:catcache:<domain> = JSON array
-                cache_key = f"sase:catcache:{domain}"
                 cache_value = json.dumps(sorted(list(all_categories)))
-                await self.cache.set(cache_key, cache_value, ttl=86400)  # 24hr TTL
+                await self.cache.set("sase:catcache", domain, value=cache_value, ttl_seconds=86400)  # 24hr TTL
         except Exception as e:
             logger.debug("write_cache_failed", domain=domain, error=str(e))

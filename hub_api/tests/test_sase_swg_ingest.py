@@ -1,9 +1,12 @@
 """Tests for SASE SWG category ingestion."""
 from __future__ import annotations
 
+import json
 import pytest
 
 from hub_api.modules.sase.security.swg.ingest import CategoryIngestManager, IngestStats
+from hub_api.cache.client import CacheClient
+from unittest.mock import MagicMock, AsyncMock
 
 
 class SimpleSource:
@@ -65,3 +68,35 @@ def test_malformed_line_skipped_without_crash() -> None:
 
     assert stats.skipped >= 1
     assert stats.stored >= 1
+
+
+@pytest.mark.asyncio
+async def test_catcache_write_with_real_client() -> None:
+    """Test category ingestion cache write using real CacheClient.
+
+    regression: swg catcache CacheClient signature (namespace-guard) — MagicMock hid the mismatch
+    """
+    # Mock DB with domain_categories table
+    db = MagicMock()
+    db.domain_categories.select = AsyncMock(return_value=[
+        MagicMock(categories=json.dumps(["malware", "phishing"])),
+        MagicMock(categories=json.dumps(["malware"])),
+    ])
+
+    # Use real CacheClient with unreachable port → in-memory fallback
+    cache = CacheClient(host="127.0.0.1", port=6399, db=0)
+
+    ingest = CategoryIngestManager(db, cache)
+
+    # Write cache for a domain
+    test_domain = "testdomain.com"
+    await ingest._write_cache(test_domain)
+
+    # Verify cache was written with correct signature
+    cached_value = await cache.get("sase:catcache", test_domain)
+    assert cached_value is not None
+
+    # Verify cached value contains the merged categories
+    categories = json.loads(cached_value)
+    assert "malware" in categories
+    assert "phishing" in categories
