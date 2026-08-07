@@ -120,8 +120,7 @@ class SwgLookup:
             Tuple of categories, or None.
         """
         try:
-            cache_key = f"sase:catcache:{domain}"
-            cached_value = await self.cache.get(cache_key)
+            cached_value = await self.cache.get("sase:catcache", domain, fail_closed=False)
 
             if cached_value:
                 try:

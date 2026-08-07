@@ -1,12 +1,14 @@
 """Tests for SASE SWG domain lookup and enforcement action resolution."""
 from __future__ import annotations
 
+import json
 import pytest
 
 from hub_api.modules.sase.security.enforcement import EnforcementAction
 from hub_api.modules.sase.security.swg.lookup import SwgLookup
 from hub_api.modules.sase.security.swg.radix import RadixTree
 from hub_api.modules.sase.security.swg.policy import CategoryPolicyManager
+from hub_api.cache.client import CacheClient
 from unittest.mock import MagicMock, AsyncMock
 
 
@@ -91,3 +93,38 @@ def test_radix_to_lookup_flow() -> None:
 
     result = radix.lookup("a.shop.com")
     assert result == ("shopping",)
+
+
+@pytest.mark.asyncio
+async def test_lookup_catcache_hit_with_real_client() -> None:
+    """Test lookup cache hit using real CacheClient with fallback.
+
+    regression: swg catcache CacheClient signature (namespace-guard) — MagicMock hid the mismatch
+    """
+    radix = RadixTree()  # Empty radix, will fall through to cache
+
+    policy_mgr = MagicMock(spec=CategoryPolicyManager)
+    policy_mgr.resolve = AsyncMock(
+        return_value=(EnforcementAction.block, "tenant")
+    )
+
+    # Use real CacheClient with unreachable port → in-memory fallback
+    cache = CacheClient(host="127.0.0.1", port=6399, db=0)
+
+    # Pre-populate cache with categories
+    test_domain = "cached-example.com"
+    test_categories = ["malware", "phishing"]
+    cache_value = json.dumps(test_categories)
+    await cache.set("sase:catcache", test_domain, value=cache_value, ttl_seconds=3600)
+
+    lookup = SwgLookup(radix, policy_mgr, cache)
+
+    # Lookup should hit the cache
+    result = await lookup.lookup(test_domain, tenant="acme", user_id="user1")
+
+    # Verify cache hit returned the categories
+    assert result.domain == test_domain
+    assert set(result.categories) == set(test_categories)
+    assert result.action == EnforcementAction.block
+    assert result.matched_scope == "tenant"
+    assert not result.uncategorized
