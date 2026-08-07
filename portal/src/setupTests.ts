@@ -1,5 +1,11 @@
 import '@testing-library/jest-dom';
 
+// Mock react-markdown to avoid ESM parsing issues in Jest
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 // Mock sessionStorage
 const sessionStorageMock: Record<string, string> = {};
 
