@@ -21,7 +21,7 @@ blueprint = Blueprint("c2c_recurring", __name__, url_prefix="/recurring")
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "recurring_runs")
+@require_feature("perftest.c2c", "recurring_runs")
 async def create_recurring() -> tuple[dict[str, Any], int]:
     """Create a new recurring matrix run or node health job.
 
@@ -153,7 +153,7 @@ async def create_recurring() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "recurring_runs")
+@require_feature("perftest.c2c", "recurring_runs")
 async def list_recurring() -> tuple[dict[str, Any], int]:
     """List recurring jobs (matrix_run and node_health) for the tenant.
 
@@ -201,7 +201,7 @@ async def list_recurring() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<job_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "recurring_runs")
+@require_feature("perftest.c2c", "recurring_runs")
 async def delete_recurring(job_id: str) -> tuple[dict[str, Any], int]:
     """Delete a recurring job.
 
@@ -246,7 +246,7 @@ async def delete_recurring(job_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<job_id>", methods=["PATCH"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "recurring_runs")
+@require_feature("perftest.c2c", "recurring_runs")
 async def patch_recurring(job_id: str) -> tuple[dict[str, Any], int]:
     """Toggle enabled status of a recurring job.
 

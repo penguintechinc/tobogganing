@@ -92,7 +92,7 @@ async def test_policies_api_flag_off_returns_402(autoperf_app) -> None:
 @pytest.mark.asyncio
 async def test_policies_api_licensed_crud_roundtrip(autoperf_app, monkeypatch) -> None:
     """Licensed Professional tier: create, list, and delete a policy over HTTP."""
-    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest.cluster.autoperf")
     import hub_api.entitlements.gate as gate_module
 
     monkeypatch.setattr(gate_module, "_is_licensed_for_tier", lambda tier: True)
@@ -158,7 +158,7 @@ async def test_policies_api_unlicensed_402_professional(autoperf_app) -> None:
     the professional tier path. Fails if the entitlement key were prefixed
     (tier would fall back to community and the paid gate would silently pass).
     """
-    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest.cluster.autoperf")
     token = await _autoperf_token(autoperf_app)
     client = autoperf_app.test_client()
     resp = await client.post(
@@ -178,7 +178,7 @@ async def test_policies_api_unlicensed_402_professional(autoperf_app) -> None:
 @pytest.mark.asyncio
 async def test_policies_api_licensed_201(autoperf_app, monkeypatch: pytest.MonkeyPatch) -> None:
     """Licensed Professional tier: policy create works."""
-    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest.cluster.autoperf")
     import hub_api.entitlements.gate as gate_module
 
     monkeypatch.setattr(gate_module, "_is_licensed_for_tier", lambda tier: True)
@@ -201,7 +201,7 @@ async def test_policies_api_licensed_201(autoperf_app, monkeypatch: pytest.Monke
 @pytest.mark.asyncio
 async def test_policy_creation_validation(autoperf_app, monkeypatch) -> None:
     """Test policy creation validation: bad intervals."""
-    autoperf_app._test_enabled_flags.add("tobogganing.perftest_cluster.autoperf")
+    autoperf_app._test_enabled_flags.add("tobogganing.perftest.cluster.autoperf")
     import hub_api.entitlements.gate as gate_module
 
     monkeypatch.setattr(gate_module, "_is_licensed_for_tier", lambda tier: True)

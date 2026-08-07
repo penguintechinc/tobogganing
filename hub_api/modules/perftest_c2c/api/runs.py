@@ -24,7 +24,7 @@ blueprint = Blueprint("c2c_runs", __name__, url_prefix="/runs")
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "runs")
+@require_feature("perftest.c2c", "runs")
 async def create_run() -> tuple[dict[str, Any], int]:
     """Create and enqueue a new matrix run.
 
@@ -126,7 +126,7 @@ async def create_run() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "runs")
+@require_feature("perftest.c2c", "runs")
 async def list_runs() -> tuple[dict[str, Any], int]:
     """List matrix runs for the tenant.
 
@@ -169,7 +169,7 @@ async def list_runs() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<run_id>", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "runs")
+@require_feature("perftest.c2c", "runs")
 async def get_run(run_id: str) -> tuple[dict[str, Any], int]:
     """Get run status and progress.
 

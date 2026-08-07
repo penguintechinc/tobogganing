@@ -20,7 +20,7 @@ blueprint = Blueprint("wpc_org_units", __name__, url_prefix="/org-units")
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("org_units:write")
-@require_feature("perftest_cluster", "org_units")
+@require_feature("perftest.cluster", "org_units")
 async def create_org_unit() -> tuple[dict[str, Any], int]:
     """Create a new organizational unit.
 
@@ -92,7 +92,7 @@ async def create_org_unit() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("org_units:read")
-@require_feature("perftest_cluster", "org_units")
+@require_feature("perftest.cluster", "org_units")
 async def list_org_units() -> tuple[dict[str, Any], int]:
     """List all organizational units for the tenant.
 
@@ -163,7 +163,7 @@ async def list_org_units() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<ou_id>", methods=["GET"])
 @require_tenant
 @require_scope("org_units:read")
-@require_feature("perftest_cluster", "org_units")
+@require_feature("perftest.cluster", "org_units")
 async def get_org_unit(ou_id: str) -> tuple[dict[str, Any], int]:
     """Get organizational unit details.
 
@@ -224,7 +224,7 @@ async def get_org_unit(ou_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<ou_id>", methods=["PUT"])
 @require_tenant
 @require_scope("org_units:write")
-@require_feature("perftest_cluster", "org_units")
+@require_feature("perftest.cluster", "org_units")
 async def update_org_unit(ou_id: str) -> tuple[dict[str, Any], int]:
     """Update organizational unit.
 
@@ -295,7 +295,7 @@ async def update_org_unit(ou_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<ou_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("org_units:write")
-@require_feature("perftest_cluster", "org_units")
+@require_feature("perftest.cluster", "org_units")
 async def delete_org_unit(ou_id: str) -> tuple[dict[str, Any], int]:
     """Delete organizational unit.
 

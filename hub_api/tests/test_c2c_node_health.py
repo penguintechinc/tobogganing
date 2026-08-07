@@ -67,7 +67,7 @@ async def test_recurring_job_type_matrix_run_default(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -116,9 +116,9 @@ async def test_recurring_job_type_node_health_requires_regions_flag(
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
         # Enable recurring_runs but NOT regions
-        if flag_key == "tobogganing.perftest_c2c.recurring_runs":
+        if flag_key == "tobogganing.perftest.c2c.recurring_runs":
             return True
-        if flag_key == "tobogganing.perftest_c2c.regions":
+        if flag_key == "tobogganing.perftest.c2c.regions":
             return False
         return original_flag_on(flag_key, distinct_id)
 
@@ -156,7 +156,7 @@ async def test_recurring_job_type_invalid_value(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -194,7 +194,7 @@ async def test_recurring_job_type_node_health_with_regions_flag(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 

@@ -396,7 +396,7 @@ async def test_regions_api_flag_off_returns_402(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key == "tobogganing.perftest_c2c.regions":
+        if flag_key == "tobogganing.perftest.c2c.regions":
             return False
         return original_flag_on(flag_key, distinct_id)
 

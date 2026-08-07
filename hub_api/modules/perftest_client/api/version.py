@@ -17,7 +17,7 @@ blueprint = Blueprint("wpcl_version", __name__, url_prefix="/version")
 
 @blueprint.route("", methods=["GET"])
 @require_tenant
-@require_feature("perftest_client", "version")
+@require_feature("perftest.client", "version")
 async def get_version() -> tuple[dict[str, Any], int]:
     """Get the latest WaddlePerf client version information.
 

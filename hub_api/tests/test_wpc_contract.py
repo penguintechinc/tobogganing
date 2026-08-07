@@ -19,13 +19,13 @@ async def test_wpc_module_registered(app_with_wpc: Quart) -> None:
 
     # Check all declared flags are present
     flags = registry.declared_flags()
-    assert "tobogganing.perftest_cluster.org_units" in flags
-    assert "tobogganing.perftest_cluster.devices" in flags
-    assert "tobogganing.perftest_cluster.enrollment" in flags
-    assert "tobogganing.perftest_cluster.tests" in flags
-    assert "tobogganing.perftest_cluster.stats" in flags
-    assert "tobogganing.perftest_cluster.live_test" in flags
-    assert "tobogganing.perftest_cluster.large_fleet" in flags
+    assert "tobogganing.perftest.cluster.org_units" in flags
+    assert "tobogganing.perftest.cluster.devices" in flags
+    assert "tobogganing.perftest.cluster.enrollment" in flags
+    assert "tobogganing.perftest.cluster.tests" in flags
+    assert "tobogganing.perftest.cluster.stats" in flags
+    assert "tobogganing.perftest.cluster.live_test" in flags
+    assert "tobogganing.perftest.cluster.large_fleet" in flags
 
 
 @pytest.mark.asyncio
@@ -78,7 +78,7 @@ async def test_wpc_feature_flags_default_off() -> None:
     ]
 
     for flag in expected_flags:
-        assert flag in flag_names, f"Flag 'tobogganing.perftest_cluster.{flag}' not declared"
+        assert flag in flag_names, f"Flag 'tobogganing.perftest.cluster.{flag}' not declared"
 
 
 @pytest.mark.asyncio
@@ -91,16 +91,16 @@ async def test_wpc_entitlements_configured(app_with_wpc: Quart) -> None:
     registry = app_with_wpc.registry
 
     # Check community tier entitlements
-    org_units_ent = registry.entitlement_for("perftest_cluster.org_units")
+    org_units_ent = registry.entitlement_for("perftest.cluster.org_units")
     assert org_units_ent is not None
     assert org_units_ent.tier == "community"
 
-    devices_ent = registry.entitlement_for("perftest_cluster.devices")
+    devices_ent = registry.entitlement_for("perftest.cluster.devices")
     assert devices_ent is not None
     assert devices_ent.tier == "community"
 
     # Check professional tier entitlements
-    large_fleet_ent = registry.entitlement_for("perftest_cluster.large_fleet")
+    large_fleet_ent = registry.entitlement_for("perftest.cluster.large_fleet")
     assert large_fleet_ent is not None
     assert large_fleet_ent.tier == "professional"
 

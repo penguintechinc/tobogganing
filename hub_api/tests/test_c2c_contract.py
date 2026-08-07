@@ -29,14 +29,14 @@ def test_c2c_registered_in_module_autodiscovery() -> None:
 def test_contract_entitlements_are_professional() -> None:
     """Every c2c feature entitlement is keyed '{module}.{feature}' at Professional tier.
 
-    Regression guard: the gate looks up entitlements by ``perftest_c2c.<feature>``
+    Regression guard: the gate looks up entitlements by ``perftest.c2c.<feature>``
     (no ``tobogganing.`` prefix). A prefixed key misses the registry and
     ``tier_of`` falls back to community, silently defeating the paid gate.
     """
     contract = c2c_module()
     keys = {e.feature: e.tier.lower() for e in contract.entitlements}
     for feature in C2C_FEATURES:
-        key = f"perftest_c2c.{feature}"
+        key = f"perftest.c2c.{feature}"
         assert key in keys, f"missing entitlement {key}; got {sorted(keys)}"
         assert keys[key] == "professional", f"{key} must be professional"
 
@@ -45,7 +45,7 @@ def test_contract_flags_and_migrations() -> None:
     """Flags carry the tobogganing prefix; migrations reference 0014/0015."""
     contract = c2c_module()
     for feature in C2C_FEATURES:
-        assert f"tobogganing.perftest_c2c.{feature}" in contract.flags
+        assert f"tobogganing.perftest.c2c.{feature}" in contract.flags
     assert contract.migrations == ["0014", "0015", "0020"]
 
 
@@ -53,7 +53,7 @@ def test_tier_of_resolves_professional_via_registry(app_with_c2c: Quart) -> None
     """The registry resolves each c2c feature to the professional tier."""
     registry = app_with_c2c.registry
     for feature in C2C_FEATURES:
-        assert tier_of(f"perftest_c2c.{feature}", registry) == "professional"
+        assert tier_of(f"perftest.c2c.{feature}", registry) == "professional"
 
 
 def test_c2c_blueprints_mounted(app_with_c2c: Quart) -> None:
@@ -87,7 +87,7 @@ async def test_unlicensed_professional_request_returns_402(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 

@@ -431,7 +431,7 @@ async def live_test_stream() -> None:
 @blueprint.route("/run", methods=["POST"])
 @require_tenant
 @require_scope("tests:write")
-@require_feature("perftest_cluster", "live_test")
+@require_feature("perftest.cluster", "live_test")
 async def run_test_sync() -> tuple[dict[str, Any], int]:
     """Synchronous HTTP endpoint to run a single test.
 

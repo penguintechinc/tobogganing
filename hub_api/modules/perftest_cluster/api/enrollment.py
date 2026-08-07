@@ -21,7 +21,7 @@ blueprint = Blueprint("wpc_enrollment", __name__, url_prefix="/enrollment")
 @blueprint.route("/secrets", methods=["GET"])
 @require_tenant
 @require_scope("enrollment:read")
-@require_feature("perftest_cluster", "enrollment")
+@require_feature("perftest.cluster", "enrollment")
 async def list_secrets() -> tuple[dict[str, Any], int]:
     """List enrollment secrets for the tenant.
 
@@ -79,7 +79,7 @@ async def list_secrets() -> tuple[dict[str, Any], int]:
 @blueprint.route("/secrets/<org_unit_id>", methods=["POST"])
 @require_tenant
 @require_scope("enrollment:write")
-@require_feature("perftest_cluster", "enrollment")
+@require_feature("perftest.cluster", "enrollment")
 async def create_secret(org_unit_id: str) -> tuple[dict[str, Any], int]:
     """Create an enrollment secret for an organizational unit.
 
@@ -151,7 +151,7 @@ async def create_secret(org_unit_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/secrets/<secret_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("enrollment:write")
-@require_feature("perftest_cluster", "enrollment")
+@require_feature("perftest.cluster", "enrollment")
 async def delete_secret(secret_id: str) -> tuple[dict[str, Any], int]:
     """Delete an enrollment secret.
 
@@ -202,7 +202,7 @@ async def delete_secret(secret_id: str) -> tuple[dict[str, Any], int]:
 
 
 @blueprint.route("/enroll", methods=["POST"])
-@require_feature("perftest_cluster", "enrollment")
+@require_feature("perftest.cluster", "enrollment")
 async def enroll_device() -> tuple[dict[str, Any], int]:
     """Enroll a device using a secret.
 

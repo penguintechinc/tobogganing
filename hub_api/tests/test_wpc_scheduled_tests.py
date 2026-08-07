@@ -60,8 +60,8 @@ async def app_with_wpc_st(
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
         if flag_key.startswith(
-            "tobogganing.perftest_cluster."
-        ) or flag_key.startswith("tobogganing.perftest_client."):
+            "tobogganing.perftest.cluster."
+        ) or flag_key.startswith("tobogganing.perftest.client."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -150,7 +150,7 @@ async def test_scheduled_tests_flag_off(
 
     # Mock flag to return False for scheduled_tests
     def mock_flag_off(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key == "tobogganing.perftest_cluster.scheduled_tests":
+        if flag_key == "tobogganing.perftest.cluster.scheduled_tests":
             return False
         return True
 

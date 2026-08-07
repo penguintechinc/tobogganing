@@ -16,9 +16,9 @@ async def test_wpcl_module_registered(app_with_wpc: Quart) -> None:
     assert registry is not None
 
     flags = registry.declared_flags()
-    assert "tobogganing.perftest_client.schedules" in flags
-    assert "tobogganing.perftest_client.config" in flags
-    assert "tobogganing.perftest_client.version" in flags
+    assert "tobogganing.perftest.client.schedules" in flags
+    assert "tobogganing.perftest.client.config" in flags
+    assert "tobogganing.perftest.client.version" in flags
 
 
 @pytest.mark.asyncio

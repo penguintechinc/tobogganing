@@ -650,7 +650,7 @@ async def test_rules_api_flag_off_returns_402(alerts_app) -> None:
 @pytest.mark.asyncio
 async def test_rules_api_crud_roundtrip(alerts_app) -> None:
     """Flag on (Community tier): create, list, and delete a rule over HTTP."""
-    alerts_app._test_enabled_flags.add("tobogganing.perftest_cluster.alerts")
+    alerts_app._test_enabled_flags.add("tobogganing.perftest.cluster.alerts")
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     headers = {"Authorization": f"Bearer {token}"}
@@ -678,7 +678,7 @@ async def test_rules_api_crud_roundtrip(alerts_app) -> None:
 @pytest.mark.asyncio
 async def test_email_channel_requires_only_alerts_flag(alerts_app) -> None:
     """Email channels are Community: alerts flag alone is enough for 201."""
-    alerts_app._test_enabled_flags.add("tobogganing.perftest_cluster.alerts")
+    alerts_app._test_enabled_flags.add("tobogganing.perftest.cluster.alerts")
     token = await _alerts_token(alerts_app)
     client = alerts_app.test_client()
     resp = await client.post(
@@ -697,8 +697,8 @@ async def test_webhook_channel_unlicensed_402_professional(alerts_app) -> None:
     """
     alerts_app._test_enabled_flags.update(
         {
-            "tobogganing.perftest_cluster.alerts",
-            "tobogganing.perftest_cluster.alert_routing",
+            "tobogganing.perftest.cluster.alerts",
+            "tobogganing.perftest.cluster.alert_routing",
         }
     )
     token = await _alerts_token(alerts_app)
@@ -724,8 +724,8 @@ async def test_webhook_channel_licensed_201_redacts_secret(
     """Licensed Professional tier: webhook channel creates and redacts secret."""
     alerts_app._test_enabled_flags.update(
         {
-            "tobogganing.perftest_cluster.alerts",
-            "tobogganing.perftest_cluster.alert_routing",
+            "tobogganing.perftest.cluster.alerts",
+            "tobogganing.perftest.cluster.alert_routing",
         }
     )
     import hub_api.modules.perftest_cluster.api.alerts as alerts_api

@@ -22,7 +22,7 @@ alerts_bp = Blueprint("wpc_alerts", __name__, url_prefix="/alerts")
 @alerts_bp.route("/rules", methods=["POST"])
 @require_tenant
 @require_scope("alerts:write")
-@require_feature("perftest_cluster", "alerts")
+@require_feature("perftest.cluster", "alerts")
 async def create_rule() -> tuple[dict[str, Any], int]:
     """Create an alert rule.
 
@@ -128,7 +128,7 @@ async def create_rule() -> tuple[dict[str, Any], int]:
 @alerts_bp.route("/rules", methods=["GET"])
 @require_tenant
 @require_scope("alerts:read")
-@require_feature("perftest_cluster", "alerts")
+@require_feature("perftest.cluster", "alerts")
 async def list_rules() -> tuple[dict[str, Any], int]:
     """List alert rules for the tenant.
 
@@ -182,7 +182,7 @@ async def list_rules() -> tuple[dict[str, Any], int]:
 @alerts_bp.route("/rules/<rule_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("alerts:write")
-@require_feature("perftest_cluster", "alerts")
+@require_feature("perftest.cluster", "alerts")
 async def delete_rule(rule_id: str) -> tuple[dict[str, Any], int]:
     """Delete an alert rule.
 
@@ -221,7 +221,7 @@ async def delete_rule(rule_id: str) -> tuple[dict[str, Any], int]:
 @alerts_bp.route("/events", methods=["GET"])
 @require_tenant
 @require_scope("alerts:read")
-@require_feature("perftest_cluster", "alerts")
+@require_feature("perftest.cluster", "alerts")
 async def list_events() -> tuple[dict[str, Any], int]:
     """List recent alert events for the tenant.
 

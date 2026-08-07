@@ -24,7 +24,7 @@ blueprint = Blueprint("c2c_matrix", __name__, url_prefix="/matrix")
 @blueprint.route("/latest", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "matrix")
+@require_feature("perftest.c2c", "matrix")
 async def get_latest_matrix() -> tuple[dict[str, Any], int]:
     """Get the latest NxN region matrix for a test type.
 
@@ -82,7 +82,7 @@ async def get_latest_matrix() -> tuple[dict[str, Any], int]:
 @blueprint.route("/runs/<run_id>", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "matrix")
+@require_feature("perftest.c2c", "matrix")
 async def get_run_matrix(run_id: str) -> tuple[dict[str, Any], int]:
     """Get the region matrix for a specific run.
 
@@ -144,7 +144,7 @@ async def get_run_matrix(run_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/trends", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "matrix")
+@require_feature("perftest.c2c", "matrix")
 async def get_trends() -> tuple[dict[str, Any], int]:
     """Get trends for a region pair and test type.
 

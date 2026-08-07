@@ -20,7 +20,7 @@ blueprint = Blueprint("c2c_regions", __name__, url_prefix="/regions")
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "regions")
+@require_feature("perftest.c2c", "regions")
 async def list_regions() -> tuple[dict[str, Any], int]:
     """List region aggregates with node counts and health summaries.
 
@@ -63,7 +63,7 @@ async def list_regions() -> tuple[dict[str, Any], int]:
 @blueprint.route("/nodes", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "regions")
+@require_feature("perftest.c2c", "regions")
 async def list_nodes() -> tuple[dict[str, Any], int]:
     """List visible endpoints (own + foreign public, optionally filtered by region).
 
