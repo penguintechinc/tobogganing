@@ -209,3 +209,132 @@ config:
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
   dbType: "sqlite"
+
+## ---------------------------------------------------------------------
+## Optional out-of-band analysis tools (SASE Slice D adapters)
+## ---------------------------------------------------------------------
+## Suricata, Zeek, Arkime, Strelka, and CAPE ship as OFF-BY-DEFAULT Helm
+## sub-charts (see Chart.yaml `dependencies:` + `charts/<tool>/`). The
+## baseline product deploys without any of them.
+##
+## Enabling a tool here (`<tool>.enabled: true`) only deploys its pod +
+## Service. To actually turn on detection you must ALSO:
+##   1. Enable the community-tier flag `tobogganing.sase.adapters`
+##      (hub_api sase module contract — Entitlement("sase.adapters",
+##      "community"), default OFF).
+##   2. Configure hub-api's adapter poller to reach the tool via the
+##      {SOURCE}_ENABLED / {SOURCE}_ENDPOINT / {SOURCE}_LOG_PATH env vars
+##      read by hub_api/modules/sase/security/adapters/config.py
+##      (source = suricata|zeek|strelka|cape|arkime), pointed at the
+##      endpoint/logPath values configured below for each tool.
+## See k8s/helm/tobogganing/charts/README.md for the full
+## mirror -> tool -> adapter -> blocklist flow and known integration gaps.
+
+## Suricata IDS — the one tool hub-router's Go mirror already wires a raw
+## TCP feed to (mirror.suricata_host/mirror.suricata_port, default port
+## 9999 — services/hub-router/proxy/bootstrap.go).
+suricata:
+  enabled: false
+  image:
+    repository: jasonish/suricata
+    tag: "7.0.7"
+    digest: "sha256:b76d6bc42a572757d01b9289f1da250c6414ae69183505f694f75cd14025129f"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  mirror:
+    port: 9999
+  eve:
+    logPath: /var/log/suricata/eve.json
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## Zeek network security monitor — log-based in this deployment (no live
+## mirror wiring yet; only Suricata has that today). Establishes the
+## deployable pattern for when a traffic source is added.
+zeek:
+  enabled: false
+  image:
+    repository: zeek/zeek
+    tag: "6.2.1"
+    digest: "sha256:825d7f338cb539fa0e937cab5a68a4859e696cdc851dc06428a3961e6bb16014"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  notice:
+    logPath: /usr/local/zeek/logs/current/notice.log
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## Arkime full-packet-capture/session viewer. No maintained public image
+## with verifiable provenance was found for this tool (checked Docker Hub
+## + GHCR) — the sub-chart ships as a stub with NO default image; set
+## arkime.image.* before enabling. See charts/arkime/values.yaml.
+arkime:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  viewer:
+    port: 8005
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## Strelka file-scanning/YARA pipeline (Target's target/strelka-frontend —
+## the gRPC-facing component a poller submits scans to).
+strelka:
+  enabled: false
+  image:
+    repository: target/strelka-frontend
+    tag: "1.0.1"
+    digest: "sha256:5a713323733240c2028a49e01a008d35aeb955239b75e11d8cb86300369ab524"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  frontend:
+    port: 57314
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## CAPE sandbox. No safe generic container image exists upstream — CAPE's
+## architecture requires a hypervisor (VirtualBox/KVM) to detonate
+## samples, which is out of scope for a single stub pod. Ships with NO
+## default image; set cape.image.* (and provision the sandbox hosts
+## separately) before enabling. See charts/cape/values.yaml.
+cape:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  api:
+    port: 8000
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"

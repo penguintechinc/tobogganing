@@ -1,0 +1,62 @@
+## CAPE sandbox verdict API — out-of-band analysis tool for SASE Slice D
+## adapters. Deployed OFF by default (parent Chart.yaml: condition
+## cape.enabled).
+##
+## No safe generic container image exists upstream: CAPE's architecture
+## requires a hypervisor (VirtualBox/KVM) to detonate samples in guest
+## VMs, which a single stub pod cannot provide and which is out of scope
+## for this chart. This sub-chart ships with NO default image — it only
+## deploys the REST API front-end container once you supply one backed by
+## your own sandbox-host infrastructure. Set image.repository/tag/digest
+## before setting enabled: true — the Deployment template fails the
+## render otherwise.
+enabled: false
+
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+## CAPE's REST API default port (inherited from the Cuckoo lineage). The
+## CapeAdapter poller (hub_api/modules/sase/security/adapters/config.py:
+## CAPE_ENDPOINT) reads verdicts from this endpoint.
+api:
+  port: 8000
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3

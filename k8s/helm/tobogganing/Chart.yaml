@@ -4,3 +4,31 @@ description: Tobogganing - Zero Trust SASE Platform
 type: application
 version: 2.0.0
 appVersion: "2.0.0"
+
+## Optional, off-by-default out-of-band analysis-tool sub-charts (Slice D
+## adapters — see docs/superpowers/specs/2026-08-06-sase-slice-d-adapters-design.md
+## "Helm sub-charts"). Each condition maps to the matching top-level key in
+## values.yaml (e.g. suricata.enabled); all default false, so the baseline
+## product renders without any of them. See charts/README.md for the
+## mirror -> tool -> adapter -> blocklist flow and per-tool notes.
+dependencies:
+  - name: suricata
+    version: "0.1.0"
+    repository: "file://./charts/suricata"
+    condition: suricata.enabled
+  - name: zeek
+    version: "0.1.0"
+    repository: "file://./charts/zeek"
+    condition: zeek.enabled
+  - name: arkime
+    version: "0.1.0"
+    repository: "file://./charts/arkime"
+    condition: arkime.enabled
+  - name: strelka
+    version: "0.1.0"
+    repository: "file://./charts/strelka"
+    condition: strelka.enabled
+  - name: cape
+    version: "0.1.0"
+    repository: "file://./charts/cape"
+    condition: cape.enabled

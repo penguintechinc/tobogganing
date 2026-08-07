@@ -1,0 +1,18 @@
+dependencies:
+- name: suricata
+  repository: file://./charts/suricata
+  version: 0.1.0
+- name: zeek
+  repository: file://./charts/zeek
+  version: 0.1.0
+- name: arkime
+  repository: file://./charts/arkime
+  version: 0.1.0
+- name: strelka
+  repository: file://./charts/strelka
+  version: 0.1.0
+- name: cape
+  repository: file://./charts/cape
+  version: 0.1.0
+digest: sha256:45644284ec5a84943042834dae5c37265d32a51b854e6e0decc53efd52d5ece7
+generated: "2026-08-06T21:47:26.76865112-05:00"
