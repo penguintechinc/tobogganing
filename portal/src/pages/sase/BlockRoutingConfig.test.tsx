@@ -80,6 +80,9 @@ describe('BlockRoutingConfig', () => {
       defaultOptions: { queries: { retry: false } },
     });
 
+    // Clear all mocks from previous tests
+    jest.clearAllMocks();
+
     mockedSaseApi.listBlockPages.mockResolvedValue(mockPages);
     mockedSaseApi.listBlockRoutes.mockResolvedValue(mockRoutes);
     mockedSaseApi.upsertBlockRoutes.mockResolvedValue(mockRoutes);
@@ -183,12 +186,21 @@ describe('BlockRoutingConfig', () => {
     expect(sourceInputs.length).toBeGreaterThan(0);
     fireEvent.change(sourceInputs[0]!, { target: { value: 'custom-rule:phishing' } });
 
-    // Page is already selected by default
+    // Select a page
+    const pageSelects = screen.getAllByDisplayValue('-- Select a page --');
+    expect(pageSelects.length).toBeGreaterThan(0);
+    fireEvent.change(pageSelects[0]!, { target: { value: 'page-1' } });
+
+    // Save
     const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(mockedSaseApi.upsertBlockRoutes).toHaveBeenCalled();
+      const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const callArgs = calls[0]![0]!;
+      expect(callArgs.some((r) => r.source_type === 'custom-rule:phishing' && r.destination_kind === 'page')).toBe(true);
     });
   });
 
@@ -208,8 +220,9 @@ describe('BlockRoutingConfig', () => {
     fireEvent.change(sourceInputs[0]!, { target: { value: 'soft-block' } });
 
     // Switch to external
-    const destSelect = screen.getByDisplayValue('page');
-    fireEvent.change(destSelect, { target: { value: 'external' } });
+    const destSelects = screen.getAllByDisplayValue('Page');
+    expect(destSelects.length).toBeGreaterThan(0);
+    fireEvent.change(destSelects[0]!, { target: { value: 'external' } });
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('https://example.com/block')).toBeInTheDocument();
@@ -226,6 +239,10 @@ describe('BlockRoutingConfig', () => {
 
     await waitFor(() => {
       expect(mockedSaseApi.upsertBlockRoutes).toHaveBeenCalled();
+      const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const callArgs = calls[0]![0]!;
+      expect(callArgs.some((r) => r.source_type === 'soft-block' && r.destination_kind === 'external')).toBe(true);
     });
   });
 
@@ -243,6 +260,11 @@ describe('BlockRoutingConfig', () => {
     const sourceInputs = screen.getAllByPlaceholderText('e.g., web-category:gambling');
     expect(sourceInputs.length).toBeGreaterThan(0);
     fireEvent.change(sourceInputs[0]!, { target: { value: 'web-category:violence' } });
+
+    // Select a page for the route to be valid
+    const pageSelects = screen.getAllByDisplayValue('-- Select a page --');
+    expect(pageSelects.length).toBeGreaterThan(0);
+    fireEvent.change(pageSelects[0]!, { target: { value: 'page-1' } });
 
     // Fill in metadata
     const ticketInputs = screen.getAllByPlaceholderText('Ticket ID');
@@ -270,14 +292,17 @@ describe('BlockRoutingConfig', () => {
       const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
       expect(calls.length).toBeGreaterThan(0);
       const callArgs = calls[0]![0]!;
-      expect(callArgs[0]!.metadata?.ticket).toBe('SEC-456');
-      expect(callArgs[0]!.metadata?.notes).toBe('Violence content blocking');
-      expect(callArgs[0]!.metadata?.scope).toBe('tenant');
-      expect(callArgs[0]!.metadata?.risk).toBe('high');
+      const newRoute = callArgs.find((r) => r.source_type === 'web-category:violence');
+      expect(newRoute?.metadata?.ticket).toBe('SEC-456');
+      expect(newRoute?.metadata?.notes).toBe('Violence content blocking');
+      expect(newRoute?.metadata?.scope).toBe('tenant');
+      expect(newRoute?.metadata?.risk).toBe('high');
     });
   });
 
   it('validates required fields before saving', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+
     renderComponent();
 
     fireEvent.click(screen.getByLabelText('Add new route'));
@@ -291,8 +316,10 @@ describe('BlockRoutingConfig', () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Source type is required')).toBeInTheDocument();
+      expect(alertSpy).toHaveBeenCalledWith('Source type is required');
     });
+
+    alertSpy.mockRestore();
   });
 
   it('deletes a route', async () => {

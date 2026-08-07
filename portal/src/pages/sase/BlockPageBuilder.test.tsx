@@ -131,8 +131,10 @@ describe('BlockPageBuilder', () => {
     expect(textareas.length).toBeGreaterThan(0);
     fireEvent.change(textareas[0]!, { target: { value: 'This is a paragraph.' } });
 
+    // Verify markdown output contains the text (in the generated markdown <pre> block)
     await waitFor(() => {
-      expect(screen.getByText('This is a paragraph.')).toBeInTheDocument();
+      const markdownOutput = screen.getByText(/This is a paragraph\./, { selector: 'pre' });
+      expect(markdownOutput).toBeInTheDocument();
     });
   });
 
@@ -208,10 +210,10 @@ describe('BlockPageBuilder', () => {
     expect(textareas.length).toBeGreaterThan(0);
     fireEvent.change(textareas[0]!, { target: { value: 'Item 1\nItem 2\nItem 3' } });
 
+    // Verify markdown output contains the list items (in the generated markdown <pre> block)
     await waitFor(() => {
-      expect(screen.getByText('- Item 1')).toBeInTheDocument();
-      expect(screen.getByText('- Item 2')).toBeInTheDocument();
-      expect(screen.getByText('- Item 3')).toBeInTheDocument();
+      const markdownOutput = screen.getByText(/- Item 1[\s\S]*- Item 2[\s\S]*- Item 3/, { selector: 'pre' });
+      expect(markdownOutput).toBeInTheDocument();
     });
   });
 
@@ -278,6 +280,8 @@ describe('BlockPageBuilder', () => {
   });
 
   it('shows page name required error', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+
     renderComponent();
 
     // Add a block
@@ -293,8 +297,10 @@ describe('BlockPageBuilder', () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Please enter a page name')).toBeInTheDocument();
+      expect(alertSpy).toHaveBeenCalledWith('Please enter a page name');
     });
+
+    alertSpy.mockRestore();
   });
 
   it('renders multiple blocks in order', async () => {
