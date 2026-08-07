@@ -1,7 +1,7 @@
 ## Tobogganing - Beta Environment Overrides
 ## Moderate resources for staging/QA
 
-namespace: tobogganing-beta
+namespace: tobogganing
 
 hubApi:
   replicas: 2

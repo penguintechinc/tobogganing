@@ -1,7 +1,7 @@
 ## Tobogganing - Alpha Environment Overrides
 ## Minimal resources for development/testing
 
-namespace: tobogganing-alpha
+namespace: tobogganing
 
 hubApi:
   replicas: 1

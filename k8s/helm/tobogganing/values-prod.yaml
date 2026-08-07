@@ -1,7 +1,7 @@
 ## Tobogganing - Production Environment Overrides
 ## Full resources with autoscaling
 
-namespace: tobogganing-prod
+namespace: tobogganing
 
 hubApi:
   replicas: 3
