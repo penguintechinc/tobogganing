@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
+	machineauth "github.com/tobogganing/headend/auth"
 	"github.com/tobogganing/headend/proxy/auth"
 	"github.com/tobogganing/headend/proxy/firewall"
 	"github.com/tobogganing/headend/proxy/mirror"
@@ -205,6 +207,23 @@ func (s *ProxyServer) Initialize() error {
 		authToken := viper.GetString("firewall.auth_token")
 
 		s.firewallManager = firewall.NewManager(managerURL, authToken)
+
+		// Set up machine JWT provider for firewall manager if available.
+		clusterID := os.Getenv("CLUSTER_ID")
+		clusterAPIKey := os.Getenv("CLUSTER_API_KEY")
+		if clusterID != "" && clusterAPIKey != "" {
+			jwtClient, err := machineauth.NewMachineJWTClient(managerURL, clusterID, clusterAPIKey, authToken)
+			if err != nil {
+				log.Warnf("Failed to initialize machine JWT for firewall manager: %v; will use static token", err)
+			} else {
+				// Set the JWT token provider for dynamic token retrieval.
+				s.firewallManager.SetTokenProvider(func(ctx context.Context) (string, error) {
+					return jwtClient.GetToken(ctx)
+				})
+				log.Info("Machine JWT authentication enabled for firewall manager")
+			}
+		}
+
 		if err := s.firewallManager.Start(); err != nil {
 			return fmt.Errorf("failed to start firewall manager: %w", err)
 		}
@@ -257,6 +276,23 @@ func (s *ProxyServer) Initialize() error {
 
 		// Fetch initial configuration
 		configClient := ports.NewConfigClient(managerURL, authToken, headendID, clusterID)
+
+		// Set up machine JWT provider for ports config client if available.
+		clusterIDEnv := os.Getenv("CLUSTER_ID")
+		clusterAPIKey := os.Getenv("CLUSTER_API_KEY")
+		if clusterIDEnv != "" && clusterAPIKey != "" {
+			jwtClient, err := machineauth.NewMachineJWTClient(managerURL, clusterIDEnv, clusterAPIKey, authToken)
+			if err != nil {
+				log.Warnf("Failed to initialize machine JWT for ports config client: %v; will use static token", err)
+			} else {
+				// Set the JWT token provider for dynamic token retrieval.
+				configClient.SetTokenProvider(func(ctx context.Context) (string, error) {
+					return jwtClient.GetToken(ctx)
+				})
+				log.Info("Machine JWT authentication enabled for ports config client")
+			}
+		}
+
 		config, err := configClient.FetchConfig()
 		if err != nil {
 			log.Errorf("Failed to fetch initial port config: %v", err)

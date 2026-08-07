@@ -15,6 +15,7 @@
 package firewall
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -83,9 +84,13 @@ type AllRulesResponse struct {
 	UserRules  map[string]UserRules `json:"user_rules"`
 }
 
+// TokenProvider is a function that provides authentication tokens on demand.
+type TokenProvider func(ctx context.Context) (string, error)
+
 type Manager struct {
 	managerURL    string
 	authToken     string
+	tokenProvider TokenProvider
 	userRules     map[string]*UserRules
 	lastUpdate    time.Time
 	updateMutex   sync.RWMutex
@@ -99,7 +104,17 @@ func NewManager(managerURL, authToken string) *Manager {
 		authToken:  authToken,
 		userRules:  make(map[string]*UserRules),
 		stopChan:   make(chan bool),
+		tokenProvider: func(ctx context.Context) (string, error) {
+			// Default: return the static auth token
+			return authToken, nil
+		},
 	}
+}
+
+// SetTokenProvider sets a custom token provider (e.g., machine JWT client).
+// If set, this will be used instead of the static authToken.
+func (m *Manager) SetTokenProvider(provider TokenProvider) {
+	m.tokenProvider = provider
 }
 
 func (m *Manager) Start() error {
@@ -156,12 +171,22 @@ func (m *Manager) fetchRules() error {
 		Timeout: 10 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", m.managerURL+"/api/v1/firewall/rules", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", m.managerURL+"/api/v1/firewall/rules", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+m.authToken)
+	// Get token from provider (machine JWT or static).
+	token, err := m.tokenProvider(ctx)
+	if err != nil {
+		log.Warnf("Failed to get auth token: %v; falling back to static token", err)
+		token = m.authToken
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", "SASEWaddle-Headend/1.0")
 
 	resp, err := client.Do(req)
