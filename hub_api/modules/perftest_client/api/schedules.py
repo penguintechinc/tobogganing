@@ -20,7 +20,7 @@ blueprint = Blueprint("wpcl_schedules", __name__, url_prefix="/schedules")
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("schedules:write")
-@require_feature("perftest_client", "schedules")
+@require_feature("perftest.client", "schedules")
 async def create_schedule() -> tuple[dict[str, Any], int]:
     """Create a new test schedule.
 
@@ -95,7 +95,7 @@ async def create_schedule() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("schedules:read")
-@require_feature("perftest_client", "schedules")
+@require_feature("perftest.client", "schedules")
 async def list_schedules() -> tuple[dict[str, Any], int]:
     """List test schedules for the tenant.
 
@@ -160,7 +160,7 @@ async def list_schedules() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<schedule_id>", methods=["GET"])
 @require_tenant
 @require_scope("schedules:read")
-@require_feature("perftest_client", "schedules")
+@require_feature("perftest.client", "schedules")
 async def get_schedule(schedule_id: str) -> tuple[dict[str, Any], int]:
     """Get a test schedule by ID.
 
@@ -218,7 +218,7 @@ async def get_schedule(schedule_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<schedule_id>", methods=["PUT"])
 @require_tenant
 @require_scope("schedules:write")
-@require_feature("perftest_client", "schedules")
+@require_feature("perftest.client", "schedules")
 async def update_schedule(schedule_id: str) -> tuple[dict[str, Any], int]:
     """Update a test schedule.
 
@@ -287,7 +287,7 @@ async def update_schedule(schedule_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<schedule_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("schedules:write")
-@require_feature("perftest_client", "schedules")
+@require_feature("perftest.client", "schedules")
 async def delete_schedule(schedule_id: str) -> tuple[dict[str, Any], int]:
     """Delete a test schedule.
 

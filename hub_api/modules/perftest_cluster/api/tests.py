@@ -35,7 +35,7 @@ async def _authenticate_device(db: object, api_key: str) -> tuple[Any, str] | No
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("tests:write")
-@require_feature("perftest_cluster", "tests")
+@require_feature("perftest.cluster", "tests")
 async def create_test() -> tuple[dict[str, Any], int]:
     """Create a new performance test.
 
@@ -112,7 +112,7 @@ async def create_test() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("tests:read")
-@require_feature("perftest_cluster", "tests")
+@require_feature("perftest.cluster", "tests")
 async def list_tests() -> tuple[dict[str, Any], int]:
     """List all performance tests for the tenant.
 
@@ -192,7 +192,7 @@ async def list_tests() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<test_id>", methods=["GET"])
 @require_tenant
 @require_scope("tests:read")
-@require_feature("perftest_cluster", "tests")
+@require_feature("perftest.cluster", "tests")
 async def get_test(test_id: str) -> tuple[dict[str, Any], int]:
     """Get performance test details.
 
@@ -354,7 +354,7 @@ async def record_result(test_id: str) -> tuple[dict[str, Any], int]:
         try:
             from hub_api.entitlements.gate import feature_enabled
 
-            if feature_enabled("perftest_cluster", "alerts"):
+            if feature_enabled("perftest.cluster", "alerts"):
                 from hub_api.modules.perftest_cluster.services.alert_evaluator import (
                     AlertEvaluator,
                 )

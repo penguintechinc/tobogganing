@@ -20,7 +20,7 @@ blueprint = Blueprint("c2c_endpoints", __name__, url_prefix="/endpoints")
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "endpoints")
+@require_feature("perftest.c2c", "endpoints")
 async def create_endpoint() -> tuple[dict[str, Any], int]:
     """Create a new C2C endpoint.
 
@@ -109,7 +109,7 @@ async def create_endpoint() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "endpoints")
+@require_feature("perftest.c2c", "endpoints")
 async def list_endpoints() -> tuple[dict[str, Any], int]:
     """List C2C endpoints for the tenant.
 
@@ -159,7 +159,7 @@ async def list_endpoints() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<endpoint_id>", methods=["GET"])
 @require_tenant
 @require_scope("c2c:read")
-@require_feature("perftest_c2c", "endpoints")
+@require_feature("perftest.c2c", "endpoints")
 async def get_endpoint(endpoint_id: str) -> tuple[dict[str, Any], int]:
     """Get a C2C endpoint by ID.
 
@@ -213,7 +213,7 @@ async def get_endpoint(endpoint_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<endpoint_id>", methods=["PATCH"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "endpoints")
+@require_feature("perftest.c2c", "endpoints")
 async def update_endpoint(endpoint_id: str) -> tuple[dict[str, Any], int]:
     """Update a C2C endpoint.
 
@@ -278,7 +278,7 @@ async def update_endpoint(endpoint_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<endpoint_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("c2c:write")
-@require_feature("perftest_c2c", "endpoints")
+@require_feature("perftest.c2c", "endpoints")
 async def delete_endpoint(endpoint_id: str) -> tuple[dict[str, Any] | str, int]:
     """Delete a C2C endpoint.
 

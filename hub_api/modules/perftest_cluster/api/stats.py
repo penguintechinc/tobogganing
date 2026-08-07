@@ -20,7 +20,7 @@ blueprint = Blueprint("wpc_stats", __name__, url_prefix="/stats")
 @blueprint.route("/summary", methods=["GET"])
 @require_tenant
 @require_scope("stats:read")
-@require_feature("perftest_cluster", "stats")
+@require_feature("perftest.cluster", "stats")
 async def get_summary() -> tuple[dict[str, Any], int]:
     """Get overall statistics summary.
 
@@ -74,7 +74,7 @@ async def get_summary() -> tuple[dict[str, Any], int]:
 @blueprint.route("/by-device", methods=["GET"])
 @require_tenant
 @require_scope("stats:read")
-@require_feature("perftest_cluster", "stats")
+@require_feature("perftest.cluster", "stats")
 async def get_by_device() -> tuple[dict[str, Any], int]:
     """Get statistics aggregated by device.
 
@@ -132,7 +132,7 @@ async def get_by_device() -> tuple[dict[str, Any], int]:
 @blueprint.route("/by-type", methods=["GET"])
 @require_tenant
 @require_scope("stats:read")
-@require_feature("perftest_cluster", "stats")
+@require_feature("perftest.cluster", "stats")
 async def get_by_type() -> tuple[dict[str, Any], int]:
     """Get statistics aggregated by test type.
 
@@ -190,7 +190,7 @@ async def get_by_type() -> tuple[dict[str, Any], int]:
 @blueprint.route("/trends", methods=["GET"])
 @require_tenant
 @require_scope("stats:read")
-@require_feature("perftest_cluster", "stats")
+@require_feature("perftest.cluster", "stats")
 async def get_trends() -> tuple[dict[str, Any], int]:
     """Get time-series data for trends analysis.
 
@@ -254,7 +254,7 @@ async def get_trends() -> tuple[dict[str, Any], int]:
 @blueprint.route("/recent", methods=["GET"])
 @require_tenant
 @require_scope("stats:read")
-@require_feature("perftest_cluster", "stats")
+@require_feature("perftest.cluster", "stats")
 async def get_recent() -> tuple[dict[str, Any], int]:
     """Get recent test results.
 

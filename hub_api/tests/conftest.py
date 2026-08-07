@@ -408,7 +408,7 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_cluster.") or flag_key.startswith("tobogganing.perftest_client."):
+        if flag_key.startswith("tobogganing.perftest.cluster.") or flag_key.startswith("tobogganing.perftest.client."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -540,7 +540,7 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 

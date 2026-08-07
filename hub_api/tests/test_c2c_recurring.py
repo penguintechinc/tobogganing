@@ -73,7 +73,7 @@ async def test_recurring_runs_unlicensed_returns_402(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -114,7 +114,7 @@ async def test_recurring_runs_unlicensed_returns_402(
 
 @pytest.mark.asyncio
 async def test_entitlement_key_is_bare_not_prefixed() -> None:
-    """Entitlement key must be 'perftest_c2c.recurring_runs', not 'tobogganing.perftest_c2c.recurring_runs'."""
+    """Entitlement key must be 'perftest.c2c.recurring_runs', not 'tobogganing.perftest.c2c.recurring_runs'."""
     from hub_api.modules.perftest_c2c import module as c2c_mod
     from hub_api.registry import ModuleRegistry
 
@@ -123,13 +123,13 @@ async def test_entitlement_key_is_bare_not_prefixed() -> None:
     registry.register(contract)
 
     # Check that the bare key is registered
-    ent = registry.entitlement_for("perftest_c2c.recurring_runs")
-    assert ent is not None, "entitlement_for('perftest_c2c.recurring_runs') must not be None"
+    ent = registry.entitlement_for("perftest.c2c.recurring_runs")
+    assert ent is not None, "entitlement_for('perftest.c2c.recurring_runs') must not be None"
     assert ent.tier.lower() == "professional"
 
     # Check that the prefixed key is NOT registered (regression guard)
-    ent_prefixed = registry.entitlement_for("tobogganing.perftest_c2c.recurring_runs")
-    assert ent_prefixed is None, "entitlement_for('tobogganing.perftest_c2c.recurring_runs') must be None"
+    ent_prefixed = registry.entitlement_for("tobogganing.perftest.c2c.recurring_runs")
+    assert ent_prefixed is None, "entitlement_for('tobogganing.perftest.c2c.recurring_runs') must be None"
 
 
 # ============================================================================
@@ -151,7 +151,7 @@ async def test_recurring_crud_licensed(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -309,7 +309,7 @@ async def test_recurring_validation_interval_too_low(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -346,7 +346,7 @@ async def test_recurring_validation_endpoint_ids_empty_list(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 
@@ -383,7 +383,7 @@ async def test_recurring_validation_endpoint_ids_not_list(
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest_c2c."):
+        if flag_key.startswith("tobogganing.perftest.c2c."):
             return True
         return original_flag_on(flag_key, distinct_id)
 

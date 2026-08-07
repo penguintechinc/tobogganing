@@ -20,7 +20,7 @@ blueprint = Blueprint("wpc_scheduled_tests", __name__, url_prefix="/scheduled-te
 @blueprint.route("", methods=["POST"])
 @require_tenant
 @require_scope("tests:write")
-@require_feature("perftest_cluster", "scheduled_tests")
+@require_feature("perftest.cluster", "scheduled_tests")
 async def create_scheduled_test() -> tuple[dict[str, Any], int]:
     """Create a scheduled server test.
 
@@ -128,7 +128,7 @@ async def create_scheduled_test() -> tuple[dict[str, Any], int]:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("tests:read")
-@require_feature("perftest_cluster", "scheduled_tests")
+@require_feature("perftest.cluster", "scheduled_tests")
 async def list_scheduled_tests() -> tuple[dict[str, Any], int]:
     """List scheduled tests for the tenant.
 
@@ -186,7 +186,7 @@ async def list_scheduled_tests() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<job_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("tests:write")
-@require_feature("perftest_cluster", "scheduled_tests")
+@require_feature("perftest.cluster", "scheduled_tests")
 async def delete_scheduled_test(job_id: str) -> tuple[dict[str, Any], int]:
     """Delete a scheduled test.
 
@@ -234,7 +234,7 @@ async def delete_scheduled_test(job_id: str) -> tuple[dict[str, Any], int]:
 @blueprint.route("/<job_id>", methods=["PATCH"])
 @require_tenant
 @require_scope("tests:write")
-@require_feature("perftest_cluster", "scheduled_tests")
+@require_feature("perftest.cluster", "scheduled_tests")
 async def update_scheduled_test(job_id: str) -> tuple[dict[str, Any], int]:
     """Update a scheduled test (enable/disable).
 

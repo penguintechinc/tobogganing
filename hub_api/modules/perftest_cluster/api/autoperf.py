@@ -19,7 +19,7 @@ autoperf_bp = Blueprint("wpc_autoperf", __name__, url_prefix="/autoperf")
 @autoperf_bp.route("/policies", methods=["POST"])
 @require_tenant
 @require_scope("autoperf:write")
-@require_feature("perftest_cluster", "autoperf")
+@require_feature("perftest.cluster", "autoperf")
 async def create_policy() -> tuple[dict[str, Any], int]:
     """Create an AutoPerf policy.
 
@@ -110,7 +110,7 @@ async def create_policy() -> tuple[dict[str, Any], int]:
 @autoperf_bp.route("/policies", methods=["GET"])
 @require_tenant
 @require_scope("autoperf:read")
-@require_feature("perftest_cluster", "autoperf")
+@require_feature("perftest.cluster", "autoperf")
 async def list_policies() -> tuple[dict[str, Any], int]:
     """List AutoPerf policies for the tenant.
 
@@ -158,7 +158,7 @@ async def list_policies() -> tuple[dict[str, Any], int]:
 @autoperf_bp.route("/policies/<policy_id>", methods=["GET"])
 @require_tenant
 @require_scope("autoperf:read")
-@require_feature("perftest_cluster", "autoperf")
+@require_feature("perftest.cluster", "autoperf")
 async def get_policy(policy_id: str) -> tuple[dict[str, Any], int]:
     """Get a single AutoPerf policy.
 
@@ -207,7 +207,7 @@ async def get_policy(policy_id: str) -> tuple[dict[str, Any], int]:
 @autoperf_bp.route("/policies/<policy_id>", methods=["DELETE"])
 @require_tenant
 @require_scope("autoperf:write")
-@require_feature("perftest_cluster", "autoperf")
+@require_feature("perftest.cluster", "autoperf")
 async def delete_policy(policy_id: str) -> tuple[dict[str, Any], int]:
     """Delete an AutoPerf policy.
 
@@ -247,7 +247,7 @@ async def delete_policy(policy_id: str) -> tuple[dict[str, Any], int]:
 @autoperf_bp.route("/policies/<policy_id>/state", methods=["GET"])
 @require_tenant
 @require_scope("autoperf:read")
-@require_feature("perftest_cluster", "autoperf")
+@require_feature("perftest.cluster", "autoperf")
 async def get_policy_state(policy_id: str) -> tuple[dict[str, Any], int]:
     """Get AutoPerf state for a policy.
 

@@ -33,7 +33,7 @@ def _extract_bearer_token() -> str | None:
 @blueprint.route("", methods=["GET"])
 @require_tenant
 @require_scope("devices:read")
-@require_feature("perftest_cluster", "devices")
+@require_feature("perftest.cluster", "devices")
 async def list_devices() -> tuple[dict[str, Any], int]:
     """List devices for the tenant.
 
@@ -95,7 +95,7 @@ async def list_devices() -> tuple[dict[str, Any], int]:
 @blueprint.route("/<device_id>", methods=["GET"])
 @require_tenant
 @require_scope("devices:read")
-@require_feature("perftest_cluster", "devices")
+@require_feature("perftest.cluster", "devices")
 async def get_device(device_id: str) -> tuple[dict[str, Any], int]:
     """Get device details.
 
@@ -160,7 +160,7 @@ async def get_device(device_id: str) -> tuple[dict[str, Any], int]:
 
 
 @blueprint.route("/<device_id>/heartbeat", methods=["POST"])
-@require_feature("perftest_cluster", "devices")
+@require_feature("perftest.cluster", "devices")
 async def device_heartbeat(device_id: str) -> tuple[dict[str, Any], int]:
     """Record device heartbeat.
 
@@ -229,7 +229,7 @@ async def device_heartbeat(device_id: str) -> tuple[dict[str, Any], int]:
 
 
 @blueprint.route("/<device_id>/config", methods=["GET"])
-@require_feature("perftest_cluster", "devices")
+@require_feature("perftest.cluster", "devices")
 async def get_device_config(device_id: str) -> tuple[dict[str, Any], int]:
     """Get device configuration.
 
