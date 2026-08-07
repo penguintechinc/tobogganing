@@ -137,29 +137,13 @@ export function BlockRoutingConfig() {
     if (newRoute.scope) metadata.scope = newRoute.scope;
     if (newRoute.risk) metadata.risk = newRoute.risk;
 
-    // Build route object
-    const routeData = {
-      source_type: newRoute.source_type,
-      destination_kind: newRoute.destination_kind,
-      page_id: newRoute.destination_kind === 'page' ? newRoute.page_id : (undefined as string | undefined),
-      external_url: newRoute.destination_kind === 'external' ? newRoute.external_url : (undefined as string | undefined),
-      metadata: Object.keys(metadata).length > 0 ? metadata : (undefined as BlockRouteMetadata | undefined),
-    };
+    // For editing: filter out the old route; for creating: keep all
+    const existingRoutes = editingRoute
+      ? routes.filter((r) => r.source_type !== editingRoute.source_type)
+      : routes;
 
-    // Create the updated routes list
-    const routesToSave = editingRoute
-      ? routes
-          .filter((r) => r.source_type !== editingRoute.source_type)
-          .concat([
-            {
-              ...editingRoute,
-              ...routeData,
-            },
-          ])
-      : routes.concat([routeData as BlockRoute]);
-
-    // Convert to upsert format
-    const routesToUpsert = routesToSave
+    // Build upsert payload (not trying to be BlockRoute objects - the server returns those)
+    const routesToUpsert = existingRoutes
       .map((r) => ({
         source_type: r.source_type,
         destination_kind: r.destination_kind,
@@ -174,57 +158,67 @@ export function BlockRoutingConfig() {
           risk: r.risk,
         } as BlockRouteMetadata | undefined,
       }))
-      .filter((r) => {
-        // Remove empty metadata
+      .concat([
+        {
+          source_type: newRoute.source_type,
+          destination_kind: newRoute.destination_kind,
+          page_id: newRoute.destination_kind === 'page' ? newRoute.page_id : (null as string | null),
+          external_url: newRoute.destination_kind === 'external' ? newRoute.external_url : (null as string | null),
+          metadata: Object.keys(metadata).length > 0 ? metadata : (undefined as BlockRouteMetadata | undefined),
+        },
+      ]);
+
+    // Remove empty metadata from all routes
+    const finalRoutes = routesToUpsert.map((r) => {
+      if (r.metadata) {
+        const hasMetadata = Object.values(r.metadata).some((v) => v !== undefined && v !== null && v !== '');
+        if (!hasMetadata) {
+          r.metadata = undefined;
+        }
+      }
+      return r;
+    });
+
+    console.log('[BlockRoutingConfig] SaveRoute { sourceType }', { sourceType: newRoute.source_type });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    saveRoutes(finalRoutes as any);
+  };
+
+  // Delete route
+  const handleDeleteRoute = (sourceType: string) => {
+    if (confirm(`Delete route for "${sourceType}"?`)) {
+      const remainingRoutes = routes.filter((r) => r.source_type !== sourceType);
+      console.log('[BlockRoutingConfig] DeleteRoute { sourceType }', { sourceType });
+
+      const routesToUpsert = remainingRoutes.map((r) => ({
+        source_type: r.source_type,
+        destination_kind: r.destination_kind,
+        page_id: r.page_id,
+        external_url: r.external_url,
+        metadata: {
+          ticket: r.ticket,
+          notes: r.notes,
+          expiry: r.expiry,
+          review_date: r.review_date,
+          scope: r.scope,
+          risk: r.risk,
+        } as BlockRouteMetadata | undefined,
+      }));
+
+      // Remove empty metadata
+      const finalRoutes = routesToUpsert.map((r) => {
         if (r.metadata) {
           const hasMetadata = Object.values(r.metadata).some((v) => v !== undefined && v !== null && v !== '');
           if (!hasMetadata) {
             r.metadata = undefined;
           }
         }
-        return true;
+        return r;
       });
 
-    console.log('[BlockRoutingConfig] SaveRoute { sourceType }', { sourceType: newRoute.source_type });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    saveRoutes(routesToUpsert as any);
-  };
-
-  // Delete route
-  const handleDeleteRoute = (sourceType: string) => {
-    if (confirm(`Delete route for "${sourceType}"?`)) {
-      const routesToSave = routes.filter((r) => r.source_type !== sourceType);
-      console.log('[BlockRoutingConfig] DeleteRoute { sourceType }', { sourceType });
-
-      const routesToUpsert = routesToSave
-        .map((r) => ({
-          source_type: r.source_type,
-          destination_kind: r.destination_kind,
-          page_id: r.page_id,
-          external_url: r.external_url,
-          metadata: {
-            ticket: r.ticket,
-            notes: r.notes,
-            expiry: r.expiry,
-            review_date: r.review_date,
-            scope: r.scope,
-            risk: r.risk,
-          } as BlockRouteMetadata | undefined,
-        }))
-        .filter((r) => {
-          // Remove empty metadata
-          if (r.metadata) {
-            const hasMetadata = Object.values(r.metadata).some((v) => v !== undefined && v !== null && v !== '');
-            if (!hasMetadata) {
-              r.metadata = undefined;
-            }
-          }
-          return true;
-        });
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      saveRoutes(routesToUpsert as any);
+      saveRoutes(finalRoutes as any);
     }
   };
 
