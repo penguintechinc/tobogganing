@@ -14,6 +14,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,15 +23,19 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/tobogganing/headend/auth"
 )
 
 // Manager handles configuration retrieval from SASEWaddle Manager Service
 type Manager struct {
-	managerURL string
-	apiKey     string
-	httpClient *http.Client
-	lastUpdate time.Time
-	config     *HeadendConfig
+	managerURL      string
+	apiKey          string
+	httpClient      *http.Client
+	lastUpdate      time.Time
+	config          *HeadendConfig
+	jwtClient       *auth.MachineJWTClient
+	useMachineJWT   bool
 }
 
 // HeadendConfig represents the complete configuration for a headend server
@@ -119,15 +124,34 @@ type ProxyConfig struct {
 	MaxIdleConns  int  `json:"max_idle_conns"`
 }
 
-// NewManager creates a new configuration manager
+// NewManager creates a new configuration manager with machine-JWT authentication.
+// If machine JWT initialization fails, it falls back to the legacy static API key.
 func NewManager(managerURL, apiKey string) *Manager {
-	return &Manager{
+	m := &Manager{
 		managerURL: managerURL,
 		apiKey:     apiKey,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		useMachineJWT: false,
 	}
+
+	// Try to initialize machine JWT client with the cluster ID from environment.
+	clusterID := os.Getenv("CLUSTER_ID")
+	if clusterID != "" {
+		jwtClient, err := auth.NewMachineJWTClient(managerURL, clusterID, apiKey, apiKey)
+		if err == nil {
+			m.jwtClient = jwtClient
+			m.useMachineJWT = true
+			log.Info("Machine JWT authentication enabled")
+		} else {
+			log.Warnf("Failed to initialize machine JWT client, falling back to static API key: %v", err)
+		}
+	} else {
+		log.Warn("CLUSTER_ID not set, machine JWT authentication disabled")
+	}
+
+	return m
 }
 
 // FetchConfig retrieves the headend configuration from the Manager Service
@@ -139,13 +163,28 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
 
 	url := fmt.Sprintf("%s/api/v1/clusters/%s/headend-config", cm.managerURL, clusterID)
 
-	req, err := http.NewRequest("GET", url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Authenticate with cluster API key
-	req.Header.Set("Authorization", "Bearer "+cm.apiKey)
+	// Authenticate with machine JWT if available; otherwise fall back to static API key.
+	var token string
+	if cm.useMachineJWT && cm.jwtClient != nil {
+		var err error
+		token, err = cm.jwtClient.GetToken(ctx)
+		if err != nil {
+			log.Warnf("Failed to get machine JWT token, falling back to static API key: %v", err)
+			token = cm.apiKey
+		}
+	} else {
+		token = cm.apiKey
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := cm.httpClient.Do(req)

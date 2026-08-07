@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,16 +34,20 @@ type PortRange struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+// TokenProvider is a function that provides authentication tokens on demand.
+type TokenProvider func(ctx context.Context) (string, error)
+
 // ConfigClient fetches port configuration from the Manager service
 type ConfigClient struct {
-	managerURL string
-	authToken  string
-	headendID  string
-	clusterID  string
-	httpClient *http.Client
+	managerURL    string
+	authToken     string
+	headendID     string
+	clusterID     string
+	httpClient    *http.Client
+	tokenProvider TokenProvider
 }
 
-// NewConfigClient creates a new configuration client
+// NewConfigClient creates a new configuration client with static token fallback.
 func NewConfigClient(managerURL, authToken, headendID, clusterID string) *ConfigClient {
 	return &ConfigClient{
 		managerURL: managerURL,
@@ -52,19 +57,38 @@ func NewConfigClient(managerURL, authToken, headendID, clusterID string) *Config
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		tokenProvider: func(ctx context.Context) (string, error) {
+			// Default: return the static auth token
+			return authToken, nil
+		},
 	}
+}
+
+// SetTokenProvider sets a custom token provider (e.g., machine JWT client).
+func (c *ConfigClient) SetTokenProvider(provider TokenProvider) {
+	c.tokenProvider = provider
 }
 
 // FetchConfig retrieves the current port configuration from the Manager
 func (c *ConfigClient) FetchConfig() (*PortConfig, error) {
 	url := fmt.Sprintf("%s/api/v1/headend/%s/ports?cluster_id=%s", c.managerURL, c.headendID, c.clusterID)
 
-	req, err := http.NewRequest("GET", url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.authToken)
+	// Get token from provider (machine JWT or static).
+	token, err := c.tokenProvider(ctx)
+	if err != nil {
+		log.Warnf("Failed to get auth token: %v; falling back to static token", err)
+		token = c.authToken
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", "SASEWaddle-Headend/1.0")
 
 	resp, err := c.httpClient.Do(req)
