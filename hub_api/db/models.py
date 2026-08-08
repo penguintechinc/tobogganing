@@ -887,6 +887,203 @@ class AutoPerfState(Base):
         return f"<AutoPerfState(id={self.id}, policy_id={self.policy_id}, current_tier={self.current_tier})>"
 
 
+class DNSZone(Base):
+    """DNS zone configuration for netsvcs module."""
+
+    __tablename__ = "dns_zones"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    visibility: Column[str] = Column(String(50), default="public", nullable=False)
+    description: Column[str | None] = Column(Text, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "name", name="uq_dns_zones_tenant_name"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSZone(id={self.id}, tenant={self.tenant}, name={self.name})>"
+
+
+class DNSRecord(Base):
+    """DNS record configuration for netsvcs module."""
+
+    __tablename__ = "dns_records"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    zone_id: Column[str] = Column(
+        UUID(as_uuid=False), nullable=False, index=True
+    )  # FK to dns_zones.id
+    name: Column[str] = Column(String(255), nullable=False)
+    type: Column[str] = Column(String(10), nullable=False)
+    value: Column[str] = Column(String(1024), nullable=False)
+    ttl: Column[int] = Column(Integer, default=300, nullable=False)
+    priority: Column[int | None] = Column(Integer, nullable=True)
+    weight: Column[int | None] = Column(Integer, nullable=True)
+    port: Column[int | None] = Column(Integer, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "zone_id", "name", "type", name="uq_dns_records_zone_name_type"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSRecord(id={self.id}, zone_id={self.zone_id}, name={self.name}, type={self.type})>"
+
+
+class DNSServer(Base):
+    """DNS resolver server enrollment for netsvcs module."""
+
+    __tablename__ = "dns_servers"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    status: Column[str] = Column(String(20), default="offline", nullable=False)
+    version: Column[str | None] = Column(String(50), nullable=True)
+    region: Column[str | None] = Column(String(100), nullable=True)
+    hostname: Column[str | None] = Column(String(255), nullable=True)
+    last_heartbeat: Column[datetime | None] = Column(DateTime, nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSServer(id={self.id}, tenant={self.tenant}, name={self.name})>"
+
+
+class DNSServerMetrics(Base):
+    """DNS resolver server metrics for netsvcs module."""
+
+    __tablename__ = "dns_server_metrics"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    server_id: Column[str] = Column(
+        UUID(as_uuid=False), nullable=False, index=True
+    )  # FK to dns_servers.id
+    timestamp: Column[datetime] = Column(DateTime, nullable=False)
+    queries_total: Column[int] = Column(Integer, default=0, nullable=False)
+    cache_hits: Column[int] = Column(Integer, default=0, nullable=False)
+    errors: Column[int] = Column(Integer, default=0, nullable=False)
+    avg_response_ms: Column[float] = Column(Float, default=0.0, nullable=False)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "server_id", "timestamp", name="uq_dns_server_metrics_server_timestamp"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSServerMetrics(id={self.id}, server_id={self.server_id}, timestamp={self.timestamp})>"
+
+
+class DNSResolverToken(Base):
+    """DNS resolver authentication token for netsvcs module."""
+
+    __tablename__ = "dns_resolver_tokens"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    name: Column[str] = Column(String(255), nullable=False)
+    token: Column[str] = Column(String(255), nullable=False, unique=True, index=True)
+    active: Column[bool] = Column(Boolean, default=True, nullable=False)
+    expires_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    last_used: Column[datetime | None] = Column(DateTime, nullable=True)
+    created_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
+    created_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "name", name="uq_dns_resolver_tokens_tenant_name"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSResolverToken(id={self.id}, tenant={self.tenant}, name={self.name})>"
+
+
+class DNSConfigVersion(Base):
+    """DNS configuration monotonic version counter for netsvcs module."""
+
+    __tablename__ = "dns_config_versions"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)
+    scope_key: Column[str] = Column(String(255), nullable=False)
+    version: Column[int] = Column(Integer, default=0, nullable=False)
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant", "scope_key", name="uq_dns_config_versions_tenant_scope"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSConfigVersion(id={self.id}, tenant={self.tenant}, scope_key={self.scope_key})>"
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -917,4 +1114,10 @@ __all__ = [
     "AlertEvent",
     "AutoPerfPolicy",
     "AutoPerfState",
+    "DNSZone",
+    "DNSRecord",
+    "DNSServer",
+    "DNSServerMetrics",
+    "DNSResolverToken",
+    "DNSConfigVersion",
 ]

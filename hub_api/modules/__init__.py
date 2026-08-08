@@ -9,4 +9,5 @@ __all__ = [
     "perftest_client",
     "perftest_c2c",
     "ziti",
+    "netsvcs",
 ]

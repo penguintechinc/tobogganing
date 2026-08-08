@@ -29,6 +29,12 @@ from hub_api.db.models import (
     AlertEvent,
     AutoPerfPolicy,
     AutoPerfState,
+    DNSZone,
+    DNSRecord,
+    DNSServer,
+    DNSServerMetrics,
+    DNSResolverToken,
+    DNSConfigVersion,
 )
 from hub_api.modules.sase.security.scanner.models import (
     SecurityScan,
@@ -47,7 +53,7 @@ from hub_api.modules.threatintel.feeds.models import (
 
 
 def test_alembic_migrations_cover_all_tables() -> None:
-    """Verify all Base.metadata tables are covered by migrations 0001-0019.
+    """Verify all Base.metadata tables are covered by migrations 0001-0025.
 
     Migration 0001: users, refresh_tokens, password_reset_tokens
     Migration 0002: firewall_rules
@@ -70,6 +76,8 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0017: notification_channels, notification_deliveries
     Migration 0018: alert_rules, alert_events
     Migration 0019: autoperf_policies, autoperf_state
+    Migration 0025: dns_zones, dns_records, dns_servers, dns_server_metrics,
+                    dns_resolver_tokens, dns_config_versions
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -127,12 +135,23 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "autoperf_state",
     }
 
+    # Tables created by migration 0025 (netsvcs control plane)
+    created_by_migration_0025 = {
+        "dns_zones",
+        "dns_records",
+        "dns_servers",
+        "dns_server_metrics",
+        "dns_resolver_tokens",
+        "dns_config_versions",
+    }
+
     # All tables covered by migrations
     all_migration_tables = (
         created_by_existing_migrations
         | created_by_migration_0008
         | created_by_wpc_migrations
         | created_by_scheduler_migrations
+        | created_by_migration_0025
     )
 
     # Verify coverage
@@ -184,6 +203,12 @@ def test_base_metadata_models_imported() -> None:
         ThreatIndicator,
         FeedUpdate,
         ThreatDetection,
+        DNSZone,
+        DNSRecord,
+        DNSServer,
+        DNSServerMetrics,
+        DNSResolverToken,
+        DNSConfigVersion,
     ]
 
     for model in expected_models:
