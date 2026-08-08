@@ -1,7 +1,7 @@
 # Tobogganing Root Makefile
 # Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto
+.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint
 
 # Default target
 help: ## Show this help message
@@ -47,6 +47,24 @@ proto: ## Generate gRPC stubs from .proto files
 	@# Fix imports to use relative paths for PEP 328 compliance
 	@sed -i 's/^from netsvcs\.v1 import/from . import/g' proto/netsvcs/v1/manager_pb2_grpc.py
 	@echo "✅ gRPC stubs generated"
+
+# OpenAPI spec generation and validation
+openapi: ## Generate OpenAPI 3.x spec (openapi/v1.yaml)
+	@echo "📝 Generating OpenAPI spec..."
+	@python3 scripts/generate_openapi.py
+	@echo "✅ OpenAPI spec generated at openapi/v1.yaml"
+
+openapi-lint: openapi ## Validate OpenAPI spec with spectral
+	@echo "🔍 Linting OpenAPI spec..."
+	@if command -v spectral &> /dev/null; then \
+		spectral lint openapi/v1.yaml --format json 2>/dev/null | jq . || spectral lint openapi/v1.yaml; \
+	elif command -v npx &> /dev/null; then \
+		npx @stoplight/spectral-cli lint openapi/v1.yaml; \
+	else \
+		echo "⚠️  Spectral not found. Install with: npm install -g @stoplight/spectral-cli"; \
+		exit 1; \
+	fi
+	@echo "✅ OpenAPI spec validation complete"
 
 # Test targets
 test: test-unit test-portal test-go ## Run all tests (unit + portal + go if available)

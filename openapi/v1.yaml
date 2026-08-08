@@ -1,249 +1,2540 @@
-openapi: 3.1.0
-info:
-  title: Tobogganing Hub API
-  version: 1.0.0
-  description: |
-    Tobogganing Hub API (hub-api) — SASE brain for cluster management, testing coordination, and integration services.
-
-    **Authentication**: All endpoints except `/api/v1/auth/*` require a valid JWT Bearer token.
-
-    **Public Documentation**: Only the login/refresh endpoints are documented unauthenticated at `/docs/public`.
-    For full API documentation, authenticate via `/api/v1/auth/login` and access the authenticated spec at `/openapi.json`.
-
-servers:
-  - url: https://hub.penguintech.io
-    description: Production
-  - url: http://localhost:5000
-    description: Local development
-
-paths:
-  /health:
-    get:
-      summary: Liveness probe
-      description: Lightweight health check; returns 200 if the process is running. Does not check external dependencies.
-      operationId: healthCheck
-      tags:
-        - Health
-      security: []
-      responses:
-        "200":
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [healthy]
-                required: [status]
-
-  /ready:
-    get:
-      summary: Readiness probe
-      description: Readiness check that verifies database connectivity. Returns 200 if ready, 503 if database is unavailable.
-      operationId: readinessCheck
-      tags:
-        - Health
-      security: []
-      responses:
-        "200":
-          description: Service is ready
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [healthy]
-                required: [status]
-        "503":
-          description: Service is not ready
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [unhealthy]
-                  error:
-                    type: string
-                    enum: [database]
-                required: [status, error]
-
-  /api/v1/auth/login:
-    post:
-      summary: Authenticate user with email and password
-      description: |
-        Authenticate a user with email and password credentials.
-
-        Returns an access token and refresh token on success.
-        May return `mfa_required: true` if the user has MFA enabled; in that case, call this endpoint again with the `mfa_token`.
-      operationId: login
-      tags:
-        - Authentication
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  format: email
-                  description: User email address
-                password:
-                  type: string
-                  format: password
-                  description: User password
-                mfa_token:
-                  type: string
-                  description: Optional MFA token if MFA is enabled on the account
-              required: [email, password]
-      responses:
-        "200":
-          description: Login successful or MFA required
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - type: object
-                    properties:
-                      access_token:
-                        type: string
-                        description: JWT access token for authenticated requests
-                      refresh_token:
-                        type: string
-                        description: Refresh token for obtaining new access tokens
-                      expires_in:
-                        type: integer
-                        description: Token expiration time in seconds (default 3600)
-                      token_type:
-                        type: string
-                        enum: [Bearer]
-                    required: [access_token, refresh_token, expires_in, token_type]
-                  - type: object
-                    properties:
-                      mfa_required:
-                        type: boolean
-                        const: true
-                    required: [mfa_required]
-        "400":
-          description: Missing required fields
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    enum: [Invalid credentials]
-
-  /api/v1/auth/refresh:
-    post:
-      summary: Refresh access token
-      description: |
-        Refresh an access token using a refresh token.
-
-        Returns a new access token with the same expiration as the original.
-      operationId: refreshToken
-      tags:
-        - Authentication
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                refresh_token:
-                  type: string
-                  description: Refresh token from a previous login
-              required: [refresh_token]
-      responses:
-        "200":
-          description: Token refreshed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  access_token:
-                    type: string
-                    description: New JWT access token
-                  refresh_token:
-                    type: string
-                    description: Original refresh token (unchanged)
-                  expires_in:
-                    type: integer
-                    description: Token expiration time in seconds
-                  token_type:
-                    type: string
-                    enum: [Bearer]
-                required: [access_token, refresh_token, expires_in, token_type]
-        "400":
-          description: Missing refresh_token
-        "401":
-          description: Invalid or expired refresh token
-
-  /api/v1/auth/logout:
-    post:
-      summary: Logout and revoke refresh tokens
-      description: |
-        Revoke all refresh tokens for the authenticated user.
-
-        This endpoint is idempotent; logout is successful whether or not tokens were actually revoked.
-      operationId: logout
-      tags:
-        - Authentication
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                refresh_token:
-                  type: string
-                  description: Refresh token to revoke
-              required: [refresh_token]
-      responses:
-        "204":
-          description: Logout successful (idempotent)
-
 components:
+  schemas:
+    DNSConfigRecord:
+      description: DNS config record DTO.
+      properties:
+        name:
+          title: Name
+          type: string
+        port:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Port
+        priority:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Priority
+        ttl:
+          title: Ttl
+          type: integer
+        type:
+          title: Type
+          type: string
+        value:
+          title: Value
+          type: string
+        weight:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Weight
+      required:
+      - name
+      - type
+      - value
+      - ttl
+      title: DNSConfigRecord
+      type: object
+    DNSConfigZone:
+      description: DNS config zone DTO.
+      properties:
+        name:
+          title: Name
+          type: string
+        records:
+          items:
+            $ref: '#/components/schemas/DNSConfigRecord'
+          title: Records
+          type: array
+        visibility:
+          title: Visibility
+          type: string
+      required:
+      - name
+      - visibility
+      - records
+      title: DNSConfigZone
+      type: object
+    DNSServerConfigResponse:
+      description: Server configuration response.
+      properties:
+        cache_settings:
+          additionalProperties: true
+          title: Cache Settings
+          type: object
+        settings:
+          additionalProperties: true
+          title: Settings
+          type: object
+        version:
+          title: Version
+          type: integer
+        zones:
+          items:
+            $ref: '#/components/schemas/DNSConfigZone'
+          title: Zones
+          type: array
+      required:
+      - zones
+      - cache_settings
+      - settings
+      - version
+      title: DNSServerConfigResponse
+      type: object
+    DNSServerMetricsResponse:
+      description: DNS server metrics response.
+      properties:
+        avg_response_ms:
+          title: Avg Response Ms
+          type: number
+        cache_hits:
+          title: Cache Hits
+          type: integer
+        errors:
+          title: Errors
+          type: integer
+        queries_total:
+          title: Queries Total
+          type: integer
+        server_id:
+          title: Server Id
+          type: string
+        timestamp:
+          title: Timestamp
+          type: string
+      required:
+      - server_id
+      - timestamp
+      - queries_total
+      - cache_hits
+      - errors
+      - avg_response_ms
+      title: DNSServerMetricsResponse
+      type: object
+    DNSServerResponse:
+      description: DNS server response DTO.
+      properties:
+        created_at:
+          title: Created At
+          type: string
+        hostname:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hostname
+        id:
+          title: Id
+          type: string
+        last_heartbeat:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Heartbeat
+        name:
+          title: Name
+          type: string
+        region:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Region
+        status:
+          title: Status
+          type: string
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      required:
+      - id
+      - name
+      - status
+      - version
+      - region
+      - hostname
+      - last_heartbeat
+      - created_at
+      title: DNSServerResponse
+      type: object
+    PerformanceMetric:
+      description: Performance metric DTO.
+      properties:
+        metric:
+          title: Metric
+          type: string
+        value:
+          title: Value
+          type: number
+      required:
+      - metric
+      - value
+      title: PerformanceMetric
+      type: object
+    QueryTimelineEntry:
+      description: Query timeline entry DTO.
+      properties:
+        queries:
+          title: Queries
+          type: integer
+        timestamp:
+          title: Timestamp
+          type: string
+      required:
+      - timestamp
+      - queries
+      title: QueryTimelineEntry
+      type: object
+    RecordResponse:
+      description: Record response DTO.
+      properties:
+        created_at:
+          title: Created At
+          type: string
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        port:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Port
+        priority:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Priority
+        ttl:
+          title: Ttl
+          type: integer
+        type:
+          title: Type
+          type: string
+        value:
+          title: Value
+          type: string
+        weight:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Weight
+      required:
+      - id
+      - name
+      - type
+      - value
+      - ttl
+      - created_at
+      title: RecordResponse
+      type: object
+    ServerSummaryEntry:
+      description: Server summary entry DTO.
+      properties:
+        avg_response_ms:
+          title: Avg Response Ms
+          type: number
+        cache_hits:
+          title: Cache Hits
+          type: integer
+        errors:
+          title: Errors
+          type: integer
+        queries:
+          title: Queries
+          type: integer
+        server_id:
+          title: Server Id
+          type: string
+        server_name:
+          title: Server Name
+          type: string
+      required:
+      - server_id
+      - server_name
+      - queries
+      - cache_hits
+      - errors
+      - avg_response_ms
+      title: ServerSummaryEntry
+      type: object
+    SummaryMetric:
+      description: Summary metric DTO.
+      properties:
+        key:
+          title: Key
+          type: string
+        value:
+          title: Value
+          type: integer
+      required:
+      - key
+      - value
+      title: SummaryMetric
+      type: object
+    ZoneResponse:
+      description: Zone response DTO.
+      properties:
+        created_at:
+          title: Created At
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        visibility:
+          title: Visibility
+          type: string
+      required:
+      - id
+      - name
+      - visibility
+      - description
+      - created_at
+      title: ZoneResponse
+      type: object
   securitySchemes:
     BearerAuth:
-      type: http
+      bearer_format: JWT
       scheme: bearer
-      bearerFormat: JWT
-      description: |
-        JWT access token obtained from `/api/v1/auth/login`.
+      type: http
+info:
+  title: hub_api.app
+  version: 0.1.0
+openapi: 3.1.0
+paths:
+  /api/v1/auth/login:
+    post:
+      description: '
 
-        All endpoints except authentication and health checks require a valid Bearer token.
+        Request body: {email, password, mfa_token?}
 
-        Include as: `Authorization: Bearer <access_token>`
+        Returns:
 
-security:
-  - BearerAuth: []
+        - 200 {access_token, refresh_token, expires_in: 3600, token_type: "Bearer"}
 
-tags:
-  - name: Health
-    description: Service health and readiness checks
-  - name: Authentication
-    description: User authentication and token management
+        - 200 {mfa_required: true} (no tokens) when MFA needed
+
+        - 401 {error: "Invalid credentials"} on failure
+
+        - 400 on missing fields'
+      operationId: post_login
+      parameters: []
+      responses: {}
+      summary: Authenticate user by email and password.
+  /api/v1/auth/logout:
+    post:
+      description: '
+
+        Request body: {refresh_token}
+
+        Returns:
+
+        - 204 No Content on success
+
+        - 400 on missing fields'
+      operationId: post_logout
+      parameters: []
+      responses: {}
+      summary: Logout user by revoking refresh token.
+  /api/v1/auth/public-key:
+    get:
+      description: "\nUsed by headend servers and clients to verify JWTs issued by\
+        \ the auth service.\nReturns the key in PEM format with the key ID (kid).\n\
+        \nThis endpoint is PUBLIC (no authentication required) because headends need\n\
+        the key before they can authenticate.\n\nReturns:\n    - 200: {public_key:\
+        \ \"...\", kid: \"...\", algorithm: \"RS256\", ...}\n    - 500: {error: \"\
+        ...\"} on server error"
+      operationId: get_get_auth_public_key
+      parameters: []
+      responses: {}
+      summary: Get the public key for JWT verification.
+  /api/v1/auth/refresh:
+    post:
+      description: "\nThis is the FLAT equivalent of `/api/v1/sase/jwt/refresh`.\n\
+        Does NOT require a pre-existing JWT (uses refresh_token for auth).\n\nRequest\
+        \ body:\n{\n    \"refresh_token\": \"eyJhbGc...\"\n}\n\nReturns:\n    - 200:\
+        \ {access_token, refresh_token, expires_in, token_type, meta}\n    - 400:\
+        \ {error: \"...\"} if validation fails\n    - 401: {error: \"...\"} if token\
+        \ is invalid/expired/replayed\n    - 503: {error: \"...\", retry_with_credentials:\
+        \ true} if cache unavailable\n    - 500: {error: \"...\"} on server error"
+      operationId: post_refresh_auth_token
+      parameters: []
+      responses: {}
+      summary: Refresh JWT access token using refresh token with rotation.
+  /api/v1/auth/token:
+    post:
+      description: "\nThis is the FLAT equivalent of `/api/v1/sase/jwt/token`.\nUsed\
+        \ by Go hub-router to obtain initial JWT after registration.\n\nRequires node_id,\
+        \ node_type, and api_key in request body.\nDoes NOT require a pre-existing\
+        \ JWT (caller has none yet).\n\nRequest body:\n{\n    \"node_id\": \"cluster-1\"\
+        ,\n    \"node_type\": \"kubernetes_node\" | \"raw_compute\" | \"client_docker\"\
+        \ | \"client_native\",\n    \"api_key\": \"secret-api-key\"\n}\n\nReturns:\n\
+        \    - 200: {access_token, refresh_token, expires_in, token_type, meta}\n\
+        \    - 400: {error: \"...\"} if validation fails\n    - 401: {error: \"...\"\
+        } if authentication fails\n    - 500: {error: \"...\"} on server error"
+      operationId: post_issue_auth_token
+      parameters: []
+      responses: {}
+      summary: Issue JWT token for an authenticated cluster/client node.
+  /api/v1/auth/validate:
+    post:
+      description: "\nUsed by headend servers to validate node JWTs issued by the\
+        \ auth service.\nRequires the JWT in the Authorization header (the token to\
+        \ validate).\n\nRequest header:\n    Authorization: Bearer <token>\n\nReturns:\n\
+        \    - 200: {valid: True, node_id: \"...\", tenant: \"...\", ...}\n    - 401:\
+        \ {error: \"...\"} if token is invalid\n    - 500: {error: \"...\"} on server\
+        \ error"
+      operationId: post_validate_auth_token
+      parameters: []
+      responses: {}
+      summary: Validate a JWT token and return its payload.
+  /api/v1/certs/certificates:
+    post:
+      description: "\nRequires machine-JWT with certs:issue scope (or legacy enrollment\
+        \ token if flag OFF).\nUsed during node onboarding and cert renewal.\n\nRequest\
+        \ body:\n{\n    \"type\": \"client\" | \"headend\",\n    \"id\": \"node-id\"\
+        ,\n    \"name\": \"node-name\",\n    \"client_type\": \"docker\" | \"native\"\
+        \ (for client type),\n    \"san_names\": [\"dns1\", \"dns2\"] (for headend\
+        \ type)\n}\n\nReturns:\n    JSON response with certificate type and PEM-encoded\
+        \ cert/key/CA."
+      operationId: post_generate_certificate
+      parameters: []
+      responses: {}
+      summary: Generate a signed X.509 certificate for a node.
+  /api/v1/clusters/:
+    get:
+      description: "\nThis is the FLAT equivalent of `/api/v1/sase/clusters/` (GET).\n\
+        Used by Go hub-router to enumerate clusters for policy sync.\n\nRequires valid\
+        \ JWT with clusters:read scope.\n\nReturns:\n    - 200: {clusters: [...],\
+        \ meta: {...}}\n    - 403: {error: \"...\"} if auth fails\n    - 500: {error:\
+        \ \"...\"} on server error"
+      operationId: get_list_clusters_flat
+      parameters: []
+      responses: {}
+      summary: List all clusters for the tenant.
+  /api/v1/firewall/rules:
+    get:
+      description: "\nRequires machine-JWT authentication (or legacy static token\
+        \ if flag OFF).\nReturns rules for all active users in the authenticated tenant.\n\
+        \nReturns:\n    - 200: {timestamp, rules_count, user_rules: {user_id: [rules]}}\n\
+        \    - 401: {error: \"...\"} if auth fails\n    - 500: {error: \"...\"} on\
+        \ server error"
+      operationId: get_get_firewall_rules
+      parameters: []
+      responses: {}
+      summary: Get all firewall rules for headend consumption.
+  /api/v1/headend/{headend_id}/ports:
+    get:
+      description: "\nRequires machine-JWT authentication (or legacy static token\
+        \ if flag OFF).\nOptional query param: cluster_id (defaults to \"cluster-{headend_id}\"\
+        ).\n\nArgs:\n    headend_id: ID of the headend.\n\nReturns:\n    - 200: {headend_id,\
+        \ cluster_id, tcp_ranges, udp_ranges, ...}\n    - 401: {error: \"...\"} if\
+        \ auth fails\n    - 404: {error: \"...\"} if no config found\n    - 500: {error:\
+        \ \"...\"} on server error"
+      operationId: get_get_headend_ports
+      parameters:
+      - in: path
+        name: headend_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get port configuration for a specific headend.
+  /api/v1/jwt/public-key:
+    get:
+      description: "\nUsed by headend servers and clients to verify JWTs issued by\
+        \ the\nauth service. Returns the key in PEM format with the key ID (kid).\n\
+        \nReturns:\n    JSON response with public_key, kid, algorithm, and use."
+      operationId: get_get_jwt_public_key
+      parameters: []
+      responses: {}
+      summary: Get the public key for JWT verification.
+  /api/v1/jwt/refresh:
+    post:
+      description: "\nRequest body:\n{\n    \"refresh_token\": \"eyJhbGc...\"\n}\n\
+        \nReturns:\n    JSON response with new access_token and expires_in."
+      operationId: post_refresh_jwt_token
+      parameters: []
+      responses: {}
+      summary: Refresh JWT access token using refresh token.
+  /api/v1/jwt/revoke:
+    post:
+      description: "\nRequires tenant claim and jwt:revoke scope.\nOnly node_id-based\
+        \ revocation is supported; revocation of tokens\nfrom other tenants is rejected\
+        \ with 403.\n\nRequest body:\n{\n    \"node_id\": \"cluster-1\"  (revoke all\
+        \ tokens for node)\n}\n\nReturns:\n    JSON response with revocation result."
+      operationId: post_revoke_jwt_token
+      parameters: []
+      responses: {}
+      summary: Revoke JWT token(s) for a node in the caller's tenant.
+  /api/v1/jwt/token:
+    post:
+      description: "\nRequires node_id, node_type, and api_key. Authenticates via\n\
+        cluster_manager (for headend nodes) or client_registry (for clients).\n\n\
+        Request body:\n{\n    \"node_id\": \"cluster-1\",\n    \"node_type\": \"kubernetes_node\"\
+        \ | \"raw_compute\" | \"client_docker\" | \"client_native\",\n    \"api_key\"\
+        : \"secret-api-key\"\n}\n\nReturns:\n    JSON response with access_token,\
+        \ refresh_token, expires_in."
+      operationId: post_generate_jwt_token
+      parameters: []
+      responses: {}
+      summary: Generate JWT token for an authenticated node.
+  /api/v1/jwt/validate:
+    post:
+      description: "\nUsed by headend servers to validate node JWTs.\n\nRequest header:\n\
+        \    Authorization: Bearer <token>\n\nReturns:\n    JSON response with validation\
+        \ result and claims."
+      operationId: post_validate_jwt_token
+      parameters: []
+      responses: {}
+      summary: Validate a JWT token and return its payload.
+  /api/v1/netsvcs/analytics/performance:
+    get:
+      description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
+        \ 24)\n\nReturns:\n    JSON response with performance metrics (avg, min, max,\
+        \ percentiles)."
+      operationId: get_get_performance_analytics
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Performance analytics response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  metrics:
+                    items:
+                      $ref: '#/components/schemas/PerformanceMetric'
+                    title: Metrics
+                    type: array
+                required:
+                - metrics
+                - meta
+                title: PerformanceAnalyticsResponse
+                type: object
+          description: Performance analytics response.
+      summary: Get performance analytics for this tenant.
+  /api/v1/netsvcs/analytics/queries:
+    get:
+      description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
+        \ 24)\n\nReturns:\n    JSON response with query totals and timeline."
+      operationId: get_get_queries_analytics
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Queries analytics response.
+                properties:
+                  cache_hit_rate:
+                    title: Cache Hit Rate
+                    type: number
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  timeline:
+                    items:
+                      $ref: '#/components/schemas/QueryTimelineEntry'
+                    title: Timeline
+                    type: array
+                  total_cache_hits:
+                    title: Total Cache Hits
+                    type: integer
+                  total_errors:
+                    title: Total Errors
+                    type: integer
+                  total_queries:
+                    title: Total Queries
+                    type: integer
+                required:
+                - total_queries
+                - total_cache_hits
+                - total_errors
+                - cache_hit_rate
+                - timeline
+                - meta
+                title: QueriesAnalyticsResponse
+                type: object
+          description: Queries analytics response.
+      summary: Get query analytics for this tenant.
+  /api/v1/netsvcs/analytics/servers:
+    get:
+      description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
+        \ 24)\n\nReturns:\n    JSON response with per-server metrics."
+      operationId: get_get_servers_analytics
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Servers analytics response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  servers:
+                    items:
+                      $ref: '#/components/schemas/ServerSummaryEntry'
+                    title: Servers
+                    type: array
+                required:
+                - servers
+                - meta
+                title: ServersAnalyticsResponse
+                type: object
+          description: Servers analytics response.
+      summary: Get per-server analytics for this tenant.
+  /api/v1/netsvcs/analytics/summary:
+    get:
+      description: "\nReturns:\n    JSON response with zone/record/server/query counts\
+        \ for THIS TENANT ONLY."
+      operationId: get_get_summary_analytics
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Summary analytics response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  metrics:
+                    items:
+                      $ref: '#/components/schemas/SummaryMetric'
+                    title: Metrics
+                    type: array
+                required:
+                - metrics
+                - meta
+                title: SummaryAnalyticsResponse
+                type: object
+          description: Summary analytics response.
+      summary: Get dashboard summary for this tenant.
+  /api/v1/netsvcs/dns-servers:
+    get:
+      description: "\nReturns:\n    JSON response with list of servers and meta."
+      operationId: get_list_dns_servers
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: List of DNS servers response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  servers:
+                    items:
+                      $ref: '#/components/schemas/DNSServerResponse'
+                    title: Servers
+                    type: array
+                required:
+                - servers
+                - meta
+                title: DNSServersListResponse
+                type: object
+          description: List of DNS servers response.
+      summary: List all DNS servers for the tenant.
+  /api/v1/netsvcs/dns-servers/register:
+    post:
+      description: "\nRequires ENROLLMENT_BOOTSTRAP_TOKEN for enrollment.\nReturns\
+        \ machine-JWT + refresh token for subsequent API calls.\n\nReturns:\n    JSON\
+        \ response with server_id, jwt, refresh_token, and config."
+      operationId: post_register_server
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Server enrollment response (machine-JWT + config).
+                properties:
+                  config:
+                    $ref: '#/components/schemas/DNSServerConfigResponse'
+                  jwt:
+                    title: Jwt
+                    type: string
+                  refresh_token:
+                    title: Refresh Token
+                    type: string
+                  server_id:
+                    title: Server Id
+                    type: string
+                required:
+                - server_id
+                - jwt
+                - refresh_token
+                - config
+                title: DNSEnrollmentResponse
+                type: object
+          description: Server enrollment response (machine-JWT + config).
+      summary: Register a new DNS resolver server with bootstrap token.
+  /api/v1/netsvcs/dns-servers/{server_id}:
+    delete:
+      description: "\nArgs:\n    server_id: Server ID to delete\n\nReturns:\n    JSON\
+        \ response with deletion status."
+      operationId: delete_delete_dns_server
+      parameters:
+      - in: path
+        name: server_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a DNS server and its metrics.
+    get:
+      description: "\nArgs:\n    server_id: Server ID to retrieve\n\nReturns:\n  \
+        \  JSON response with server details."
+      operationId: get_get_dns_server
+      parameters:
+      - in: path
+        name: server_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: DNS server response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  hostname:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Hostname
+                  id:
+                    title: Id
+                    type: string
+                  last_heartbeat:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Last Heartbeat
+                  name:
+                    title: Name
+                    type: string
+                  region:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Region
+                  status:
+                    title: Status
+                    type: string
+                  version:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Version
+                required:
+                - id
+                - name
+                - status
+                - version
+                - region
+                - hostname
+                - last_heartbeat
+                - created_at
+                title: DNSServerResponse
+                type: object
+          description: DNS server response DTO.
+      summary: Get details of a specific DNS server.
+  /api/v1/netsvcs/dns-servers/{server_id}/config:
+    get:
+      description: "\nRequires machine-JWT with dns:config:read scope.\nVerifies the\
+        \ machine subject matches the server ID.\n\nArgs:\n    server_id: Server ID\n\
+        \nReturns:\n    JSON response with zones, records, and config version."
+      operationId: get_get_server_config
+      parameters:
+      - in: path
+        name: server_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Server configuration response.
+                properties:
+                  cache_settings:
+                    additionalProperties: true
+                    title: Cache Settings
+                    type: object
+                  settings:
+                    additionalProperties: true
+                    title: Settings
+                    type: object
+                  version:
+                    title: Version
+                    type: integer
+                  zones:
+                    items:
+                      $ref: '#/components/schemas/DNSConfigZone'
+                    title: Zones
+                    type: array
+                required:
+                - zones
+                - cache_settings
+                - settings
+                - version
+                title: DNSServerConfigResponse
+                type: object
+          description: Server configuration response.
+      summary: Get configuration for a DNS resolver server.
+  /api/v1/netsvcs/dns-servers/{server_id}/heartbeat:
+    post:
+      description: "\nRequires machine-JWT with metrics:write scope.\nVerifies the\
+        \ machine subject matches the server ID.\n\nRequest body:\n{\n    \"queries_total\"\
+        : 1000,\n    \"cache_hits\": 800,\n    \"errors\": 5,\n    \"avg_response_ms\"\
+        : 12.5\n}\n\nArgs:\n    server_id: Server ID\n\nReturns:\n    JSON response\
+        \ with config_version and should_sync flag."
+      operationId: post_server_heartbeat
+      parameters:
+      - in: path
+        name: server_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Heartbeat response.
+                properties:
+                  config_version:
+                    title: Config Version
+                    type: integer
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  should_sync:
+                    title: Should Sync
+                    type: boolean
+                  timestamp:
+                    title: Timestamp
+                    type: string
+                required:
+                - config_version
+                - should_sync
+                - timestamp
+                - meta
+                title: DNSHeartbeatResponse
+                type: object
+          description: Heartbeat response.
+      summary: Record a server heartbeat and ingest metrics.
+  /api/v1/netsvcs/dns-servers/{server_id}/metrics:
+    get:
+      description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
+        \ 24)\n\nArgs:\n    server_id: Server ID\n\nReturns:\n    JSON response with\
+        \ metrics list."
+      operationId: get_get_dns_server_metrics
+      parameters:
+      - in: path
+        name: server_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: List of metrics response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  metrics:
+                    items:
+                      $ref: '#/components/schemas/DNSServerMetricsResponse'
+                    title: Metrics
+                    type: array
+                required:
+                - metrics
+                - meta
+                title: DNSServerMetricsListResponse
+                type: object
+          description: List of metrics response.
+      summary: Get metrics for a DNS server.
+  /api/v1/netsvcs/dns-servers/{server_id}/refresh-token:
+    post:
+      description: "\nRequires a machine-JWT with token_type=\"refresh\" and subject=\"\
+        resolver:{server_id}\".\nUses jti-based single-use replay protection.\n\n\
+        Returns:\n    JSON response with new access and refresh tokens."
+      operationId: post_refresh_server_token
+      parameters:
+      - in: path
+        name: server_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Refresh token response.
+                properties:
+                  access_token:
+                    title: Access Token
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  refresh_token:
+                    title: Refresh Token
+                    type: string
+                required:
+                - access_token
+                - refresh_token
+                - meta
+                title: DNSRefreshTokenResponse
+                type: object
+          description: Refresh token response.
+      summary: Rotate DNS resolver server tokens with replay protection.
+  /api/v1/netsvcs/zones:
+    get:
+      description: "\nReturns:\n    JSON response with list of zones and meta."
+      operationId: get_list_zones
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: List zones response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  zones:
+                    items:
+                      $ref: '#/components/schemas/ZoneResponse'
+                    title: Zones
+                    type: array
+                required:
+                - zones
+                - meta
+                title: ZonesListResponse
+                type: object
+          description: List zones response.
+      summary: List all zones for the tenant.
+    post:
+      description: "\nRequest body:\n{\n    \"name\": \"example.com\",\n    \"visibility\"\
+        : \"public\",\n    \"description\": \"Example zone\"\n}\n\nReturns:\n    JSON\
+        \ response with created zone (201) or error (400/500)."
+      operationId: post_create_zone
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Create zone request DTO.
+              properties:
+                description:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Description
+                name:
+                  title: Name
+                  type: string
+                visibility:
+                  default: public
+                  title: Visibility
+                  type: string
+              required:
+              - name
+              title: CreateZoneRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Zone response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  description:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Description
+                  id:
+                    title: Id
+                    type: string
+                  name:
+                    title: Name
+                    type: string
+                  visibility:
+                    title: Visibility
+                    type: string
+                required:
+                - id
+                - name
+                - visibility
+                - description
+                - created_at
+                title: ZoneResponse
+                type: object
+          description: Zone response DTO.
+      summary: Create a new zone.
+  /api/v1/netsvcs/zones/{zone_id}:
+    delete:
+      description: "\nArgs:\n    zone_id: Zone ID to delete\n\nReturns:\n    JSON\
+        \ response with deletion status."
+      operationId: delete_delete_zone
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a zone and cascade records.
+    get:
+      description: "\nArgs:\n    zone_id: Zone ID to retrieve\n\nReturns:\n    JSON\
+        \ response with zone details (200) or error (404/500)."
+      operationId: get_get_zone
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Zone response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  description:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Description
+                  id:
+                    title: Id
+                    type: string
+                  name:
+                    title: Name
+                    type: string
+                  visibility:
+                    title: Visibility
+                    type: string
+                required:
+                - id
+                - name
+                - visibility
+                - description
+                - created_at
+                title: ZoneResponse
+                type: object
+          description: Zone response DTO.
+      summary: Get a single zone by ID.
+    put:
+      description: "\nArgs:\n    zone_id: Zone ID to update\n    data: Update request\
+        \ data\n\nReturns:\n    JSON response with updated zone (200) or error (400/404/500)."
+      operationId: put_update_zone
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Update zone request DTO.
+              properties:
+                description:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Description
+                name:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Name
+                visibility:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Visibility
+              title: UpdateZoneRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Zone response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  description:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Description
+                  id:
+                    title: Id
+                    type: string
+                  name:
+                    title: Name
+                    type: string
+                  visibility:
+                    title: Visibility
+                    type: string
+                required:
+                - id
+                - name
+                - visibility
+                - description
+                - created_at
+                title: ZoneResponse
+                type: object
+          description: Zone response DTO.
+      summary: Update an existing zone.
+  /api/v1/netsvcs/zones/{zone_id}/records:
+    get:
+      description: "\nArgs:\n    zone_id: Zone ID to list records for\n\nReturns:\n\
+        \    JSON response with list of records and meta."
+      operationId: get_list_records
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: List records response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  records:
+                    items:
+                      $ref: '#/components/schemas/RecordResponse'
+                    title: Records
+                    type: array
+                required:
+                - records
+                - meta
+                title: RecordsListResponse
+                type: object
+          description: List records response.
+      summary: List all records for a zone.
+    post:
+      description: "\nArgs:\n    zone_id: Zone ID\n    data: Create record request\
+        \ data\n\nReturns:\n    JSON response with created record (201) or error (400/404/500)."
+      operationId: post_create_record
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Create record request DTO.
+              properties:
+                name:
+                  title: Name
+                  type: string
+                port:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Port
+                priority:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Priority
+                ttl:
+                  default: 300
+                  title: Ttl
+                  type: integer
+                type:
+                  title: Type
+                  type: string
+                value:
+                  title: Value
+                  type: string
+                weight:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Weight
+              required:
+              - name
+              - type
+              - value
+              title: CreateRecordRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Record response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  id:
+                    title: Id
+                    type: string
+                  name:
+                    title: Name
+                    type: string
+                  port:
+                    anyOf:
+                    - type: integer
+                    - type: 'null'
+                    default: null
+                    title: Port
+                  priority:
+                    anyOf:
+                    - type: integer
+                    - type: 'null'
+                    default: null
+                    title: Priority
+                  ttl:
+                    title: Ttl
+                    type: integer
+                  type:
+                    title: Type
+                    type: string
+                  value:
+                    title: Value
+                    type: string
+                  weight:
+                    anyOf:
+                    - type: integer
+                    - type: 'null'
+                    default: null
+                    title: Weight
+                required:
+                - id
+                - name
+                - type
+                - value
+                - ttl
+                - created_at
+                title: RecordResponse
+                type: object
+          description: Record response DTO.
+      summary: Create a new record in a zone.
+  /api/v1/netsvcs/zones/{zone_id}/records/{record_id}:
+    delete:
+      description: "\nArgs:\n    zone_id: Zone ID\n    record_id: Record ID to delete\n\
+        \nReturns:\n    JSON response with deletion status."
+      operationId: delete_delete_record
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: record_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a record.
+    put:
+      description: "\nArgs:\n    zone_id: Zone ID\n    record_id: Record ID to update\n\
+        \    data: Update record request data\n\nReturns:\n    JSON response with\
+        \ updated record (200) or error (400/404/500)."
+      operationId: put_update_record
+      parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: record_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Update record request DTO.
+              properties:
+                name:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Name
+                port:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Port
+                priority:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Priority
+                ttl:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Ttl
+                type:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Type
+                value:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  default: null
+                  title: Value
+                weight:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
+                  title: Weight
+              title: UpdateRecordRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Record response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  id:
+                    title: Id
+                    type: string
+                  name:
+                    title: Name
+                    type: string
+                  port:
+                    anyOf:
+                    - type: integer
+                    - type: 'null'
+                    default: null
+                    title: Port
+                  priority:
+                    anyOf:
+                    - type: integer
+                    - type: 'null'
+                    default: null
+                    title: Priority
+                  ttl:
+                    title: Ttl
+                    type: integer
+                  type:
+                    title: Type
+                    type: string
+                  value:
+                    title: Value
+                    type: string
+                  weight:
+                    anyOf:
+                    - type: integer
+                    - type: 'null'
+                    default: null
+                    title: Weight
+                required:
+                - id
+                - name
+                - type
+                - value
+                - ttl
+                - created_at
+                title: RecordResponse
+                type: object
+          description: Record response DTO.
+      summary: Update an existing record.
+  /api/v1/perftest_c2c/endpoints:
+    get:
+      description: "\nQuery params:\n    enabled: Optional bool filter (true/false)\n\
+        \nReturns:\n    200 with list of endpoints."
+      operationId: get_list_endpoints
+      parameters: []
+      responses: {}
+      summary: List C2C endpoints for the tenant.
+    post:
+      description: "\nRequest body:\n    {\n        \"region\": \"us-west-2\",\n \
+        \       \"name\": \"primary-node\",\n        \"engine_url\": \"http://engine.local:8080\"\
+        ,\n        \"target\": \"node.example.com\",\n        \"api_key\": \"optional-key\"\
+        \n    }\n\nReturns:\n    201 with endpoint and raw api_key (if generated)."
+      operationId: post_create_endpoint
+      parameters: []
+      responses: {}
+      summary: Create a new C2C endpoint.
+  /api/v1/perftest_c2c/endpoints/{endpoint_id}:
+    delete:
+      description: "\nArgs:\n    endpoint_id: Endpoint identifier.\n\nReturns:\n \
+        \   204 on success, 404 if not found."
+      operationId: delete_delete_endpoint
+      parameters:
+      - in: path
+        name: endpoint_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a C2C endpoint.
+    get:
+      description: "\nArgs:\n    endpoint_id: Endpoint identifier.\n\nReturns:\n \
+        \   200 with endpoint, 404 if not found."
+      operationId: get_get_endpoint
+      parameters:
+      - in: path
+        name: endpoint_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get a C2C endpoint by ID.
+    patch:
+      description: "\nRequest body: any of {name, region, engine_url, target, enabled}\n\
+        \nReturns:\n    200 with updated endpoint, 404 if not found."
+      operationId: patch_update_endpoint
+      parameters:
+      - in: path
+        name: endpoint_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update a C2C endpoint.
+  /api/v1/perftest_c2c/matrix/latest:
+    get:
+      description: "\nQuery params:\n    test_type: Required test type (e.g., \"http\"\
+        , \"icmp\")\n\nReturns:\n    200 with matrix data, 400 if test_type missing."
+      operationId: get_get_latest_matrix
+      parameters: []
+      responses: {}
+      summary: Get the latest NxN region matrix for a test type.
+  /api/v1/perftest_c2c/matrix/runs/{run_id}:
+    get:
+      description: "\nArgs:\n    run_id: Run identifier.\n\nReturns:\n    200 with\
+        \ run matrix, 404 if run not found."
+      operationId: get_get_run_matrix
+      parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get the region matrix for a specific run.
+  /api/v1/perftest_c2c/matrix/trends:
+    get:
+      description: "\nQuery params:\n    source: Required source region\n    dest:\
+        \ Required destination region\n    test_type: Required test type\n    window:\
+        \ Optional window size (default 20)\n\nReturns:\n    200 with trend data,\
+        \ 400 if required params missing."
+      operationId: get_get_trends
+      parameters: []
+      responses: {}
+      summary: Get trends for a region pair and test type.
+  /api/v1/perftest_c2c/recurring:
+    get:
+      description: "\nReturns:\n    200 with list of jobs."
+      operationId: get_list_recurring
+      parameters: []
+      responses: {}
+      summary: List recurring jobs (matrix_run and node_health) for the tenant.
+    post:
+      description: "\nRequest body:\n    {\n        \"endpoint_ids\": [\"ep-1\", \"\
+        ep-2\"] or null,\n        # null = all enabled endpoints (matrix_run only)\n\
+        \        \"interval_seconds\": 300,\n        \"job_type\": \"matrix_run\"\
+        \ or \"node_health\"  # default: \"matrix_run\"\n    }\n\nReturns:\n    201\
+        \ with job_id and scheduled details.\n    400 on invalid input or job_type.\n\
+        \    402 if node_health requires regions feature but not enabled."
+      operationId: post_create_recurring
+      parameters: []
+      responses: {}
+      summary: Create a new recurring matrix run or node health job.
+  /api/v1/perftest_c2c/recurring/{job_id}:
+    delete:
+      description: "\nArgs:\n    job_id: Job identifier.\n\nReturns:\n    204 if deleted,\
+        \ 404 if not found."
+      operationId: delete_delete_recurring
+      parameters:
+      - in: path
+        name: job_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a recurring job.
+    patch:
+      description: "\nRequest body:\n    {\"enabled\": bool}\n\nArgs:\n    job_id:\
+        \ Job identifier.\n\nReturns:\n    200 if updated, 404 if not found."
+      operationId: patch_patch_recurring
+      parameters:
+      - in: path
+        name: job_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Toggle enabled status of a recurring job.
+  /api/v1/perftest_c2c/regions:
+    get:
+      description: "\nReturns:\n    200 with list of regions: {region, node_count,\
+        \ healthy_count, providers}"
+      operationId: get_list_regions
+      parameters: []
+      responses: {}
+      summary: List region aggregates with node counts and health summaries.
+  /api/v1/perftest_c2c/regions/nodes:
+    get:
+      description: "\nQuery params:\n    region: Optional region filter\n\nReturns:\n\
+        \    200 with list of visible endpoints (foreign public nodes redacted)."
+      operationId: get_list_nodes
+      parameters: []
+      responses: {}
+      summary: List visible endpoints (own + foreign public, optionally filtered by
+        region).
+  /api/v1/perftest_c2c/runs:
+    get:
+      description: "\nReturns:\n    200 with list of runs."
+      operationId: get_list_runs
+      parameters: []
+      responses: {}
+      summary: List matrix runs for the tenant.
+    post:
+      description: "\nRequest body:\n    {\n        \"test_types\": [\"http\", \"\
+        icmp\"],\n        \"endpoint_ids\": [\"ep-1\", \"ep-2\"]  # optional; defaults\
+        \ to all enabled\n    }\n\nReturns:\n    202 with run_id and total_pairs enqueued."
+      operationId: post_create_run
+      parameters: []
+      responses: {}
+      summary: Create and enqueue a new matrix run.
+  /api/v1/perftest_c2c/runs/{run_id}:
+    get:
+      description: "\nArgs:\n    run_id: Run identifier.\n\nReturns:\n    200 with\
+        \ run status/progress, 404 if not found."
+      operationId: get_get_run
+      parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get run status and progress.
+  /api/v1/perftest_client/config:
+    get:
+      description: "\nThis is a device-facing endpoint. Authentication is via Bearer\
+        \ token\ncontaining an API key (not a JWT). The device's tenant is derived\
+        \ from\nthe device record, not from the request.\n\nReturns:\n    JSON response\
+        \ with resolved schedules and client config"
+      operationId: get_get_client_config
+      parameters: []
+      responses: {}
+      summary: Get client configuration and resolved schedules for a device.
+  /api/v1/perftest_client/schedules:
+    get:
+      description: "\nQuery parameters:\n    org_unit_id: Filter by organization unit\
+        \ ID (optional)\n\nReturns:\n    JSON response with list of schedules and\
+        \ meta"
+      operationId: get_list_schedules
+      parameters: []
+      responses: {}
+      summary: List test schedules for the tenant.
+    post:
+      description: "\nRequired scope: schedules:write\nRequired feature: perftest_client.schedules\n\
+        \nJSON body:\n    test_type: Test type (required)\n    target: Test target\
+        \ (required)\n    interval_seconds: Test interval in seconds (required)\n\
+        \    org_unit_id: Organization unit ID (optional)\n    enabled: Whether schedule\
+        \ is enabled (optional, default: true)\n\nReturns:\n    JSON response with\
+        \ created schedule and meta"
+      operationId: post_create_schedule
+      parameters: []
+      responses: {}
+      summary: Create a new test schedule.
+  /api/v1/perftest_client/schedules/{schedule_id}:
+    delete:
+      description: "\nArgs:\n    schedule_id: Schedule identifier\n\nReturns:\n  \
+        \  JSON response with deletion status"
+      operationId: delete_delete_schedule
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a test schedule.
+    get:
+      description: "\nArgs:\n    schedule_id: Schedule identifier\n\nReturns:\n  \
+        \  JSON response with schedule details"
+      operationId: get_get_schedule
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get a test schedule by ID.
+    put:
+      description: "\nArgs:\n    schedule_id: Schedule identifier\n\nJSON body:\n\
+        \    test_type: Test type (optional)\n    target: Test target (optional)\n\
+        \    interval_seconds: Test interval in seconds (optional)\n    enabled: Whether\
+        \ schedule is enabled (optional)\n\nReturns:\n    JSON response with updated\
+        \ schedule"
+      operationId: put_update_schedule
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update a test schedule.
+  /api/v1/perftest_client/version:
+    get:
+      description: "\nRequired feature: perftest_client.version\nNo specific scope\
+        \ required (tenant access is sufficient).\n\nReturns:\n    JSON response with\
+        \ version details and metadata"
+      operationId: get_get_version
+      parameters: []
+      responses: {}
+      summary: Get the latest WaddlePerf client version information.
+  /api/v1/perftest_cluster/alerts/channels:
+    get:
+      description: "\nReturns:\n    JSON response with list of channels"
+      operationId: get_list_channels
+      parameters: []
+      responses: {}
+      summary: List notification channels for the tenant.
+    post:
+      description: "\nEmail requires: perftest_cluster.alerts\nWebhook requires: perftest_cluster.alert_routing\
+        \ (Professional)\n\nJSON body:\n    name: Channel name (required)\n    kind:\
+        \ \"email\" or \"webhook\" (required)\n    config: Config dict (required)\n\
+        \        email: {\"to\": [\"addr1\", \"addr2\"]}\n        webhook: {\"url\"\
+        : \"https://...\", \"secret\": \"...\"}\n    enabled: Channel enabled (default\
+        \ true)\n\nReturns:\n    JSON response with created channel"
+      operationId: post_create_channel
+      parameters: []
+      responses: {}
+      summary: Create a notification channel (email or webhook).
+  /api/v1/perftest_cluster/alerts/channels/{channel_id}:
+    delete:
+      description: "\nReturns:\n    204 No Content or 404"
+      operationId: delete_delete_channel
+      parameters:
+      - in: path
+        name: channel_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a notification channel.
+  /api/v1/perftest_cluster/alerts/events:
+    get:
+      description: "\nReturns:\n    JSON response with list of events"
+      operationId: get_list_events
+      parameters: []
+      responses: {}
+      summary: List recent alert events for the tenant.
+  /api/v1/perftest_cluster/alerts/rules:
+    get:
+      description: "\nReturns:\n    JSON response with list of rules"
+      operationId: get_list_rules
+      parameters: []
+      responses: {}
+      summary: List alert rules for the tenant.
+    post:
+      description: "\nRequired scope: alerts:write\nRequired feature: perftest_cluster.alerts\n\
+        \nJSON body:\n    name: Rule name (required)\n    metric: Metric name (e.g.,\
+        \ latency_ms, throughput) (required)\n    comparator: gt, gte, lt, lte (required)\n\
+        \    threshold: Threshold value (required)\n    window_seconds: Dedup window\
+        \ in seconds (default 300)\n    device_id: Device filter (optional)\n    test_type:\
+        \ Test type filter (optional)\n    channel_id: Notification channel ID (optional)\n\
+        \    enabled: Rule enabled (default true)\n\nReturns:\n    JSON response with\
+        \ created rule"
+      operationId: post_create_rule
+      parameters: []
+      responses: {}
+      summary: Create an alert rule.
+  /api/v1/perftest_cluster/alerts/rules/{rule_id}:
+    delete:
+      description: "\nReturns:\n    204 No Content or 404"
+      operationId: delete_delete_rule
+      parameters:
+      - in: path
+        name: rule_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete an alert rule.
+  /api/v1/perftest_cluster/autoperf/policies:
+    get:
+      description: "\nRequired scope: autoperf:read\nRequired feature: perftest_cluster.autoperf\n\
+        \nReturns:\n    JSON response with policies list (200)"
+      operationId: get_list_policies
+      parameters: []
+      responses: {}
+      summary: List AutoPerf policies for the tenant.
+    post:
+      description: "\nRequired scope: autoperf:write\nRequired feature: perftest_cluster.autoperf\n\
+        \nJSON body:\n    name: Policy name (required)\n    device_id: Device to monitor\
+        \ (required)\n    target: Test target IP/hostname (required)\n    t1_interval_seconds:\
+        \ Tier 1 interval in seconds (default 300, min 30)\n    t2_interval_seconds:\
+        \ Tier 2 interval in seconds (default 120, min 30)\n    t3_interval_seconds:\
+        \ Tier 3 interval in seconds (default 60, min 30)\n    deescalate_after_clean:\
+        \ Clean cycles to de-escalate (default 3)\n    enabled: Policy enabled (default\
+        \ true)\n\nReturns:\n    JSON response with created policy (201)"
+      operationId: post_create_policy
+      parameters: []
+      responses: {}
+      summary: Create an AutoPerf policy.
+  /api/v1/perftest_cluster/autoperf/policies/{policy_id}:
+    delete:
+      description: "\nRequired scope: autoperf:write\nRequired feature: perftest_cluster.autoperf\n\
+        \nReturns:\n    JSON response (204 on success, 404 if not found)"
+      operationId: delete_delete_policy
+      parameters:
+      - in: path
+        name: policy_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete an AutoPerf policy.
+    get:
+      description: "\nRequired scope: autoperf:read\nRequired feature: perftest_cluster.autoperf\n\
+        \nReturns:\n    JSON response with policy (200) or 404 if not found"
+      operationId: get_get_policy
+      parameters:
+      - in: path
+        name: policy_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get a single AutoPerf policy.
+  /api/v1/perftest_cluster/autoperf/policies/{policy_id}/state:
+    get:
+      description: "\nRequired scope: autoperf:read\nRequired feature: perftest_cluster.autoperf\n\
+        \nReturns:\n    JSON response with state (200) or 404 if not found"
+      operationId: get_get_policy_state
+      parameters:
+      - in: path
+        name: policy_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get AutoPerf state for a policy.
+  /api/v1/perftest_cluster/devices:
+    get:
+      description: "\nRequires valid JWT with devices:read scope.\n\nReturns:\n  \
+        \  JSON response with list of devices."
+      operationId: get_list_devices
+      parameters: []
+      responses: {}
+      summary: List devices for the tenant.
+  /api/v1/perftest_cluster/devices/{device_id}:
+    get:
+      description: "\nRequires valid JWT with devices:read scope.\n\nArgs:\n    device_id:\
+        \ Device identifier.\n\nReturns:\n    JSON response with device details."
+      operationId: get_get_device
+      parameters:
+      - in: path
+        name: device_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get device details.
+  /api/v1/perftest_cluster/devices/{device_id}/config:
+    get:
+      description: "\nRequires valid API key for the device.\n\nArgs:\n    device_id:\
+        \ Device identifier.\n\nReturns:\n    JSON response with device configuration."
+      operationId: get_get_device_config
+      parameters:
+      - in: path
+        name: device_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get device configuration.
+  /api/v1/perftest_cluster/devices/{device_id}/heartbeat:
+    post:
+      description: "\nRequires valid API key for the device.\n\nArgs:\n    device_id:\
+        \ Device identifier.\n\nReturns:\n    JSON response with status."
+      operationId: post_device_heartbeat
+      parameters:
+      - in: path
+        name: device_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Record device heartbeat.
+  /api/v1/perftest_cluster/enrollment/enroll:
+    post:
+      description: "\nPublic endpoint \u2014 no JWT required. Validates enrollment\
+        \ secret and creates device.\nEnforces Professional tier gate for >5 active\
+        \ devices per tenant.\n\nRequest body:\n    secret: Enrollment secret (required)\n\
+        \    name: Device name (required)\n    serial: Device serial (required)\n\
+        \    hostname: Device hostname\n    os: Operating system\n    device_metadata:\
+        \ Additional metadata JSON\n\nReturns:\n    JSON response with enrolled device\
+        \ and API key."
+      operationId: post_enroll_device
+      parameters: []
+      responses: {}
+      summary: Enroll a device using a secret.
+  /api/v1/perftest_cluster/enrollment/secrets:
+    get:
+      description: "\nRequires valid JWT with enrollment:read scope.\n\nReturns:\n\
+        \    JSON response with list of secrets."
+      operationId: get_list_secrets
+      parameters: []
+      responses: {}
+      summary: List enrollment secrets for the tenant.
+  /api/v1/perftest_cluster/enrollment/secrets/{org_unit_id}:
+    post:
+      description: "\nRequires valid JWT with enrollment:write scope.\n\nArgs:\n \
+        \   org_unit_id: Organizational unit identifier.\n\nReturns:\n    JSON response\
+        \ with created secret (including raw secret for one-time display)."
+      operationId: post_create_secret
+      parameters:
+      - in: path
+        name: org_unit_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Create an enrollment secret for an organizational unit.
+  /api/v1/perftest_cluster/enrollment/secrets/{secret_id}:
+    delete:
+      description: "\nRequires valid JWT with enrollment:write scope.\n\nArgs:\n \
+        \   secret_id: Secret identifier.\n\nReturns:\n    JSON response with status."
+      operationId: delete_delete_secret
+      parameters:
+      - in: path
+        name: secret_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete an enrollment secret.
+  /api/v1/perftest_cluster/live-test/run:
+    post:
+      description: "\nRequires valid JWT with tenant claim.\n\nRequest body:\n   \
+        \ {\n        \"test_type\": \"http|tcp|udp|icmp|...\",\n        \"target\"\
+        : \"host or IP\",\n        \"device_id\": \"device-uuid\",\n        \"params\"\
+        : { \"port\": 80, \"timeout\": 30, \"count\": 10, ... }\n    }\n\nReturns:\n\
+        \    JSON response with test result and metadata."
+      operationId: post_run_test_sync
+      parameters: []
+      responses: {}
+      summary: Synchronous HTTP endpoint to run a single test.
+  /api/v1/perftest_cluster/org-units:
+    get:
+      description: "\nQuery parameters:\n    parent_id: Filter by parent OU ID (optional)\n\
+        \    limit: Maximum number of results (default: 100)\n    offset: Pagination\
+        \ offset (default: 0)\n\nRequired scope: org_units:read\nRequired feature:\
+        \ perftest_cluster.org_units\n\nReturns:\n    JSON response with list of OUs\
+        \ and meta"
+      operationId: get_list_org_units
+      parameters: []
+      responses: {}
+      summary: List all organizational units for the tenant.
+    post:
+      description: "\nRequired scope: org_units:write\nRequired feature: perftest_cluster.org_units\n\
+        \nJSON body:\n    name: OU name (required)\n    parent_id: Parent OU ID (optional)\n\
+        \    description: OU description (optional)\n    is_active: Active status\
+        \ (optional, default: true)\n\nReturns:\n    JSON response with created OU\
+        \ and meta"
+      operationId: post_create_org_unit
+      parameters: []
+      responses: {}
+      summary: Create a new organizational unit.
+  /api/v1/perftest_cluster/org-units/{ou_id}:
+    delete:
+      description: "\nArgs:\n    ou_id: OU identifier\n\nRequired scope: org_units:write\n\
+        Required feature: perftest_cluster.org_units\n\nReturns:\n    JSON response\
+        \ with status and meta"
+      operationId: delete_delete_org_unit
+      parameters:
+      - in: path
+        name: ou_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete organizational unit.
+    get:
+      description: "\nArgs:\n    ou_id: OU identifier\n\nRequired scope: org_units:read\n\
+        Required feature: perftest_cluster.org_units\n\nReturns:\n    JSON response\
+        \ with OU details and meta"
+      operationId: get_get_org_unit
+      parameters:
+      - in: path
+        name: ou_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get organizational unit details.
+    put:
+      description: "\nArgs:\n    ou_id: OU identifier\n\nJSON body:\n    name: OU\
+        \ name (optional)\n    parent_id: Parent OU ID (optional)\n    description:\
+        \ OU description (optional)\n    is_active: Active status (optional)\n\nRequired\
+        \ scope: org_units:write\nRequired feature: perftest_cluster.org_units\n\n\
+        Returns:\n    JSON response with updated OU and meta"
+      operationId: put_update_org_unit
+      parameters:
+      - in: path
+        name: ou_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update organizational unit.
+  /api/v1/perftest_cluster/scheduled-tests:
+    get:
+      description: "\nRequired scope: tests:read\nRequired feature: perftest_cluster.scheduled_tests\n\
+        \nReturns:\n    JSON response with list of scheduled tests and meta"
+      operationId: get_list_scheduled_tests
+      parameters: []
+      responses: {}
+      summary: List scheduled tests for the tenant.
+    post:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.scheduled_tests\n\
+        \nJSON body:\n    device_id: Device identifier (required, non-empty string)\n\
+        \    test_type: Test type (required, non-empty string)\n    target: Target\
+        \ URL or endpoint (required, non-empty string)\n    interval_seconds: Interval\
+        \ in seconds (required, int >= 30)\n\nReturns:\n    JSON response with created\
+        \ job and meta"
+      operationId: post_create_scheduled_test
+      parameters: []
+      responses: {}
+      summary: Create a scheduled server test.
+  /api/v1/perftest_cluster/scheduled-tests/{job_id}:
+    delete:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.scheduled_tests\n\
+        \nPath parameters:\n    job_id: Job identifier\n\nReturns:\n    Empty response\
+        \ (204) or not found (404)"
+      operationId: delete_delete_scheduled_test
+      parameters:
+      - in: path
+        name: job_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete a scheduled test.
+    patch:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.scheduled_tests\n\
+        \nPath parameters:\n    job_id: Job identifier\n\nJSON body:\n    enabled:\
+        \ Boolean to enable or disable the job\n\nReturns:\n    JSON response with\
+        \ updated job"
+      operationId: patch_update_scheduled_test
+      parameters:
+      - in: path
+        name: job_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update a scheduled test (enable/disable).
+  /api/v1/perftest_cluster/stats/by-device:
+    get:
+      description: "\nQuery parameters:\n    start_date: Filter by start date (ISO\
+        \ format, optional)\n    end_date: Filter by end date (ISO format, optional)\n\
+        \    limit: Maximum number of devices (default: 50)\n\nRequired scope: stats:read\n\
+        Required feature: perftest_cluster.stats\n\nReturns:\n    JSON response with\
+        \ per-device statistics and meta"
+      operationId: get_get_by_device
+      parameters: []
+      responses: {}
+      summary: Get statistics aggregated by device.
+  /api/v1/perftest_cluster/stats/by-type:
+    get:
+      description: "\nQuery parameters:\n    start_date: Filter by start date (ISO\
+        \ format, optional)\n    end_date: Filter by end date (ISO format, optional)\n\
+        \    limit: Maximum number of test types (default: 50)\n\nRequired scope:\
+        \ stats:read\nRequired feature: perftest_cluster.stats\n\nReturns:\n    JSON\
+        \ response with per-test-type statistics and meta"
+      operationId: get_get_by_type
+      parameters: []
+      responses: {}
+      summary: Get statistics aggregated by test type.
+  /api/v1/perftest_cluster/stats/recent:
+    get:
+      description: "\nQuery parameters:\n    device_id: Filter by device ID (optional)\n\
+        \    limit: Number of recent tests to return (default: 20, max: 100)\n\nRequired\
+        \ scope: stats:read\nRequired feature: perftest_cluster.stats\n\nReturns:\n\
+        \    JSON response with recent test results and meta"
+      operationId: get_get_recent
+      parameters: []
+      responses: {}
+      summary: Get recent test results.
+  /api/v1/perftest_cluster/stats/summary:
+    get:
+      description: "\nQuery parameters:\n    start_date: Filter by start date (ISO\
+        \ format, optional)\n    end_date: Filter by end date (ISO format, optional)\n\
+        \nRequired scope: stats:read\nRequired feature: perftest_cluster.stats\n\n\
+        Returns:\n    JSON response with overall statistics and meta"
+      operationId: get_get_summary
+      parameters: []
+      responses: {}
+      summary: Get overall statistics summary.
+  /api/v1/perftest_cluster/stats/trends:
+    get:
+      description: "\nQuery parameters:\n    start_date: Filter by start date (ISO\
+        \ format, optional)\n    end_date: Filter by end date (ISO format, optional)\n\
+        \    interval: Time interval (hourly, daily, weekly) (default: daily)\n  \
+        \  metric: Metric to trend (success_rate, avg_latency, count) (default: success_rate)\n\
+        \nRequired scope: stats:read\nRequired feature: perftest_cluster.stats\n\n\
+        Returns:\n    JSON response with time-series data and meta"
+      operationId: get_get_trends
+      parameters: []
+      responses: {}
+      summary: Get time-series data for trends analysis.
+  /api/v1/perftest_cluster/tests:
+    get:
+      description: "\nQuery parameters:\n    device_id: Filter by device ID (optional)\n\
+        \    test_type: Filter by test type (optional)\n    status: Filter by status\
+        \ (optional)\n    limit: Maximum number of results (default: 100)\n    offset:\
+        \ Pagination offset (default: 0)\n\nRequired scope: tests:read\nRequired feature:\
+        \ perftest_cluster.tests\n\nReturns:\n    JSON response with list of tests\
+        \ and meta"
+      operationId: get_list_tests
+      parameters: []
+      responses: {}
+      summary: List all performance tests for the tenant.
+    post:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.tests\n\
+        \nJSON body:\n    device_id: Device identifier (required)\n    test_type:\
+        \ Test type (required)\n    target: Target URL or endpoint (optional)\n  \
+        \  status: Test status (default: pending)\n    started_at: Test start timestamp\
+        \ (optional)\n\nReturns:\n    JSON response with created test and meta"
+      operationId: post_create_test
+      parameters: []
+      responses: {}
+      summary: Create a new performance test.
+  /api/v1/perftest_cluster/tests/{test_id}:
+    get:
+      description: "\nArgs:\n    test_id: Test identifier\n\nRequired scope: tests:read\n\
+        Required feature: perftest_cluster.tests\n\nReturns:\n    JSON response with\
+        \ test details and meta"
+      operationId: get_get_test
+      parameters:
+      - in: path
+        name: test_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get performance test details.
+  /api/v1/perftest_cluster/tests/{test_id}/results:
+    post:
+      description: "\nDevice authentication:\n  1. Extract Bearer token from Authorization\
+        \ header\n  2. SHA256 hash the key and query device_api_keys globally\n  3.\
+        \ Reject if not found, revoked, or hash mismatch (401)\n  4. Derive tenant\
+        \ and device_id from matched key record\n  5. Verify result payload's device_id\
+        \ matches authenticated device (403 if mismatch)\n\nJSON body:\n    device_id:\
+        \ Device identifier (must match authenticated device)\n    status: Test status\
+        \ (completed, failed, etc.)\n    latency_ms: Latency in milliseconds (optional)\n\
+        \    throughput: Throughput metric (optional)\n    test_output: Test output/logs\
+        \ (optional)\n    completed_at: Completion timestamp (optional)\n\nReturns:\n\
+        \    JSON response with updated test and meta, or error"
+      operationId: post_record_result
+      parameters:
+      - in: path
+        name: test_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Record performance test result (device-authenticated endpoint).
+  /api/v1/ping:
+    get:
+      description: "\nRequires a valid tenant claim.\n\nReturns:\n    JSON response\
+        \ with status and metadata."
+      operationId: get_ping_enabled
+      parameters: []
+      responses: {}
+      summary: Ping endpoint gated by the tobogganing.ping.enabled flag.
+  /api/v1/ping/pro:
+    get:
+      description: "\nRequires a valid tenant claim and Professional license.\n\n\
+        Returns:\n    JSON response with professional status and metadata."
+      operationId: get_ping_pro
+      parameters: []
+      responses: {}
+      summary: Professional ping endpoint gated by the tobogganing.ping.pro feature.
+  /api/v1/portal/manifest:
+    get:
+      description: '
+
+        Returns:
+
+        - 200 {modules: [...], role: "...", meta: {...}}
+
+        - 403 without valid Bearer token (enforced by @require_tenant)'
+      operationId: get_get_manifest
+      parameters: []
+      responses: {}
+      summary: Get portal manifest with modules, nav entries, and evaluated flags.
+  /api/v1/sase/blockpages/pages:
+    get:
+      description: "\nReturns:\n    200 with list of BlockPageDTO\n    402 if feature\
+        \ disabled\n    403 if unauthorized"
+      operationId: get_list_pages
+      parameters: []
+      responses: {}
+      summary: List all block pages for the authenticated tenant.
+    post:
+      description: "\nRequest body:\n    name: str - display name\n    markdown: str\
+        \ - markdown content\n\nReturns:\n    201 with BlockPageDTO\n    400 if invalid\
+        \ input\n    402 if feature disabled\n    403 if unauthorized"
+      operationId: post_create_page
+      parameters: []
+      responses: {}
+      summary: Create a new draft block page.
+  /api/v1/sase/blockpages/pages/{page_id}:
+    put:
+      description: "\nRequest body:\n    markdown: str - new markdown content\n\n\
+        Returns:\n    200 with updated BlockPageDTO\n    400 if invalid input\n  \
+        \  402 if feature disabled\n    403 if unauthorized or not found"
+      operationId: put_update_page
+      parameters:
+      - in: path
+        name: page_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update a block page's markdown.
+  /api/v1/sase/blockpages/pages/{page_id}/preview:
+    post:
+      description: "\nRequest body (optional):\n    variables: dict - sample variables\
+        \ for rendering\n\nReturns:\n    200 with BlockPagePreviewDTO (html + variables\
+        \ used)\n    403 if unauthorized or not found"
+      operationId: post_preview_page
+      parameters:
+      - in: path
+        name: page_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Preview a block page with sample variable rendering.
+  /api/v1/sase/blockpages/pages/{page_id}/publish:
+    post:
+      description: "\nReturns:\n    200 with published BlockPageDTO\n    402 if feature\
+        \ disabled\n    403 if unauthorized or not found"
+      operationId: post_publish_page
+      parameters:
+      - in: path
+        name: page_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Publish a draft page to live (bumps version).
+  /api/v1/sase/blockpages/routes:
+    get:
+      description: "\nReturns:\n    200 with list of BlockRouteDTO\n    402 if feature\
+        \ disabled\n    403 if unauthorized"
+      operationId: get_get_routes
+      parameters: []
+      responses: {}
+      summary: Get all block routes for the authenticated tenant.
+    put:
+      description: "\nRequest body:\n    routes: list of route dicts with source_type,\
+        \ destination_kind, page_id/external_url, metadata\n\nReturns:\n    200 with\
+        \ list of updated BlockRouteDTO\n    400 if invalid input\n    402 if feature\
+        \ disabled\n    403 if unauthorized"
+      operationId: put_upsert_routes
+      parameters: []
+      responses: {}
+      summary: Set or update block routes (full upsert).
+  /api/v1/sase/swg/categories:
+    post:
+      description: "\nRequest body:\n    {\n        \"domain\": \"example.com\",\n\
+        \        \"category\": \"blocked-shopping\"\n    }\n\nTenant is derived from\
+        \ authenticated JWT claims. Request body tenant\nfield (if present) must match\
+        \ the authenticated tenant or is rejected.\n\nReturns:\n    200 if successful\n\
+        \    400 if invalid input\n    403 if tenant mismatch or unauthorized"
+      operationId: post_upsert_category
+      parameters: []
+      responses: {}
+      summary: Upsert a custom category for a domain (authenticated tenant only).
+  /api/v1/sase/swg/lookup:
+    get:
+      description: "\nQuery parameters:\n    domain: Domain to look up (required).\n\
+        \nDerives tenant, user_id, and group_ids from authenticated JWT claims only.\n\
+        X-* headers are not trusted for authorization context.\n\nReturns:\n    200\
+        \ with LookupResultDTO if successful\n    400 if domain parameter missing\
+        \ or invalid\n    402 if feature disabled\n    403 if unauthorized"
+      operationId: get_lookup_domain
+      parameters: []
+      responses: {}
+      summary: Look up a domain and return its enforcement action.
+  /api/v1/sase/swg/policy:
+    get:
+      description: "\nReturns only policies for the authenticated tenant (derived\
+        \ from JWT claims).\n\nReturns:\n    200 with list of policies scoped to authenticated\
+        \ tenant\n    403 if unauthorized"
+      operationId: get_get_policies
+      parameters: []
+      responses: {}
+      summary: Get all category policies for authenticated tenant.
+    put:
+      description: "\nRequest body:\n    {\n        \"scope\": \"user|group|tenant\"\
+        ,\n        \"scope_id\": \"user123\" (optional),\n        \"category\": \"\
+        gambling\",\n        \"action\": \"block\"\n    }\n\nTenant is derived from\
+        \ authenticated JWT claims. Any tenant field in\nthe request body must match\
+        \ the authenticated tenant or is rejected.\n\nReturns:\n    200 if successful\n\
+        \    400 if invalid input\n    403 if tenant mismatch or unauthorized"
+      operationId: put_set_policy
+      parameters: []
+      responses: {}
+      summary: Set a category policy for authenticated tenant.
+  /api/v1/sase/swg/radix:
+    get:
+      description: "\nReturns the compiled domain category radix tree as a JSON artifact,\n\
+        which the data plane pulls daily for inline lookup.\n\nReturns:\n    200 with\
+        \ radix artifact and version\n    403 if unauthorized (machine JWT missing\
+        \ swg:read scope)\n    500 if radix not available"
+      operationId: get_get_radix_artifact
+      parameters: []
+      responses: {}
+      summary: Get the serialized radix tree artifact for data-plane consumption.
+  /api/v1/sdwan/clients:
+    get:
+      description: "\nRequires valid JWT with clients:read scope.\n\nReturns:\n  \
+        \  JSON response with list of clients."
+      operationId: get_list_clients
+      parameters: []
+      responses: {}
+      summary: List all clients for the tenant.
+    post:
+      description: "\nRequires ENROLLMENT_BOOTSTRAP_TOKEN for Phase-0 enrollment.\n\
+        \nReturns:\n    JSON response with client_id and api_key."
+      operationId: post_register_client
+      parameters: []
+      responses: {}
+      summary: Register a new client with enrollment token.
+  /api/v1/sdwan/clients/headends/{headend_id}/metrics:
+    post:
+      description: "\nRequires valid machine-JWT with metrics:write scope.\nVerifies\
+        \ the authenticated cluster matches the headend_id in path.\n\nArgs:\n   \
+        \ headend_id: Headend/cluster identifier.\n\nReturns:\n    JSON response with\
+        \ status."
+      operationId: post_submit_headend_metrics
+      parameters:
+      - in: path
+        name: headend_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Submit metrics from a headend/cluster.
+  /api/v1/sdwan/clients/{client_id}/config:
+    get:
+      description: "\nRequires valid API key for the client.\n\nArgs:\n    client_id:\
+        \ Client identifier.\n\nReturns:\n    JSON response with client configuration."
+      operationId: get_get_client_config
+      parameters:
+      - in: path
+        name: client_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get configuration for a client.
+  /api/v1/sdwan/clients/{client_id}/metrics:
+    post:
+      description: "\nRequires valid API key.\n\nArgs:\n    client_id: Client identifier.\n\
+        \nReturns:\n    JSON response with status."
+      operationId: post_submit_client_metrics
+      parameters:
+      - in: path
+        name: client_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Submit metrics from a client.
+  /api/v1/sdwan/clients/{client_id}/rotate-key:
+    post:
+      description: "\nRequires valid current API key.\n\nArgs:\n    client_id: Client\
+        \ identifier.\n\nReturns:\n    JSON response with new API key."
+      operationId: post_rotate_client_key
+      parameters:
+      - in: path
+        name: client_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Rotate API key for a client.
+  /api/v1/sdwan/clients/{client_id}/tunnel-config:
+    put:
+      description: "\nRequires valid API key or admin JWT.\n\nArgs:\n    client_id:\
+        \ Client identifier.\n\nReturns:\n    JSON response with updated configuration."
+      operationId: put_update_tunnel_config
+      parameters:
+      - in: path
+        name: client_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update tunnel configuration for a client.
+  /api/v1/sdwan/clusters:
+    get:
+      description: "\nRequires valid JWT with clusters:read scope.\n\nReturns:\n \
+        \   JSON response with list of clusters."
+      operationId: get_list_clusters
+      parameters: []
+      responses: {}
+      summary: List all clusters for the tenant.
+    post:
+      description: "\nRequires ENROLLMENT_BOOTSTRAP_TOKEN for Phase-0 enrollment.\n\
+        Enforces Professional tier for >5 node clusters.\n\nReturns:\n    JSON response\
+        \ with cluster_id and status."
+      operationId: post_register_cluster
+      parameters: []
+      responses: {}
+      summary: Register a new cluster with enrollment token.
+  /api/v1/sdwan/clusters/{cluster_id}/headend-config:
+    get:
+      description: "\nRequires per-cluster API key authentication.\n\nArgs:\n    cluster_id:\
+        \ Cluster identifier.\n\nReturns:\n    JSON response with headend configuration."
+      operationId: get_get_headend_config
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get complete headend configuration for a cluster.
+  /api/v1/sdwan/clusters/{cluster_id}/heartbeat:
+    post:
+      description: "\nRequires per-cluster API key authentication.\n\nArgs:\n    cluster_id:\
+        \ Cluster identifier.\n\nReturns:\n    JSON response with status."
+      operationId: post_cluster_heartbeat
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update cluster heartbeat with client count.
+  /api/v1/sdwan/status:
+    get:
+      description: "\nReturns aggregate metrics for clusters and clients.\n\nReturns:\n\
+        \    JSON response with service status and metrics."
+      operationId: get_get_status
+      parameters: []
+      responses: {}
+      summary: Get overall SASE service status.
+  /api/v1/sdwan/wireguard/keys:
+    post:
+      description: "\nRequires tenant claim (for authorization) and node authentication\
+        \ via\ncluster_manager (for headend/cluster nodes) or client_registry (for\
+        \ clients).\n\nRequest body:\n{\n    \"node_id\": \"cluster-1\",\n    \"node_type\"\
+        : \"kubernetes_node\" | \"raw_compute\" | \"headend\" | \"client_docker\"\
+        \ | \"client_native\",\n    \"api_key\": \"secret-api-key\"\n}\n\nReturns:\n\
+        \    JSON response with WireGuard keys, IP address, and X.509 certificate."
+      operationId: post_generate_wireguard_keys
+      parameters: []
+      responses: {}
+      summary: Generate WireGuard keys and certificates for authenticated nodes.
+  /api/v1/sdwan/wireguard/keys/{node_id}:
+    delete:
+      description: "\nRequires tenant claim and valid Bearer token.\n\nPath parameter:\n\
+        \    node_id: Node identifier to revoke.\n\nReturns:\n    JSON response indicating\
+        \ success or failure."
+      operationId: delete_revoke_wireguard_keys
+      parameters:
+      - in: path
+        name: node_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Revoke WireGuard keys for a specific node.
+  /api/v1/sdwan/wireguard/peers:
+    get:
+      description: "\nUsed by headend servers to fetch the current peer list for\n\
+        configuring WireGuard interfaces.\n\nRequires tenant claim and valid Bearer\
+        \ token.\n\nReturns:\n    JSON response with list of peers (node_id, public_key,\
+        \ ip_address)."
+      operationId: get_get_wireguard_peers
+      parameters: []
+      responses: {}
+      summary: Get all WireGuard peer configurations.
+  /api/v1/threatintel/blocklist/check:
+    get:
+      description: "\nQuery parameters:\n    type: IOC type (ip, domain, url, hash)\n\
+        \    value: IOC value to check\n\nReturns:\n    200 with verdict DTO if found\n\
+        \    404 if not found or feature disabled\n    400 if invalid IOC type"
+      operationId: get_check_ioc
+      parameters: []
+      responses: {}
+      summary: Check if an IOC is in the SASE blocklist.
+  /api/v1/wireguard/peers:
+    get:
+      description: "\nRequires machine-JWT authentication (or legacy static token\
+        \ if flag OFF).\nReturns peer configurations for the authenticated tenant.\n\
+        \nReturns:\n    - 200: {peers: [...], total: N, meta: {...}}\n    - 401: {error:\
+        \ \"...\"} if auth fails\n    - 500: {error: \"...\"} on server error"
+      operationId: get_get_wireguard_peers
+      parameters: []
+      responses: {}
+      summary: Get all WireGuard peer configurations for headend consumption.
+  /api/v1/ziti/api/v1/ziti/health:
+    get:
+      description: "\nReturns:\n    Tuple of (response dict, HTTP status code)."
+      operationId: get_health
+      parameters: []
+      responses: {}
+      summary: Return ziti module scaffold status.
+  /docs/public:
+    get:
+      description: '
+
+        Accessible without authentication. Exposes only the login/token endpoints
+
+        to allow unauthenticated clients to discover how to authenticate.'
+      operationId: get_public_docs
+      parameters: []
+      responses: {}
+      summary: Public OpenAPI documentation with login endpoint only.
+  /health:
+    get:
+      description: "\nDoes not check external dependencies; only verifies the process\
+        \ is up.\n\nReturns:\n    JSON response with health status and status code.\n\
+        \    200 always (process-only check)."
+      operationId: get_health_check
+      parameters: []
+      responses: {}
+      summary: Liveness probe endpoint. Returns 200 if process is running.
+  /openapi.json:
+    get:
+      description: '
+
+        Returns 401 if the request does not include a valid JWT token.
+
+        Exposes the complete API surface, schemas, and security requirements.'
+      operationId: get_full_openapi_spec
+      parameters: []
+      responses: {}
+      summary: Full OpenAPI specification for authenticated users only.
+  /ready:
+    get:
+      description: "\nReturns 200 if process is up and database is reachable, 503\
+        \ if DB check fails.\n\nReturns:\n    JSON response with readiness status\
+        \ and status code.\n    200 if ready, 503 if database check fails."
+      operationId: get_readiness_check
+      parameters: []
+      responses: {}
+      summary: Readiness probe endpoint with database connectivity check.
+  /static/{filename}:
+    get:
+      operationId: get_send_static_file
+      parameters:
+      - in: path
+        name: filename
+        required: true
+        schema:
+          type: string
+      responses: {}
