@@ -122,7 +122,9 @@ class ServerManager:
         Returns:
             List of DNSServerRecord instances
         """
-        rowset = await self.db(self.db.dns_servers.tenant == self.tenant_id).select()
+        rowset = await self.db(
+            self.db.dns_servers.tenant == self.tenant_id
+        ).select()
         return [
             DNSServerRecord(
                 id=row.id,
@@ -149,8 +151,8 @@ class ServerManager:
             DNSServerRecord if found, None otherwise
         """
         rowset = await self.db(
-            self.db.dns_servers.id == server_id,
-            self.db.dns_servers.tenant == self.tenant_id,
+            (self.db.dns_servers.id == server_id)
+            & (self.db.dns_servers.tenant == self.tenant_id)
         ).select()
         row = rowset.first()
 
@@ -191,14 +193,14 @@ class ServerManager:
 
         # Delete metrics first (cascade)
         await self.db(
-            self.db.dns_server_metrics.server_id == server_id,
-            self.db.dns_server_metrics.tenant == self.tenant_id,
+            (self.db.dns_server_metrics.server_id == server_id)
+            & (self.db.dns_server_metrics.tenant == self.tenant_id)
         ).delete()
 
         # Delete server
         await self.db(
-            self.db.dns_servers.id == server_id,
-            self.db.dns_servers.tenant == self.tenant_id,
+            (self.db.dns_servers.id == server_id)
+            & (self.db.dns_servers.tenant == self.tenant_id)
         ).delete()
 
         logger.info(
@@ -236,8 +238,8 @@ class ServerManager:
 
         # Update server heartbeat
         await self.db(
-            self.db.dns_servers.id == server_id,
-            self.db.dns_servers.tenant == self.tenant_id,
+            (self.db.dns_servers.id == server_id)
+            & (self.db.dns_servers.tenant == self.tenant_id)
         ).update(
             last_heartbeat=now,
             status="online",
@@ -282,9 +284,9 @@ class ServerManager:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         rowset = await self.db(
-            self.db.dns_server_metrics.server_id == server_id,
-            self.db.dns_server_metrics.tenant == self.tenant_id,
-            self.db.dns_server_metrics.timestamp >= cutoff,
+            (self.db.dns_server_metrics.server_id == server_id)
+            & (self.db.dns_server_metrics.tenant == self.tenant_id)
+            & (self.db.dns_server_metrics.timestamp >= cutoff)
         ).select()
 
         return [

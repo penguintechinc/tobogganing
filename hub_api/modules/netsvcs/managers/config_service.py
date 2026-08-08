@@ -75,19 +75,27 @@ class ConfigService:
 
         Creates the version row if absent. Returns the new version.
 
+        NOTE: This read-then-write is NOT atomic. penguin-dal does not support
+        column-expression updates (e.g., SET version = version + 1) required for
+        true atomicity. In a high-concurrency environment, concurrent bump calls
+        may drop increments. This is acceptable for DNS config versioning (a client
+        checking a slightly-stale version still pulls the latest config on next
+        sync), but would require a database-level trigger or SQLAlchemy direct
+        execution for full atomicity. Limitation accepted; document if upgrading.
+
         Returns:
             New monotonic version number
         """
         # Try to get existing version row
         rowset = await self.db(
-            self.db.dns_config_versions.tenant == self.tenant_id,
+            self.db.dns_config_versions.tenant == self.tenant_id
         ).select()
         row = rowset.first()
 
         now = datetime.now(timezone.utc)
 
         if row:
-            # Increment existing
+            # Increment existing (non-atomic, see NOTE above)
             new_version = row.version + 1
             await self.db(
                 self.db.dns_config_versions.id == row.id,
@@ -124,20 +132,20 @@ class ConfigService:
         Returns:
             DNSServerConfigDTO with zones, cache settings, and version
         """
-        # Get current version
+        # Get current version (monotonic, bumped on zone/record changes)
         current_version = await self.get_config_version()
 
         # Fetch all zones for this tenant
         zones_rowset = await self.db(
-            self.db.dns_zones.tenant == self.tenant_id,
+            self.db.dns_zones.tenant == self.tenant_id
         ).select()
 
         zone_dtos = []
         for zone_row in zones_rowset:
             # Fetch records for this zone
             records_rowset = await self.db(
-                self.db.dns_records.zone_id == zone_row.id,
-                self.db.dns_records.tenant == self.tenant_id,
+                (self.db.dns_records.zone_id == zone_row.id)
+                & (self.db.dns_records.tenant == self.tenant_id)
             ).select()
 
             record_dtos = [

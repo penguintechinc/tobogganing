@@ -59,7 +59,9 @@ class ZoneManager:
         Returns:
             List of DNSZoneRecord instances
         """
-        rowset = await self.db(self.db.dns_zones.tenant == self.tenant_id).select()
+        rowset = await self.db(
+            self.db.dns_zones.tenant == self.tenant_id
+        ).select()
         return [
             DNSZoneRecord(
                 id=row.id,
@@ -93,8 +95,8 @@ class ZoneManager:
         """
         # Check for duplicate name in tenant
         rowset = await self.db(
-            self.db.dns_zones.tenant == self.tenant_id,
-            self.db.dns_zones.name == name,
+            (self.db.dns_zones.tenant == self.tenant_id)
+            & (self.db.dns_zones.name == name)
         ).select()
         if rowset.first():
             logger.warning(
@@ -145,8 +147,8 @@ class ZoneManager:
             DNSZoneRecord if found, None otherwise
         """
         rowset = await self.db(
-            self.db.dns_zones.id == zone_id,
-            self.db.dns_zones.tenant == self.tenant_id,
+            (self.db.dns_zones.id == zone_id)
+            & (self.db.dns_zones.tenant == self.tenant_id)
         ).select()
         row = rowset.first()
 
@@ -189,9 +191,9 @@ class ZoneManager:
         # Check for name uniqueness if changing name
         if name and name != zone.name:
             rowset = await self.db(
-                self.db.dns_zones.tenant == self.tenant_id,
-                self.db.dns_zones.name == name,
-                self.db.dns_zones.id != zone_id,
+                (self.db.dns_zones.tenant == self.tenant_id)
+                & (self.db.dns_zones.name == name)
+                & (self.db.dns_zones.id != zone_id)
             ).select()
             if rowset.first():
                 logger.warning(
@@ -215,8 +217,8 @@ class ZoneManager:
         updates["updated_at"] = now
 
         await self.db(
-            self.db.dns_zones.id == zone_id,
-            self.db.dns_zones.tenant == self.tenant_id,
+            (self.db.dns_zones.id == zone_id)
+            & (self.db.dns_zones.tenant == self.tenant_id)
         ).update(**updates)
 
         logger.info(
@@ -252,14 +254,14 @@ class ZoneManager:
 
         # Delete records (cascade)
         await self.db(
-            self.db.dns_records.zone_id == zone_id,
-            self.db.dns_records.tenant == self.tenant_id,
+            (self.db.dns_records.zone_id == zone_id)
+            & (self.db.dns_records.tenant == self.tenant_id)
         ).delete()
 
         # Delete zone
         await self.db(
-            self.db.dns_zones.id == zone_id,
-            self.db.dns_zones.tenant == self.tenant_id,
+            (self.db.dns_zones.id == zone_id)
+            & (self.db.dns_zones.tenant == self.tenant_id)
         ).delete()
 
         logger.info(
@@ -280,8 +282,8 @@ class ZoneManager:
             List of DNSRecordRecord instances
         """
         rowset = await self.db(
-            self.db.dns_records.zone_id == zone_id,
-            self.db.dns_records.tenant == self.tenant_id,
+            (self.db.dns_records.zone_id == zone_id)
+            & (self.db.dns_records.tenant == self.tenant_id)
         ).select()
         return [
             DNSRecordRecord(
@@ -412,9 +414,9 @@ class ZoneManager:
             DNSRecordRecord if found, None otherwise
         """
         rowset = await self.db(
-            self.db.dns_records.id == record_id,
-            self.db.dns_records.zone_id == zone_id,
-            self.db.dns_records.tenant == self.tenant_id,
+            (self.db.dns_records.id == record_id)
+            & (self.db.dns_records.zone_id == zone_id)
+            & (self.db.dns_records.tenant == self.tenant_id)
         ).select()
         row = rowset.first()
 
@@ -520,9 +522,9 @@ class ZoneManager:
         updates["updated_at"] = now
 
         await self.db(
-            self.db.dns_records.id == record_id,
-            self.db.dns_records.zone_id == zone_id,
-            self.db.dns_records.tenant == self.tenant_id,
+            (self.db.dns_records.id == record_id)
+            & (self.db.dns_records.zone_id == zone_id)
+            & (self.db.dns_records.tenant == self.tenant_id)
         ).update(**updates)
 
         logger.info(
@@ -564,9 +566,9 @@ class ZoneManager:
 
         # Delete record
         await self.db(
-            self.db.dns_records.id == record_id,
-            self.db.dns_records.zone_id == zone_id,
-            self.db.dns_records.tenant == self.tenant_id,
+            (self.db.dns_records.id == record_id)
+            & (self.db.dns_records.zone_id == zone_id)
+            & (self.db.dns_records.tenant == self.tenant_id)
         ).delete()
 
         logger.info(

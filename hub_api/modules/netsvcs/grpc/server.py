@@ -142,8 +142,8 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             )
 
         except Exception as e:
-            logger.error("register_server_error", error=str(e))
-            await context.abort(grpc.StatusCode.INTERNAL, str(e))
+            logger.error("register_server_error", error=str(e), exc_info=True)
+            await context.abort(grpc.StatusCode.INTERNAL, "internal error")
 
     async def RefreshToken(
         self, request: manager_pb2.RefreshTokenRequest, context: grpc.aio.ServicerContext
@@ -238,8 +238,12 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
         try:
             cached_jti = await self.cache.get("auth", "refresh", subject, fail_closed=True)
         except Exception as e:
-            logger.warning("refresh_cache_read_error", error=str(e))
-            # Fall through on cache error; proceed with caution (fail-closed means cache error = treat as unknown state)
+            logger.error("refresh_cache_read_error", error=str(e), exc_info=True)
+            # Fail-closed: cannot verify single-use; deny the refresh (cache unavailability = security posture)
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE,
+                "cannot verify token freshness",
+            )
 
         # Check for replay: if cache exists and is DIFFERENT, this is a superseded token
         if cached_jti and cached_jti != current_jti:
@@ -304,8 +308,8 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
 
         except Exception as e:
             # Only catches logic errors in minting, not auth failures
-            logger.error("refresh_token_minting_error", error=str(e), server_id=request.server_id)
-            await context.abort(grpc.StatusCode.INTERNAL, str(e))
+            logger.error("refresh_token_minting_error", error=str(e), server_id=request.server_id, exc_info=True)
+            await context.abort(grpc.StatusCode.INTERNAL, "internal error")
 
     async def GetConfig(
         self, request: manager_pb2.GetConfigRequest, context: grpc.aio.ServicerContext
@@ -328,8 +332,8 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             )
 
         except Exception as e:
-            logger.error("get_config_error", error=str(e))
-            await context.abort(grpc.StatusCode.INTERNAL, str(e))
+            logger.error("get_config_error", error=str(e), exc_info=True)
+            await context.abort(grpc.StatusCode.INTERNAL, "internal error")
 
     async def StreamConfigUpdates(
         self,
@@ -384,7 +388,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
                     last_version = new_version
 
         except Exception as e:
-            logger.error("stream_config_updates_error", error=str(e))
+            logger.error("stream_config_updates_error", error=str(e), exc_info=True)
             # Let the stream end naturally; client can reconnect
 
     async def SendHeartbeat(
@@ -430,8 +434,8 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             )
 
         except Exception as e:
-            logger.error("send_heartbeat_error", error=str(e))
-            await context.abort(grpc.StatusCode.INTERNAL, str(e))
+            logger.error("send_heartbeat_error", error=str(e), exc_info=True)
+            await context.abort(grpc.StatusCode.INTERNAL, "internal error")
 
     async def ValidateToken(
         self, request: manager_pb2.ValidateTokenRequest, context: grpc.aio.ServicerContext
@@ -451,8 +455,8 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
         try:
             # Look up the resolver token in the database
             rowset = await self.db(
-                self.db.dns_resolver_tokens.token == request.token,
-                self.db.dns_resolver_tokens.active == True,
+                (self.db.dns_resolver_tokens.token == request.token)
+                & (self.db.dns_resolver_tokens.active == True)
             ).select()
             token_row = rowset.first()
 
@@ -481,7 +485,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
 
             # Update last_used timestamp
             await self.db(
-                self.db.dns_resolver_tokens.id == token_row.id,
+                self.db.dns_resolver_tokens.id == token_row.id
             ).update(
                 last_used=now,
             )
@@ -500,10 +504,11 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             )
 
         except Exception as e:
-            logger.error("validate_token_error", error=str(e))
+            logger.error("validate_token_error", error=str(e), exc_info=True)
+            # Never expose exception details to remote callers
             return manager_pb2.ValidateTokenResponse(
                 valid=False,
-                reason=f"Validation error: {str(e)}",
+                reason="validation failed",
                 allowed_zone_ids=[],
             )
 

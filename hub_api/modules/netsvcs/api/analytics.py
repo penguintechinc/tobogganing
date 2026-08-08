@@ -125,8 +125,8 @@ async def get_queries_analytics() -> tuple[dict[str, Any], int]:
 
         # Fetch metrics for this tenant
         rowset = await db(
-            db.dns_server_metrics.tenant == tenant_id,
-            db.dns_server_metrics.timestamp >= cutoff,
+            (db.dns_server_metrics.tenant == tenant_id)
+            & (db.dns_server_metrics.timestamp >= cutoff)
         ).select()
 
         total_queries = 0
@@ -209,8 +209,8 @@ async def get_performance_analytics() -> tuple[dict[str, Any], int]:
 
         # Fetch metrics for this tenant
         rowset = await db(
-            db.dns_server_metrics.tenant == tenant_id,
-            db.dns_server_metrics.timestamp >= cutoff,
+            (db.dns_server_metrics.tenant == tenant_id)
+            & (db.dns_server_metrics.timestamp >= cutoff)
         ).select()
 
         response_times = [row.avg_response_ms for row in rowset]
@@ -294,8 +294,8 @@ async def get_servers_analytics() -> tuple[dict[str, Any], int]:
 
         # Fetch metrics for this tenant and time range
         metrics_rowset = await db(
-            db.dns_server_metrics.tenant == tenant_id,
-            db.dns_server_metrics.timestamp >= cutoff,
+            (db.dns_server_metrics.tenant == tenant_id)
+            & (db.dns_server_metrics.timestamp >= cutoff)
         ).select()
 
         # Aggregate metrics by server
@@ -389,8 +389,8 @@ async def get_summary_analytics() -> tuple[dict[str, Any], int]:
         # Sum queries for this tenant (last 24 hours)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         metrics_rowset = await db(
-            db.dns_server_metrics.tenant == tenant_id,
-            db.dns_server_metrics.timestamp >= cutoff,
+            (db.dns_server_metrics.tenant == tenant_id)
+            & (db.dns_server_metrics.timestamp >= cutoff)
         ).select()
         total_queries = sum(row.queries_total for row in metrics_rowset)
 
