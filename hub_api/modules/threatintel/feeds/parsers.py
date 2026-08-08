@@ -10,10 +10,10 @@ from io import StringIO
 from typing import Any, Dict
 from urllib.parse import urlparse
 
-try:
-    from defusedxml import ElementTree as ET
-except ImportError:
-    import xml.etree.ElementTree as ET
+# defusedxml is a hard pinned dependency (requirements.in): parse OpenIOC XML
+# with the XXE/entity-expansion-safe ElementTree. No stdlib fallback — a silent
+# degrade to xml.etree would reintroduce the XML-attack surface on untrusted feeds.
+from defusedxml import ElementTree as ET
 
 try:
     import stix2
