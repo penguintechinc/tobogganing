@@ -19,6 +19,7 @@ penguin-licensing>=0.1.0
 python-dotenv==1.0.1
 structlog==24.4.0
 stix2==3.0.2
+defusedxml==0.7.1
 beautifulsoup4==4.12.3
 scikit-learn==1.5.2
 numpy==1.26.4
