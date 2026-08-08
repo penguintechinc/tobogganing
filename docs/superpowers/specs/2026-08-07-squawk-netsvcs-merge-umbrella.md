@@ -21,6 +21,7 @@ Merge the Squawk DNS product into tobogganing as network-services (`netsvcs`), f
 4. **DHCP and NTP are INDEPENDENT feature flags.** Each netsvcs service (DNS, DHCP, NTP) is separately flag-gated + tiered, so operators enable them independently: `tobogganing.netsvcs.dns.*`, `tobogganing.netsvcs.dhcp.*`, `tobogganing.netsvcs.ntp.*`.
 5. **Discard the legacy.** Squawk has 3 overlapping DNS codebases (legacy `dns-server/bins` monolith, a Flask variant, the new `dns-server/app` Quart agent) + a py4web console + a legacy Python client. Base the merge on the **new `manager/` control plane + `dns-server/app` agent + `squawk-client-go`**; discard the rest (harvest only the MISP/STIX/TAXII/OpenIOC parsers from `bins/ioc_manager.py` into `threatintel`).
 6. **Replace bespoke auth.** Squawk's `auth_user`/`team`/`token` + hand-rolled PyJWT → dropped; remap onto tobogganing's single `users` identity table + tenant model + existing token/JWT issuance (penguin-aaa/penguin-dal). Squawk's per-DNS-server join-key/JWT fleet-registration maps onto the machine-JWT/enrollment model already built (auth redesign + `docs/architecture/headend-machine-jwt-contract.md`).
+7. **Unified server/node agent (`node-agent`).** Merge the tobogganing **server** agents (`clients/docker` = client-k8s DaemonSet + the planned client-node bare-metal agent) AND the squawk **server** agents (`squawk-client-go` edge :53 DoH forwarder + DHCP + NTP clients) into **ONE Go binary** with two deploy modes — **K8s DaemonSet** and **bare-metal/systemd** (non-k8s servers + hypervisors). One agent per server does BOTH: **connectivity** (WireGuard/OpenZiti into the SASE fabric, node registration, Inspection-Point tap) AND **netsvcs edge** (local :53 DNS forward/resolve + `threatintel` filtering, DHCP, NTP). Each capability is **independently flag-gated** (consistent with decision #4) so an operator runs connectivity-only, DNS-only, or any combination. Go (existing squawk edge + tobogganing docker client are Go; per-node data plane). Lives in the **tobogganing repo** (`agents/node-agent/`). The central DoH resolver **service** (`engines/netsvcs-dns`) stays separate — the agent forwards to it or resolves locally. The **end-user desktop** agent is unaffected — it stays in `~/code/penguin` (penguin modular desktop). *(Naming `node-agent` is provisional; alt: `hub-agent`/`server-agent`.)*
 
 ## Target shape
 
@@ -34,10 +35,18 @@ hub_api/modules/
 └── netsvcs/            # NEW: DNS (zones/records/servers), DHCP, NTP control planes;
                         # per-service independent flags + tiers.
 engines/
-├── netsvcs-dns/        # Python Quart DoH/DoT resolver agent (from dns-server/app); reads threatintel for filtering
-├── netsvcs-dhcp/       # DHCP server
-└── netsvcs-ntp/        # NTP/NTS server
-clients/ (or penguin desktop): squawk-client-go → the edge agent (:53 forwarder + DHCP + NTP clients)
+├── netsvcs-dns/        # Python Quart DoH/DoT resolver SERVICE (from dns-server/app); reads threatintel for filtering
+├── netsvcs-dhcp/       # DHCP server service
+└── netsvcs-ntp/        # NTP/NTS server service
+agents/
+└── node-agent/         # NEW UNIFIED per-server/per-node agent (Go, ONE binary, two deploy modes):
+                        #   • K8s DaemonSet  • bare-metal/systemd (non-k8s servers + hypervisors)
+                        # MERGES tobogganing server agents (clients/docker=client-k8s + planned
+                        # client-node) AND squawk server agents (squawk-client-go edge :53
+                        # forwarder + DHCP + NTP clients). Capabilities, each INDEPENDENTLY flag-gated:
+                        #   connectivity (WireGuard/OpenZiti → SASE fabric, node reg, Inspection tap)
+                        #   + netsvcs edge (local :53 DNS forward/resolve+threatintel-filter, DHCP, NTP)
+# End-user desktop agent stays in ~/code/penguin (penguin modular desktop) — NOT merged here.
 ```
 
 ## Phasing (each phase = its own spec→plan→implement cycle)
@@ -57,17 +66,20 @@ Import the chosen base (new `manager/` + `dns-server/app` + `squawk-client-go`) 
 - Keep the `manager_service.proto` gRPC contract (RegisterServer/GetConfig/StreamConfigUpdates/SendHeartbeat/ValidateToken/CheckIOC) — `CheckIOC` becomes a thin `threatintel` client.
 - Flag `tobogganing.netsvcs.dns.*` (community core; some features professional).
 
-### P3 — DNS data plane
-- `engines/netsvcs-dns/` — the Quart DoH/DoT/HTTP3 resolver agent (`dns-server/app`): registers with the control plane, syncs zones + config over gRPC, resolves (forward + custom-zone answers), and enforces filtering by reading `threatintel` (blocklist + SWG category verdicts). Debian-slim rebuild (Squawk is Ubuntu today).
-- `squawk-client-go` `:53` edge forwarder lands as the client edge component (DoH forward + local policy). Repo placement per `client.md` (product repo vs penguin desktop) — decide in P3 spec.
+### P3 — Data-plane services (DNS + DHCP + NTP, independent flags)
+- `engines/netsvcs-dns/` — the Quart DoH/DoT/HTTP3 resolver **service** (`dns-server/app`): registers with the control plane, syncs zones + config over gRPC, resolves (forward + custom-zone answers), enforces filtering by reading `threatintel` (blocklist + SWG category verdicts). Debian-slim rebuild (Squawk is Ubuntu today).
+- `engines/netsvcs-dhcp/` + `engines/netsvcs-ntp/` — DHCP + NTP/NTS server **services** (from `dhcp-server/` + `ntp-server/`).
+- **Independent flags**: `tobogganing.netsvcs.{dns,dhcp,ntp}.*` — each separately enable-able + tiered; any works without the others. Per-service contract registration so enabling one never requires another.
 
-### P4 — DHCP + NTP (independent flags)
-- `engines/netsvcs-dhcp/` + `engines/netsvcs-ntp/` (servers, from `dhcp-server/` + `ntp-server/`); Go DHCP + NTP/NTS clients in the edge agent.
-- **Independent flags**: `tobogganing.netsvcs.dhcp.*` and `tobogganing.netsvcs.ntp.*` — each separately enable-able + tiered; DNS works without them and vice versa. Per-service contract registration so enabling one never requires another.
+### P4 — Unified `node-agent` (the server-agent convergence — decision #7)
+- `agents/node-agent/` — ONE Go binary merging the tobogganing server agents (`clients/docker` client-k8s + planned client-node) AND the squawk edge agent (`squawk-client-go` :53 forwarder + DHCP + NTP clients).
+- Two deploy modes from the one binary: **K8s DaemonSet** + **bare-metal/systemd** (non-k8s servers + hypervisors).
+- Capabilities, each **independently flag-gated** (build-tag/config-selectable, like the Go XDP pattern): **connectivity** (WireGuard/OpenZiti → SASE fabric, node registration via the machine-JWT/enrollment model, Inspection-Point tap) + **netsvcs edge** (local :53 DNS forward/resolve+`threatintel`-filter, DHCP, NTP client). Forwards DNS to `engines/netsvcs-dns` or resolves locally (P4-spec decision).
+- Retire `clients/docker` (client-k8s) + `squawk-client-go` into this one agent; the **end-user desktop** stays in `~/code/penguin`.
 
 ### P5 — UI + Helm + tests
 - Fold Squawk's React (manager/frontend: users/teams→identity, zones/records, DNS-server fleet, IOC feeds→threatintel, analytics) into the tobogganing portal (`portal/src/pages/netsvcs/`), shared `@penguintechinc/react-*` components, per the established portal conventions.
-- Author Helm (absent in squawk today) — netsvcs services + optional DHCP/NTP sub-charts (like the SASE analysis sub-charts), digest-pinned, securityContext, Cilium policies.
+- Author Helm (absent in squawk today) — netsvcs services + optional DHCP/NTP sub-charts (like the SASE analysis sub-charts), digest-pinned, securityContext, Cilium policies. Includes the `node-agent` **DaemonSet** manifest (capability toggles via values) + the bare-metal/systemd install packaging.
 - Port/expand Squawk's thin tests to tobogganing standards (90% gate); the parked `dns-server/tests_full_future/` suite is a harvest source.
 
 ## Key integration decisions surfaced per-phase (for the phase specs)
@@ -75,13 +87,14 @@ Import the chosen base (new `manager/` + `dns-server/app` + `squawk-client-go`) 
 - **P1**: the Valkey key-prefix migration (`sase:blocklist:*` → shared `ti:blocklist:*`) vs keeping the prefix for zero-migration; how to name the generalized module without breaking SASE imports (shim vs hard cutover).
 - **P2**: mapping Squawk's `team` model + `visibility` (public/internal/restricted/private zones) onto tobogganing's tenant + scope model — split-horizon is a genuinely new capability with no SASE analog.
 - **P3**: resolver filtering reads threatintel in-process vs over gRPC `CheckIOC` (the data plane is a separate service — likely a pulled-artifact + local cache like the SWG radix, not per-query gRPC).
-- **P4**: DHCP/NTP repo placement + whether the Go clients live in the product repo or penguin desktop.
+- **P4 (node-agent)**: does the agent resolve+filter DNS locally or forward to `engines/netsvcs-dns`; the connectivity-vs-netsvcs capability toggling mechanism (Go build tags like the XDP `xdp`/`noxdp` pattern vs pure runtime config); DaemonSet securityContext + required caps (NET_ADMIN for WireGuard/XDP + :53 bind — documented ROOT/cap exception); how the bare-metal/systemd installer is packaged; final name (`node-agent` vs `hub-agent`/`server-agent`); migration path off the existing `clients/docker` + `squawk-client-go`.
 
 ## Non-goals (this program)
 
 - No Go/Rust resolver rewrite (decision #2).
 - No preservation of the 3 legacy DNS codebases / py4web console / Python client (decision #5).
 - No new threat-intel store forked from SASE (decision #1).
+- No change to the end-user desktop agent (stays in `~/code/penguin`) — only the **server/node** agents merge (decision #7).
 
 ## Verification (program-level)
 
