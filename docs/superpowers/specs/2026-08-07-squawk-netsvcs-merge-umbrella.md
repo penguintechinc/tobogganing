@@ -11,12 +11,12 @@
 
 ## Goal
 
-Merge the Squawk DNS product into tobogganing as network-services (`netsvcs`), following the established WaddlePerf pattern (control plane → `hub_api/modules/`, data plane → `engines/` + Go agent). Squawk is a **DoH resolver + threat-intel DNS filtering + authoritative split-horizon custom zones + DHCP + NTP + a Go edge agent + control plane** — a multi-phase program, not a single merge.
+Merge the Squawk DNS product into tobogganing as network-services (`netsvcs`), following the established WaddlePerf pattern (control plane → `hub_api/modules/` in Quart; data-plane services → `engines/`; per-node agent → `agents/node-agent/` in Rust). Squawk today is a **DoH resolver + threat-intel DNS filtering + authoritative split-horizon custom zones + DHCP + NTP + a Go edge agent + control plane** — a multi-phase program, not a single merge.
 
 ## Locked decisions (from brainstorming)
 
 1. **Threat-intel becomes its own shared module.** Do NOT converge Squawk's IOC onto SASE, and do NOT keep two stores. Instead **extract** the existing SASE `feeds/` + `blocklist/` into a standalone **`threatintel`** module, harvest Squawk's MISP/STIX/TAXII/OpenIOC feed parsers into it, and make **SASE (SWG/enforcement) AND netsvcs (DNS filtering) both consumers**. One threat-intel pipeline + store (`sase:blocklist:*` → generalized), leveraged by all products.
-2. **Resolver stays Python for now.** Land the existing Quart DoH resolver agent as the netsvcs DNS data plane; keep the Go `:53` edge forwarder. Rewrite in Go/Rust ONLY on a measured throughput need (>10K rps) — not up front (YAGNI).
+2. **The control plane and the DNS resolver *service* stay Python/Quart — only the *node-agent* goes to Rust (#8).** This "no rewrite" applies to two things and NOT the agent: (a) the **control-plane API** (`hub_api`, incl. the new `netsvcs` module) stays Quart/Python — it's a hub_api module like every other; (b) the central **DoH resolver service** (`engines/netsvcs-dns`, from `dns-server/app`) stays Python/Quart, rewritten to Rust ONLY on a measured throughput need (>10K rps) — not up front (YAGNI; and per the Go phase-out, any such rewrite would be Rust, not Go). The squawk `:53` **edge forwarder is NOT kept as Go** — it is folded into the Rust node-agent (decision #8). So: API + resolver-service = Python (no rewrite); node-agent = Rust.
 3. **Full suite in scope**: DNS + DHCP + NTP. netsvcs is the complete network-services module.
 4. **DHCP and NTP are INDEPENDENT feature flags.** Each netsvcs service (DNS, DHCP, NTP) is separately flag-gated + tiered, so operators enable them independently: `tobogganing.netsvcs.dns.*`, `tobogganing.netsvcs.dhcp.*`, `tobogganing.netsvcs.ntp.*`.
 5. **Discard the legacy.** Squawk has 3 overlapping DNS codebases (legacy `dns-server/bins` monolith, a Flask variant, the new `dns-server/app` Quart agent) + a py4web console + a legacy Python client. Base the merge on the **new `manager/` control plane + `dns-server/app` agent + `squawk-client-go`**; discard the rest (harvest only the MISP/STIX/TAXII/OpenIOC parsers from `bins/ioc_manager.py` into `threatintel`).
@@ -74,8 +74,11 @@ Import the chosen base (new `manager/` + `dns-server/app` + `squawk-client-go`) 
 
 ### P4 — Unified `node-agent` (the server-agent convergence — decision #7)
 - `agents/node-agent/` — ONE **Rust** binary (decision #8) merging the tobogganing server agents (`clients/docker` client-k8s + planned client-node) AND the squawk edge agent (`squawk-client-go` :53 forwarder + DHCP + NTP clients) — the existing Go is ported, not preserved. Crates: `aya`/`quinn`/`boringtun`/`hickory-dns`/`ntpd-rs`/`tonic`/`tokio`.
-- Two deploy modes from the one binary: **K8s DaemonSet** + **bare-metal/systemd** (non-k8s servers + hypervisors).
-- Capabilities, each **independently flag-gated** (build-tag/config-selectable, like the Go XDP pattern): **connectivity** (WireGuard/OpenZiti → SASE fabric, node registration via the machine-JWT/enrollment model, Inspection-Point tap) + **netsvcs edge** (local :53 DNS forward/resolve+`threatintel`-filter, DHCP, NTP client). Forwards DNS to `engines/netsvcs-dns` or resolves locally (P4-spec decision).
+- **Two first-class deployment artifacts, built from the ONE Rust binary — both are explicit P4 deliverables:**
+  1. **Standalone binary** (bare-metal / non-k8s servers + hypervisors — the *client-node* role): a single **static musl** executable, installed + supervised as a **systemd** service via a bare-metal installer (deb/rpm or install script). No Kubernetes required; self-registers with the control plane over the machine-JWT/enrollment flow.
+  2. **Kubernetes DaemonSet** (in-cluster — the *client-k8s* role): the same binary as a container image, scheduled **one pod per node** across the cluster (tolerations for all nodes incl. control-plane if desired). Requires host access + `NET_ADMIN`/`NET_RAW` (WireGuard/XDP) + `:53` bind → a documented `ROOT EXCEPTION (approved)`; securityContext otherwise per standards. The DaemonSet manifest is authored in the product Helm chart (P5), but the **requirement + the image build live in P4**.
+- **Same binary, two packagings** (not two codebases): the identical Rust artifact ships **naked** (the static binary, for bare-metal/systemd) OR **containerized** (the same binary in an image, for the DaemonSet). One CI build emits both outputs; the two deploy paths can never diverge in behavior.
+- Capabilities, each **independently flag-gated** via **Cargo feature flags** (the Rust `xdp`/`noxdp` feature pattern in `backend-rust.md`) + runtime config: **connectivity** (WireGuard/OpenZiti → SASE fabric, node registration via the machine-JWT/enrollment model, Inspection-Point tap) + **netsvcs edge** (local :53 DNS forward/resolve+`threatintel`-filter, DHCP, NTP client). Forwards DNS to `engines/netsvcs-dns` or resolves locally (P4-spec decision).
 - Retire `clients/docker` (client-k8s) + `squawk-client-go` into this one agent; the **end-user desktop** stays in `~/code/penguin`.
 
 ### P5 — UI + Helm + tests
@@ -92,7 +95,7 @@ Import the chosen base (new `manager/` + `dns-server/app` + `squawk-client-go`) 
 
 ## Non-goals (this program)
 
-- No Go/Rust resolver rewrite (decision #2).
+- No Rust rewrite of the **control-plane API** or the **DNS resolver service** — both stay Python/Quart (decision #2). This is distinct from the **node-agent**, which IS Rust (decision #8).
 - No preservation of the 3 legacy DNS codebases / py4web console / Python client (decision #5).
 - No new threat-intel store forked from SASE (decision #1).
 - No change to the end-user desktop agent (stays in `~/code/penguin`) — only the **server/node** agents merge (decision #7).
