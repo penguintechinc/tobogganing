@@ -28,6 +28,9 @@ joblib==1.4.2
 celery==5.4.0
 markdown==3.10.2
 bleach==6.1.0
+grpcio==1.62.0
+grpcio-tools==1.62.0
+protobuf==4.25.2
 
 # Test dependencies
 pytest==8.3.4

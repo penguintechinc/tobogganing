@@ -1,7 +1,7 @@
 # Tobogganing Root Makefile
 # Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push
+.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto
 
 # Default target
 help: ## Show this help message
@@ -34,6 +34,19 @@ docker-push: ## Push Docker image to registry
 	@echo "🐳 Pushing Docker image..."
 	@docker push hub-api:latest
 	@echo "✅ Docker push complete"
+
+# Proto generation
+proto: ## Generate gRPC stubs from .proto files
+	@echo "📝 Generating gRPC stubs..."
+	@python3 -m grpc_tools.protoc \
+		-I proto \
+		--python_out=proto \
+		--grpc_python_out=proto \
+		proto/netsvcs/v1/manager.proto
+	@touch proto/__init__.py proto/netsvcs/__init__.py proto/netsvcs/v1/__init__.py
+	@# Fix imports to use relative paths for PEP 328 compliance
+	@sed -i 's/^from netsvcs\.v1 import/from . import/g' proto/netsvcs/v1/manager_pb2_grpc.py
+	@echo "✅ gRPC stubs generated"
 
 # Test targets
 test: test-unit test-portal test-go ## Run all tests (unit + portal + go if available)

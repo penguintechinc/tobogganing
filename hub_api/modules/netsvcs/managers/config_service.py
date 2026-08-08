@@ -173,6 +173,8 @@ class ConfigService:
         settings = {
             "log_queries": True,
             "enable_dnssec": False,
+            # S2: Threatintel IOC filtering enabled for this tenant
+            "ioc_filtering": True,
         }
 
         return DNSServerConfigDTO(
