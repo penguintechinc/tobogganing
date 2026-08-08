@@ -39,7 +39,7 @@ from hub_api.modules.sase.security.protection.models import (
     SecurityEvent,
     RateLimitRule,
 )
-from hub_api.modules.sase.security.feeds.models import (
+from hub_api.modules.threatintel.feeds.models import (
     ThreatIndicator,
     FeedUpdate,
     ThreatDetection,

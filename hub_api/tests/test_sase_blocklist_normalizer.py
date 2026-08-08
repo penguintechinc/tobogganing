@@ -4,7 +4,7 @@ from __future__ import annotations
 import stix2
 import pytest
 
-from hub_api.modules.sase.security.blocklist.stix_normalizer import to_stix_indicator
+from hub_api.modules.threatintel.blocklist.stix_normalizer import to_stix_indicator
 
 
 def test_ip_indicator_pattern() -> None:

@@ -60,7 +60,7 @@ class BlocklistStore:
         ioc_type, key_value = self._key(verdict.ioc_type, verdict.value)
 
         # Check if entry exists
-        existing_json = await self.cache.get("sase:blocklist", ioc_type, key_value)
+        existing_json = await self.cache.get("threatintel:blocklist", ioc_type, key_value)
         if existing_json:
             try:
                 existing_data = json.loads(existing_json)
@@ -93,7 +93,7 @@ class BlocklistStore:
             if verdict.expiry:
                 ttl_seconds = max(1, verdict.expiry - int(time.time()))
             await self.cache.set(
-                "sase:blocklist", ioc_type, key_value, value=json_value, ttl_seconds=ttl_seconds
+                "threatintel:blocklist", ioc_type, key_value, value=json_value, ttl_seconds=ttl_seconds
             )
         except Exception as e:
             logger.warning("sase_blocklist_put_error", error=str(e))
@@ -113,7 +113,7 @@ class BlocklistStore:
         """
         ioc_type_key, key_value = self._key(ioc_type, value)
         try:
-            json_value = await self.cache.get("sase:blocklist", ioc_type_key, key_value, fail_closed=False)
+            json_value = await self.cache.get("threatintel:blocklist", ioc_type_key, key_value, fail_closed=False)
             if not json_value:
                 return None
             data = json.loads(json_value)
@@ -131,6 +131,6 @@ class BlocklistStore:
         """
         ioc_type_key, key_value = self._key(ioc_type, value)
         try:
-            await self.cache.delete("sase:blocklist", ioc_type_key, key_value)
+            await self.cache.delete("threatintel:blocklist", ioc_type_key, key_value)
         except Exception as e:
             logger.warning("sase_blocklist_remove_error", error=str(e))

@@ -7,7 +7,7 @@ import pytest
 
 from hub_api.cache.client import CacheClient
 from hub_api.modules.sase.security.adapters.suricata import SuricataAdapter
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 
 
 @pytest.fixture

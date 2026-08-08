@@ -33,7 +33,7 @@ class VerdictDTO:
 @blueprint.route("/check", methods=["GET"])
 @require_tenant
 @require_scope("sase:read")
-@require_feature("sase", "blocklist")
+@require_feature("threatintel", "blocklist")
 async def check_ioc() -> tuple[dict, int]:
     """Check if an IOC is in the SASE blocklist.
 

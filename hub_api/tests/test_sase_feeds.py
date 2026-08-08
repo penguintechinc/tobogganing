@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hub_api.modules.sase.security.feeds import (
+from hub_api.modules.threatintel.feeds import (
     DetectionLogger,
     FeedSource,
     SecurityFeedsManager,
@@ -265,12 +265,12 @@ class TestFeedUpdate:
 
         # Mock feed sources to return no results
         with patch(
-            "hub_api.modules.sase.security.feeds.manager.fetch_blackweb_domains",
+            "hub_api.modules.threatintel.feeds.manager.fetch_blackweb_domains",
             new_callable=AsyncMock,
             return_value=[],
         ):
             with patch(
-                "hub_api.modules.sase.security.feeds.manager.fetch_blackweb_ips",
+                "hub_api.modules.threatintel.feeds.manager.fetch_blackweb_ips",
                 new_callable=AsyncMock,
                 return_value=[],
             ):
@@ -305,11 +305,11 @@ class TestFeedUpdate:
         manager = SecurityFeedsManager(mock_db)
 
         with patch(
-            "hub_api.modules.sase.security.feeds.manager.fetch_blackweb_domains",
+            "hub_api.modules.threatintel.feeds.manager.fetch_blackweb_domains",
             side_effect=RuntimeError("Network timeout"),
         ):
             with patch(
-                "hub_api.modules.sase.security.feeds.manager.fetch_blackweb_ips",
+                "hub_api.modules.threatintel.feeds.manager.fetch_blackweb_ips",
                 side_effect=RuntimeError("Network timeout"),
             ):
                 stats = await manager._update_blackweb_feed("tenant-1")

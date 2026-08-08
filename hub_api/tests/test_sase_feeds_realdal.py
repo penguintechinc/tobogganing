@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from hub_api.modules.sase.security.feeds import (
+from hub_api.modules.threatintel.feeds import (
     DetectionLogger,
     FeedSource,
     SecurityFeedsManager,

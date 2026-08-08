@@ -12,7 +12,7 @@ def test_prefixed_builds_namespaced_key() -> None:
     """Test that prefixed() builds correct namespace:parts key format."""
     assert prefixed("auth", "refresh", "cluster:1") == "auth:refresh:cluster:1"
     assert prefixed("rl", "k") == "rl:k"
-    assert prefixed("sase:blocklist", "ip", "1.2.3.4") == "sase:blocklist:ip:1.2.3.4"
+    assert prefixed("threatintel:blocklist", "ip", "1.2.3.4") == "threatintel:blocklist:ip:1.2.3.4"
 
 
 def test_prefixed_rejects_unknown_namespace() -> None:
@@ -28,7 +28,7 @@ def test_namespaces_frozen_set() -> None:
     assert isinstance(NAMESPACES, frozenset)
     assert "auth" in NAMESPACES
     assert "rl" in NAMESPACES
-    assert "sase:blocklist" in NAMESPACES
+    assert "threatintel:blocklist" in NAMESPACES
     assert "sase:catcache" in NAMESPACES
 
 

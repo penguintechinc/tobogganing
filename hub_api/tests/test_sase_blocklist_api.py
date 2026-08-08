@@ -9,21 +9,21 @@ from quart import Quart
 
 from hub_api.auth.jwt import encode_access_token
 from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
-from hub_api.modules.sase.security.blocklist.models import Verdict
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.models import Verdict
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 from hub_api.registry import ModuleContext
 
 
 @pytest.fixture
 def app_with_blocklist(app: Quart, mock_db: MagicMock) -> Quart:
-    """Create a test app with SASE module and blocklist API registered.
+    """Create a test app with threatintel module and blocklist API registered.
 
     Args:
         app: Base test app fixture.
         mock_db: Mock database fixture.
 
     Returns:
-        Quart app with SASE module and blocklist blueprint registered.
+        Quart app with threatintel module and blocklist blueprint registered.
     """
     # Set up key provider for token generation
     private_pem, public_pem = generate_rsa_key_pair()
@@ -35,11 +35,11 @@ def app_with_blocklist(app: Quart, mock_db: MagicMock) -> Quart:
 
     app.config["CACHE"] = CacheClient(host="127.0.0.1", port=6399)  # Unreachable; uses in-memory
 
-    # Register SASE module
-    from hub_api.modules.sase import module as sase_module
+    # Register threatintel module
+    from hub_api.modules.threatintel import module as threatintel_module
 
-    sase_contract = sase_module()
-    app.registry.register(sase_contract)
+    threatintel_contract = threatintel_module()
+    app.registry.register(threatintel_contract)
 
     # Apply registry to wire blueprints
     ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
@@ -102,7 +102,7 @@ async def test_check_ioc_flag_on_found(
         mock_flag.return_value = True
 
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=ip&value=1.2.3.4",
+            "/api/v1/threatintel/blocklist/check?type=ip&value=1.2.3.4",
             headers={"Authorization": f"Bearer {sase_read_token}"},
         )
 
@@ -136,7 +136,7 @@ async def test_check_ioc_not_found(
         mock_flag.return_value = True
 
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=ip&value=9.9.9.9",
+            "/api/v1/threatintel/blocklist/check?type=ip&value=9.9.9.9",
             headers={"Authorization": f"Bearer {sase_read_token}"},
         )
 
@@ -159,7 +159,7 @@ async def test_check_ioc_flag_off(app_with_blocklist: Quart, sase_read_token: st
         mock_flag.return_value = False
 
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=ip&value=1.2.3.4",
+            "/api/v1/threatintel/blocklist/check?type=ip&value=1.2.3.4",
             headers={"Authorization": f"Bearer {sase_read_token}"},
         )
 
@@ -183,7 +183,7 @@ async def test_check_ioc_invalid_type(
         mock_flag.return_value = True
 
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=invalid&value=1.2.3.4",
+            "/api/v1/threatintel/blocklist/check?type=invalid&value=1.2.3.4",
             headers={"Authorization": f"Bearer {sase_read_token}"},
         )
 
@@ -209,7 +209,7 @@ async def test_check_ioc_missing_params(
 
         # Missing both type and value
         response = await client.get(
-            "/api/v1/sase/blocklist/check",
+            "/api/v1/threatintel/blocklist/check",
             headers={"Authorization": f"Bearer {sase_read_token}"},
         )
 
@@ -219,7 +219,7 @@ async def test_check_ioc_missing_params(
 
         # Missing value
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=ip",
+            "/api/v1/threatintel/blocklist/check?type=ip",
             headers={"Authorization": f"Bearer {sase_read_token}"},
         )
 
@@ -240,7 +240,7 @@ async def test_check_ioc_requires_auth(app_with_blocklist: Quart) -> None:
 
         # Request without Authorization header
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=ip&value=1.2.3.4",
+            "/api/v1/threatintel/blocklist/check?type=ip&value=1.2.3.4",
         )
 
         assert response.status_code == 403
@@ -270,7 +270,7 @@ async def test_check_ioc_requires_scope(app_with_blocklist: Quart) -> None:
         mock_flag.return_value = True
 
         response = await client.get(
-            "/api/v1/sase/blocklist/check?type=ip&value=1.2.3.4",
+            "/api/v1/threatintel/blocklist/check?type=ip&value=1.2.3.4",
             headers={"Authorization": f"Bearer {token_without_scope}"},
         )
 
@@ -308,7 +308,7 @@ async def test_check_ioc_all_types(
         # Test each type
         for verdict in verdicts:
             response = await client.get(
-                f"/api/v1/sase/blocklist/check?type={verdict.ioc_type}&value={verdict.value}",
+                f"/api/v1/threatintel/blocklist/check?type={verdict.ioc_type}&value={verdict.value}",
                 headers={"Authorization": f"Bearer {sase_read_token}"},
             )
 

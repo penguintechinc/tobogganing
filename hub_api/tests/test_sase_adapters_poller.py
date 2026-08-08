@@ -11,7 +11,7 @@ import pytest
 from hub_api.cache.client import CacheClient
 from hub_api.modules.sase.security.adapters.base import AnalysisAdapter
 from hub_api.modules.sase.security.adapters.poller import AdapterPoller
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 
 
 @pytest.fixture

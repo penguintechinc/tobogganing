@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 
 import structlog
 
-from hub_api.modules.sase.security.blocklist.models import IOC_TYPES, Verdict
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
-from hub_api.modules.sase.security.blocklist.stix_normalizer import to_stix_indicator
+from hub_api.modules.threatintel.blocklist.models import IOC_TYPES, Verdict
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.stix_normalizer import to_stix_indicator
 
 
 logger = structlog.get_logger()

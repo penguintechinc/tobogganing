@@ -10,7 +10,7 @@ from hub_api.modules.sase.security.adapters.zeek import ZeekAdapter
 from hub_api.modules.sase.security.adapters.strelka import StrelkaAdapter
 from hub_api.modules.sase.security.adapters.cape import CapeAdapter
 from hub_api.modules.sase.security.adapters.arkime import ArkimeAdapter
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 
 
 @pytest.fixture
