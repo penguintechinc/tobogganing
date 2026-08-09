@@ -18,6 +18,47 @@ repo_root = Path(__file__).parent.parent
 sys.path.insert(0, str(repo_root))
 
 
+def _sanitize_spec(spec: dict) -> dict:
+    """Post-process OpenAPI spec to fix quart-schema serialization issues.
+
+    Quart-schema emits snake_case OpenAPI keywords (bearer_format) and default:null
+    values that violate the OpenAPI 3.x standard and crash spectral linter.
+    This sanitizer fixes:
+      1. bearer_format → bearerFormat (camelCase per OpenAPI spec)
+      2. Removes default: null entries (meaningless, break spectral's oas ruleset)
+
+    Args:
+        spec: The OpenAPI spec dict (modified in-place and returned).
+
+    Returns:
+        The sanitized spec dict.
+    """
+    def _walk_dict(obj: dict) -> None:
+        """Recursively walk dict and apply fixes."""
+        # Fix bearer_format → bearerFormat in security schemes
+        if "securitySchemes" in obj:
+            for scheme in obj["securitySchemes"].values():
+                if isinstance(scheme, dict) and "bearer_format" in scheme:
+                    scheme["bearerFormat"] = scheme.pop("bearer_format")
+
+        # Remove default: null from all schema objects
+        keys_to_delete = [k for k, v in obj.items() if k == "default" and v is None]
+        for k in keys_to_delete:
+            del obj[k]
+
+        # Recurse into nested dicts and lists
+        for v in obj.values():
+            if isinstance(v, dict):
+                _walk_dict(v)
+            elif isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict):
+                        _walk_dict(item)
+
+    _walk_dict(spec)
+    return spec
+
+
 async def generate_spec() -> dict:
     """Generate OpenAPI spec from the Quart app using quart-schema.
 
@@ -61,6 +102,9 @@ async def generate_spec() -> dict:
             spec["info"]["title"] = app.config.get("PRODUCT_NAME", "Hub API")
         if "version" not in spec["info"]:
             spec["info"]["version"] = "1.0.0"
+
+        # Sanitize the spec to fix quart-schema serialization issues
+        spec = _sanitize_spec(spec)
 
         return spec
 

@@ -175,3 +175,6 @@ services/hub-router/proxy/headend-proxy
 # update`/`build` output regenerated from Chart.lock — the unpacked
 # k8s/helm/*/charts/<name>/ source directories themselves stay tracked.
 k8s/helm/*/charts/*.tgz
+
+# stray 0-byte file some tooling keeps creating at repo root
+/tobogganing

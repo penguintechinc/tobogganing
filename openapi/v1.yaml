@@ -10,13 +10,11 @@ components:
           anyOf:
           - type: integer
           - type: 'null'
-          default: null
           title: Port
         priority:
           anyOf:
           - type: integer
           - type: 'null'
-          default: null
           title: Priority
         ttl:
           title: Ttl
@@ -31,7 +29,6 @@ components:
           anyOf:
           - type: integer
           - type: 'null'
-          default: null
           title: Weight
       required:
       - name
@@ -206,13 +203,11 @@ components:
           anyOf:
           - type: integer
           - type: 'null'
-          default: null
           title: Port
         priority:
           anyOf:
           - type: integer
           - type: 'null'
-          default: null
           title: Priority
         ttl:
           title: Ttl
@@ -227,7 +222,6 @@ components:
           anyOf:
           - type: integer
           - type: 'null'
-          default: null
           title: Weight
       required:
       - id
@@ -312,9 +306,9 @@ components:
       type: object
   securitySchemes:
     BearerAuth:
-      bearer_format: JWT
       scheme: bearer
       type: http
+      bearerFormat: JWT
 info:
   title: hub_api.app
   version: 0.1.0
@@ -979,7 +973,6 @@ paths:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Description
                 name:
                   title: Name
@@ -1103,19 +1096,16 @@ paths:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Description
                 name:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Name
                 visibility:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Visibility
               title: UpdateZoneRequest
               type: object
@@ -1210,13 +1200,11 @@ paths:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Port
                 priority:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Priority
                 ttl:
                   default: 300
@@ -1232,7 +1220,6 @@ paths:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Weight
               required:
               - name
@@ -1260,13 +1247,11 @@ paths:
                     anyOf:
                     - type: integer
                     - type: 'null'
-                    default: null
                     title: Port
                   priority:
                     anyOf:
                     - type: integer
                     - type: 'null'
-                    default: null
                     title: Priority
                   ttl:
                     title: Ttl
@@ -1281,7 +1266,6 @@ paths:
                     anyOf:
                     - type: integer
                     - type: 'null'
-                    default: null
                     title: Weight
                 required:
                 - id
@@ -1338,43 +1322,36 @@ paths:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Name
                 port:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Port
                 priority:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Priority
                 ttl:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Ttl
                 type:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Type
                 value:
                   anyOf:
                   - type: string
                   - type: 'null'
-                  default: null
                   title: Value
                 weight:
                   anyOf:
                   - type: integer
                   - type: 'null'
-                  default: null
                   title: Weight
               title: UpdateRecordRequest
               type: object
@@ -1398,13 +1375,11 @@ paths:
                     anyOf:
                     - type: integer
                     - type: 'null'
-                    default: null
                     title: Port
                   priority:
                     anyOf:
                     - type: integer
                     - type: 'null'
-                    default: null
                     title: Priority
                   ttl:
                     title: Ttl
@@ -1419,7 +1394,6 @@ paths:
                     anyOf:
                     - type: integer
                     - type: 'null'
-                    default: null
                     title: Weight
                 required:
                 - id

@@ -125,7 +125,7 @@ async def test_generated_spec_includes_netsvcs_paths(client):
 
 @pytest.mark.asyncio
 async def test_generated_spec_has_security_schemes(client):
-    """OpenAPI spec should define BearerAuth security scheme."""
+    """OpenAPI spec should define BearerAuth security scheme with correct camelCase format."""
     repo_root = Path(__file__).parent.parent.parent
     spec_path = repo_root / "openapi" / "v1.yaml"
 
@@ -141,5 +141,49 @@ async def test_generated_spec_has_security_schemes(client):
     bearer = security_schemes["BearerAuth"]
     assert bearer.get("type") == "http", "BearerAuth should be type 'http'"
     assert bearer.get("scheme") == "bearer", "BearerAuth should have scheme 'bearer'"
-    # Note: quart-schema uses bearer_format (snake_case) not bearerFormat (camelCase)
-    assert bearer.get("bearer_format") == "JWT", "BearerAuth should specify JWT format"
+    # OpenAPI 3.x spec requires camelCase: bearerFormat (not snake_case bearer_format)
+    assert bearer.get("bearerFormat") == "JWT", "BearerAuth should specify JWT format with camelCase 'bearerFormat'"
+    assert "bearer_format" not in bearer, "BearerAuth should not have snake_case 'bearer_format'"
+
+
+@pytest.mark.asyncio
+async def test_generated_spec_has_no_default_null(client):
+    """OpenAPI spec should not contain any 'default: null' entries.
+
+    'default: null' is meaningless in OpenAPI and crashes spectral linter.
+    Sanitizer should remove all such entries during spec generation.
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    spec_path = repo_root / "openapi" / "v1.yaml"
+
+    import yaml
+    with open(spec_path) as f:
+        spec_content = f.read()
+
+    # Simple text-based check: no 'default: null' should exist in the YAML
+    assert "default: null" not in spec_content, (
+        "OpenAPI spec contains 'default: null' entries which crash spectral. "
+        "Regenerate spec with scripts/generate_openapi.py sanitizer."
+    )
+
+    # Also validate by walking the parsed spec structure
+    with open(spec_path) as f:
+        spec = yaml.safe_load(f)
+
+    def _check_no_default_null(obj, path=""):
+        """Recursively check that no object has default: None."""
+        if isinstance(obj, dict):
+            if "default" in obj and obj["default"] is None:
+                raise AssertionError(
+                    f"Found 'default: null' at {path or 'root'} — "
+                    "this will crash spectral linter and must be removed."
+                )
+            for key, value in obj.items():
+                new_path = f"{path}.{key}" if path else key
+                _check_no_default_null(value, new_path)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                new_path = f"{path}[{i}]"
+                _check_no_default_null(item, new_path)
+
+    _check_no_default_null(spec)
