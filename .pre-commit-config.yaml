@@ -1,0 +1,122 @@
+# PenguinTech standard git hooks.
+#
+# Install:  make install-hooks
+# Run all:  pre-commit run --all-files
+#
+# Two stages, matching devops.md "Git Hooks (Mandatory)":
+#   pre-commit — fast checks only (<30s), blocks the commit
+#   pre-push   — heavier security scans, blocks the push
+#
+# Replaces the previous hand-rolled scripts/hooks/pre-commit + pre-push bash
+# scripts — see setup-git-hooks skill: a missing tool in a bash hook is a
+# silent no-op, the pre-commit framework fails loudly and pins tool versions.
+#
+# Revs are pinned. Update deliberately via `pre-commit autoupdate` or Renovate,
+# never by floating to a branch.
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  # ── Hygiene ────────────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        # Helm chart templates use Go template syntax ({{ ... }}) that is not
+        # valid standalone YAML — `helm lint`/`helm template` validate these,
+        # not a generic YAML parser.
+        exclude: ^k8s/helm/.*/templates/
+      - id: check-json
+      - id: check-executables-have-shebangs
+      - id: detect-private-key
+
+  # ── Secrets (mandatory, every repo) ────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ── Shell (Bash must stay 3.2-compatible — see general.md) ─────────────────
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  # ── Python (services/hub-api) — ruff ONLY, never alongside flake8/black/isort
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^services/hub-api/
+      - id: ruff-format
+        files: ^services/hub-api/
+
+  # ── Go — multi-module repo (clients/native, services/hub-router,
+  #    services/hub-policy); run per-module rather than assuming one root go.mod
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint (per Go module)
+        language: golang
+        additional_dependencies: ["github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2"]
+        entry: bash -c 'status=0; for m in clients/native services/hub-router services/hub-policy; do if [ -f "$m/go.mod" ]; then (cd "$m" && golangci-lint run --timeout=5m) || status=1; fi; done; exit $status'
+        files: \.go$
+        pass_filenames: false
+
+  # ── Node/TS (hub-webui) — runs the project's own pinned eslint via its lint
+  #    script (requires `npm install` in services/hub-webui/ once) ───────────
+  - repo: local
+    hooks:
+      - id: eslint-hub-webui
+        name: ESLint (hub-webui)
+        entry: bash -c 'cd services/hub-webui && npm run lint'
+        language: system
+        files: ^services/hub-webui/src/.*\.(js|jsx|ts|tsx)$
+        pass_filenames: false
+
+  # ── Dockerfiles ────────────────────────────────────────────────────────────
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint-docker
+
+  # ── GitHub Actions ─────────────────────────────────────────────────────────
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
+
+  # ── Security (pre-push — heavier, keeps commits fast) ───────────────────────
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        files: ^services/hub-api/
+        exclude: ^services/hub-api/tests/
+        stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: dockerfile-rootless
+        name: Dockerfile runs as non-root
+        entry: scripts/hooks/check-dockerfile-rootless.sh
+        language: script
+        files: (^|/)Dockerfile[^/]*$
+        stages: [pre-push]
+
+      - id: govulncheck
+        name: Go vulnerability scan (govulncheck)
+        entry: bash -c 'status=0; for m in clients/native services/hub-router services/hub-policy; do if [ -f "$m/go.mod" ]; then (cd "$m" && govulncheck ./...) || status=1; fi; done; exit $status'
+        language: system
+        files: \.go$
+        pass_filenames: false
+        stages: [pre-push]

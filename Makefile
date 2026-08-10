@@ -8,7 +8,7 @@
 .PHONY: docker-build docker-push dev-up dev-down dev-logs dev-restart
 .PHONY: deploy-alpha deploy-beta deploy-prod deploy-terraform
 .PHONY: helm-lint helm-template seed-mock-data
-.PHONY: install-hooks pre-commit-check pre-push-check
+.PHONY: install-hooks verify-hooks pre-commit-check pre-push-check
 
 VERSION := $(shell cat .version)
 
@@ -109,9 +109,9 @@ seed-mock-data: ## Populate database with test data
 
 lint: ## Run all linting
 	@echo "=== Linting ==="
-	@cd services/hub-api && echo "-- flake8 --" && python3 -m flake8 . --max-line-length=120 --exclude=.git,__pycache__,venv,node_modules 2>/dev/null || true
-	@cd services/hub-api && echo "-- black --" && python3 -m black --check . 2>/dev/null || true
-	@cd services/hub-api && echo "-- isort --" && python3 -m isort --check-only . 2>/dev/null || true
+	@command -v ruff >/dev/null 2>&1 || { echo "❌ ruff not installed — install with: uv tool install ruff (or pip install ruff)"; exit 1; }
+	@cd services/hub-api && echo "-- ruff --" && ruff check .
+	@cd services/hub-api && echo "-- ruff format --" && ruff format --check .
 	@cd services/hub-api && echo "-- mypy --" && python3 -m mypy . --ignore-missing-imports 2>/dev/null || true
 	@cd services/hub-router && echo "-- golangci-lint --" && golangci-lint run 2>/dev/null || true
 	@cd clients/native && echo "-- golangci-lint --" && golangci-lint run 2>/dev/null || true
@@ -120,11 +120,11 @@ lint: ## Run all linting
 	@find . -name "*.sh" -not -path "*/.git/*" -exec echo "-- shellcheck: {} --" \; -exec shellcheck {} \; 2>/dev/null || true
 	@echo "Linting complete"
 
-lint-hub-api: ## Lint Hub API
+lint-hub-api: ## Lint Hub API (ruff required — fails if missing)
 	@echo "Linting Hub API..."
-	@cd services/hub-api && python3 -m flake8 . || true
-	@cd services/hub-api && python3 -m black --check . || true
-	@cd services/hub-api && python3 -m isort --check-only . || true
+	@command -v ruff >/dev/null 2>&1 || { echo "❌ ruff not installed — install with: uv tool install ruff (or pip install ruff)"; exit 1; }
+	@cd services/hub-api && ruff check .
+	@cd services/hub-api && ruff format --check .
 	@cd services/hub-api && python3 -m mypy . || true
 	@cd services/hub-api && python3 -m bandit -r . -x tests || true
 
@@ -327,19 +327,17 @@ test-security: ## Run security tests (gosec, bandit, npm audit, trivy)
 	@echo "-- gitleaks --" && gitleaks detect --source . --no-git 2>/dev/null || true
 	@echo "Security scans complete"
 
-install-hooks: ## Install pre-commit and pre-push git hooks from scripts/hooks/
-	@echo "Installing git hooks..."
-	@ln -sf "$(PWD)/scripts/hooks/pre-commit" "$(PWD)/.git/hooks/pre-commit"
-	@ln -sf "$(PWD)/scripts/hooks/pre-push"   "$(PWD)/.git/hooks/pre-push"
-	@chmod +x scripts/hooks/pre-commit scripts/hooks/pre-push
-	@echo "✓ pre-commit → .git/hooks/pre-commit"
-	@echo "✓ pre-push   → .git/hooks/pre-push"
+install-hooks: ## Install pre-commit framework + register pre-commit and pre-push hooks
+	@./scripts/install-pre-commit.sh
 
-pre-commit-check: ## Run pre-commit checks manually (same as git pre-commit hook)
-	@scripts/hooks/pre-commit
+verify-hooks: ## Report whether pre-commit/pre-push hooks are installed and non-empty
+	@./scripts/install-pre-commit.sh --verify
 
-pre-push-check: ## Run pre-push checks manually (same as git pre-push hook)
-	@scripts/hooks/pre-push
+pre-commit-check: ## Run pre-commit-stage hooks manually against all files
+	@pre-commit run --all-files
+
+pre-push-check: ## Run pre-push-stage hooks manually against all files
+	@pre-commit run --all-files --hook-stage pre-push
 
 pre-commit: pre-commit-check ## Alias for pre-commit-check
 
