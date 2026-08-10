@@ -14,6 +14,8 @@ from proto.netsvcs.v1 import manager_pb2
 @pytest.mark.asyncio
 async def test_validate_token_verbose_error_not_exposed() -> None:
     """Test ValidateToken does not expose exception details in the response."""
+    from unittest.mock import patch
+
     # Mock dependencies
     db_mock = MagicMock()
     cache_mock = AsyncMock()
@@ -27,23 +29,38 @@ async def test_validate_token_verbose_error_not_exposed() -> None:
 
     servicer = ManagerServicer(db=db_mock, cache=cache_mock, key_provider=key_provider_mock)
 
-    # Mock context
+    # Mock context with valid token (bypass auth check by mocking decode_token)
     context_mock = MagicMock(spec=grpc.aio.ServicerContext)
+    context_mock.invocation_metadata.return_value = [
+        ("authorization", "Bearer valid-test-jwt")
+    ]
 
-    # Build request
-    request = manager_pb2.ValidateTokenRequest(
-        api_version="v1",
-        token="some-invalid-token",
-    )
+    # Mock feature_enabled and decode_token to return valid claims
+    with patch("hub_api.modules.netsvcs.grpc.server.feature_enabled") as mock_feature, \
+         patch("hub_api.modules.netsvcs.grpc.server.decode_token") as mock_decode:
+        mock_feature.return_value = True
+        mock_decode.return_value = {
+            "sub": "resolver:test",
+            "iss": "tobogganing",
+            "aud": "headend",
+            "tenant": "default",
+            "scope": "ioc:read",
+        }
 
-    # Call ValidateToken
-    response = await servicer.ValidateToken(request, context_mock)
+        # Build request
+        request = manager_pb2.ValidateTokenRequest(
+            api_version="v1",
+            token="some-invalid-token",
+        )
 
-    # Verify response does NOT expose exception details
-    assert response.valid is False
-    assert "Database connection failed" not in response.reason
-    assert "auth timeout" not in response.reason
-    assert response.reason == "validation failed"  # Generic message only
+        # Call ValidateToken
+        response = await servicer.ValidateToken(request, context_mock)
+
+        # Verify response does NOT expose exception details
+        assert response.valid is False
+        assert "Database connection failed" not in response.reason
+        assert "auth timeout" not in response.reason
+        assert response.reason == "validation failed"  # Generic message only
 
 
 @pytest.mark.asyncio

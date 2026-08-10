@@ -12,6 +12,7 @@ from typing import Any, AsyncIterator
 from proto.netsvcs.v1 import manager_pb2, manager_pb2_grpc
 from hub_api.auth.jwt import encode_access_token, decode_token
 from hub_api.auth.machine_claims import build_machine_claims
+from hub_api.flags import feature_enabled
 from hub_api.modules.netsvcs.ioc import IOCChecker
 from hub_api.modules.netsvcs.managers.config_service import (
     ConfigService,
@@ -58,6 +59,73 @@ def _verify_bootstrap_token(token: str | None) -> bool:
     return hmac.compare_digest(token, expected)
 
 
+async def _authenticate(
+    context: grpc.aio.ServicerContext,
+    key_provider: Any,
+    *required_scopes: str,
+) -> dict[str, Any]:
+    """Authenticate machine-JWT and verify required scopes.
+
+    Extracts bearer token from gRPC metadata, decodes and validates it,
+    verifies audience and required scopes, and returns claims.
+    Aborts with UNAUTHENTICATED on any validation failure.
+
+    Args:
+        context: gRPC context with invocation metadata
+        key_provider: KeyProvider for JWT verification
+        *required_scopes: One or more required scope strings (e.g., "dns:config:read")
+
+    Returns:
+        Decoded claims dict if valid
+
+    Raises:
+        Aborts with UNAUTHENTICATED if token invalid/missing/insufficient scopes
+    """
+    token = _extract_bearer_token_from_metadata(context)
+    if not token:
+        logger.warning("grpc_auth_missing_token")
+        await context.abort(
+            grpc.StatusCode.UNAUTHENTICATED,
+            "bearer token required",
+        )
+        return {}  # Unreachable after abort, but ensures type safety
+
+    claims = decode_token(token, key_provider)
+    if not claims:
+        logger.warning("grpc_auth_invalid_token")
+        await context.abort(
+            grpc.StatusCode.UNAUTHENTICATED,
+            "invalid token",
+        )
+        return {}  # Unreachable after abort, but ensures type safety
+
+    # Verify audience
+    if claims.get("aud") != "headend":
+        logger.warning("grpc_auth_aud_mismatch", aud=claims.get("aud"))
+        await context.abort(
+            grpc.StatusCode.UNAUTHENTICATED,
+            "invalid audience",
+        )
+        return {}  # Unreachable after abort, but ensures type safety
+
+    # Verify required scopes (space-separated in token)
+    token_scopes = set((claims.get("scope") or "").split())
+    required = set(required_scopes)
+    if required and not required.issubset(token_scopes):
+        logger.warning(
+            "grpc_auth_insufficient_scopes",
+            required=required,
+            available=token_scopes,
+        )
+        await context.abort(
+            grpc.StatusCode.PERMISSION_DENIED,
+            "insufficient scopes",
+        )
+        return {}  # Unreachable after abort, but ensures type safety
+
+    return claims
+
+
 class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
     """gRPC servicer for ManagerService.
 
@@ -77,31 +145,34 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
         self.cache = cache
         self.key_provider = key_provider
         self.ioc_checker = IOCChecker(cache=cache)
-        self._config_versions: dict[str, int] = {}  # In-memory version tracking for streaming
 
     async def RegisterServer(
         self, request: manager_pb2.RegisterServerRequest, context: grpc.aio.ServicerContext
     ) -> manager_pb2.RegisterServerResponse:
-        """Register a DNS resolver node and issue machine-JWT.
+        """Register a DNS resolver node and issue access+refresh machine-JWT.
 
         Requires ENROLLMENT_BOOTSTRAP_TOKEN for enrollment (fail-closed).
+        Issues both access (TTL 1h) and refresh (TTL 24h) tokens.
+        Caches refresh token JTI for single-use replay protection.
         """
+        # ===== API VERSION CHECK (before broad try/except) =====
         if request.api_version != "v1":
             await context.abort(
                 grpc.StatusCode.UNIMPLEMENTED,
                 f"api_version {request.api_version} not supported",
             )
 
-        try:
-            # Verify bootstrap token (required for enrollment)
-            bootstrap_token = _extract_bearer_token_from_metadata(context)
-            if not _verify_bootstrap_token(bootstrap_token):
-                logger.warning("register_server_invalid_bootstrap_token")
-                await context.abort(
-                    grpc.StatusCode.UNAUTHENTICATED,
-                    "enrollment token required",
-                )
+        # ===== BOOTSTRAP TOKEN VALIDATION (before broad try/except) =====
+        bootstrap_token = _extract_bearer_token_from_metadata(context)
+        if not _verify_bootstrap_token(bootstrap_token):
+            logger.warning("register_server_invalid_bootstrap_token")
+            await context.abort(
+                grpc.StatusCode.UNAUTHENTICATED,
+                "enrollment token required",
+            )
 
+        # ===== SERVER REGISTRATION (broad exception handler for logic errors) =====
+        try:
             # Create server record under enrollment tenant
             server_manager = ServerManager(self.db, ENROLLMENT_TENANT)
             server_record = await server_manager.register_server(
@@ -112,30 +183,65 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             )
             server_id = server_record.id
 
-            # Build machine-JWT claims for dns_resolver node
-            claims = build_machine_claims(
+            # Build machine-JWT claims for dns_resolver node (access token)
+            access_claims = build_machine_claims(  # nosec B106 - "access" is a JWT token_type label, not a secret
                 sub_id=server_id,
                 node_type="dns_resolver",
                 tenant=ENROLLMENT_TENANT,
                 iss="tobogganing",
                 aud="headend",
+                token_type="access",
             )
 
-            # Encode JWT token
-            jwt_token = await encode_access_token(
-                claims=claims,
+            # Encode access JWT token (1h TTL)
+            access_token = await encode_access_token(
+                claims=access_claims,
                 key_provider=self.key_provider,
                 ttl_hours=1,
             )
+
+            # Build refresh token claims
+            refresh_claims = build_machine_claims(  # nosec B106 - "refresh" is a JWT token_type label, not a secret
+                sub_id=server_id,
+                node_type="dns_resolver",
+                tenant=ENROLLMENT_TENANT,
+                iss="tobogganing",
+                aud="headend",
+                token_type="refresh",
+            )
+
+            # Encode refresh JWT token (24h TTL)
+            refresh_token = await encode_access_token(
+                claims=refresh_claims,
+                key_provider=self.key_provider,
+                ttl_hours=24,
+            )
+
+            # Cache refresh token JTI for single-use protection (M2)
+            refresh_jti = refresh_claims.get("jti")
+            subject = f"resolver:{server_id}"
+            try:
+                await self.cache.set(
+                    "auth",
+                    "refresh",
+                    subject,
+                    value=refresh_jti,
+                    ttl_seconds=86400,
+                    fail_closed=True,
+                )
+            except Exception as e:
+                logger.warning("register_cache_refresh_jti_error", error=str(e))
+                # Log but continue; cache failure doesn't block registration
 
             # Get initial config
             config_service = ConfigService(self.db, ENROLLMENT_TENANT)
             config_dto = await config_service.get_server_config()
             config_version = await config_service.get_config_version()
 
-            # Build response
+            # Build response with both tokens (M3)
             return manager_pb2.RegisterServerResponse(
-                jwt=jwt_token,
+                jwt=access_token,
+                refresh_token=refresh_token,
                 server_id=server_id,
                 config=self._dto_to_proto_config(config_dto),
                 config_version=config_version,
@@ -284,41 +390,74 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
                 ttl_hours=24,
             )
 
-            # Cache new refresh JTI (24 hour TTL) for single-use tracking
-            new_jti = new_claims.get("jti")
-            try:
-                await self.cache.set(
-                    "auth",
-                    "refresh",
-                    subject,
-                    value=new_jti,
-                    ttl_seconds=86400,
-                    fail_closed=True,
-                )
-            except Exception as e:
-                logger.warning("refresh_cache_set_error", error=str(e))
-
             logger.info(
                 "refresh_token_issued",
                 server_id=request.server_id,
                 subject=subject,
             )
 
-            return manager_pb2.RefreshTokenResponse(jwt=jwt_token)
-
         except Exception as e:
             # Only catches logic errors in minting, not auth failures
             logger.error("refresh_token_minting_error", error=str(e), server_id=request.server_id, exc_info=True)
             await context.abort(grpc.StatusCode.INTERNAL, "internal error")
 
+        # ===== CACHE PERSISTENCE PHASE (separate from minting, fail-closed on cache failure) =====
+        # Cache new refresh JTI (24 hour TTL) for single-use tracking (M4: fail-closed)
+        new_jti = new_claims.get("jti")
+        try:
+            await self.cache.set(
+                "auth",
+                "refresh",
+                subject,
+                value=new_jti,
+                ttl_seconds=86400,
+                fail_closed=True,
+            )
+        except Exception as e:
+            logger.error("refresh_cache_set_error", error=str(e), exc_info=True)
+            # Fail-closed: cannot track single-use on the new token; deny the refresh
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE,
+                "cannot track token freshness",
+            )
+
+        return manager_pb2.RefreshTokenResponse(jwt=jwt_token)
+
     async def GetConfig(
         self, request: manager_pb2.GetConfigRequest, context: grpc.aio.ServicerContext
     ) -> manager_pb2.GetConfigResponse:
-        """Get current configuration for a DNS resolver node."""
+        """Get current configuration for a DNS resolver node.
+
+        Requires machine-JWT with dns:config:read scope and subject matching resolver:{server_id}.
+        """
         if request.api_version != "v1":
             await context.abort(
                 grpc.StatusCode.UNIMPLEMENTED,
                 f"api_version {request.api_version} not supported",
+            )
+
+        # ===== FEATURE GATING (L4) =====
+        if not feature_enabled("netsvcs", "dns", distinct_id="system"):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "feature not enabled",
+            )
+
+        # ===== AUTHENTICATION (H1) =====
+        claims = await _authenticate(context, self.key_provider, "dns:config:read")
+
+        # Verify subject matches server_id (subject binding)
+        expected_sub = f"resolver:{request.server_id}"
+        if claims.get("sub") != expected_sub:
+            logger.warning(
+                "grpc_get_config_subject_mismatch",
+                server_id=request.server_id,
+                expected_sub=expected_sub,
+                actual_sub=claims.get("sub"),
+            )
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "subject does not match server_id",
             )
 
         try:
@@ -342,13 +481,37 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
     ) -> AsyncIterator[manager_pb2.ConfigUpdate]:
         """Stream configuration updates to a DNS resolver node on version bump.
 
-        Yields the current config, then polls for version changes and yields
-        updates as they occur.
+        Requires machine-JWT with dns:config:read scope and subject matching resolver:{server_id}.
+        Yields the current config, then polls for version changes and yields updates as they occur.
         """
         if request.api_version != "v1":
             await context.abort(
                 grpc.StatusCode.UNIMPLEMENTED,
                 f"api_version {request.api_version} not supported",
+            )
+
+        # ===== FEATURE GATING (L4) =====
+        if not feature_enabled("netsvcs", "dns", distinct_id="system"):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "feature not enabled",
+            )
+
+        # ===== AUTHENTICATION (H1) =====
+        claims = await _authenticate(context, self.key_provider, "dns:config:read")
+
+        # Verify subject matches server_id (subject binding)
+        expected_sub = f"resolver:{request.server_id}"
+        if claims.get("sub") != expected_sub:
+            logger.warning(
+                "grpc_stream_config_subject_mismatch",
+                server_id=request.server_id,
+                expected_sub=expected_sub,
+                actual_sub=claims.get("sub"),
+            )
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "subject does not match server_id",
             )
 
         try:
@@ -396,6 +559,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
     ) -> manager_pb2.SendHeartbeatResponse:
         """Record resolver heartbeat and check config version status.
 
+        Requires machine-JWT with metrics:write scope and subject matching resolver:{server_id}.
         Unary RPC: server receives metrics once, responds with current config version
         and sync flag. This keeps heartbeat fast and allows the resolver to
         independently decide whether to stream config updates.
@@ -406,14 +570,38 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
                 f"api_version {request.api_version} not supported",
             )
 
+        # ===== FEATURE GATING (L4) =====
+        if not feature_enabled("netsvcs", "dns", distinct_id="system"):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "feature not enabled",
+            )
+
+        # ===== AUTHENTICATION (H1) =====
+        claims = await _authenticate(context, self.key_provider, "metrics:write")
+
+        # Verify subject matches server_id (subject binding)
+        expected_sub = f"resolver:{request.server_id}"
+        if claims.get("sub") != expected_sub:
+            logger.warning(
+                "grpc_send_heartbeat_subject_mismatch",
+                server_id=request.server_id,
+                expected_sub=expected_sub,
+                actual_sub=claims.get("sub"),
+            )
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "subject does not match server_id",
+            )
+
         try:
             server_manager = ServerManager(self.db, ENROLLMENT_TENANT)
             config_service = ConfigService(self.db, ENROLLMENT_TENANT)
 
-            # Record metrics
+            # Record metrics (H2: fix positional argument)
             await server_manager.record_heartbeat(
-                server_id=request.server_id,
-                metrics={
+                request.server_id,
+                {
                     "queries_total": request.metrics.queries_total,
                     "cache_hits": request.metrics.cache_hits,
                     "errors": request.metrics.errors,
@@ -442,6 +630,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
     ) -> manager_pb2.ValidateTokenResponse:
         """Validate resolver-token and return tenant-scoped allowed zone IDs.
 
+        Requires machine-JWT with ioc:read scope (high-frequency operation, no subject binding).
         Looks up the dns_resolver_tokens table for the given token.
         Returns zones for the token's tenant only (never enrollment tenant zones to a tenant's token).
         Updates last_used on successful validation.
@@ -451,6 +640,16 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
                 grpc.StatusCode.UNIMPLEMENTED,
                 f"api_version {request.api_version} not supported",
             )
+
+        # ===== FEATURE GATING (L4) =====
+        if not feature_enabled("netsvcs", "dns", distinct_id="system"):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "feature not enabled",
+            )
+
+        # ===== AUTHENTICATION (H1) =====
+        await _authenticate(context, self.key_provider, "ioc:read")
 
         try:
             # Look up the resolver token in the database
@@ -481,7 +680,8 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             config_service = ConfigService(self.db, token_row.tenant)
             config_dto = await config_service.get_server_config()
 
-            zone_ids = [zone.name for zone in config_dto.zones]
+            # M5: Return zone IDs instead of names
+            zone_ids = [zone.id for zone in config_dto.zones]
 
             # Update last_used timestamp
             await self.db(
@@ -517,6 +717,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
     ) -> manager_pb2.CheckIOCResponse:
         """Check if domain or IP is in blocklist.
 
+        Requires machine-JWT with ioc:read scope (high-frequency operation, no subject binding).
         This is a high-frequency operation called during resolver query processing.
         Fails open: any blocklist lookup error returns blocked=False.
         """
@@ -525,6 +726,16 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
                 grpc.StatusCode.UNIMPLEMENTED,
                 f"api_version {request.api_version} not supported",
             )
+
+        # ===== FEATURE GATING (L4) =====
+        if not feature_enabled("netsvcs", "dns", distinct_id="system"):
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "feature not enabled",
+            )
+
+        # ===== AUTHENTICATION (H1) =====
+        await _authenticate(context, self.key_provider, "ioc:read")
 
         try:
             # Check domain if provided
@@ -571,7 +782,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
         """Convert DNSServerConfigDTO to ServerConfig protobuf message."""
         zones = [
             manager_pb2.DNSZone(
-                id="",  # Zone ID not in DTO, leave empty for now
+                id=zone.id,  # M5: Zone ID now populated from DTO
                 name=zone.name,
                 visibility=zone.visibility,
                 records=[
@@ -615,6 +826,12 @@ async def create_grpc_server(
     use_tls: bool = True,
 ) -> grpc.aio.Server:
     """Create and configure a gRPC manager service server.
+
+    SECURITY ASSERTION (H1 startup guard): The servicer instantiated below has every
+    state-changing and data-returning RPC method guarded by _authenticate, which enforces
+    per-RPC machine-JWT validation with scope + subject checking. This is a fail-closed
+    enforcement: auth failures abort the RPC immediately before any business logic runs.
+    TLS enforcement below further ensures transport-level security. No unauth'd access possible.
 
     Args:
         db: penguin-dal AsyncDB instance

@@ -26,6 +26,7 @@ class DNSRecordDTO:
 class DNSZoneDTO:
     """DNS zone data transfer object."""
 
+    id: str
     name: str
     visibility: str
     records: list[DNSRecordDTO] = field(default_factory=list)
@@ -167,6 +168,7 @@ class ConfigService:
 
             zone_dtos.append(
                 DNSZoneDTO(
+                    id=zone_row.id,
                     name=zone_row.name,
                     visibility=zone_row.visibility,
                     records=record_dtos,

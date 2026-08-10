@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18netsvcs/v1/manager.proto\x12\x12netsvcs.manager.v1\"O\n\x15RegisterServerRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x10\n\x08hostname\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"\x82\x01\n\x16RegisterServerResponse\x12\x0b\n\x03jwt\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\x12\x30\n\x06\x63onfig\x18\x03 \x01(\x0b\x32 .netsvcs.manager.v1.ServerConfig\x12\x16\n\x0e\x63onfig_version\x18\x04 \x01(\x05\"=\n\x13RefreshTokenRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\"#\n\x14RefreshTokenResponse\x12\x0b\n\x03jwt\x18\x01 \x01(\t\"\xff\x01\n\x0cServerConfig\x12*\n\x05zones\x18\x01 \x03(\x0b\x32\x1b.netsvcs.manager.v1.DNSZone\x12\x39\n\x0e\x63\x61\x63he_settings\x18\x02 \x01(\x0b\x32!.netsvcs.manager.v1.CacheSettings\x12@\n\x08settings\x18\x03 \x03(\x0b\x32..netsvcs.manager.v1.ServerConfig.SettingsEntry\x12\x15\n\rioc_filtering\x18\x04 \x01(\x08\x1a/\n\rSettingsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"g\n\x07\x44NSZone\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\nvisibility\x18\x03 \x01(\t\x12.\n\x07records\x18\x04 \x03(\x0b\x32\x1d.netsvcs.manager.v1.DNSRecord\"s\n\tDNSRecord\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\t\x12\x0b\n\x03ttl\x18\x04 \x01(\x05\x12\x10\n\x08priority\x18\x05 \x01(\x05\x12\x0e\n\x06weight\x18\x06 \x01(\x05\x12\x0c\n\x04port\x18\x07 \x01(\x05\"B\n\rCacheSettings\x12\x0b\n\x03ttl\x18\x01 \x01(\x05\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\x12\x13\n\x0bmax_entries\x18\x03 \x01(\x05\":\n\x10GetConfigRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\"V\n\x11GetConfigResponse\x12\x30\n\x06\x63onfig\x18\x01 \x01(\x0b\x32 .netsvcs.manager.v1.ServerConfig\x12\x0f\n\x07version\x18\x02 \x01(\x05\"D\n\x1aStreamConfigUpdatesRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\"f\n\x0c\x43onfigUpdate\x12\x30\n\x06\x63onfig\x18\x01 \x01(\x0b\x32 .netsvcs.manager.v1.ServerConfig\x12\x0f\n\x07version\x18\x02 \x01(\x05\x12\x13\n\x0bupdate_type\x18\x03 \x01(\t\"\x85\x01\n\x14SendHeartbeatRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\x12\x11\n\ttimestamp\x18\x03 \x01(\x03\x12\x32\n\x07metrics\x18\x04 \x01(\x0b\x32!.netsvcs.manager.v1.ServerMetrics\"D\n\x15SendHeartbeatResponse\x12\x16\n\x0e\x63onfig_version\x18\x01 \x01(\x05\x12\x13\n\x0bshould_sync\x18\x02 \x01(\x08\"\xe8\x01\n\rServerMetrics\x12\x15\n\rqueries_total\x18\x01 \x01(\x03\x12\x12\n\ncache_hits\x18\x02 \x01(\x03\x12\x0e\n\x06\x65rrors\x18\x03 \x01(\x03\x12\x17\n\x0f\x61vg_response_ms\x18\x04 \x01(\x01\x12M\n\x0fqueries_by_type\x18\x05 \x03(\x0b\x32\x34.netsvcs.manager.v1.ServerMetrics.QueriesByTypeEntry\x1a\x34\n\x12QueriesByTypeEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"J\n\x14ValidateTokenRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\r\n\x05token\x18\x02 \x01(\t\x12\x0e\n\x06\x64omain\x18\x03 \x01(\t\"P\n\x15ValidateTokenResponse\x12\r\n\x05valid\x18\x01 \x01(\x08\x12\x0e\n\x06reason\x18\x02 \x01(\t\x12\x18\n\x10\x61llowed_zone_ids\x18\x03 \x03(\t\"B\n\x0f\x43heckIOCRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\n\n\x02ip\x18\x03 \x01(\t\"Z\n\x10\x43heckIOCResponse\x12\x0f\n\x07\x62locked\x18\x01 \x01(\x08\x12\x0e\n\x06reason\x18\x02 \x01(\t\x12\x13\n\x0b\x66\x65\x65\x64_source\x18\x03 \x01(\t\x12\x10\n\x08severity\x18\x04 \x01(\t2\xc4\x05\n\x0eManagerService\x12g\n\x0eRegisterServer\x12).netsvcs.manager.v1.RegisterServerRequest\x1a*.netsvcs.manager.v1.RegisterServerResponse\x12\x61\n\x0cRefreshToken\x12\'.netsvcs.manager.v1.RefreshTokenRequest\x1a(.netsvcs.manager.v1.RefreshTokenResponse\x12X\n\tGetConfig\x12$.netsvcs.manager.v1.GetConfigRequest\x1a%.netsvcs.manager.v1.GetConfigResponse\x12i\n\x13StreamConfigUpdates\x12..netsvcs.manager.v1.StreamConfigUpdatesRequest\x1a .netsvcs.manager.v1.ConfigUpdate0\x01\x12\x64\n\rSendHeartbeat\x12(.netsvcs.manager.v1.SendHeartbeatRequest\x1a).netsvcs.manager.v1.SendHeartbeatResponse\x12\x64\n\rValidateToken\x12(.netsvcs.manager.v1.ValidateTokenRequest\x1a).netsvcs.manager.v1.ValidateTokenResponse\x12U\n\x08\x43heckIOC\x12#.netsvcs.manager.v1.CheckIOCRequest\x1a$.netsvcs.manager.v1.CheckIOCResponseBBZ@github.com/penguintechinc/tobogganing/proto/netsvcs/v1;netsvcsv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18netsvcs/v1/manager.proto\x12\x12netsvcs.manager.v1\"O\n\x15RegisterServerRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x10\n\x08hostname\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"\x99\x01\n\x16RegisterServerResponse\x12\x0b\n\x03jwt\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\x12\x30\n\x06\x63onfig\x18\x03 \x01(\x0b\x32 .netsvcs.manager.v1.ServerConfig\x12\x16\n\x0e\x63onfig_version\x18\x04 \x01(\x05\x12\x15\n\rrefresh_token\x18\x05 \x01(\t\"=\n\x13RefreshTokenRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\"#\n\x14RefreshTokenResponse\x12\x0b\n\x03jwt\x18\x01 \x01(\t\"\xff\x01\n\x0cServerConfig\x12*\n\x05zones\x18\x01 \x03(\x0b\x32\x1b.netsvcs.manager.v1.DNSZone\x12\x39\n\x0e\x63\x61\x63he_settings\x18\x02 \x01(\x0b\x32!.netsvcs.manager.v1.CacheSettings\x12@\n\x08settings\x18\x03 \x03(\x0b\x32..netsvcs.manager.v1.ServerConfig.SettingsEntry\x12\x15\n\rioc_filtering\x18\x04 \x01(\x08\x1a/\n\rSettingsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"g\n\x07\x44NSZone\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\nvisibility\x18\x03 \x01(\t\x12.\n\x07records\x18\x04 \x03(\x0b\x32\x1d.netsvcs.manager.v1.DNSRecord\"s\n\tDNSRecord\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\t\x12\x0b\n\x03ttl\x18\x04 \x01(\x05\x12\x10\n\x08priority\x18\x05 \x01(\x05\x12\x0e\n\x06weight\x18\x06 \x01(\x05\x12\x0c\n\x04port\x18\x07 \x01(\x05\"B\n\rCacheSettings\x12\x0b\n\x03ttl\x18\x01 \x01(\x05\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\x12\x13\n\x0bmax_entries\x18\x03 \x01(\x05\":\n\x10GetConfigRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\"V\n\x11GetConfigResponse\x12\x30\n\x06\x63onfig\x18\x01 \x01(\x0b\x32 .netsvcs.manager.v1.ServerConfig\x12\x0f\n\x07version\x18\x02 \x01(\x05\"D\n\x1aStreamConfigUpdatesRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\"f\n\x0c\x43onfigUpdate\x12\x30\n\x06\x63onfig\x18\x01 \x01(\x0b\x32 .netsvcs.manager.v1.ServerConfig\x12\x0f\n\x07version\x18\x02 \x01(\x05\x12\x13\n\x0bupdate_type\x18\x03 \x01(\t\"\x85\x01\n\x14SendHeartbeatRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x11\n\tserver_id\x18\x02 \x01(\t\x12\x11\n\ttimestamp\x18\x03 \x01(\x03\x12\x32\n\x07metrics\x18\x04 \x01(\x0b\x32!.netsvcs.manager.v1.ServerMetrics\"D\n\x15SendHeartbeatResponse\x12\x16\n\x0e\x63onfig_version\x18\x01 \x01(\x05\x12\x13\n\x0bshould_sync\x18\x02 \x01(\x08\"\xe8\x01\n\rServerMetrics\x12\x15\n\rqueries_total\x18\x01 \x01(\x03\x12\x12\n\ncache_hits\x18\x02 \x01(\x03\x12\x0e\n\x06\x65rrors\x18\x03 \x01(\x03\x12\x17\n\x0f\x61vg_response_ms\x18\x04 \x01(\x01\x12M\n\x0fqueries_by_type\x18\x05 \x03(\x0b\x32\x34.netsvcs.manager.v1.ServerMetrics.QueriesByTypeEntry\x1a\x34\n\x12QueriesByTypeEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"J\n\x14ValidateTokenRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\r\n\x05token\x18\x02 \x01(\t\x12\x0e\n\x06\x64omain\x18\x03 \x01(\t\"P\n\x15ValidateTokenResponse\x12\r\n\x05valid\x18\x01 \x01(\x08\x12\x0e\n\x06reason\x18\x02 \x01(\t\x12\x18\n\x10\x61llowed_zone_ids\x18\x03 \x03(\t\"B\n\x0f\x43heckIOCRequest\x12\x13\n\x0b\x61pi_version\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\n\n\x02ip\x18\x03 \x01(\t\"Z\n\x10\x43heckIOCResponse\x12\x0f\n\x07\x62locked\x18\x01 \x01(\x08\x12\x0e\n\x06reason\x18\x02 \x01(\t\x12\x13\n\x0b\x66\x65\x65\x64_source\x18\x03 \x01(\t\x12\x10\n\x08severity\x18\x04 \x01(\t2\xc4\x05\n\x0eManagerService\x12g\n\x0eRegisterServer\x12).netsvcs.manager.v1.RegisterServerRequest\x1a*.netsvcs.manager.v1.RegisterServerResponse\x12\x61\n\x0cRefreshToken\x12\'.netsvcs.manager.v1.RefreshTokenRequest\x1a(.netsvcs.manager.v1.RefreshTokenResponse\x12X\n\tGetConfig\x12$.netsvcs.manager.v1.GetConfigRequest\x1a%.netsvcs.manager.v1.GetConfigResponse\x12i\n\x13StreamConfigUpdates\x12..netsvcs.manager.v1.StreamConfigUpdatesRequest\x1a .netsvcs.manager.v1.ConfigUpdate0\x01\x12\x64\n\rSendHeartbeat\x12(.netsvcs.manager.v1.SendHeartbeatRequest\x1a).netsvcs.manager.v1.SendHeartbeatResponse\x12\x64\n\rValidateToken\x12(.netsvcs.manager.v1.ValidateTokenRequest\x1a).netsvcs.manager.v1.ValidateTokenResponse\x12U\n\x08\x43heckIOC\x12#.netsvcs.manager.v1.CheckIOCRequest\x1a$.netsvcs.manager.v1.CheckIOCResponseBBZ@github.com/penguintechinc/tobogganing/proto/netsvcs/v1;netsvcsv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,45 +39,45 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_REGISTERSERVERREQUEST']._serialized_start=48
   _globals['_REGISTERSERVERREQUEST']._serialized_end=127
   _globals['_REGISTERSERVERRESPONSE']._serialized_start=130
-  _globals['_REGISTERSERVERRESPONSE']._serialized_end=260
-  _globals['_REFRESHTOKENREQUEST']._serialized_start=262
-  _globals['_REFRESHTOKENREQUEST']._serialized_end=323
-  _globals['_REFRESHTOKENRESPONSE']._serialized_start=325
-  _globals['_REFRESHTOKENRESPONSE']._serialized_end=360
-  _globals['_SERVERCONFIG']._serialized_start=363
-  _globals['_SERVERCONFIG']._serialized_end=618
-  _globals['_SERVERCONFIG_SETTINGSENTRY']._serialized_start=571
-  _globals['_SERVERCONFIG_SETTINGSENTRY']._serialized_end=618
-  _globals['_DNSZONE']._serialized_start=620
-  _globals['_DNSZONE']._serialized_end=723
-  _globals['_DNSRECORD']._serialized_start=725
-  _globals['_DNSRECORD']._serialized_end=840
-  _globals['_CACHESETTINGS']._serialized_start=842
-  _globals['_CACHESETTINGS']._serialized_end=908
-  _globals['_GETCONFIGREQUEST']._serialized_start=910
-  _globals['_GETCONFIGREQUEST']._serialized_end=968
-  _globals['_GETCONFIGRESPONSE']._serialized_start=970
-  _globals['_GETCONFIGRESPONSE']._serialized_end=1056
-  _globals['_STREAMCONFIGUPDATESREQUEST']._serialized_start=1058
-  _globals['_STREAMCONFIGUPDATESREQUEST']._serialized_end=1126
-  _globals['_CONFIGUPDATE']._serialized_start=1128
-  _globals['_CONFIGUPDATE']._serialized_end=1230
-  _globals['_SENDHEARTBEATREQUEST']._serialized_start=1233
-  _globals['_SENDHEARTBEATREQUEST']._serialized_end=1366
-  _globals['_SENDHEARTBEATRESPONSE']._serialized_start=1368
-  _globals['_SENDHEARTBEATRESPONSE']._serialized_end=1436
-  _globals['_SERVERMETRICS']._serialized_start=1439
-  _globals['_SERVERMETRICS']._serialized_end=1671
-  _globals['_SERVERMETRICS_QUERIESBYTYPEENTRY']._serialized_start=1619
-  _globals['_SERVERMETRICS_QUERIESBYTYPEENTRY']._serialized_end=1671
-  _globals['_VALIDATETOKENREQUEST']._serialized_start=1673
-  _globals['_VALIDATETOKENREQUEST']._serialized_end=1747
-  _globals['_VALIDATETOKENRESPONSE']._serialized_start=1749
-  _globals['_VALIDATETOKENRESPONSE']._serialized_end=1829
-  _globals['_CHECKIOCREQUEST']._serialized_start=1831
-  _globals['_CHECKIOCREQUEST']._serialized_end=1897
-  _globals['_CHECKIOCRESPONSE']._serialized_start=1899
-  _globals['_CHECKIOCRESPONSE']._serialized_end=1989
-  _globals['_MANAGERSERVICE']._serialized_start=1992
-  _globals['_MANAGERSERVICE']._serialized_end=2700
+  _globals['_REGISTERSERVERRESPONSE']._serialized_end=283
+  _globals['_REFRESHTOKENREQUEST']._serialized_start=285
+  _globals['_REFRESHTOKENREQUEST']._serialized_end=346
+  _globals['_REFRESHTOKENRESPONSE']._serialized_start=348
+  _globals['_REFRESHTOKENRESPONSE']._serialized_end=383
+  _globals['_SERVERCONFIG']._serialized_start=386
+  _globals['_SERVERCONFIG']._serialized_end=641
+  _globals['_SERVERCONFIG_SETTINGSENTRY']._serialized_start=594
+  _globals['_SERVERCONFIG_SETTINGSENTRY']._serialized_end=641
+  _globals['_DNSZONE']._serialized_start=643
+  _globals['_DNSZONE']._serialized_end=746
+  _globals['_DNSRECORD']._serialized_start=748
+  _globals['_DNSRECORD']._serialized_end=863
+  _globals['_CACHESETTINGS']._serialized_start=865
+  _globals['_CACHESETTINGS']._serialized_end=931
+  _globals['_GETCONFIGREQUEST']._serialized_start=933
+  _globals['_GETCONFIGREQUEST']._serialized_end=991
+  _globals['_GETCONFIGRESPONSE']._serialized_start=993
+  _globals['_GETCONFIGRESPONSE']._serialized_end=1079
+  _globals['_STREAMCONFIGUPDATESREQUEST']._serialized_start=1081
+  _globals['_STREAMCONFIGUPDATESREQUEST']._serialized_end=1149
+  _globals['_CONFIGUPDATE']._serialized_start=1151
+  _globals['_CONFIGUPDATE']._serialized_end=1253
+  _globals['_SENDHEARTBEATREQUEST']._serialized_start=1256
+  _globals['_SENDHEARTBEATREQUEST']._serialized_end=1389
+  _globals['_SENDHEARTBEATRESPONSE']._serialized_start=1391
+  _globals['_SENDHEARTBEATRESPONSE']._serialized_end=1459
+  _globals['_SERVERMETRICS']._serialized_start=1462
+  _globals['_SERVERMETRICS']._serialized_end=1694
+  _globals['_SERVERMETRICS_QUERIESBYTYPEENTRY']._serialized_start=1642
+  _globals['_SERVERMETRICS_QUERIESBYTYPEENTRY']._serialized_end=1694
+  _globals['_VALIDATETOKENREQUEST']._serialized_start=1696
+  _globals['_VALIDATETOKENREQUEST']._serialized_end=1770
+  _globals['_VALIDATETOKENRESPONSE']._serialized_start=1772
+  _globals['_VALIDATETOKENRESPONSE']._serialized_end=1852
+  _globals['_CHECKIOCREQUEST']._serialized_start=1854
+  _globals['_CHECKIOCREQUEST']._serialized_end=1920
+  _globals['_CHECKIOCRESPONSE']._serialized_start=1922
+  _globals['_CHECKIOCRESPONSE']._serialized_end=2012
+  _globals['_MANAGERSERVICE']._serialized_start=2015
+  _globals['_MANAGERSERVICE']._serialized_end=2723
 # @@protoc_insertion_point(module_scope)

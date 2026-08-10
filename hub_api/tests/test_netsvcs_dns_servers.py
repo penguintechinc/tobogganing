@@ -284,6 +284,7 @@ async def test_register_server_with_bootstrap_token(app_with_netsvcs: Quart) -> 
             config = DNSServerConfigDTO(
                 zones=[
                     DNSZoneDTO(
+                        id="zone-789",
                         name="example.com",
                         visibility="public",
                         records=[
@@ -351,6 +352,7 @@ async def test_get_server_config_with_machine_jwt(app_with_netsvcs: Quart) -> No
         config = DNSServerConfigDTO(
             zones=[
                 DNSZoneDTO(
+                    id="zone-123",
                     name="example.com",
                     visibility="public",
                     records=[

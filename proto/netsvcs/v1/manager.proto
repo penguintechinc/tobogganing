@@ -33,6 +33,7 @@ message RegisterServerResponse {
   string server_id = 2;
   ServerConfig config = 3;
   int32 config_version = 4;
+  string refresh_token = 5;
 }
 
 // Token Refresh
