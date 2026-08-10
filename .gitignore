@@ -30,6 +30,8 @@ config.yaml
 config.json
 *config*.yaml
 *config*.json
+# ...but .pre-commit-config.yaml is required tooling, not sensitive data
+!.pre-commit-config.yaml
 .env
 .env.local
 .env.*.local
@@ -159,4 +161,3 @@ artifacts/
 
 # Git worktrees
 .worktrees/
-

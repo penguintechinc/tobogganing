@@ -95,7 +95,7 @@ jobs:
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Extract platform tuple
       id: platform
@@ -103,14 +103,14 @@ jobs:
         PLATFORM="${{ matrix.platform }}"
         OS="${PLATFORM%/*}"
         ARCH="${PLATFORM#*/}"
-        echo "os=${OS}" >> $GITHUB_OUTPUT
-        echo "arch=${ARCH}" >> $GITHUB_OUTPUT
+        echo "os=${OS}" >> "$GITHUB_OUTPUT"
+        echo "arch=${ARCH}" >> "$GITHUB_OUTPUT"
 
     - name: Compute image tags
       id: tags
       run: |
         EPOCH=$(date +%s)
-        VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+        VERSION=$(tr -d '[:space:]' < .version | sed 's/\.[^.]*$//')
         REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
         IMAGE="${REGISTRY}/tobogganing-${{ matrix.component }}"
         REF="${{ github.ref_name }}"
@@ -125,7 +125,7 @@ jobs:
         else
           TAGS="${IMAGE}:alpha-${EPOCH}-${ARCH}"
         fi
-        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+        echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
     - name: Build and push Docker image
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7
@@ -165,13 +165,13 @@ jobs:
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Compute manifest tags
       id: tags
       run: |
         EPOCH=$(date +%s)
-        VERSION=$(cat .version | tr -d '[:space:]' | sed 's/\.[^.]*$//')
+        VERSION=$(tr -d '[:space:]' < .version | sed 's/\.[^.]*$//')
         REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
         IMAGE="${REGISTRY}/tobogganing-${{ matrix.component }}"
         REF="${{ github.ref_name }}"
@@ -189,8 +189,8 @@ jobs:
           FINAL_TAG="${IMAGE}:alpha-${EPOCH}"
           SOURCE_TAGS="${IMAGE}:alpha-${EPOCH}-amd64 ${IMAGE}:alpha-${EPOCH}-arm64"
         fi
-        echo "final_tag=${FINAL_TAG}" >> $GITHUB_OUTPUT
-        echo "source_tags=${SOURCE_TAGS}" >> $GITHUB_OUTPUT
+        echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
+        echo "source_tags=${SOURCE_TAGS}" >> "$GITHUB_OUTPUT"
 
     - name: Create and push manifest
       run: |
@@ -248,7 +248,7 @@ jobs:
       shell: bash
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Build binary
       env:
@@ -307,7 +307,7 @@ jobs:
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Create universal binary
       run: |
@@ -350,7 +350,7 @@ jobs:
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Download all artifacts
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
@@ -387,7 +387,7 @@ jobs:
 
         # Create checksums
         cd release-packages
-        sha256sum * > checksums.txt
+        sha256sum -- * > checksums.txt
         cd ..
 
     - name: Create example configuration files
@@ -414,23 +414,21 @@ jobs:
         import os
         v = os.environ.get('VERSION', 'unknown')
         r = os.environ.get('REPO', 'penguintechinc/tobogganing')
-        notes = f'''# Tobogganing Release v{v}
-
-## Features
-- WireGuard VPN termination
-- Multi-protocol proxy
-- Cross-platform clients
-
-## Docker Images
-- Manager: ghcr.io/{r}/tobogganing-manager:{v}
-- Headend: ghcr.io/{r}/tobogganing-headend:{v}
-- Client: ghcr.io/{r}/tobogganing-client:{v}
-
-## Security
-- Zero Trust Network Architecture (ZTNA)
-- Dual authentication: X.509 + JWT
-- All communications secured with mutual TLS
-'''
+        notes = (
+            f'# Tobogganing Release v{v}\n\n'
+            '## Features\n'
+            '- WireGuard VPN termination\n'
+            '- Multi-protocol proxy\n'
+            '- Cross-platform clients\n\n'
+            '## Docker Images\n'
+            f'- Manager: ghcr.io/{r}/tobogganing-manager:{v}\n'
+            f'- Headend: ghcr.io/{r}/tobogganing-headend:{v}\n'
+            f'- Client: ghcr.io/{r}/tobogganing-client:{v}\n\n'
+            '## Security\n'
+            '- Zero Trust Network Architecture (ZTNA)\n'
+            '- Dual authentication: X.509 + JWT\n'
+            '- All communications secured with mutual TLS\n'
+        )
         with open('release-notes.md', 'w') as f:
             f.write(notes)
         EOF
@@ -456,12 +454,24 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        component: [manager, headend, client]
+        include:
+          - component: manager
+            image_suffix: tobogganing-manager
+          - component: headend
+            image_suffix: tobogganing-headend
+          - component: client
+            image_suffix: tobogganing-client
     steps:
     - name: Run Trivy vulnerability scanner on release images
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
       with:
-        image-ref: ${{ env.REGISTRY }}/${{ env[format('IMAGE_NAME_{0}', upper(matrix.component))] }}:${{ github.ref_name }}
+        # GHA expressions have no upper()/lower() function — the previous
+        # env[format('IMAGE_NAME_{0}', upper(matrix.component))] lookup was
+        # invalid and would fail at runtime (caught by actionlint); the `env`
+        # context also isn't available inside `strategy.matrix`, so resolve
+        # the per-component image suffix via matrix.include instead, matching
+        # the same tobogganing-{component} naming as IMAGE_NAME_* above.
+        image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.image_suffix }}:${{ github.ref_name }}
         format: 'sarif'
         output: 'trivy-${{ matrix.component }}-results.sarif'
         version: 'v0.69.3'
