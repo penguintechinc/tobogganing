@@ -373,7 +373,7 @@ class DeviceManager:
             Number of active devices
         """
         count = await self.db(
-            self.db.devices.tenant == self.tenant_id,
-            self.db.devices.status == "online",
+            (self.db.devices.tenant == self.tenant_id)
+            & (self.db.devices.status == "online")
         ).count()
         return count
