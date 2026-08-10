@@ -530,6 +530,8 @@ paths:
                 type: object
           description: Performance analytics response.
       summary: Get performance analytics for this tenant.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/analytics/queries:
     get:
       description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
@@ -575,6 +577,8 @@ paths:
                 type: object
           description: Queries analytics response.
       summary: Get query analytics for this tenant.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/analytics/servers:
     get:
       description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
@@ -604,6 +608,8 @@ paths:
                 type: object
           description: Servers analytics response.
       summary: Get per-server analytics for this tenant.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/analytics/summary:
     get:
       description: "\nReturns:\n    JSON response with zone/record/server/query counts\
@@ -633,6 +639,8 @@ paths:
                 type: object
           description: Summary analytics response.
       summary: Get dashboard summary for this tenant.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers:
     get:
       description: "\nReturns:\n    JSON response with list of servers and meta."
@@ -661,6 +669,8 @@ paths:
                 type: object
           description: List of DNS servers response.
       summary: List all DNS servers for the tenant.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers/register:
     post:
       description: "\nRequires ENROLLMENT_BOOTSTRAP_TOKEN for enrollment.\nReturns\
@@ -695,6 +705,8 @@ paths:
                 type: object
           description: Server enrollment response (machine-JWT + config).
       summary: Register a new DNS resolver server with bootstrap token.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers/{server_id}:
     delete:
       description: "\nArgs:\n    server_id: Server ID to delete\n\nReturns:\n    JSON\
@@ -706,8 +718,29 @@ paths:
         required: true
         schema:
           type: string
-      responses: {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Generic message response DTO.
+                properties:
+                  message:
+                    title: Message
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                required:
+                - message
+                - meta
+                title: MessageResponse
+                type: object
+          description: Generic message response DTO.
       summary: Delete a DNS server and its metrics.
+      tags:
+      - netsvcs
     get:
       description: "\nArgs:\n    server_id: Server ID to retrieve\n\nReturns:\n  \
         \  JSON response with server details."
@@ -770,6 +803,8 @@ paths:
                 type: object
           description: DNS server response DTO.
       summary: Get details of a specific DNS server.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers/{server_id}/config:
     get:
       description: "\nRequires machine-JWT with dns:config:read scope.\nVerifies the\
@@ -814,6 +849,8 @@ paths:
                 type: object
           description: Server configuration response.
       summary: Get configuration for a DNS resolver server.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers/{server_id}/heartbeat:
     post:
       description: "\nRequires machine-JWT with metrics:write scope.\nVerifies the\
@@ -857,6 +894,8 @@ paths:
                 type: object
           description: Heartbeat response.
       summary: Record a server heartbeat and ingest metrics.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers/{server_id}/metrics:
     get:
       description: "\nQuery parameters:\n    hours: Number of hours to look back (default\
@@ -892,6 +931,8 @@ paths:
                 type: object
           description: List of metrics response.
       summary: Get metrics for a DNS server.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/dns-servers/{server_id}/refresh-token:
     post:
       description: "\nRequires a machine-JWT with token_type=\"refresh\" and subject=\"\
@@ -929,6 +970,8 @@ paths:
                 type: object
           description: Refresh token response.
       summary: Rotate DNS resolver server tokens with replay protection.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/zones:
     get:
       description: "\nReturns:\n    JSON response with list of zones and meta."
@@ -957,6 +1000,8 @@ paths:
                 type: object
           description: List zones response.
       summary: List all zones for the tenant.
+      tags:
+      - netsvcs
     post:
       description: "\nRequest body:\n{\n    \"name\": \"example.com\",\n    \"visibility\"\
         : \"public\",\n    \"description\": \"Example zone\"\n}\n\nReturns:\n    JSON\
@@ -1019,6 +1064,8 @@ paths:
                 type: object
           description: Zone response DTO.
       summary: Create a new zone.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/zones/{zone_id}:
     delete:
       description: "\nArgs:\n    zone_id: Zone ID to delete\n\nReturns:\n    JSON\
@@ -1030,8 +1077,29 @@ paths:
         required: true
         schema:
           type: string
-      responses: {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Generic message response DTO.
+                properties:
+                  message:
+                    title: Message
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                required:
+                - message
+                - meta
+                title: MessageResponse
+                type: object
+          description: Generic message response DTO.
       summary: Delete a zone and cascade records.
+      tags:
+      - netsvcs
     get:
       description: "\nArgs:\n    zone_id: Zone ID to retrieve\n\nReturns:\n    JSON\
         \ response with zone details (200) or error (404/500)."
@@ -1076,6 +1144,8 @@ paths:
                 type: object
           description: Zone response DTO.
       summary: Get a single zone by ID.
+      tags:
+      - netsvcs
     put:
       description: "\nArgs:\n    zone_id: Zone ID to update\n    data: Update request\
         \ data\n\nReturns:\n    JSON response with updated zone (200) or error (400/404/500)."
@@ -1143,6 +1213,8 @@ paths:
                 type: object
           description: Zone response DTO.
       summary: Update an existing zone.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/zones/{zone_id}/records:
     get:
       description: "\nArgs:\n    zone_id: Zone ID to list records for\n\nReturns:\n\
@@ -1177,6 +1249,8 @@ paths:
                 type: object
           description: List records response.
       summary: List all records for a zone.
+      tags:
+      - netsvcs
     post:
       description: "\nArgs:\n    zone_id: Zone ID\n    data: Create record request\
         \ data\n\nReturns:\n    JSON response with created record (201) or error (400/404/500)."
@@ -1278,6 +1352,8 @@ paths:
                 type: object
           description: Record response DTO.
       summary: Create a new record in a zone.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/zones/{zone_id}/records/{record_id}:
     delete:
       description: "\nArgs:\n    zone_id: Zone ID\n    record_id: Record ID to delete\n\
@@ -1294,8 +1370,29 @@ paths:
         required: true
         schema:
           type: string
-      responses: {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Generic message response DTO.
+                properties:
+                  message:
+                    title: Message
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                required:
+                - message
+                - meta
+                title: MessageResponse
+                type: object
+          description: Generic message response DTO.
       summary: Delete a record.
+      tags:
+      - netsvcs
     put:
       description: "\nArgs:\n    zone_id: Zone ID\n    record_id: Record ID to update\n\
         \    data: Update record request data\n\nReturns:\n    JSON response with\
@@ -1406,6 +1503,8 @@ paths:
                 type: object
           description: Record response DTO.
       summary: Update an existing record.
+      tags:
+      - netsvcs
   /api/v1/perftest_c2c/endpoints:
     get:
       description: "\nQuery params:\n    enabled: Optional bool filter (true/false)\n\
@@ -2512,3 +2611,6 @@ paths:
         schema:
           type: string
       responses: {}
+tags:
+- name: netsvcs
+  description: DNS resolver services (registration, configuration, metrics, analytics)

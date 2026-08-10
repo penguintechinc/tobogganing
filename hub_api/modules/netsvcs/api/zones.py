@@ -18,7 +18,7 @@ from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
 from hub_api.modules.netsvcs.managers.config_service import ConfigService
 from hub_api.modules.netsvcs.managers.zone_manager import ZoneManager
-from quart_schema import validate_request, validate_response
+from quart_schema import validate_request, validate_response, tag
 
 logger = structlog.get_logger()
 
@@ -113,10 +113,19 @@ class RecordsListResponse:
     meta: dict[str, Any]
 
 
+@dataclass(slots=True)
+class MessageResponse:
+    """Generic message response DTO."""
+
+    message: str
+    meta: dict[str, Any]
+
+
 # Zone routes
 
 
 @zones_bp.route("", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "zones")
@@ -161,6 +170,7 @@ async def list_zones() -> tuple[dict[str, Any], int]:
 
 
 @zones_bp.route("", methods=["POST"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "zones")
@@ -214,6 +224,7 @@ async def create_zone(data: CreateZoneRequest) -> tuple[dict[str, Any], int]:
 
 
 @zones_bp.route("/<zone_id>", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "zones")
@@ -253,6 +264,7 @@ async def get_zone(zone_id: str) -> tuple[dict[str, Any] | Any, int]:
 
 
 @zones_bp.route("/<zone_id>", methods=["PUT"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "zones")
@@ -305,9 +317,11 @@ async def update_zone(
 
 
 @zones_bp.route("/<zone_id>", methods=["DELETE"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "zones")
+@validate_response(MessageResponse)
 async def delete_zone(zone_id: str) -> tuple[dict[str, Any], int]:
     """Delete a zone and cascade records.
 
@@ -350,6 +364,7 @@ async def delete_zone(zone_id: str) -> tuple[dict[str, Any], int]:
 
 
 @zones_bp.route("/<zone_id>/records", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "zones")
@@ -407,6 +422,7 @@ async def list_records(zone_id: str) -> tuple[dict[str, Any], int]:
 
 
 @zones_bp.route("/<zone_id>/records", methods=["POST"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "zones")
@@ -470,6 +486,7 @@ async def create_record(
 
 
 @zones_bp.route("/<zone_id>/records/<record_id>", methods=["PUT"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "zones")
@@ -537,9 +554,11 @@ async def update_record(
 
 
 @zones_bp.route("/<zone_id>/records/<record_id>", methods=["DELETE"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "zones")
+@validate_response(MessageResponse)
 async def delete_record(zone_id: str, record_id: str) -> tuple[dict[str, Any], int]:
     """Delete a record.
 

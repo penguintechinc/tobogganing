@@ -23,7 +23,7 @@ from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
 from hub_api.modules.netsvcs.managers.config_service import ConfigService
 from hub_api.modules.netsvcs.managers.server_manager import ServerManager
-from quart_schema import validate_request, validate_response
+from quart_schema import validate_request, validate_response, tag
 
 logger = structlog.get_logger()
 
@@ -134,6 +134,14 @@ class DNSRefreshTokenResponse:
     meta: dict[str, Any]
 
 
+@dataclass(slots=True)
+class MessageResponse:
+    """Generic message response DTO."""
+
+    message: str
+    meta: dict[str, Any]
+
+
 def _verify_bootstrap_token(token: str | None) -> bool:
     """Constant-time check of enrollment/bootstrap token.
 
@@ -162,6 +170,7 @@ def _extract_bearer_token() -> str | None:
 
 
 @dns_servers_bp.route("", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "dns_servers")
@@ -209,6 +218,7 @@ async def list_dns_servers() -> tuple[dict[str, Any], int]:
 
 
 @dns_servers_bp.route("/<server_id>", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "dns_servers")
@@ -253,9 +263,11 @@ async def get_dns_server(server_id: str) -> tuple[dict[str, Any] | Any, int]:
 
 
 @dns_servers_bp.route("/<server_id>", methods=["DELETE"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:write")
 @require_feature("netsvcs", "dns_servers")
+@validate_response(MessageResponse)
 async def delete_dns_server(server_id: str) -> tuple[dict[str, Any], int]:
     """Delete a DNS server and its metrics.
 
@@ -291,6 +303,7 @@ async def delete_dns_server(server_id: str) -> tuple[dict[str, Any], int]:
 
 
 @dns_servers_bp.route("/<server_id>/metrics", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "dns_servers")
@@ -352,6 +365,7 @@ async def get_dns_server_metrics(server_id: str) -> tuple[dict[str, Any], int]:
 
 
 @dns_servers_bp.route("/register", methods=["POST"])
+@tag(["netsvcs"])
 @validate_response(DNSEnrollmentResponse)
 async def register_server() -> tuple[dict[str, Any], int]:
     """Register a new DNS resolver server with bootstrap token.
@@ -426,6 +440,24 @@ async def register_server() -> tuple[dict[str, Any], int]:
             refresh_claims, key_provider, ttl_hours=24
         )
 
+        # Cache refresh token JTI for single-use protection (M2)
+        refresh_jti = refresh_claims.get("jti")
+        subject = f"resolver:{server.id}"
+        cache_client = current_app.config.get("CACHE")
+        if cache_client:
+            try:
+                await cache_client.set(
+                    "auth",
+                    "refresh",
+                    subject,
+                    value=refresh_jti,
+                    ttl_seconds=86400,
+                    fail_closed=True,
+                )
+            except Exception as e:
+                logger.warning("register_cache_refresh_jti_error", error=str(e))
+                # Log but continue; cache failure doesn't block registration
+
         # Get initial config
         config_service = ConfigService(db, enrollment_tenant)
         server_config = await config_service.get_server_config()
@@ -477,6 +509,7 @@ async def register_server() -> tuple[dict[str, Any], int]:
 
 
 @dns_servers_bp.route("/<server_id>/config", methods=["GET"])
+@tag(["netsvcs"])
 @require_machine_jwt("dns:config:read")
 @validate_response(DNSServerConfigResponse)
 async def get_server_config(server_id: str) -> tuple[dict[str, Any], int]:
@@ -545,6 +578,7 @@ async def get_server_config(server_id: str) -> tuple[dict[str, Any], int]:
 
 
 @dns_servers_bp.route("/<server_id>/heartbeat", methods=["POST"])
+@tag(["netsvcs"])
 @require_machine_jwt("metrics:write")
 @validate_response(DNSHeartbeatResponse)
 async def server_heartbeat(server_id: str) -> tuple[dict[str, Any], int]:
@@ -628,6 +662,7 @@ async def server_heartbeat(server_id: str) -> tuple[dict[str, Any], int]:
 
 
 @dns_servers_bp.route("/<server_id>/refresh-token", methods=["POST"])
+@tag(["netsvcs"])
 @validate_response(DNSRefreshTokenResponse)
 async def refresh_server_token(server_id: str) -> tuple[dict[str, Any], int]:
     """Rotate DNS resolver server tokens with replay protection.
@@ -742,13 +777,14 @@ async def refresh_server_token(server_id: str) -> tuple[dict[str, Any], int]:
             refresh_claims, key_provider, ttl_hours=24
         )
 
-        # Cache new refresh jti (24 hour TTL)
+        # Cache new refresh jti (24 hour TTL) — fail CLOSED on cache-set failure (M4)
         new_jti = refresh_claims.get("jti")
         try:
             await cache_client.set("auth", "refresh", subject, value=new_jti, ttl_seconds=86400, fail_closed=True)
         except Exception as e:
-            logger.warning("refresh_cache_set_error", error=str(e))
-            # Non-fatal: still return new tokens even if cache write fails
+            logger.error("refresh_cache_set_error", error=str(e))
+            # Fail closed: cannot track single-use without cache; deny the refresh
+            return jsonify({"error": "Cache unavailable", "retry_with_credentials": True}), 503
 
         logger.info(
             "server_token_refreshed",

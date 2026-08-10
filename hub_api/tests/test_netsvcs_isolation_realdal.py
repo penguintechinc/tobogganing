@@ -9,13 +9,133 @@ This test FAILS on old comma-syntax, PASSES with the fix.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
+from penguin_dal import AsyncDB
+from quart import Quart
 
 from hub_api.modules.netsvcs.managers.zone_manager import ZoneManager
 from hub_api.modules.netsvcs.managers.server_manager import ServerManager
 from hub_api.modules.netsvcs.managers.config_service import ConfigService
+from unittest.mock import MagicMock, patch
+
+
+@pytest.fixture
+def app_with_netsvcs(app: Quart, mock_db: MagicMock) -> Quart:
+    """Create a test app with netsvcs module registered.
+
+    Args:
+        app: Base test app fixture.
+        mock_db: Mock database fixture.
+
+    Returns:
+        Quart app with netsvcs module and auth configured.
+    """
+    from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
+    from hub_api.registry import ModuleContext
+
+    # Set up key provider for token generation in tests
+    private_pem, public_pem = generate_rsa_key_pair()
+    provider = InAppKeyProvider(private_pem, public_pem)
+    app.config["KEY_PROVIDER"] = provider
+    app.config["ENROLLMENT_TENANT"] = "default"
+
+    # Register netsvcs module via registry
+    from hub_api.modules.netsvcs import module as netsvcs_module
+
+    netsvcs_contract = netsvcs_module()
+    app.registry.register(netsvcs_contract)
+
+    # Apply registry to wire blueprints
+    ctx = ModuleContext(config=app.config_obj, db=mock_db, key_provider=provider)
+    app.registry.apply_to(app, ctx)
+
+    return app
+
+
+@pytest_asyncio.fixture
+async def app_with_netsvcs_realdal(
+    app_with_netsvcs: Quart, real_dal: AsyncDB, monkeypatch: Any
+) -> Quart:
+    """Create test app with netsvcs module using real_dal fixture.
+
+    Reuses app_with_netsvcs which has auth + module wiring already set up,
+    but patches get_db to return real_dal instead of mock_db.
+    """
+    # Patch get_db everywhere it's imported
+    get_db_func = lambda: real_dal  # noqa: E731
+
+    monkeypatch.setattr("hub_api.db.get_db", get_db_func)
+
+    import hub_api.app
+    monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
+
+    import hub_api.modules.netsvcs.api.dns_servers
+    monkeypatch.setattr(hub_api.modules.netsvcs.api.dns_servers, "get_db", get_db_func)
+
+    import hub_api.modules.netsvcs.api.analytics
+    monkeypatch.setattr(hub_api.modules.netsvcs.api.analytics, "get_db", get_db_func)
+
+    import hub_api.modules.netsvcs.api.zones
+    monkeypatch.setattr(hub_api.modules.netsvcs.api.zones, "get_db", get_db_func)
+
+    app_with_netsvcs.db = real_dal
+    return app_with_netsvcs
+
+
+@pytest_asyncio.fixture
+async def tenant_a_token_realdal(app_with_netsvcs_realdal: Quart) -> str:
+    """Generate JWT token for tenant A for real_dal app.
+
+    Args:
+        app_with_netsvcs_realdal: Test app with netsvcs module and real_dal.
+
+    Returns:
+        Valid JWT token for tenant A.
+    """
+    from hub_api.auth.jwt import encode_access_token
+
+    provider = app_with_netsvcs_realdal.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "user-a",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
+        "tenant": "tenant-analytics-test",
+        "scope": "dns:read",
+    }
+
+    token = await encode_access_token(claims, provider, ttl_hours=1)
+    return token
+
+
+@pytest_asyncio.fixture
+async def tenant_b_token_realdal(app_with_netsvcs_realdal: Quart) -> str:
+    """Generate JWT token for tenant B for real_dal app.
+
+    Args:
+        app_with_netsvcs_realdal: Test app with netsvcs module and real_dal.
+
+    Returns:
+        Valid JWT token for tenant B.
+    """
+    from hub_api.auth.jwt import encode_access_token
+
+    provider = app_with_netsvcs_realdal.config["KEY_PROVIDER"]
+
+    claims = {
+        "sub": "user-b",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
+        "tenant": "tenant-b",
+        "scope": "dns:read",
+    }
+
+    token = await encode_access_token(claims, provider, ttl_hours=1)
+    return token
 
 
 @pytest.mark.asyncio
@@ -550,45 +670,49 @@ async def test_config_service_cross_tenant_isolated(real_dal) -> None:
 
 
 @pytest.mark.asyncio
-async def test_analytics_time_window_filter_realdal(real_dal) -> None:
-    """REGRESSION: Test that analytics time-window filter actually works.
+async def test_analytics_time_window_filter_route_realdal(
+    app_with_netsvcs_realdal: Quart,
+    real_dal: AsyncDB,
+    tenant_a_token_realdal: str,
+    tenant_b_token_realdal: str,
+) -> None:
+    """REGRESSION: Test that analytics route time-window filter actually works.
 
     The old comma-syntax query db(tenant==t, timestamp>=cutoff) silently
     dropped the timestamp condition, causing analytics to return all-time
     data regardless of the ?hours query parameter.
 
-    This test FAILS on the old syntax (both metrics counted),
-    PASSES with the new & syntax (only in-window metric counted).
-
-    This is a regression test for a bug the mock-based tests missed
-    because mocks don't enforce query semantics.
+    This test hits the actual GET /api/v1/netsvcs/analytics/queries?hours=1 route
+    to verify it enforces tenant isolation AND time-window filtering through
+    the route, not just the underlying query logic.
     """
-    tenant_id = "tenant-analytics-test"
+    tenant_a_id = "tenant-analytics-test"
+    tenant_b_id = "tenant-b"
     now = datetime.now(timezone.utc)
     in_window_time = now - timedelta(minutes=10)  # 10 minutes ago
     out_of_window_time = now - timedelta(hours=48)  # 48 hours ago
 
-    # Create a server for this tenant
-    server_id = str(uuid4())
+    # Create a server for tenant-a
+    server_a_id = str(uuid4())
     await real_dal.dns_servers.async_insert(
-        id=server_id,
-        tenant=tenant_id,
-        name="test-resolver",
+        id=server_a_id,
+        tenant=tenant_a_id,
+        name="test-resolver-a",
         status="online",
         version="1.0",
         region="us-west",
-        hostname="test.internal",
+        hostname="test-a.internal",
         last_heartbeat=now,
         created_at=now,
         updated_at=now,
     )
 
-    # Seed a metric INSIDE the 1-hour window (10 minutes ago)
-    in_window_metric_id = str(uuid4())
+    # Seed a metric INSIDE the 1-hour window (10 minutes ago) for tenant-a
+    in_window_metric_a_id = str(uuid4())
     await real_dal.dns_server_metrics.async_insert(
-        id=in_window_metric_id,
-        server_id=server_id,
-        tenant=tenant_id,
+        id=in_window_metric_a_id,
+        server_id=server_a_id,
+        tenant=tenant_a_id,
         timestamp=in_window_time,
         queries_total=1000,
         cache_hits=800,
@@ -597,12 +721,12 @@ async def test_analytics_time_window_filter_realdal(real_dal) -> None:
         created_at=now,
     )
 
-    # Seed a metric OUTSIDE the 1-hour window (48 hours ago)
-    out_of_window_metric_id = str(uuid4())
+    # Seed a metric OUTSIDE the 1-hour window (48 hours ago) for tenant-a
+    out_of_window_metric_a_id = str(uuid4())
     await real_dal.dns_server_metrics.async_insert(
-        id=out_of_window_metric_id,
-        server_id=server_id,
-        tenant=tenant_id,
+        id=out_of_window_metric_a_id,
+        server_id=server_a_id,
+        tenant=tenant_a_id,
         timestamp=out_of_window_time,
         queries_total=2000,
         cache_hits=1600,
@@ -611,53 +735,27 @@ async def test_analytics_time_window_filter_realdal(real_dal) -> None:
         created_at=now,
     )
 
-    # Query metrics with 1-hour window using the fixed SQL syntax
-    # (simulating what the analytics route does)
-    cutoff = now - timedelta(hours=1)
-    rowset = await real_dal(
-        (real_dal.dns_server_metrics.tenant == tenant_id)
-        & (real_dal.dns_server_metrics.timestamp >= cutoff)
-    ).select()
-
-    rows = list(rowset)
-
-    # REGRESSION TEST: With the fix, we should see ONLY the in-window metric
-    # With the old comma-syntax, BOTH metrics would be returned
-    assert len(rows) == 1, (
-        f"Expected 1 metric (only in-window), got {len(rows)}. "
-        f"Old comma-syntax bug would return both in-window and out-of-window metrics."
-    )
-
-    # Verify it's the correct (in-window) metric
-    row = rows[0]
-    # SQLite returns datetimes without tzinfo, so compare just the time part
-    assert row.timestamp.replace(tzinfo=timezone.utc) == in_window_time
-    assert row.queries_total == 1000
-
-    # Also verify tenant isolation in analytics: seed metrics for tenant-b
-    # and ensure tenant-a's query doesn't see them
-    tenant_b = "tenant-b"
+    # Create a server for tenant-b
     server_b_id = str(uuid4())
-
     await real_dal.dns_servers.async_insert(
         id=server_b_id,
-        tenant=tenant_b,
-        name="resolver-b",
+        tenant=tenant_b_id,
+        name="test-resolver-b",
         status="online",
         version="1.0",
         region="us-east",
-        hostname="resolver-b.internal",
+        hostname="test-b.internal",
         last_heartbeat=now,
         created_at=now,
         updated_at=now,
     )
 
-    # Seed a metric for tenant-b (also in-window, to prove it's tenant filtering)
+    # Seed a metric for tenant-b (also in-window, to test tenant filtering)
     metric_b_id = str(uuid4())
     await real_dal.dns_server_metrics.async_insert(
         id=metric_b_id,
         server_id=server_b_id,
-        tenant=tenant_b,
+        tenant=tenant_b_id,
         timestamp=in_window_time,
         queries_total=5000,
         cache_hits=4000,
@@ -666,24 +764,43 @@ async def test_analytics_time_window_filter_realdal(real_dal) -> None:
         created_at=now,
     )
 
-    # Query analytics for tenant-a with 1-hour window
-    # Should see ONLY tenant-a's in-window metric, NOT tenant-b's
-    rowset_a = await real_dal(
-        (real_dal.dns_server_metrics.tenant == tenant_id)
-        & (real_dal.dns_server_metrics.timestamp >= cutoff)
-    ).select()
+    # Call the analytics route as tenant-a with 1-hour window
+    # Route: GET /api/v1/netsvcs/analytics/queries?hours=1
+    client = app_with_netsvcs_realdal.test_client()
 
-    rows_a = list(rowset_a)
-    assert len(rows_a) == 1, "Tenant-a should see only 1 metric (their own in-window one)"
-    assert rows_a[0].queries_total == 1000  # tenant-a's metric
+    # Mock the feature flag to be enabled
+    with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
+        mock_flag.return_value = True
 
-    # Query analytics for tenant-b with same window
-    # Should see ONLY tenant-b's in-window metric
-    rowset_b = await real_dal(
-        (real_dal.dns_server_metrics.tenant == tenant_b)
-        & (real_dal.dns_server_metrics.timestamp >= cutoff)
-    ).select()
+        response_a = await client.get(
+            "/api/v1/netsvcs/analytics/queries?hours=1",
+            headers={"Authorization": f"Bearer {tenant_a_token_realdal}"},
+        )
 
-    rows_b = list(rowset_b)
-    assert len(rows_b) == 1, "Tenant-b should see only 1 metric (their own in-window one)"
-    assert rows_b[0].queries_total == 5000  # tenant-b's metric
+        assert response_a.status_code == 200
+        data_a = await response_a.get_json()
+
+        # Verify tenant-a sees ONLY their in-window metric (1000 queries)
+        # NOT their out-of-window metric (2000) or tenant-b's metric (5000)
+        assert data_a["total_queries"] == 1000, (
+            f"Expected tenant-a to see 1000 queries (in-window only), "
+            f"got {data_a['total_queries']}. "
+            f"Old comma-syntax bug would return 3000 (1000+2000 from same tenant), "
+            f"or missing tenant scoping would leak cross-tenant data."
+        )
+
+        # Call the analytics route as tenant-b with same window
+        response_b = await client.get(
+            "/api/v1/netsvcs/analytics/queries?hours=1",
+            headers={"Authorization": f"Bearer {tenant_b_token_realdal}"},
+        )
+
+        assert response_b.status_code == 200
+        data_b = await response_b.get_json()
+
+        # Verify tenant-b sees ONLY their in-window metric (5000 queries)
+        assert data_b["total_queries"] == 5000, (
+            f"Expected tenant-b to see 5000 queries (in-window only), "
+            f"got {data_b['total_queries']}. "
+            f"Missing tenant scoping would allow cross-tenant data leakage."
+        )

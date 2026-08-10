@@ -15,7 +15,7 @@ from hub_api.auth.middleware import (
 )
 from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
-from quart_schema import validate_response
+from quart_schema import validate_response, tag
 
 logger = structlog.get_logger()
 
@@ -96,6 +96,7 @@ class SummaryAnalyticsResponse:
 
 
 @analytics_bp.route("/queries", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "analytics")
@@ -109,9 +110,9 @@ async def get_queries_analytics() -> tuple[dict[str, Any], int]:
     Returns:
         JSON response with query totals and timeline.
     """
+    db = get_db()
+    tenant_id = current_claims()["tenant"]
     try:
-        db = get_db()
-        tenant_id = current_claims()["tenant"]
 
         # Get hours from query param
         hours_str = request.args.get("hours", "24")
@@ -180,6 +181,7 @@ async def get_queries_analytics() -> tuple[dict[str, Any], int]:
 
 
 @analytics_bp.route("/performance", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "analytics")
@@ -193,9 +195,9 @@ async def get_performance_analytics() -> tuple[dict[str, Any], int]:
     Returns:
         JSON response with performance metrics (avg, min, max, percentiles).
     """
+    db = get_db()
+    tenant_id = current_claims()["tenant"]
     try:
-        db = get_db()
-        tenant_id = current_claims()["tenant"]
 
         # Get hours from query param
         hours_str = request.args.get("hours", "24")
@@ -258,6 +260,7 @@ async def get_performance_analytics() -> tuple[dict[str, Any], int]:
 
 
 @analytics_bp.route("/servers", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "analytics")
@@ -271,9 +274,9 @@ async def get_servers_analytics() -> tuple[dict[str, Any], int]:
     Returns:
         JSON response with per-server metrics.
     """
+    db = get_db()
+    tenant_id = current_claims()["tenant"]
     try:
-        db = get_db()
-        tenant_id = current_claims()["tenant"]
 
         # Get hours from query param
         hours_str = request.args.get("hours", "24")
@@ -354,6 +357,7 @@ async def get_servers_analytics() -> tuple[dict[str, Any], int]:
 
 
 @analytics_bp.route("/summary", methods=["GET"])
+@tag(["netsvcs"])
 @require_tenant
 @require_scope("dns:read")
 @require_feature("netsvcs", "analytics")
@@ -364,9 +368,9 @@ async def get_summary_analytics() -> tuple[dict[str, Any], int]:
     Returns:
         JSON response with zone/record/server/query counts for THIS TENANT ONLY.
     """
+    db = get_db()
+    tenant_id = current_claims()["tenant"]
     try:
-        db = get_db()
-        tenant_id = current_claims()["tenant"]
 
         # Count zones for this tenant
         zones_rowset = await db(
