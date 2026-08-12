@@ -154,9 +154,11 @@ portal-dev: ## Start portal dev server
 	@echo "🚀 Starting portal dev server..."
 	@cd portal && npm install && npm run dev
 
-install-hooks: ## Install Git hooks (pre-commit, pre-push)
-	@echo "📦 Installing Git hooks..."
-	@if [ -f .git/hooks/pre-commit ]; then echo "✅ Git hooks already installed"; else echo "Run: sh scripts/install-hooks.sh"; fi
+install-hooks: ## Install pre-commit framework + register pre-commit and pre-push hooks
+	@./scripts/install-pre-commit.sh
+
+verify-hooks: ## Report whether pre-commit/pre-push hooks are installed and non-empty
+	@./scripts/install-pre-commit.sh --verify
 
 # Portal-specific targets (convenience)
 portal-build: ## Build portal for production

@@ -39,6 +39,8 @@ config.json
 !tsconfig.*.json
 !**/tsconfig.json
 !**/tsconfig.*.json
+# ...and the pre-commit hook config matches *config*.yaml but MUST be committed
+!.pre-commit-config.yaml
 .env
 .env.local
 .env.*.local
