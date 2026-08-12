@@ -10,16 +10,22 @@ All split-horizon logic now lives here.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True, frozen=True)
 class TokenClaims:
-    """DNS client token claims."""
+    """DNS client token claims.
+
+    allowed_zone_ids: List of zone IDs this token is permitted to resolve.
+                       Set by the control plane's ValidateToken response.
+                       Default empty (no zone-scoped restrictions); filled by control plane.
+    """
 
     teams: list[str]
+    allowed_zone_ids: list[str] = field(default_factory=list)
     role: str | None = None
 
 
@@ -43,6 +49,7 @@ class SelectiveRouter:
         """Load DNS zones from Manager config.
 
         Each zone dict must contain:
+        - id: zone ID (e.g., "z1") for control-plane tenant scoping
         - name: zone name (e.g., "internal.example.com")
         - visibility: "public", "internal", "restricted", or "private"
         - allowed_teams: list of team IDs (used for internal/restricted)
@@ -60,6 +67,7 @@ class SelectiveRouter:
                 continue
 
             self.zones[zone_name] = {
+                "id": zone.get("id"),  # Zone ID for control-plane tenant scoping
                 "name": zone_name,
                 "visibility": zone.get("visibility", "public"),
                 "allowed_teams": zone.get("allowed_teams", []),
@@ -101,17 +109,20 @@ class SelectiveRouter:
         selective_router.py::check_zone_permission and
         resilience.py::_check_zone_permission).
 
+        COMBINED RULE (public OR allowed_zone_ids):
+        - A zone is served if visibility=="public" (SelectiveRouter allows visibility), OR
+        - the zone's id is in the token's allowed_zone_ids (control-plane tenant+token scoping).
+
         No matching zone → allow (falls through to public recursion).
         Public zones → always allow.
-        Non-public without token → deny.
-        Internal: allow if no team restrictions OR token shares a team.
-        Restricted: allow only if token shares a team.
-        Private: allow only if role == "admin".
-        Unknown visibility → deny.
+        Non-public zones:
+        - Check if zone.id is in token.allowed_zone_ids (tenant-scoped from control plane).
+        - If zone NOT in allowed_zone_ids, deny.
+        - If in allowed_zone_ids, apply classic visibility logic (teams, role).
 
         Args:
             domain: Domain being queried.
-            token_claims: Parsed JWT token claims {teams, role} or None.
+            token_claims: Parsed JWT token claims {teams, allowed_zone_ids, role} or None.
 
         Returns:
             True if allowed, False otherwise.
@@ -123,18 +134,28 @@ class SelectiveRouter:
             return True
 
         visibility = zone.get("visibility", "public")
+        zone_id = zone.get("id")
 
         # Public zones always accessible
         if visibility == "public":
             return True
 
-        # Any non-public zone requires a token
+        # Non-public zone requires token
         if not token_claims:
             logger.debug(
                 f"Access denied to {visibility} zone {zone['name']}: no token provided"
             )
             return False
 
+        # Tenant+token scoping: zone must be in allowed_zone_ids
+        if zone_id and zone_id not in token_claims.allowed_zone_ids:
+            logger.debug(
+                f"Access denied to zone {zone['name']}: zone id {zone_id} not in "
+                f"allowed_zone_ids {token_claims.allowed_zone_ids}"
+            )
+            return False
+
+        # Zone is in allowed_zone_ids; now check visibility rules
         allowed_teams = zone.get("allowed_teams", [])
 
         if visibility == "internal":

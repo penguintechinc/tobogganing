@@ -5,11 +5,13 @@ Standalone async TLS listener on port 853 with 2-byte length prefix.
 """
 from __future__ import annotations
 
+import os
 import asyncio
-import logging
 import ssl
 import struct
 from typing import Any
+
+import structlog
 
 import dns.message
 import dns.name
@@ -20,7 +22,7 @@ import dns.rrset
 
 from app.pipeline import ResolvePipeline
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 async def serve_dot(
@@ -67,7 +69,7 @@ async def serve_dot(
     try:
         server = await asyncio.start_server(
             lambda r, w: _handle_dot_connection(r, w, pipeline),
-            "0.0.0.0",
+            os.getenv("BIND_HOST", "0.0.0.0"),  # nosec B104 - containerized DNS service must bind all interfaces
             port,
             ssl=ssl_context,
         )

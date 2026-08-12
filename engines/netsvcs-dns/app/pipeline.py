@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from app.resolver import DNSResolver
 from app.router import SelectiveRouter, TokenClaims
 from app.cache import CacheManager
+from app.manager_client import ManagerClient
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class ResolvePipeline:
         resolver: DNSResolver,
         router: SelectiveRouter,
         cache: CacheManager,
+        manager_client: ManagerClient | None = None,
         config: ResolvePipelineConfig | None = None,
     ) -> None:
         """Initialize the resolve pipeline.
@@ -52,11 +54,13 @@ class ResolvePipeline:
             resolver: DNSResolver instance for upstream queries.
             router: SelectiveRouter for zone matching and permissions.
             cache: CacheManager for result caching.
+            manager_client: ManagerClient for control-plane integration (S3+).
             config: Pipeline configuration.
         """
         self.resolver = resolver
         self.router = router
         self.cache = cache
+        self.manager_client = manager_client
         self.config = config or ResolvePipelineConfig()
 
         # Operational mode tracking
@@ -159,44 +163,56 @@ class ResolvePipeline:
         return result
 
     async def ioc_check(self, name: str) -> bool:
-        """Check if domain is blocked by IOC feeds.
+        """Check if domain is blocked by IOC feeds via control plane.
 
-        S3 HOOK: Replace with control-plane CheckIOC gRPC call.
-        For S2, this is a stub that returns False (not blocked).
+        Uses control-plane CheckIOC gRPC with fail-open posture:
+        any error → returns False (allows resolution).
+        This ensures DNS never hangs due to control-plane unavailability.
 
         Args:
             name: Domain to check.
 
         Returns:
-            True if domain is IOC-blocked, False otherwise.
+            True if domain is IOC-blocked, False otherwise (or on error).
         """
-        # S3: Call control-plane CheckIOC gRPC
-        # IOCServiceStub(channel).CheckIOC(CheckIOCRequest(domain=name))
-        # Fail-open on error: return False if service unreachable
-        return False
+        if not self.manager_client:
+            return False
+
+        result = await self.manager_client.check_ioc(name)
+        return result.get("blocked", False)
 
     async def _claims_for_token(self, token: str | None) -> TokenClaims | None:
-        """Extract and validate token claims.
+        """Extract and validate token claims via control plane.
 
-        S3 HOOK: Replace with control-plane ValidateToken gRPC call.
-        For S2, this is a stub that returns None (no token = no claims).
+        Delegates token validation to the control plane's ValidateToken RPC.
+        The control plane returns allowed_zone_ids based on the token's tenant+teams.
+
+        Do NOT decode or verify the token locally with verify_signature=False.
+        The control plane is the authoritative token validator.
+
+        Fails closed: returns None on any error (invalid/unvalidatable token → no claims).
 
         Args:
             token: Bearer token (without 'Bearer ' prefix).
 
         Returns:
-            TokenClaims if valid token, None otherwise.
+            TokenClaims if valid token, None otherwise (or on error).
         """
-        # S3: Call control-plane ValidateToken gRPC
-        # ValidateTokenResponse = ManagerServiceStub(channel).ValidateToken(
-        #     ValidateTokenRequest(token=token)
-        # )
-        # Extract teams + role from response
-        # Verify JWT signature against control-plane public key
-        if not token:
+        if not token or not self.manager_client:
             return None
-        # For S2, always return None (stub)
-        return None
+
+        result = await self.manager_client.validate_token(token)
+
+        if not result.get("valid"):
+            logger.debug(f"Token validation failed: {result.get('reason', 'unknown')}")
+            return None
+
+        # Token is valid; extract claims from control-plane response
+        return TokenClaims(
+            teams=[],  # Teams would be in the token itself; for now, empty
+            allowed_zone_ids=result.get("allowed_zone_ids", []),
+            role=None,  # Role would be in the token itself; for now, None
+        )
 
     def _record_metric(self, metric_name: str, value: float | int) -> None:
         """Record a metric (placeholder for real metrics in S3+).

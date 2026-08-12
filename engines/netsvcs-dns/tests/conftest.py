@@ -19,6 +19,16 @@ class StubManagerService(manager_pb2_grpc.ManagerServiceServicer):
         self.server_tokens: dict[str, str] = {
             "test-server-1": "test-jwt-v1"
         }
+        # Token → allowed_zone_ids mapping for testing token scoping
+        self.token_zone_mapping: dict[str, list[str]] = {
+            "test-token-z1": ["z1"],  # Can access z1 only
+            "test-token-z2": ["z2"],  # Can access z2 only
+            "test-token-all": ["z1", "z2"],  # Can access both
+        }
+        # Domain → IOC status mapping
+        self.ioc_domains: dict[str, bool] = {
+            "blocked.example.com": True,  # Blocked
+        }
 
     async def RegisterServer(
         self, request: manager_pb2.RegisterServerRequest, context: grpc.aio.ServicerContext
@@ -87,20 +97,63 @@ class StubManagerService(manager_pb2_grpc.ManagerServiceServicer):
     async def SendHeartbeat(
         self, request: manager_pb2.SendHeartbeatRequest, context: grpc.aio.ServicerContext
     ) -> manager_pb2.SendHeartbeatResponse:
-        """Stub SendHeartbeat."""
+        """Stub SendHeartbeat — records metrics and returns config version."""
         return manager_pb2.SendHeartbeatResponse(config_version=1, should_sync=False)
 
     async def ValidateToken(
         self, request: manager_pb2.ValidateTokenRequest, context: grpc.aio.ServicerContext
     ) -> manager_pb2.ValidateTokenResponse:
-        """Stub ValidateToken."""
-        return manager_pb2.ValidateTokenResponse(valid=True, allowed_zone_ids=["z1"])
+        """Stub ValidateToken — checks token against zone mapping."""
+        token = request.token
+        if token in self.token_zone_mapping:
+            return manager_pb2.ValidateTokenResponse(
+                valid=True,
+                allowed_zone_ids=self.token_zone_mapping[token],
+                reason="token valid",
+            )
+        else:
+            # Unknown token → invalid
+            return manager_pb2.ValidateTokenResponse(
+                valid=False,
+                allowed_zone_ids=[],
+                reason="unknown token",
+            )
 
     async def CheckIOC(
         self, request: manager_pb2.CheckIOCRequest, context: grpc.aio.ServicerContext
     ) -> manager_pb2.CheckIOCResponse:
-        """Stub CheckIOC."""
-        return manager_pb2.CheckIOCResponse(blocked=False)
+        """Stub CheckIOC — checks domain against IOC mapping."""
+        domain = request.domain
+        blocked = self.ioc_domains.get(domain, False)
+        return manager_pb2.CheckIOCResponse(
+            blocked=blocked,
+            reason="blocked by IOC feed" if blocked else "clean",
+            feed_source="test-feed",
+            severity="high" if blocked else "none",
+        )
+
+    async def StreamConfigUpdates(
+        self, request: manager_pb2.StreamConfigUpdatesRequest, context: grpc.aio.ServicerContext
+    ):
+        """Stub StreamConfigUpdates — streams a single config update."""
+        config = manager_pb2.ServerConfig(
+            zones=[
+                manager_pb2.DNSZone(
+                    id="z1",
+                    name="example.com",
+                    visibility="public",
+                ),
+                manager_pb2.DNSZone(
+                    id="z2",
+                    name="internal.example.com",
+                    visibility="internal",
+                ),
+            ],
+            cache_settings=manager_pb2.CacheSettings(ttl=3600, enabled=True, max_entries=10000),
+            settings={"policy": "allow_all"},
+            ioc_filtering=True,
+        )
+        yield manager_pb2.ConfigUpdate(config=config, version=1, update_type="full")
 
 
 _server_port: int | None = None

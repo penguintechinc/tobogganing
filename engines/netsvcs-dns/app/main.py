@@ -33,12 +33,14 @@ config: Config | None = None
 ready = False
 pipeline: ResolvePipeline | None = None
 dot_task: asyncio.Task | None = None
+stream_config_task: asyncio.Task | None = None
+heartbeat_task: asyncio.Task | None = None
 
 
 @app.before_serving
 async def startup() -> None:
     """Initialize on app startup."""
-    global manager_client, config, ready, pipeline, dot_task
+    global manager_client, config, ready, pipeline, dot_task, stream_config_task, heartbeat_task
 
     try:
         config = Config.from_env()
@@ -95,12 +97,47 @@ async def startup() -> None:
             resolver=resolver,
             router=router,
             cache=cache,
+            manager_client=manager_client,  # S3: Pass manager_client for gRPC calls
             config=ResolvePipelineConfig(),
         )
 
         # Initialize DoH routes
         doh.init_doh(app, pipeline)
         logger.info("doh_initialized")
+
+        # S3: Start stream_config_updates background task (live resync)
+        async def on_config_update(cfg: dict) -> None:
+            """Handle config update from control plane stream."""
+            if "zones" in cfg:
+                router.load_zones(cfg["zones"])
+                logger.info("config_updated_via_stream", version=cfg.get("version"))
+
+        stream_config_task = asyncio.create_task(
+            manager_client.stream_config_updates(on_update=on_config_update)
+        )
+        logger.info("stream_config_updates_started")
+
+        # S3: Start heartbeat background task
+        async def send_periodic_heartbeat() -> None:
+            """Send heartbeat metrics to control plane periodically."""
+            heartbeat_interval = 60  # seconds
+            while True:
+                try:
+                    await asyncio.sleep(heartbeat_interval)
+                    metrics = {
+                        "queries_total": 0,  # Would come from pipeline metrics in real impl
+                        "cache_hits": 0,
+                        "errors": 0,
+                        "avg_response_ms": 0.0,
+                        "queries_by_type": {},
+                    }
+                    result = await manager_client.send_heartbeat(metrics)
+                    logger.debug("heartbeat_sent", config_version=result.get("config_version"))
+                except Exception as e:
+                    logger.warning("heartbeat_error", error=str(e))
+
+        heartbeat_task = asyncio.create_task(send_periodic_heartbeat())
+        logger.info("heartbeat_task_started")
 
         # Initialize DoT listener (if TLS configured)
         if config.dot_tls_cert_path and config.dot_tls_key_path:
@@ -124,7 +161,7 @@ async def startup() -> None:
 @app.after_serving
 async def shutdown() -> None:
     """Clean up on app shutdown."""
-    global manager_client, pipeline, dot_task
+    global manager_client, pipeline, dot_task, stream_config_task, heartbeat_task
 
     if pipeline:
         await pipeline.close()
@@ -137,6 +174,22 @@ async def shutdown() -> None:
         except asyncio.CancelledError:
             pass
         logger.info("dot_task_cancelled")
+
+    if stream_config_task and not stream_config_task.done():
+        stream_config_task.cancel()
+        try:
+            await stream_config_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("stream_config_task_cancelled")
+
+    if heartbeat_task and not heartbeat_task.done():
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("heartbeat_task_cancelled")
 
     if manager_client:
         await manager_client.close()

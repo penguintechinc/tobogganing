@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import structlog
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -278,3 +279,166 @@ class ManagerClient:
         except Exception as e:
             logger.error("manager_refresh_failed", error=str(e))
             return False
+
+    async def check_ioc(self, domain: str, ip: str = "") -> dict:
+        """Check if domain/IP is blocked by IOC feeds (Indicator of Compromise).
+
+        Fails open: returns {"blocked": False} on any error (control-plane unreachable, timeout).
+        This ensures DNS resolution never hangs due to control-plane hiccup.
+
+        Args:
+            domain: Domain to check.
+            ip: Optional IP address to check.
+
+        Returns:
+            {"blocked": bool, "reason": str, "feed_source": str} on success,
+            {"blocked": False} on error (fail-open).
+        """
+        if not self.jwt or not self.server_id:
+            logger.warning("check_ioc_not_enrolled")
+            return {"blocked": False}
+
+        req = manager_pb2.CheckIOCRequest(
+            api_version="v1",
+            domain=domain,
+            ip=ip,
+        )
+
+        try:
+            resp = await self.stub.CheckIOC(req, metadata=self._metadata(self.jwt), timeout=2.0)
+            return {
+                "blocked": resp.blocked,
+                "reason": resp.reason,
+                "feed_source": resp.feed_source,
+            }
+        except Exception as e:
+            logger.warning("check_ioc_error", domain=domain, error=str(e), msg="Failing open (allowing resolution)")
+            return {"blocked": False}
+
+    async def validate_token(self, token: str) -> dict:
+        """Validate a DNS-client token with the control plane.
+
+        This delegates token validation to the control plane rather than doing it locally.
+        The control plane's response includes allowed_zone_ids for the token's tenant/teams.
+
+        Fails closed: returns {"valid": False, "allowed_zone_ids": []} on error.
+        An invalid/unvalidatable token should get no access to private zones.
+
+        Args:
+            token: Bearer token from DNS client (without "Bearer " prefix).
+
+        Returns:
+            {"valid": bool, "allowed_zone_ids": [...], "reason": str} on success,
+            {"valid": False, "allowed_zone_ids": []} on error (fail-closed).
+        """
+        if not self.jwt or not self.server_id:
+            logger.warning("validate_token_not_enrolled")
+            return {"valid": False, "allowed_zone_ids": []}
+
+        req = manager_pb2.ValidateTokenRequest(
+            api_version="v1",
+            token=token,
+        )
+
+        try:
+            resp = await self.stub.ValidateToken(req, metadata=self._metadata(self.jwt), timeout=2.0)
+            return {
+                "valid": resp.valid,
+                "allowed_zone_ids": list(resp.allowed_zone_ids),
+                "reason": resp.reason,
+            }
+        except Exception as e:
+            logger.warning("validate_token_error", error=str(e), msg="Failing closed (no access)")
+            return {"valid": False, "allowed_zone_ids": []}
+
+    async def stream_config_updates(self, on_update: callable) -> None:
+        """Stream configuration updates from the control plane.
+
+        Subscribes to StreamConfigUpdates; on each ConfigUpdate with version bump,
+        calls on_update(config). This enables live resync without restart.
+
+        Runs indefinitely until the stream ends or an error occurs.
+        Should be spawned as a background task in main.py.
+
+        Args:
+            on_update: Callable(config_dict) invoked on each config update.
+        """
+        if not self.jwt or not self.server_id:
+            logger.error("stream_config_updates_not_enrolled")
+            return
+
+        req = manager_pb2.StreamConfigUpdatesRequest(
+            api_version="v1",
+            server_id=self.server_id,
+        )
+
+        try:
+            async for update in self.stub.StreamConfigUpdates(
+                req, metadata=self._metadata(self.jwt), timeout=None
+            ):
+                config_dict = {
+                    "zones": [
+                        {
+                            "id": z.id,
+                            "name": z.name,
+                            "visibility": z.visibility,
+                            "records": [
+                                {
+                                    "name": r.name,
+                                    "type": r.type,
+                                    "value": r.value,
+                                    "ttl": r.ttl,
+                                    "priority": r.priority,
+                                    "weight": r.weight,
+                                    "port": r.port,
+                                }
+                                for r in z.records
+                            ],
+                        }
+                        for z in update.config.zones
+                    ],
+                    "version": update.version,
+                }
+                logger.info("config_update_received", version=update.version, update_type=update.update_type)
+                await on_update(config_dict)
+        except Exception as e:
+            logger.error("stream_config_updates_error", error=str(e))
+
+    async def send_heartbeat(self, metrics: dict) -> dict:
+        """Send heartbeat with metrics to the control plane.
+
+        Args:
+            metrics: Metrics dict with keys like queries_total, cache_hits, errors, etc.
+
+        Returns:
+            {"config_version": int, "should_sync": bool} on success,
+            {"config_version": 0, "should_sync": False} on error.
+        """
+        if not self.jwt or not self.server_id:
+            logger.warning("send_heartbeat_not_enrolled")
+            return {"config_version": 0, "should_sync": False}
+
+        server_metrics = manager_pb2.ServerMetrics(
+            queries_total=metrics.get("queries_total", 0),
+            cache_hits=metrics.get("cache_hits", 0),
+            errors=metrics.get("errors", 0),
+            avg_response_ms=metrics.get("avg_response_ms", 0.0),
+            queries_by_type={k: v for k, v in metrics.get("queries_by_type", {}).items()},
+        )
+
+        req = manager_pb2.SendHeartbeatRequest(
+            api_version="v1",
+            server_id=self.server_id,
+            timestamp=int(time.time() * 1000),
+            metrics=server_metrics,
+        )
+
+        try:
+            resp = await self.stub.SendHeartbeat(req, metadata=self._metadata(self.jwt), timeout=5.0)
+            return {
+                "config_version": resp.config_version,
+                "should_sync": resp.should_sync,
+            }
+        except Exception as e:
+            logger.warning("send_heartbeat_error", error=str(e))
+            return {"config_version": 0, "should_sync": False}

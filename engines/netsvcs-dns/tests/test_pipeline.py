@@ -224,3 +224,263 @@ async def test_claims_for_token_stub(pipeline: ResolvePipeline) -> None:
 
     result = await pipeline._claims_for_token("test_token")
     assert result is None
+
+
+# S3 Tests: Control-plane wiring
+
+
+@pytest.mark.asyncio
+async def test_ioc_check_with_manager_client(stub_server_addr: str) -> None:
+    """Test IOC check via control-plane CheckIOC gRPC (fail-open on error)."""
+    import tempfile
+    from app.manager_client import ManagerClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager_client = ManagerClient(
+            grpc_addr=stub_server_addr,
+            tls_ca_path=None,
+            insecure_dev_flag=True,
+            cache_dir=tmpdir,
+            server_name="dns-test",
+        )
+
+        # Enroll
+        enrolled = await manager_client.enroll(
+            bootstrap_token="test-bootstrap",
+            hostname="test-host",
+            version="0.1.0",
+        )
+        assert enrolled is True
+
+        resolver = AsyncMock(spec=DNSResolver)
+        router = MagicMock(spec=SelectiveRouter)
+        cache = AsyncMock(spec=CacheManager)
+
+        pipeline = ResolvePipeline(
+            resolver=resolver,
+            router=router,
+            cache=cache,
+            manager_client=manager_client,
+            config=ResolvePipelineConfig(),
+        )
+
+        # Test blocked domain
+        blocked_result = await pipeline.ioc_check("blocked.example.com")
+        assert blocked_result is True
+
+        # Test clean domain
+        clean_result = await pipeline.ioc_check("clean.example.com")
+        assert clean_result is False
+
+        await manager_client.close()
+
+
+@pytest.mark.asyncio
+async def test_ioc_check_fail_open(stub_server_addr: str) -> None:
+    """Test IOC check fails open on control-plane error."""
+    import tempfile
+    from app.manager_client import ManagerClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create client with invalid address (will fail on check_ioc)
+        manager_client = ManagerClient(
+            grpc_addr="127.0.0.1:1",  # Invalid
+            tls_ca_path=None,
+            insecure_dev_flag=True,
+            cache_dir=tmpdir,
+            server_name="dns-test",
+        )
+
+        # Manually set enrolled state (skip real enrollment)
+        manager_client.server_id = "test-server"
+        manager_client.jwt = "test-jwt"
+
+        resolver = AsyncMock(spec=DNSResolver)
+        router = MagicMock(spec=SelectiveRouter)
+        cache = AsyncMock(spec=CacheManager)
+
+        pipeline = ResolvePipeline(
+            resolver=resolver,
+            router=router,
+            cache=cache,
+            manager_client=manager_client,
+            config=ResolvePipelineConfig(),
+        )
+
+        # Even with invalid address, ioc_check should return False (fail-open)
+        result = await pipeline.ioc_check("any.domain")
+        assert result is False
+
+        await manager_client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_token_with_manager_client(stub_server_addr: str) -> None:
+    """Test token validation via control-plane ValidateToken gRPC."""
+    import tempfile
+    from app.manager_client import ManagerClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager_client = ManagerClient(
+            grpc_addr=stub_server_addr,
+            tls_ca_path=None,
+            insecure_dev_flag=True,
+            cache_dir=tmpdir,
+            server_name="dns-test",
+        )
+
+        # Enroll
+        enrolled = await manager_client.enroll(
+            bootstrap_token="test-bootstrap",
+            hostname="test-host",
+            version="0.1.0",
+        )
+        assert enrolled is True
+
+        resolver = AsyncMock(spec=DNSResolver)
+        router = MagicMock(spec=SelectiveRouter)
+        cache = AsyncMock(spec=CacheManager)
+
+        pipeline = ResolvePipeline(
+            resolver=resolver,
+            router=router,
+            cache=cache,
+            manager_client=manager_client,
+            config=ResolvePipelineConfig(),
+        )
+
+        # Test valid token
+        claims = await pipeline._claims_for_token("test-token-z1")
+        assert claims is not None
+        assert "z1" in claims.allowed_zone_ids
+
+        # Test invalid token
+        invalid_claims = await pipeline._claims_for_token("unknown-token")
+        assert invalid_claims is None
+
+        await manager_client.close()
+
+
+@pytest.mark.asyncio
+async def test_token_scoped_zones(stub_server_addr: str) -> None:
+    """Test that tokens with allowed_zone_ids can only access their zones."""
+    import tempfile
+    from app.manager_client import ManagerClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager_client = ManagerClient(
+            grpc_addr=stub_server_addr,
+            tls_ca_path=None,
+            insecure_dev_flag=True,
+            cache_dir=tmpdir,
+            server_name="dns-test",
+        )
+
+        # Enroll
+        enrolled = await manager_client.enroll(
+            bootstrap_token="test-bootstrap",
+            hostname="test-host",
+            version="0.1.0",
+        )
+        assert enrolled is True
+
+        # Setup router with zones that have IDs for tenant scoping.
+        # Use internal zones with no team restrictions to test zone scoping
+        # independently from team-based visibility logic.
+        router = SelectiveRouter()
+        router.load_zones([
+            {
+                "id": "z1",  # Zone ID for control-plane scoping
+                "name": "example.com",
+                "visibility": "public",
+                "allowed_teams": [],
+                "records": [],
+            },
+            {
+                "id": "z2",  # Zone ID for control-plane scoping
+                "name": "internal.example.com",
+                "visibility": "internal",  # Internal with no team restrictions
+                "allowed_teams": [],  # No team restrictions, any token allowed
+                "records": [],
+            },
+        ])
+
+        resolver = AsyncMock(spec=DNSResolver)
+        cache = AsyncMock(spec=CacheManager)
+
+        pipeline = ResolvePipeline(
+            resolver=resolver,
+            router=router,
+            cache=cache,
+            manager_client=manager_client,
+            config=ResolvePipelineConfig(),
+        )
+
+        # Token with access to z1 only
+        claims_z1 = await pipeline._claims_for_token("test-token-z1")
+        assert claims_z1 is not None
+        assert claims_z1.allowed_zone_ids == ["z1"]
+
+        # Should be able to access z1 (public)
+        can_access_z1 = router.check_zone_permission("example.com", claims_z1)
+        assert can_access_z1 is True
+
+        # Should NOT be able to access z2 (not in allowed_zone_ids)
+        can_access_z2 = router.check_zone_permission("internal.example.com", claims_z1)
+        assert can_access_z2 is False
+
+        # Token with access to all zones
+        claims_all = await pipeline._claims_for_token("test-token-all")
+        assert claims_all is not None
+        assert set(claims_all.allowed_zone_ids) == {"z1", "z2"}
+
+        # Should be able to access both
+        can_access_z1_all = router.check_zone_permission("example.com", claims_all)
+        assert can_access_z1_all is True
+
+        can_access_z2_all = router.check_zone_permission("internal.example.com", claims_all)
+        assert can_access_z2_all is True
+
+        await manager_client.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_token_no_access(stub_server_addr: str) -> None:
+    """Test that invalid/unvalidatable tokens get no access (fail-closed)."""
+    import tempfile
+    from app.manager_client import ManagerClient
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager_client = ManagerClient(
+            grpc_addr=stub_server_addr,
+            tls_ca_path=None,
+            insecure_dev_flag=True,
+            cache_dir=tmpdir,
+            server_name="dns-test",
+        )
+
+        # Enroll
+        enrolled = await manager_client.enroll(
+            bootstrap_token="test-bootstrap",
+            hostname="test-host",
+            version="0.1.0",
+        )
+        assert enrolled is True
+
+        resolver = AsyncMock(spec=DNSResolver)
+        router = MagicMock(spec=SelectiveRouter)
+        cache = AsyncMock(spec=CacheManager)
+
+        pipeline = ResolvePipeline(
+            resolver=resolver,
+            router=router,
+            cache=cache,
+            manager_client=manager_client,
+            config=ResolvePipelineConfig(),
+        )
+
+        # Invalid token should return None (no claims, fail-closed)
+        invalid_claims = await pipeline._claims_for_token("bad-signature-token")
+        assert invalid_claims is None
+
+        await manager_client.close()
