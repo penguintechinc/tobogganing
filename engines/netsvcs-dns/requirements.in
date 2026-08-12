@@ -25,6 +25,7 @@ penguin-utils>=0.1.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==6.0.0
+fakeredis==2.20.0
 
 # Security scanning (dev)
 bandit==1.7.6
