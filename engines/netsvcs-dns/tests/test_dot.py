@@ -232,3 +232,36 @@ def test_json_to_dns_message_servfail() -> None:
     # SERVFAIL rcode is 2
     assert response.rcode() == 2
     assert len(response.answer) == 0
+
+
+@pytest.mark.asyncio
+async def test_serve_dot_no_cert_returns_gracefully(mock_pipeline: AsyncMock) -> None:
+    """Regression test: DoT with no cert/key should return gracefully.
+
+    Guards against crash when cert_path=None, key_path=None (e.g., stdlib logging kwargs crash).
+    Should return None without raising an exception.
+    """
+    result = await dot.serve_dot(
+        pipeline=mock_pipeline,
+        port=853,
+        cert_path=None,
+        key_path=None
+    )
+    # Should return gracefully (None) without exception
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_serve_dot_bad_cert_path_returns_gracefully(mock_pipeline: AsyncMock) -> None:
+    """Regression test: DoT with bad cert path should return gracefully.
+
+    Should handle FileNotFoundError and return gracefully, not crash.
+    """
+    result = await dot.serve_dot(
+        pipeline=mock_pipeline,
+        port=853,
+        cert_path="/nonexistent/cert.pem",
+        key_path="/nonexistent/key.pem"
+    )
+    # Should return gracefully (None) without exception
+    assert result is None

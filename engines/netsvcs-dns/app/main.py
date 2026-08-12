@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 
 from quart import Quart, jsonify, g
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from app.config import Config
 from app.manager_client import ManagerClient
@@ -19,6 +20,7 @@ from app.resolver import DNSResolver
 from app.router import SelectiveRouter
 from app.cache import CacheManager
 from app.pipeline import ResolvePipeline, ResolvePipelineConfig
+from app.metrics import MetricsReporter
 from app.servers import doh, dot
 
 # Basic logging setup
@@ -124,13 +126,7 @@ async def startup() -> None:
             while True:
                 try:
                     await asyncio.sleep(heartbeat_interval)
-                    metrics = {
-                        "queries_total": 0,  # Would come from pipeline metrics in real impl
-                        "cache_hits": 0,
-                        "errors": 0,
-                        "avg_response_ms": 0.0,
-                        "queries_by_type": {},
-                    }
+                    metrics = MetricsReporter.to_heartbeat_dict()
                     result = await manager_client.send_heartbeat(metrics)
                     logger.debug("heartbeat_sent", config_version=result.get("config_version"))
                 except Exception as e:
@@ -212,10 +208,10 @@ async def readiness() -> tuple[dict, int]:
 
 
 @app.get("/metrics")
-async def metrics() -> tuple[str, int]:
-    """Prometheus metrics endpoint (stub for P3-S0)."""
-    # Placeholder stub; real metrics in S2+
-    return "# HELP netsvcs_dns_queries_total Total DNS queries\n# TYPE netsvcs_dns_queries_total counter\n", 200
+async def metrics() -> tuple[str, int, dict]:
+    """Prometheus metrics endpoint."""
+    metrics_output = generate_latest()
+    return metrics_output.decode('utf-8'), 200, {'Content-Type': CONTENT_TYPE_LATEST.encode('utf-8').decode('utf-8')}
 
 
 @app.errorhandler(404)

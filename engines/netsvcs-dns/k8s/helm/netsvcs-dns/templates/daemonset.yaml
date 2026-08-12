@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netsvcs-dns
+  labels:
+    {{- toYaml .Values.labels | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- toYaml .Values.labels | nindent 6 }}
+  updateStrategy:
+    {{- toYaml .Values.daemonset.updateStrategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.labels | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      serviceAccountName: netsvcs-dns
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: resolver
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http-doh
+          containerPort: 8080
+          protocol: TCP
+        - name: tcp-dot
+          containerPort: 853
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+          {{- toYaml .Values.env | nindent 12 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 12 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 12 }}
+        volumeMounts:
+        - name: cache
+          mountPath: /tmp/dns-resolver-cache
+        - name: tls-ca
+          mountPath: /etc/tls/ca
+          readOnly: true
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: tls-ca
+        configMap:
+          name: netsvcs-dns-tls-ca

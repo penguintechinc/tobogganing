@@ -1,0 +1,47 @@
+# Alpha environment overrides (local K8s)
+
+image:
+  tag: latest  # Use local registry in alpha
+  repository: localhost:32000/netsvcs-dns
+
+service:
+  type: NodePort
+  ports:
+    doh:
+      nodePort: 30080
+
+# Alpha: minimal resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+env:
+  - name: BIND_HOST
+    value: "0.0.0.0"
+  - name: DOH_PORT
+    value: "8080"
+  - name: DOT_PORT
+    value: "853"
+  - name: METRICS_PORT
+    value: "9090"
+  - name: CONTROL_PLANE_GRPC_ADDR
+    value: "hub-api-grpc:50051"
+  - name: GRPC_TLS_CA_PATH
+    value: "/etc/tls/ca/ca.crt"
+  - name: GRPC_INSECURE_DEV_FLAG
+    value: "true"  # Allow insecure gRPC in alpha
+  - name: CACHE_URL
+    value: "redis://valkey:6379"
+  - name: CONFIG_CACHE_DIR
+    value: "/tmp/dns-resolver-cache"
+  - name: ENROLLMENT_BOOTSTRAP_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: netsvcs-dns-bootstrap
+        key: token
+  - name: VERSION
+    value: "0.1.0"

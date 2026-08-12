@@ -15,6 +15,7 @@ from app.resolver import DNSResolver
 from app.router import SelectiveRouter, TokenClaims
 from app.cache import CacheManager
 from app.manager_client import ManagerClient
+from app.metrics import MetricsReporter
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +104,10 @@ class ResolvePipeline:
         if cached_result:
             elapsed_ms = (time.time() - start_time) * 1000
             logger.info(f"cache_hit: {name} {record_type} ({elapsed_ms:.1f}ms)")
-            self._record_metric("cache_hit", 1)
+            MetricsReporter.record_cache_hit()
             return cached_result
 
-        self._record_metric("cache_miss", 1)
+        MetricsReporter.record_cache_miss()
 
         # Step 2: IOC check (S3 HOOK: wire to control-plane CheckIOC gRPC)
         # For S2, returns False (not blocked); S3 replaces with real gRPC call
@@ -117,7 +118,7 @@ class ResolvePipeline:
                 "Question": [query],
                 "Answer": [],
             }
-            self._record_metric("ioc_block", 1)
+            MetricsReporter.record_ioc_block()
             return response
 
         # Step 3: Extract token claims (S3 HOOK: validate via control-plane ValidateToken gRPC)
@@ -132,7 +133,7 @@ class ResolvePipeline:
                 "Question": [query],
                 "Answer": [],
             }
-            self._record_metric("refused_query", 1)
+            MetricsReporter.record_error("refused")
             return response
 
         # Step 5: Try custom zones first, then upstream
@@ -152,8 +153,9 @@ class ResolvePipeline:
             )
 
         elapsed_ms = (time.time() - start_time) * 1000
-        self._record_metric("resolve_time_ms", elapsed_ms)
-        self._record_metric("total_queries", 1)
+        elapsed_seconds = elapsed_ms / 1000.0
+        MetricsReporter.record_query_latency(elapsed_seconds)
+        MetricsReporter.record_query(record_type)
 
         logger.info(
             f"resolve_complete: {name} {record_type} status={result.get('Status')} "
@@ -214,15 +216,6 @@ class ResolvePipeline:
             role=None,  # Role would be in the token itself; for now, None
         )
 
-    def _record_metric(self, metric_name: str, value: float | int) -> None:
-        """Record a metric (placeholder for real metrics in S3+).
-
-        Args:
-            metric_name: Metric name.
-            value: Metric value.
-        """
-        # S3+: Wire to Prometheus counter/histogram/gauge
-        logger.debug(f"metric {metric_name}={value}")
 
     async def close(self) -> None:
         """Clean up pipeline resources."""
