@@ -82,7 +82,12 @@ class ManagerClient:
         """
         self.grpc_addr = grpc_addr
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # 0700: the dir holds credential cache; enforce even if it pre-exists.
+        self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            os.chmod(self.cache_dir, 0o700)
+        except OSError:
+            pass
         self.cache_file = self.cache_dir / "manager_cache.json"
         self.server_name = server_name
 
@@ -149,7 +154,10 @@ class ManagerClient:
             refresh_token=self.refresh_token,
             config=self.config,
         )
-        with open(self.cache_file, "w") as f:
+        # The cache holds the machine-JWT + refresh token — write 0600 so the
+        # credentials are not world/group readable.
+        fd = os.open(self.cache_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
             json.dump(cache.to_dict(), f)
         logger.info("manager_cache_persisted", path=str(self.cache_file))
 
