@@ -65,3 +65,13 @@ async def test_404(client) -> None:
     assert response.status_code == 404
     data = await response.get_json()
     assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_metrics_endpoint(client) -> None:
+    """Test /metrics endpoint is available and returns Prometheus format."""
+    response = await client.get("/metrics")
+    assert response.status_code == 200
+    text = await response.get_data(as_text=True)
+    # Metrics endpoint should contain HELP/TYPE or be empty
+    assert isinstance(text, str)

@@ -1,6 +1,7 @@
 """DNS resolver service Quart application.
 
 P3-S0: Skeleton with health checks, enrollment, and config retrieval.
+P3-S2: DoH + DoT servers + resolve pipeline.
 """
 from __future__ import annotations
 
@@ -14,6 +15,11 @@ from quart import Quart, jsonify, g
 
 from app.config import Config
 from app.manager_client import ManagerClient
+from app.resolver import DNSResolver
+from app.router import SelectiveRouter
+from app.cache import CacheManager
+from app.pipeline import ResolvePipeline, ResolvePipelineConfig
+from app.servers import doh, dot
 
 # Basic logging setup
 logging.basicConfig(level=logging.INFO)
@@ -25,12 +31,14 @@ app = Quart(__name__)
 manager_client: ManagerClient | None = None
 config: Config | None = None
 ready = False
+pipeline: ResolvePipeline | None = None
+dot_task: asyncio.Task | None = None
 
 
 @app.before_serving
 async def startup() -> None:
     """Initialize on app startup."""
-    global manager_client, config, ready
+    global manager_client, config, ready, pipeline, dot_task
 
     try:
         config = Config.from_env()
@@ -68,6 +76,46 @@ async def startup() -> None:
             logger.error("startup_enrollment_failed")
             ready = False
 
+        # S2: Initialize DNS components
+        logger.info("initializing_dns_components")
+
+        # Create cache manager
+        cache = CacheManager(cache_url=config.cache_url)
+        await cache.connect()
+
+        # Create resolver, router, and pipeline
+        resolver = DNSResolver()
+        router = SelectiveRouter()
+
+        # Load zones from manager config (if available)
+        if manager_client.config and "zones" in manager_client.config:
+            router.load_zones(manager_client.config["zones"])
+
+        pipeline = ResolvePipeline(
+            resolver=resolver,
+            router=router,
+            cache=cache,
+            config=ResolvePipelineConfig(),
+        )
+
+        # Initialize DoH routes
+        doh.init_doh(app, pipeline)
+        logger.info("doh_initialized")
+
+        # Initialize DoT listener (if TLS configured)
+        if config.dot_tls_cert_path and config.dot_tls_key_path:
+            dot_task = asyncio.create_task(
+                dot.serve_dot(
+                    pipeline,
+                    port=config.dot_port,
+                    cert_path=config.dot_tls_cert_path,
+                    key_path=config.dot_tls_key_path,
+                )
+            )
+            logger.info("dot_listener_started", port=config.dot_port)
+        else:
+            logger.warning("dot_tls_not_configured; skipping DoT listener")
+
     except Exception as e:
         logger.error("startup_error", error=str(e))
         ready = False
@@ -76,9 +124,23 @@ async def startup() -> None:
 @app.after_serving
 async def shutdown() -> None:
     """Clean up on app shutdown."""
-    global manager_client
+    global manager_client, pipeline, dot_task
+
+    if pipeline:
+        await pipeline.close()
+        logger.info("pipeline_closed")
+
+    if dot_task and not dot_task.done():
+        dot_task.cancel()
+        try:
+            await dot_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("dot_task_cancelled")
+
     if manager_client:
         await manager_client.close()
+
     logger.info("app_shutdown")
 
 
