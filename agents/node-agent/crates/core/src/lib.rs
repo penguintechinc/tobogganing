@@ -20,4 +20,5 @@ pub use jwt::{decode_unverified_claims, MachineJwtClaims, MachineJwtSigner};
 pub use types::{
     ConnectivityConfig, DnsConfig, EnrollRequest, EnrollResponse, Heartbeat, IocVerdict,
     MetricSample, Metrics, NetsvcsEdgeConfig, NodeConfig, NodeIdentity, RefreshResponse,
+    WireguardConfig,
 };
