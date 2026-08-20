@@ -1,0 +1,20 @@
+[package]
+name = "node-agent-connectivity"
+description = "SASE connectivity module (WireGuard/Ziti data plane, XDP inspection tap) for the tobogganing node-agent. Stage F: compilable stub; filled by feature/p4-connectivity."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "node_agent_connectivity"
+path = "src/lib.rs"
+
+[dependencies]
+node-agent-core = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }

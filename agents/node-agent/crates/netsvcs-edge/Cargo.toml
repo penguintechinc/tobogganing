@@ -1,0 +1,20 @@
+[package]
+name = "node-agent-netsvcs-edge"
+description = "Local :53 DNS/DHCP/NTP edge services for the tobogganing node-agent, forwarding to the P3 DoH resolvers. Stage F: compilable stub; filled by feature/p4-netsvcs-edge."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "node_agent_netsvcs_edge"
+path = "src/lib.rs"
+
+[dependencies]
+node-agent-core = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }

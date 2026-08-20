@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/transport",
+    "crates/connectivity",
+    "crates/netsvcs-edge",
+    "crates/agent",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98.0"
+license = "Apache-2.0"
+publish = false
+repository = "https://github.com/penguintechinc/tobogganing"
+
+# Exact-pinned versions only (no `^`/`~`/bare `*`) per org dependency-pinning
+# policy. Member crates consume these via `dep.workspace = true` so every
+# crate in the workspace resolves to a single shared version.
+[workspace.dependencies]
+# core
+async-trait = "=0.1.92"
+thiserror = "=2.0.20"
+tracing = "=0.1.44"
+tracing-subscriber = "=0.3.23"
+jsonwebtoken = "=11.0.0"
+figment = "=0.10.19"
+clap = "=4.6.6"
+serde = "=1.0.229"
+serde_json = "=1.0.151"
+tokio = "=1.53.1"
+tokio-util = "=0.7.19"
+
+# transport
+tonic = "=0.14.6"
+tonic-prost = "=0.14.6"
+tonic-prost-build = "=0.14.6"
+prost = "=0.14.4"
+protoc-bin-vendored = "=3.2.0"
+reqwest = { version = "=0.13.4", default-features = false }
+rustls = { version = "=0.23.43", default-features = false }
+
+# workspace-internal crates
+node-agent-core = { path = "crates/core" }
+node-agent-transport = { path = "crates/transport" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

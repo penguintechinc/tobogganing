@@ -1,0 +1,30 @@
+[package]
+name = "node-agent"
+description = "Unified tobogganing node-agent: SASE connectivity + netsvcs-edge in one binary, packaged as a static musl bare-metal build and a K8s DaemonSet container."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "node-agent"
+path = "src/main.rs"
+
+[features]
+default = ["connectivity", "netsvcs-edge"]
+connectivity = ["dep:node-agent-connectivity"]
+netsvcs-edge = ["dep:node-agent-netsvcs-edge"]
+
+[dependencies]
+node-agent-core = { workspace = true }
+node-agent-transport = { workspace = true }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+node-agent-connectivity = { path = "../connectivity", optional = true }
+node-agent-netsvcs-edge = { path = "../netsvcs-edge", optional = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs"] }
+tokio-util = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }

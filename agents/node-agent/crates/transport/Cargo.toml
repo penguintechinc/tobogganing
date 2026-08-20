@@ -1,0 +1,33 @@
+[package]
+name = "node-agent-transport"
+description = "gRPC (tonic) and REST (reqwest) implementations of ControlPlaneClient, selected at runtime by AgentConfig::mode."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "node_agent_transport"
+path = "src/lib.rs"
+
+[dependencies]
+node-agent-core = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt"] }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tonic = { workspace = true, features = ["tls-ring", "tls-webpki-roots"] }
+tonic-prost = { workspace = true }
+prost = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-no-provider", "json", "http2"] }
+rustls = { workspace = true, features = ["ring", "std", "tls12", "logging"] }
+
+[build-dependencies]
+tonic-prost-build = { workspace = true }
+protoc-bin-vendored = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
