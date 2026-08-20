@@ -256,10 +256,19 @@ fn map_node_config(cfg: Option<pb::ServerConfig>, config_version: i64) -> NodeCo
         None => DnsConfig::default(),
     };
 
+    // `NetsvcsEdgeConfig` embeds `DnsConfig` so the netsvcs-edge module's
+    // `run()` (which only receives `NetsvcsEdgeConfig`, per its stable
+    // signature) has everything it needs without a second parameter; keep
+    // it mirrored with the sibling `NodeConfig.dns` field above.
+    let edge = NetsvcsEdgeConfig {
+        dns: dns.clone(),
+        ..NetsvcsEdgeConfig::default()
+    };
+
     NodeConfig {
         dns,
         connectivity: ConnectivityConfig::default(),
-        edge: NetsvcsEdgeConfig::default(),
+        edge,
         config_version,
     }
 }
