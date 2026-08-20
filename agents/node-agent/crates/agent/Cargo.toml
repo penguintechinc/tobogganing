@@ -21,10 +21,17 @@ netsvcs-edge = ["dep:node-agent-netsvcs-edge"]
 node-agent-core = { workspace = true }
 node-agent-transport = { workspace = true }
 jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
-node-agent-connectivity = { path = "../connectivity", optional = true }
-node-agent-netsvcs-edge = { path = "../netsvcs-edge", optional = true }
+node-agent-connectivity = { path = "../connectivity", version = "0.1.0", optional = true }
+node-agent-netsvcs-edge = { path = "../netsvcs-edge", version = "0.1.0", optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs"] }
 tokio-util = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+# `ExpClaim` (the lifecycle loop's unverified access-token exp decode) is
+# regular (non-test) code, so serde is a normal dependency here.
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+# Only used by the lifecycle-loop unit tests' in-memory `MockClient`.
+async-trait = { workspace = true }

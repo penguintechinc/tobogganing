@@ -260,10 +260,12 @@ impl Default for NetsvcsEdgeConfig {
 
 /// The full node configuration returned by the control plane on enroll and
 /// polled thereafter via `get_config` — one sub-config per capability plus
-/// the version stamp used for change detection.
+/// the version stamp used for change detection. DNS config lives only
+/// inside [`NetsvcsEdgeConfig::dns`] (the sole consumer, `netsvcs-edge`'s
+/// DNS forwarder) — there is deliberately no top-level `dns` field here to
+/// duplicate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
-    pub dns: DnsConfig,
     pub connectivity: ConnectivityConfig,
     pub edge: NetsvcsEdgeConfig,
     pub config_version: i64,

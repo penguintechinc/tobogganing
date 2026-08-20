@@ -27,9 +27,7 @@ xdp = ["dep:aya"]
 node-agent-core = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "net", "io-util", "macros"] }
 tokio-util = { workspace = true }
-async-trait = { workspace = true }
 tracing = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 
 # WireGuard userspace data plane. `device` pulls in the full boringtun
 # `Device`/`DeviceHandle` (TUN + UAPI control protocol), not just the noise
@@ -37,7 +35,6 @@ serde = { workspace = true, features = ["derive"] }
 boringtun = { version = "=0.7.1", default-features = false, features = ["device"] }
 rand_core = { version = "=0.6.4", default-features = false, features = ["getrandom"] }
 base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
-jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
 
 # Real interface address/route configuration (not print-only stubs).
 rtnetlink = { version = "=0.23.0", default-features = false, features = ["tokio_socket"] }

@@ -42,9 +42,12 @@ protoc-bin-vendored = "=3.2.0"
 reqwest = { version = "=0.13.4", default-features = false }
 rustls = { version = "=0.23.43", default-features = false }
 
-# workspace-internal crates
-node-agent-core = { path = "crates/core" }
-node-agent-transport = { path = "crates/transport" }
+# workspace-internal crates — explicit `version` alongside `path` even
+# though nothing outside this workspace ever resolves them from a registry;
+# omitting it makes cargo-deny's `bans.wildcards = "deny"` treat every
+# `workspace = true` consumer as an unpinned wildcard dependency.
+node-agent-core = { path = "crates/core", version = "0.1.0" }
+node-agent-transport = { path = "crates/transport", version = "0.1.0" }
 
 [profile.release]
 lto = true

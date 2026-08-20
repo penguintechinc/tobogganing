@@ -1662,12 +1662,14 @@ dependencies = [
 name = "node-agent"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap",
  "jsonwebtoken",
  "node-agent-connectivity",
  "node-agent-core",
  "node-agent-netsvcs-edge",
  "node-agent-transport",
+ "serde",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1678,16 +1680,13 @@ dependencies = [
 name = "node-agent-connectivity"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "aya",
  "base64",
  "boringtun",
  "futures",
- "jsonwebtoken",
  "node-agent-core",
  "rand_core 0.6.4",
  "rtnetlink",
- "serde",
  "tokio",
  "tokio-util",
  "tracing",
