@@ -1,6 +1,6 @@
 [package]
 name = "node-agent-connectivity"
-description = "SASE connectivity module (WireGuard/Ziti data plane, XDP inspection tap) for the tobogganing node-agent. Stage F: compilable stub; filled by feature/p4-connectivity."
+description = "SASE connectivity module (WireGuard/Ziti data plane, XDP inspection tap) for the tobogganing node-agent."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,9 +12,39 @@ repository.workspace = true
 name = "node_agent_connectivity"
 path = "src/lib.rs"
 
+[features]
+default = []
+# Optional userspace XDP inspection tap loader (aya). Kept out of the
+# default feature set: aya's *userspace* loader itself builds on stable
+# Rust with no eBPF toolchain, but this feature intentionally stays opt-in
+# so `cargo build`/`clippy` never depend on it implicitly. The eBPF program
+# bytecode this loader attaches is NOT compiled by this crate (that needs a
+# separate `#![no_std]` aya-ebpf crate + bpf-linker + nightly, out of scope
+# here) — it is loaded at runtime from a configurable object-file path.
+xdp = ["dep:aya"]
+
 [dependencies]
 node-agent-core = { workspace = true }
-tokio = { workspace = true, features = ["rt", "sync", "time"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "net", "io-util", "macros"] }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+# WireGuard userspace data plane. `device` pulls in the full boringtun
+# `Device`/`DeviceHandle` (TUN + UAPI control protocol), not just the noise
+# protocol primitives.
+boringtun = { version = "=0.7.1", default-features = false, features = ["device"] }
+rand_core = { version = "=0.6.4", default-features = false, features = ["getrandom"] }
+base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+
+# Real interface address/route configuration (not print-only stubs).
+rtnetlink = { version = "=0.23.0", default-features = false, features = ["tokio_socket"] }
+futures = { version = "=0.3.34", default-features = false, features = ["std"] }
+
+# Optional XDP inspection tap loader — see the `xdp` feature above.
+aya = { version = "=0.13.1", optional = true, default-features = false }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }

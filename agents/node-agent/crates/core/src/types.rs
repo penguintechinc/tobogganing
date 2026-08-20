@@ -119,8 +119,52 @@ impl Default for DnsConfig {
     }
 }
 
+/// WireGuard interface and headend-peer parameters for the `connectivity`
+/// module's `boringtun` data plane — the local interface address/DNS and
+/// the single headend peer's public key, endpoint, allowed IPs, and
+/// keepalive interval. Populated by the control plane at enroll/config-poll
+/// time; a node with no peer configured yet gets `Default::default()`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireguardConfig {
+    #[serde(default = "default_wireguard_interface_name")]
+    pub interface_name: String,
+    /// This node's tunnel address in CIDR form, e.g. `"10.200.0.5/32"`.
+    #[serde(default)]
+    pub interface_address: String,
+    /// Base64-encoded headend public key.
+    #[serde(default)]
+    pub peer_public_key: String,
+    /// `host:port` of the headend's WireGuard listener.
+    #[serde(default)]
+    pub peer_endpoint: String,
+    #[serde(default = "default_allowed_ips")]
+    pub allowed_ips: Vec<String>,
+    #[serde(default = "default_persistent_keepalive_secs")]
+    pub persistent_keepalive_secs: u16,
+    /// DNS resolver addresses pushed down the tunnel (mirrors the Go
+    /// reference client's `DNS = 10.200.0.1` conf directive).
+    #[serde(default)]
+    pub dns: Vec<String>,
+}
+
+impl Default for WireguardConfig {
+    fn default() -> Self {
+        Self {
+            interface_name: default_wireguard_interface_name(),
+            interface_address: String::new(),
+            peer_public_key: String::new(),
+            peer_endpoint: String::new(),
+            allowed_ips: default_allowed_ips(),
+            persistent_keepalive_secs: default_persistent_keepalive_secs(),
+            dns: Vec::new(),
+        }
+    }
+}
+
 /// SASE connectivity configuration for the `connectivity` module —
-/// WireGuard/Ziti enablement and the optional XDP inspection tap.
+/// WireGuard/Ziti enablement, the optional XDP inspection tap, and (once
+/// the control plane has assigned this node a peer) the WireGuard tunnel
+/// parameters themselves.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectivityConfig {
     #[serde(default = "default_true")]
@@ -131,6 +175,8 @@ pub struct ConnectivityConfig {
     pub wireguard_listen_port: u16,
     #[serde(default)]
     pub xdp_tap_enabled: bool,
+    #[serde(default)]
+    pub wireguard: Option<WireguardConfig>,
 }
 
 impl Default for ConnectivityConfig {
@@ -140,6 +186,7 @@ impl Default for ConnectivityConfig {
             ziti_enabled: false,
             wireguard_listen_port: default_wireguard_port(),
             xdp_tap_enabled: false,
+            wireguard: None,
         }
     }
 }
@@ -202,4 +249,16 @@ fn default_wireguard_port() -> u16 {
 
 fn default_edge_bind_addr() -> String {
     "0.0.0.0:53".to_string()
+}
+
+fn default_wireguard_interface_name() -> String {
+    "wg-toboggan".to_string()
+}
+
+fn default_allowed_ips() -> Vec<String> {
+    vec!["0.0.0.0/0".to_string(), "::/0".to_string()]
+}
+
+fn default_persistent_keepalive_secs() -> u16 {
+    25
 }
