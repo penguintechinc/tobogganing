@@ -12,7 +12,7 @@ WORKDIR /build
 # Install musl toolchain for static Linux target (versions locked by rust:1.98-slim-bookworm base image)
 # hadolint ignore=DL3059
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    musl-tools=1.2.5-1 \
+    musl-tools=1.2.3-1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Add musl target

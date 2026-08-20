@@ -608,10 +608,33 @@ mod tests {
 
         let handle = tokio::spawn(async move { run(Some(&config_path), None, None).await });
 
-        // Long enough for config load, JWT signing, and the single
-        // loopback enroll round-trip to complete and the lifecycle-loop
-        // task to be spawned — short enough to keep the test fast.
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Poll the mock server until the single enroll AND the lifecycle
+        // loop's first heartbeat tick have both been recorded, rather than
+        // asserting after one fixed sleep: config load + JWT signing + the
+        // loopback enroll round-trip + the first tick can take well over a
+        // naive fixed window under coverage instrumentation or heavy CPU
+        // load, which otherwise makes this test flaky. Ceiling ~10s is only
+        // ever reached on genuine failure.
+        let mut saw_enroll = false;
+        let mut saw_heartbeat = false;
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let paths: Vec<String> = server
+                .received_requests()
+                .await
+                .expect("mock server must record requests")
+                .iter()
+                .map(|r| r.url.path().to_string())
+                .collect();
+            saw_enroll = paths.iter().filter(|p| p.ends_with("/enroll")).count() == 1;
+            saw_heartbeat = paths.iter().any(|p| p.ends_with("/heartbeat"));
+            if saw_enroll && saw_heartbeat {
+                break;
+            }
+        }
+
+        // run() only returns on ctrl_c; aborting proves it was still
+        // mid-flight (enrolled once, lifecycle loop spawned and ticking).
         handle.abort();
         let result = handle.await;
         match &result {
@@ -619,23 +642,13 @@ mod tests {
             other => panic!("expected run() to still be mid-flight when aborted, got {other:?}"),
         }
 
-        let requests = server
-            .received_requests()
-            .await
-            .expect("mock server must record requests");
-        let paths: Vec<String> = requests.iter().map(|r| r.url.path().to_string()).collect();
-        assert_eq!(
-            paths.iter().filter(|p| p.ends_with("/enroll")).count(),
-            1,
-            "enroll must have been called exactly once, got requests: {paths:?}"
-        );
-        // `tokio::time::interval`'s first tick fires immediately, so the
-        // lifecycle loop's very first heartbeat+config-poll+refresh tick
-        // also completes inside the 300ms window above — proving `run`
-        // reached and spawned the lifecycle-loop task, not just enrolled.
+        assert!(saw_enroll, "enroll must have been called exactly once");
+        // interval's first tick fires immediately, so the lifecycle loop's
+        // very first heartbeat+config-poll+refresh tick proves run() reached
+        // and spawned the lifecycle-loop task, not just enrolled.
         assert!(
-            paths.iter().any(|p| p.ends_with("/heartbeat")),
-            "the lifecycle loop's first tick must have sent a heartbeat, got: {paths:?}"
+            saw_heartbeat,
+            "the lifecycle loop's first tick must have sent a heartbeat"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
