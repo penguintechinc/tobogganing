@@ -1,0 +1,207 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "node-agent.fullname" . }}
+  namespace: {{ include "node-agent.namespace" . }}
+  labels:
+    {{- include "node-agent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "node-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "node-agent.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "node-agent.serviceAccountName" . }}
+
+      # Pod-level security context: set fsGroup for file ownership
+      securityContext:
+        fsGroup: {{ .Values.nodeAgent.securityContext.fsGroup }}
+        runAsNonRoot: {{ .Values.nodeAgent.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.nodeAgent.securityContext.runAsUser }}
+
+      # Tolerations: DaemonSet runs on all nodes (including tainted ones)
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # hostNetwork: false (default) — the agent binds to pod IP, not host IP
+      hostNetwork: false
+
+      # hostPID, hostIPC: false — use pod namespaces
+      hostPID: false
+      hostIPC: false
+
+      containers:
+        - name: node-agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # Container-level security context (non-root, capabilities)
+          securityContext:
+            runAsNonRoot: {{ .Values.nodeAgent.securityContext.runAsNonRoot }}
+            runAsUser: {{ .Values.nodeAgent.securityContext.runAsUser }}
+            allowPrivilegeEscalation: {{ .Values.nodeAgent.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.nodeAgent.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              drop:
+                {{- range .Values.nodeAgent.securityContext.capabilities.drop }}
+                - {{ . }}
+                {{- end }}
+              add:
+                {{- range .Values.nodeAgent.securityContext.capabilities.add }}
+                - {{ . }}
+                {{- end }}
+
+          # Agent command and args
+          command:
+            - /usr/local/bin/node-agent
+          args:
+            - "run"
+            - "--mode={{ .Values.nodeAgent.mode }}"
+            - "--config=/etc/node-agent/config.toml"
+
+          # Environment variables
+          env:
+            - name: NODE_AGENT_MODE
+              value: "{{ .Values.nodeAgent.mode }}"
+            - name: NODE_AGENT_CONTROL_PLANE_URL
+              value: "{{ .Values.nodeAgent.controlPlaneUrl }}"
+            - name: NODE_AGENT_MACHINE_JWT_PATH
+              value: "{{ .Values.nodeAgent.machineJwtPath }}"
+            - name: NODE_AGENT_FEATURES__CONNECTIVITY
+              value: "{{ .Values.nodeAgent.features.connectivity }}"
+            - name: NODE_AGENT_FEATURES__NETSVCS_EDGE
+              value: "{{ .Values.nodeAgent.features.netsvcsEdge }}"
+            - name: NODE_AGENT_HEARTBEAT_INTERVAL_SECS
+              value: "{{ .Values.nodeAgent.heartbeatIntervalSecs }}"
+            - name: NODE_AGENT_REQUEST_TIMEOUT_SECS
+              value: "{{ .Values.nodeAgent.requestTimeoutSecs }}"
+            - name: RUST_LOG
+              value: "info"
+
+          # Ports (informational; actual binding via CAP_NET_BIND_SERVICE)
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          # Volume mounts
+          volumeMounts:
+            - name: config
+              mountPath: /etc/node-agent/
+              readOnly: true
+            - name: machine-jwt
+              mountPath: /etc/node-agent/machine.pem
+              subPath: machine.pem
+              readOnly: true
+            - name: runtime
+              mountPath: /run/node-agent/
+            - name: cache
+              mountPath: /var/cache/node-agent/
+            - name: state
+              mountPath: /var/lib/node-agent/
+
+          # Resource requests and limits
+          resources:
+            {{- toYaml .Values.nodeAgent.resources | nindent 12 }}
+
+          # Liveness probe: check if the agent is still running
+          {{- if .Values.nodeAgent.probes.liveness.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - /usr/local/bin/node-agent
+                - healthz
+            initialDelaySeconds: {{ .Values.nodeAgent.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nodeAgent.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.nodeAgent.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.nodeAgent.probes.liveness.failureThreshold }}
+          {{- end }}
+
+          # Readiness probe: check if the agent is ready to serve requests
+          {{- if .Values.nodeAgent.probes.readiness.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - /usr/local/bin/node-agent
+                - healthz
+            initialDelaySeconds: {{ .Values.nodeAgent.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nodeAgent.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.nodeAgent.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.nodeAgent.probes.readiness.failureThreshold }}
+          {{- end }}
+
+      # Volumes
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "node-agent.fullname" . }}-config
+            defaultMode: 0644
+        - name: machine-jwt
+          secret:
+            secretName: {{ include "node-agent.fullname" . }}-machine-jwt
+            defaultMode: 0600
+        - name: runtime
+          emptyDir:
+            medium: Memory
+            sizeLimit: 100Mi
+        - name: cache
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: state
+          emptyDir:
+            sizeLimit: 1Gi
+
+      # Update strategy: rolling update with max surge of 1 (one extra pod during update)
+      updateStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "node-agent.fullname" . }}-config
+  namespace: {{ include "node-agent.namespace" . }}
+  labels:
+    {{- include "node-agent.labels" . | nindent 4 }}
+data:
+  config.toml: |
+    mode = "{{ .Values.nodeAgent.mode }}"
+    control_plane_url = "{{ .Values.nodeAgent.controlPlaneUrl }}"
+    machine_jwt_path = "{{ .Values.nodeAgent.machineJwtPath }}"
+    heartbeat_interval_secs = {{ .Values.nodeAgent.heartbeatIntervalSecs }}
+    request_timeout_secs = {{ .Values.nodeAgent.requestTimeoutSecs }}
+
+    [features]
+    connectivity = {{ .Values.nodeAgent.features.connectivity }}
+    netsvcs_edge = {{ .Values.nodeAgent.features.netsvcsEdge }}

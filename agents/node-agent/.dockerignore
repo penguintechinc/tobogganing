@@ -1,0 +1,49 @@
+# VCS and git metadata
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts and cache (but NOT Cargo.lock — needed for reproducible builds)
+target/
+*.rlib
+*.rmeta
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.editorconfig
+
+# Test and coverage artifacts
+tarpaulin-report.html
+coverage/
+*.profraw
+
+# Development and documentation
+README.md
+CHANGELOG.md
+docs/
+examples/
+
+# Environment files (never copy secrets into container)
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.log
+.tmp/
+
+# Kubernetes and deployment files (not needed in runtime container)
+k8s/
+helm/
+kubernetes/
+
+# CI/CD configuration (not needed in runtime)
+.github/
+.gitlab-ci.yml
+Makefile
