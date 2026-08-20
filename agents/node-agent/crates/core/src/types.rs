@@ -191,8 +191,41 @@ impl Default for ConnectivityConfig {
     }
 }
 
+/// DHCP client configuration for the `netsvcs-edge` module — which network
+/// interface to bind the client socket to (`None` binds all interfaces) and
+/// whether to advertise a hostname in outgoing DISCOVER/REQUEST messages.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DhcpConfig {
+    #[serde(default)]
+    pub interface: Option<String>,
+    #[serde(default)]
+    pub hostname: Option<String>,
+}
+
+/// NTP client configuration for the `netsvcs-edge` module — the upstream
+/// servers to query and how often to poll them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NtpConfig {
+    #[serde(default)]
+    pub servers: Vec<String>,
+    #[serde(default = "default_ntp_poll_interval_secs")]
+    pub poll_interval_secs: u32,
+}
+
+impl Default for NtpConfig {
+    fn default() -> Self {
+        Self {
+            servers: Vec::new(),
+            poll_interval_secs: default_ntp_poll_interval_secs(),
+        }
+    }
+}
+
 /// Top-level enablement + bind address for the local netsvcs-edge services
-/// (`:53` DNS forward, DHCP, NTP) — capability detail lives in `DnsConfig`.
+/// (`:53` DNS forward, DHCP, NTP), plus the capability-specific sub-configs
+/// (`DnsConfig`, `DhcpConfig`, `NtpConfig`) — embedded here (rather than
+/// left as NodeConfig siblings) so the single `NetsvcsEdgeConfig` passed to
+/// `node_agent_netsvcs_edge::run` carries everything the module needs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetsvcsEdgeConfig {
     #[serde(default = "default_true")]
@@ -203,6 +236,12 @@ pub struct NetsvcsEdgeConfig {
     pub ntp_enabled: bool,
     #[serde(default = "default_edge_bind_addr")]
     pub bind_addr: String,
+    #[serde(default)]
+    pub dns: DnsConfig,
+    #[serde(default)]
+    pub dhcp: Option<DhcpConfig>,
+    #[serde(default)]
+    pub ntp: Option<NtpConfig>,
 }
 
 impl Default for NetsvcsEdgeConfig {
@@ -212,6 +251,9 @@ impl Default for NetsvcsEdgeConfig {
             dhcp_enabled: false,
             ntp_enabled: false,
             bind_addr: default_edge_bind_addr(),
+            dns: DnsConfig::default(),
+            dhcp: None,
+            ntp: None,
         }
     }
 }
@@ -261,4 +303,8 @@ fn default_allowed_ips() -> Vec<String> {
 
 fn default_persistent_keepalive_secs() -> u16 {
     25
+}
+
+fn default_ntp_poll_interval_secs() -> u32 {
+    64
 }
