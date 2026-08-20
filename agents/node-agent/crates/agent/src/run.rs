@@ -521,4 +521,123 @@ mod tests {
         handle.await.expect("lifecycle_loop task must not panic");
         assert!(mock.heartbeat_calls.load(Ordering::SeqCst) >= 1);
     }
+
+    /// Generates a fresh, throwaway P-256 EC private key as a PKCS#8 PEM
+    /// (the only EC format `jsonwebtoken::EncodingKey::from_ec_pem`
+    /// accepts), matching `run`'s hardcoded `Algorithm::ES256` — good only
+    /// for signing a never-verified-against-anything-real machine JWT in
+    /// this test. Generated at test time (never a fixed/committed key
+    /// value) so nothing resembling real key material ever lands in
+    /// source control.
+    fn generate_test_ec_key_pem() -> String {
+        use p256::pkcs8::EncodePrivateKey;
+        let signing_key = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng);
+        signing_key
+            .to_pkcs8_pem(p256::pkcs8::LineEnding::LF)
+            .expect("encoding a freshly generated P-256 key as PKCS#8 PEM must succeed")
+            .to_string()
+    }
+
+    /// Exercises `run()` itself end-to-end (config load, crypto-provider
+    /// install, client build, machine-JWT signing, hostname resolution,
+    /// and the single enrollment call) against a real loopback REST mock
+    /// of `hub_api` — the only way to cover that setup sequence, since
+    /// `run()` is not otherwise reachable from outside this module.
+    ///
+    /// Both capability features are disabled at runtime (`[features]`
+    /// block below) so the only unconditionally-spawned task is the
+    /// lifecycle loop; the whole `run()` future is aborted shortly after
+    /// enrollment completes rather than waiting on a real `ctrl_c()`
+    /// signal (which would require signaling the entire test process).
+    /// `tokio::task::JoinSet`'s `Drop` aborts every task it's tracking, so
+    /// aborting `run()` cleanly tears down the lifecycle-loop subtask too.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_loads_config_signs_a_machine_jwt_and_enrolls_before_spawning_tasks() {
+        let dir = std::env::temp_dir().join(format!(
+            "node-agent-run-integration-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir must be creatable");
+        let key_path = dir.join("machine.pem");
+        std::fs::write(&key_path, generate_test_ec_key_pem())
+            .expect("writing the test key must succeed");
+
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/v1/netsvcs/enroll"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "status": "success",
+                    "data": {
+                        "node_id": "node-run-test",
+                        "tenant": "tenant-run-test",
+                        "access_token": "token-1",
+                        "refresh_token": "refresh-1",
+                        "config": {"connectivity": {}, "edge": {}, "config_version": 1},
+                    },
+                })),
+            )
+            .mount(&server)
+            .await;
+
+        let config_path = dir.join("config.toml");
+        std::fs::write(
+            &config_path,
+            format!(
+                r#"
+                mode = "edge"
+                control_plane_url = "{}"
+                machine_jwt_path = "{}"
+
+                [features]
+                connectivity = false
+                netsvcs_edge = false
+                "#,
+                server.uri(),
+                key_path.display(),
+            ),
+        )
+        .expect("writing the test config file must succeed");
+
+        // SAFETY(test-only): no other test in this binary reads `HOSTNAME`,
+        // and this crate's tests never touch it, so a process-wide env
+        // mutation here cannot race a concurrent reader.
+        unsafe {
+            std::env::set_var("HOSTNAME", "node-agent-run-integration-test");
+        }
+
+        let handle = tokio::spawn(async move { run(Some(&config_path), None, None).await });
+
+        // Long enough for config load, JWT signing, and the single
+        // loopback enroll round-trip to complete and the lifecycle-loop
+        // task to be spawned — short enough to keep the test fast.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        handle.abort();
+        let result = handle.await;
+        match &result {
+            Err(join_err) if join_err.is_cancelled() => {}
+            other => panic!("expected run() to still be mid-flight when aborted, got {other:?}"),
+        }
+
+        let requests = server
+            .received_requests()
+            .await
+            .expect("mock server must record requests");
+        let paths: Vec<String> = requests.iter().map(|r| r.url.path().to_string()).collect();
+        assert_eq!(
+            paths.iter().filter(|p| p.ends_with("/enroll")).count(),
+            1,
+            "enroll must have been called exactly once, got requests: {paths:?}"
+        );
+        // `tokio::time::interval`'s first tick fires immediately, so the
+        // lifecycle loop's very first heartbeat+config-poll+refresh tick
+        // also completes inside the 300ms window above — proving `run`
+        // reached and spawned the lifecycle-loop task, not just enrolled.
+        assert!(
+            paths.iter().any(|p| p.ends_with("/heartbeat")),
+            "the lifecycle loop's first tick must have sent a heartbeat, got: {paths:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

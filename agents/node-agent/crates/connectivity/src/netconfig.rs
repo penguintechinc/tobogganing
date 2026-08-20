@@ -204,4 +204,97 @@ mod tests {
         configure_dns_at(path, &[])
             .expect("empty server list must be a no-op, not a write attempt");
     }
+
+    /// Opens a real rtnetlink connection, matching `apply_networking`'s own
+    /// setup — link *lookups* (unlike address/route/link-state changes)
+    /// need no special capability, so these tests run unprivileged.
+    async fn real_handle() -> Handle {
+        let (connection, handle, _) =
+            rtnetlink::new_connection().expect("opening a netlink socket must succeed");
+        tokio::spawn(connection);
+        handle
+    }
+
+    fn wg_config_for(interface_address: &str, allowed_ips: Vec<String>) -> WireguardConfig {
+        WireguardConfig {
+            peer_public_key: "peer-key".to_string(),
+            peer_endpoint: "headend.example.internal:51820".to_string(),
+            interface_address: interface_address.to_string(),
+            allowed_ips,
+            ..WireguardConfig::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn link_index_finds_the_loopback_interface() {
+        let handle = real_handle().await;
+        let index = link_index(&handle, "lo")
+            .await
+            .expect("the loopback interface always exists");
+        assert!(index > 0);
+    }
+
+    #[tokio::test]
+    async fn link_index_errors_for_a_nonexistent_interface() {
+        let handle = real_handle().await;
+        let err = link_index(&handle, "node-agent-test-no-such-iface")
+            .await
+            .expect_err("a nonexistent interface must error, not silently return an index");
+        assert!(matches!(err, AgentError::Task(_)));
+    }
+
+    #[tokio::test]
+    async fn configure_address_and_link_degrades_to_a_typed_error_without_net_admin() {
+        // This process runs without `CAP_NET_ADMIN` in CI/dev sandboxes, so
+        // mutating `lo`'s address/link-state is expected to fail — proving
+        // the capability-gap-to-typed-error contract `apply_networking`'s
+        // caller relies on to log and continue rather than crash.
+        let handle = real_handle().await;
+        let cfg = wg_config_for("169.254.253.1/32", Vec::new());
+        let result = configure_address_and_link(&handle, "lo", &cfg).await;
+        match result {
+            Ok(()) => {} // a privileged runner may actually succeed
+            Err(err) => assert!(matches!(err, AgentError::Task(_))),
+        }
+    }
+
+    #[tokio::test]
+    async fn configure_address_and_link_errors_for_a_nonexistent_interface() {
+        let handle = real_handle().await;
+        let cfg = wg_config_for("169.254.253.1/32", Vec::new());
+        let err = configure_address_and_link(&handle, "node-agent-test-no-such-iface", &cfg)
+            .await
+            .expect_err("a nonexistent interface must error before any address/link call");
+        assert!(matches!(err, AgentError::Task(_)));
+    }
+
+    #[tokio::test]
+    async fn configure_routes_skips_an_invalid_allowed_ip_and_attempts_the_rest() {
+        let handle = real_handle().await;
+        let cfg = wg_config_for(
+            "169.254.253.1/32",
+            vec![
+                "not-a-valid-cidr".to_string(),
+                "169.254.0.0/16".to_string(),
+                "fd00::/8".to_string(),
+            ],
+        );
+        // Individual add-route failures (no CAP_NET_ADMIN) and the one
+        // malformed entry are both logged-and-skipped, never surfaced as
+        // an `Err` — `configure_routes` only errors on the initial link
+        // lookup itself.
+        configure_routes(&handle, "lo", &cfg)
+            .await
+            .expect("configure_routes must not fail even if every route add is rejected");
+    }
+
+    #[tokio::test]
+    async fn configure_routes_errors_for_a_nonexistent_interface() {
+        let handle = real_handle().await;
+        let cfg = wg_config_for("169.254.253.1/32", vec!["169.254.0.0/16".to_string()]);
+        let err = configure_routes(&handle, "node-agent-test-no-such-iface", &cfg)
+            .await
+            .expect_err("a nonexistent interface must error before any route call");
+        assert!(matches!(err, AgentError::Task(_)));
+    }
 }

@@ -23,8 +23,13 @@ fn main() -> std::io::Result<()> {
 
     println!("cargo:rerun-if-changed={}", proto_file.display());
 
+    // Server stubs are generated alongside the client purely for this
+    // crate's own tests (an in-process mock `ManagerService` exercising
+    // `GrpcClient` end-to-end over a real loopback gRPC connection) — the
+    // `node-agent` binary never serves gRPC, only calls it, so
+    // `ManagerServiceServer` stays unreferenced by any non-test code path.
     tonic_prost_build::configure()
-        .build_server(false)
+        .build_server(true)
         .build_client(true)
         .compile_protos(&[proto_file], &[proto_root])
 }

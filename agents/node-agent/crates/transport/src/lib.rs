@@ -33,3 +33,55 @@ pub fn build_client(cfg: &AgentConfig) -> Arc<dyn ControlPlaneClient> {
         AgentMode::Edge => Arc::new(RestClient::new(cfg)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use node_agent_core::AgentFeatures;
+    use std::path::PathBuf;
+
+    fn cfg(mode: AgentMode) -> AgentConfig {
+        AgentConfig {
+            mode,
+            control_plane_url: "http://127.0.0.1:0".to_string(),
+            machine_jwt_path: PathBuf::new(),
+            features: AgentFeatures::default(),
+            heartbeat_interval_secs: 30,
+            request_timeout_secs: 5,
+        }
+    }
+
+    #[tokio::test]
+    async fn build_client_selects_grpc_for_daemonset_mode() {
+        install_crypto_provider().expect("crypto provider install must not fail");
+        // Both transports build lazily/infallibly, so the only thing to
+        // assert here is that the right implementation was selected —
+        // proven by exercising the one behavior that differs before any
+        // enrollment: the "not enrolled" error message.
+        let client = build_client(&cfg(AgentMode::Daemonset));
+        let err = client
+            .heartbeat(node_agent_core::Heartbeat {
+                node_id: "n".to_string(),
+                timestamp: 0,
+                config_version: 0,
+            })
+            .await
+            .expect_err("must fail before enroll");
+        assert!(format!("{err}").contains("not enrolled"));
+    }
+
+    #[tokio::test]
+    async fn build_client_selects_rest_for_edge_mode() {
+        install_crypto_provider().expect("crypto provider install must not fail");
+        let client = build_client(&cfg(AgentMode::Edge));
+        let err = client
+            .heartbeat(node_agent_core::Heartbeat {
+                node_id: "n".to_string(),
+                timestamp: 0,
+                config_version: 0,
+            })
+            .await
+            .expect_err("must fail before enroll");
+        assert!(format!("{err}").contains("not enrolled"));
+    }
+}

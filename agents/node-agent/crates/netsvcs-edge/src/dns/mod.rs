@@ -418,4 +418,42 @@ mod tests {
         let name: Name = info.query.name().clone().into();
         assert_eq!(name.to_ascii(), "smoke.example.");
     }
+
+    #[tokio::test]
+    async fn run_rejects_an_unparsable_listen_addr_before_binding_anything() {
+        let cfg = DnsConfig {
+            listen_addr: "not-a-valid-socket-address".to_string(),
+            ..DnsConfig::default()
+        };
+        let err = run(
+            cfg,
+            Arc::new(MockClient::erroring()),
+            CancellationToken::new(),
+        )
+        .await
+        .expect_err("an unparsable listen_addr must error before any bind attempt");
+        assert!(matches!(err, AgentError::Config(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_binds_udp_and_tcp_then_shuts_down_gracefully_on_cancel() {
+        let cfg = DnsConfig {
+            listen_addr: "127.0.0.1:0".to_string(),
+            ..DnsConfig::default()
+        };
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            shutdown_clone.cancel();
+        });
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            run(cfg, Arc::new(MockClient::erroring()), shutdown),
+        )
+        .await
+        .expect("run must return promptly after cancellation, not hang");
+        assert!(result.is_ok());
+    }
 }

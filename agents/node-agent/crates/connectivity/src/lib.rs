@@ -286,4 +286,62 @@ mod tests {
         let result = run(cfg, Some(identity), rx, CancellationToken::new()).await;
         assert!(result.is_ok());
     }
+
+    fn identity() -> WireguardIdentity {
+        WireguardIdentity {
+            public_key_b64: "test-pub".to_string(),
+            private_key_b64: "test-priv".to_string(),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_attempts_an_initial_bring_up_when_config_already_has_a_peer() {
+        // This process runs without `CAP_NET_ADMIN` in CI/dev sandboxes, so
+        // the initial `bring_up` call is expected to fail internally
+        // (logged, non-fatal) — proving `run` degrades gracefully on
+        // startup rather than propagating the failure or panicking.
+        let cfg = ConnectivityConfig {
+            wireguard_enabled: true,
+            wireguard: Some(wg_config()),
+            ..ConnectivityConfig::default()
+        };
+        let (_tx, rx) = watch::channel(cfg.clone());
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            shutdown_clone.cancel();
+        });
+
+        let result = run(cfg, Some(identity()), rx, shutdown).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_brings_up_on_a_config_update_delivered_via_the_watch_channel() {
+        let cfg = ConnectivityConfig {
+            wireguard_enabled: true,
+            wireguard: None, // skip the initial bring_up; exercise the loop's instead
+            ..ConnectivityConfig::default()
+        };
+        let (tx, rx) = watch::channel(cfg.clone());
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+
+        let handle = tokio::spawn(run(cfg, Some(identity()), rx, shutdown.clone()));
+
+        tx.send(ConnectivityConfig {
+            wireguard_enabled: true,
+            wireguard: Some(wg_config()),
+            ..ConnectivityConfig::default()
+        })
+        .expect("run's receiver must still be alive");
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        shutdown_clone.cancel();
+        let result = handle
+            .await
+            .expect("run task must not panic while applying the update");
+        assert!(result.is_ok());
+    }
 }

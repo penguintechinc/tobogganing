@@ -103,3 +103,42 @@ impl WireguardDevice {
         &self.interface_name
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wg_config() -> WireguardConfig {
+        WireguardConfig {
+            peer_public_key: "peer-key".to_string(),
+            peer_endpoint: "headend.example.internal:51820".to_string(),
+            interface_address: "10.200.0.5/32".to_string(),
+            ..WireguardConfig::default()
+        }
+    }
+
+    /// This process runs without `CAP_NET_ADMIN` in CI/dev sandboxes, so
+    /// `create` is expected to fail — the failure path itself (the org's
+    /// runtime-capability-degrade contract) is exactly what this proves:
+    /// a missing capability surfaces as a typed `AgentError::Task`, never a
+    /// panic. When this *does* run with `CAP_NET_ADMIN` (e.g. a
+    /// privileged CI runner), the success branch is exercised instead and
+    /// this test still passes either way.
+    #[test]
+    fn create_degrades_to_a_typed_error_without_net_admin_or_succeeds_with_it() {
+        match WireguardDevice::create(
+            "wg-test-probe0",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            0,
+            &wg_config(),
+        ) {
+            Ok(device) => {
+                assert_eq!(device.interface_name(), "wg-test-probe0");
+            }
+            Err(err) => {
+                assert!(matches!(err, AgentError::Task(_)));
+                assert!(format!("{err}").contains("CAP_NET_ADMIN"));
+            }
+        }
+    }
+}

@@ -254,4 +254,111 @@ mod tests {
             .set_origin_timestamp(NtpTimestamp::from_seconds_nanos_since_ntp_era(1, 0));
         assert!(!mismatched_response.valid_server_response(second_identifier, false));
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_idles_until_shutdown_when_no_servers_are_configured() {
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            shutdown_clone.cancel();
+        });
+
+        let result =
+            tokio::time::timeout(Duration::from_secs(5), run(NtpConfig::default(), shutdown))
+                .await
+                .expect("run must return promptly after cancellation, not hang");
+        assert!(result.is_ok());
+    }
+
+    /// Spins up a minimal loopback UDP "NTP server" that answers exactly
+    /// one client poll with a well-formed, origin-timestamp-matching
+    /// response — enough to drive `query_server`'s full success path
+    /// (serialize request, send, receive, validate, compute offset/delay)
+    /// without a live NTP server.
+    async fn spawn_fake_ntp_server() -> std::net::SocketAddr {
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = socket.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            let Ok((n, peer)) = socket.recv_from(&mut buf).await else {
+                return;
+            };
+            let Ok((decoded_request, _cookie)) =
+                ntp_proto::NtpPacket::deserialize(&buf[..n], &NoCipher)
+            else {
+                return;
+            };
+
+            let mut response = ntp_proto::NtpPacket::test();
+            response.set_mode(ntp_proto::NtpAssociationMode::Server);
+            response.set_origin_timestamp(decoded_request.transmit_timestamp());
+            response.set_receive_timestamp(system_now_ntp());
+            response.set_transmit_timestamp(system_now_ntp());
+
+            let mut out = [0u8; 1024];
+            let len = {
+                let mut cursor = Cursor::new(&mut out[..]);
+                response.serialize(&mut cursor, &NoCipher, None).unwrap();
+                cursor.position() as usize
+            };
+            let _ = socket.send_to(&out[..len], peer).await;
+        });
+
+        addr
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn query_server_computes_offset_and_delay_against_a_fake_local_server() {
+        let addr = spawn_fake_ntp_server().await;
+        let result = query_server(&addr.to_string())
+            .await
+            .expect("query against the fake local server must succeed");
+        assert!(result.offset_secs.is_finite());
+        assert!(result.delay_secs.is_finite());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn query_server_times_out_against_a_silent_server() {
+        // Bound but never responds — proves the `QUERY_TIMEOUT` path maps
+        // to a `Transport` error rather than hanging indefinitely.
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = socket.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            let _ = socket.recv_from(&mut buf).await; // absorb the request, never reply
+        });
+
+        let err = tokio::time::timeout(
+            QUERY_TIMEOUT + Duration::from_secs(2),
+            query_server(&addr.to_string()),
+        )
+        .await
+        .expect("query_server itself must time out well before the outer guard")
+        .expect_err("a silent server must surface as a timeout error");
+        assert!(matches!(err, AgentError::Transport(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_completes_a_successful_query_cycle_then_stops_on_cancel() {
+        let addr = spawn_fake_ntp_server().await;
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        tokio::spawn(async move {
+            // Long enough for the fake server to have answered and `run`
+            // to have logged the successful query before we cancel.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            shutdown_clone.cancel();
+        });
+
+        let cfg = NtpConfig {
+            servers: vec![addr.to_string()],
+            poll_interval_secs: 1,
+        };
+        let result = tokio::time::timeout(Duration::from_secs(10), run(cfg, shutdown))
+            .await
+            .expect("run must return promptly after cancellation, not hang");
+        assert!(result.is_ok());
+    }
 }

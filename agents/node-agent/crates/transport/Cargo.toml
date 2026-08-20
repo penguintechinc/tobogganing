@@ -31,3 +31,6 @@ protoc-bin-vendored = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio-util = { workspace = true }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+wiremock = "=0.6.5"

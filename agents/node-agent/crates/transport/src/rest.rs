@@ -265,3 +265,370 @@ impl ControlPlaneClient for RestClient {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use node_agent_core::AgentFeatures;
+    use serde_json::json;
+    use wiremock::matchers::{header, method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// `reqwest`'s `rustls-no-provider` feature requires a process-wide
+    /// crypto provider installed before *any* client is built, even for
+    /// plain-HTTP mock-server traffic — mirrors the real startup ordering
+    /// (`install_crypto_provider` before `build_client`) documented on
+    /// [`crate::install_crypto_provider`].
+    fn new_client(cfg: &AgentConfig) -> RestClient {
+        crate::install_crypto_provider().expect("crypto provider install must not fail");
+        RestClient::new(cfg)
+    }
+
+    fn test_cfg(base_url: &str) -> AgentConfig {
+        AgentConfig {
+            mode: node_agent_core::AgentMode::Edge,
+            control_plane_url: base_url.to_string(),
+            machine_jwt_path: std::path::PathBuf::new(),
+            features: AgentFeatures::default(),
+            heartbeat_interval_secs: 30,
+            request_timeout_secs: 5,
+        }
+    }
+
+    fn enroll_envelope(access_token: &str) -> serde_json::Value {
+        json!({
+            "status": "success",
+            "data": {
+                "node_id": "node-1",
+                "tenant": "tenant-1",
+                "access_token": access_token,
+                "refresh_token": "refresh-1",
+                "config": {"connectivity": {}, "edge": {}, "config_version": 1},
+            },
+            "meta": {"version": 1},
+        })
+    }
+
+    #[tokio::test]
+    async fn enroll_sets_access_token_used_by_the_next_call() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/enroll"))
+            .and(header("authorization", "Bearer machine-jwt-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(enroll_envelope("token-1")))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/heartbeat"))
+            .and(header("authorization", "Bearer token-1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"status": "success", "data": {}})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = new_client(&test_cfg(&server.uri()));
+        let resp = client
+            .enroll(EnrollRequest {
+                machine_jwt: "machine-jwt-1".to_string(),
+                node_type: "node-agent".to_string(),
+                hostname: "host-1".to_string(),
+                public_key: None,
+            })
+            .await
+            .expect("enroll must succeed");
+        assert_eq!(resp.node_id, "node-1");
+        assert_eq!(resp.access_token, "token-1");
+
+        // Proves the access token from enroll(), not a stale/absent one, is
+        // attached as the bearer on the very next call.
+        client
+            .heartbeat(Heartbeat {
+                node_id: "node-1".to_string(),
+                timestamp: 0,
+                config_version: 1,
+            })
+            .await
+            .expect("heartbeat must succeed using the freshly enrolled token");
+    }
+
+    #[tokio::test]
+    async fn heartbeat_before_enroll_fails_with_not_enrolled_error() {
+        let server = MockServer::start().await;
+        let client = new_client(&test_cfg(&server.uri()));
+        let err = client
+            .heartbeat(Heartbeat {
+                node_id: "node-1".to_string(),
+                timestamp: 0,
+                config_version: 0,
+            })
+            .await
+            .expect_err("heartbeat before enroll must fail");
+        assert!(matches!(err, AgentError::ControlPlane(msg) if msg.contains("not enrolled")));
+    }
+
+    async fn enrolled_client(server: &MockServer) -> RestClient {
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/enroll"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(enroll_envelope("token-1")))
+            .mount(server)
+            .await;
+        let client = new_client(&test_cfg(&server.uri()));
+        client
+            .enroll(EnrollRequest {
+                machine_jwt: "mjwt".to_string(),
+                node_type: "node-agent".to_string(),
+                hostname: "host-1".to_string(),
+                public_key: Some("pubkey".to_string()),
+            })
+            .await
+            .expect("enroll must succeed");
+        client
+    }
+
+    #[tokio::test]
+    async fn get_config_returns_some_when_server_reports_a_newer_version() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/netsvcs/config"))
+            .and(query_param("node_id", "node-1"))
+            .and(query_param("current_version", "1"))
+            .and(header("authorization", "Bearer token-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "success",
+                "data": {"connectivity": {}, "edge": {}, "config_version": 2},
+            })))
+            .mount(&server)
+            .await;
+
+        let cfg = client
+            .get_config("node-1", 1)
+            .await
+            .expect("get_config must succeed")
+            .expect("a newer config must be returned");
+        assert_eq!(cfg.config_version, 2);
+    }
+
+    #[tokio::test]
+    async fn get_config_returns_none_when_server_reports_no_newer_version_via_204() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/netsvcs/config"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        let result = client
+            .get_config("node-1", 5)
+            .await
+            .expect("204 must not be an error");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn get_config_filters_out_a_stale_version_returned_with_200() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/netsvcs/config"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "success",
+                "data": {"connectivity": {}, "edge": {}, "config_version": 1},
+            })))
+            .mount(&server)
+            .await;
+
+        // Server echoed back the same version the caller already has —
+        // must be filtered to None even though the envelope carried data.
+        let result = client
+            .get_config("node-1", 1)
+            .await
+            .expect("must not error");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn get_config_maps_unsupported_api_version_to_the_dedicated_error() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/netsvcs/config"))
+            .respond_with(
+                ResponseTemplate::new(501).set_body_string("api_version v1 not supported"),
+            )
+            .mount(&server)
+            .await;
+
+        let err = client
+            .get_config("node-1", 1)
+            .await
+            .expect_err("501 with api_version text must error");
+        assert!(matches!(err, AgentError::UnsupportedApiVersion { .. }));
+    }
+
+    #[tokio::test]
+    async fn get_config_maps_other_http_errors_to_control_plane_error() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/netsvcs/config"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+            .mount(&server)
+            .await;
+
+        let err = client
+            .get_config("node-1", 1)
+            .await
+            .expect_err("HTTP 500 must error");
+        assert!(matches!(err, AgentError::ControlPlane(msg) if msg.contains("500")));
+    }
+
+    #[tokio::test]
+    async fn report_metrics_succeeds_against_a_success_envelope() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/metrics"))
+            .and(header("authorization", "Bearer token-1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"status": "success", "data": {}})),
+            )
+            .mount(&server)
+            .await;
+
+        client
+            .report_metrics(Metrics {
+                node_id: "node-1".to_string(),
+                samples: Vec::new(),
+            })
+            .await
+            .expect("report_metrics must succeed");
+    }
+
+    #[tokio::test]
+    async fn refresh_token_rotates_the_access_token_used_by_subsequent_calls() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/token/refresh"))
+            .and(header("authorization", "Bearer old-refresh"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "success",
+                "data": {"access_token": "token-2", "refresh_token": "refresh-2"},
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/heartbeat"))
+            .and(header("authorization", "Bearer token-2"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"status": "success", "data": {}})),
+            )
+            .mount(&server)
+            .await;
+
+        let resp = client
+            .refresh_token("old-refresh")
+            .await
+            .expect("refresh_token must succeed");
+        assert_eq!(resp.access_token, "token-2");
+        assert_eq!(resp.refresh_token, "refresh-2");
+
+        client
+            .heartbeat(Heartbeat {
+                node_id: "node-1".to_string(),
+                timestamp: 0,
+                config_version: 1,
+            })
+            .await
+            .expect("heartbeat must use the rotated access token");
+    }
+
+    #[tokio::test]
+    async fn check_ioc_parses_a_malicious_verdict() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/netsvcs/ioc"))
+            .and(query_param("indicator", "bad.example.com"))
+            .and(header("authorization", "Bearer token-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "success",
+                "data": {"indicator": "bad.example.com", "malicious": true, "source": "test-feed"},
+            })))
+            .mount(&server)
+            .await;
+
+        let verdict = client
+            .check_ioc("bad.example.com")
+            .await
+            .expect("check_ioc must succeed");
+        assert!(verdict.malicious);
+        assert_eq!(verdict.source.as_deref(), Some("test-feed"));
+    }
+
+    #[tokio::test]
+    async fn send_maps_a_non_success_envelope_status_to_control_plane_error() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/heartbeat"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "error",
+                "message": "tenant mismatch",
+            })))
+            .mount(&server)
+            .await;
+
+        let err = client
+            .heartbeat(Heartbeat {
+                node_id: "node-1".to_string(),
+                timestamp: 0,
+                config_version: 1,
+            })
+            .await
+            .expect_err("a non-success envelope status must error");
+        assert!(matches!(err, AgentError::ControlPlane(msg) if msg.contains("tenant mismatch")));
+    }
+
+    #[tokio::test]
+    async fn send_maps_unsupported_api_version_to_the_dedicated_error() {
+        let server = MockServer::start().await;
+        let client = enrolled_client(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/netsvcs/heartbeat"))
+            .respond_with(
+                ResponseTemplate::new(501).set_body_string("api_version v1 not supported"),
+            )
+            .mount(&server)
+            .await;
+
+        let err = client
+            .heartbeat(Heartbeat {
+                node_id: "node-1".to_string(),
+                timestamp: 0,
+                config_version: 1,
+            })
+            .await
+            .expect_err("501 with api_version text must error");
+        assert!(matches!(err, AgentError::UnsupportedApiVersion { .. }));
+    }
+
+    #[tokio::test]
+    async fn new_falls_back_gracefully_when_configured_normally() {
+        // `RestClient::new` never panics — this just exercises the happy
+        // construction path (the `unwrap_or_else` fallback branch is not
+        // independently triggerable without an invalid TLS backend, which
+        // `reqwest::Client::builder()` cannot be forced into from safe code).
+        let client = new_client(&test_cfg("http://127.0.0.1:0"));
+        let err = client
+            .bearer_token()
+            .await
+            .expect_err("a fresh client has no access token yet");
+        assert!(matches!(err, AgentError::ControlPlane(_)));
+    }
+}

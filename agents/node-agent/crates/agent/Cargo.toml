@@ -35,3 +35,9 @@ serde = { workspace = true, features = ["derive"] }
 [dev-dependencies]
 # Only used by the lifecycle-loop unit tests' in-memory `MockClient`.
 async-trait = { workspace = true }
+serde_json = { workspace = true }
+wiremock = "=0.6.5"
+# Generates a fresh throwaway P-256 EC key at test time for the run()
+# integration test's machine-JWT signer — never a committed key value.
+p256 = "=0.13.2"
+rand_core = { version = "=0.6.4", features = ["getrandom"] }

@@ -329,4 +329,35 @@ mod tests {
         let b = next_xid();
         assert_ne!(a, b);
     }
+
+    /// This process runs unprivileged, so binding `DHCP_CLIENT_PORT` (68,
+    /// a privileged port) fails immediately — exercising `run`'s
+    /// error-and-retry loop iteration plus the shutdown-vs-sleep `select!`
+    /// without waiting out `LEASE_RETRY_INTERVAL`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_logs_and_retries_when_the_client_socket_cannot_bind_then_stops_on_cancel() {
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            shutdown_clone.cancel();
+        });
+
+        let result =
+            tokio::time::timeout(Duration::from_secs(5), run(DhcpConfig::default(), shutdown))
+                .await
+                .expect(
+                    "run must return promptly after cancellation, not wait out the retry interval",
+                );
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn acquire_lease_fails_when_the_privileged_client_port_is_unavailable() {
+        let chaddr = [0x02, 0x01, 0x02, 0x03, 0x04, 0x05];
+        let err = acquire_lease(&chaddr, None)
+            .await
+            .expect_err("binding the privileged DHCP client port must fail unprivileged");
+        assert!(matches!(err, AgentError::Io(_)));
+    }
 }
