@@ -1,0 +1,20 @@
+# Gamma environment values for node-agent
+# Pre-release environment (dal2.penguintech.cloud, separate cluster)
+
+namespace: tobogganing
+
+image:
+  repository: ghcr.io/penguintechinc/tobogganing/node-agent
+  tag: gamma-1724152800
+  pullPolicy: IfNotPresent
+
+nodeAgent:
+  mode: daemonset
+  controlPlaneUrl: "https://hub-api-gamma.tobogganing.svc:8443"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

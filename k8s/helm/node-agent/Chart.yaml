@@ -1,0 +1,21 @@
+apiVersion: v2
+name: node-agent
+description: Tobogganing Node-Agent DaemonSet - Unified Rust agent for SASE connectivity and netsvcs-edge (DNS, DHCP, NTP)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - tobogganing
+  - sase
+  - wireguard
+  - node-agent
+  - netsvcs-edge
+
+maintainers:
+  - name: PenguinTech Platform
+    email: platform@penguintech.io
+
+home: https://github.com/penguintechinc/tobogganing
+sources:
+  - https://github.com/penguintechinc/tobogganing

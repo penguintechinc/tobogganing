@@ -1,0 +1,25 @@
+# Production environment values for node-agent
+# Customer production deployments
+
+namespace: tobogganing
+
+image:
+  repository: ghcr.io/penguintechinc/tobogganing/node-agent
+  tag: v0.1.0  # Pinned to release version tag
+  pullPolicy: IfNotPresent
+
+nodeAgent:
+  mode: daemonset
+  controlPlaneUrl: "https://hub-api.tobogganing.svc:8443"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Production: stricter pod disruption budget (maintain at least 1 running pod)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
