@@ -46,7 +46,7 @@ jobs:
         cd hub_api
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install -r requirements-kms.txt
+        pip install boto3
         pip install pytest pytest-cov pytest-asyncio
 
     - name: Lint with pylint
@@ -62,7 +62,7 @@ jobs:
     - name: Test with pytest
       run: |
         cd hub_api
-        python -m pytest tests/ -v --cov=. --cov-report=xml || exit 0
+        python -m pytest tests/ -v --cov=. --cov-report=xml --cov-fail-under=90
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
@@ -255,7 +255,7 @@ jobs:
     - name: Test with pytest
       run: |
         cd engines/netsvcs-dns
-        python -m pytest tests/ -v --cov=. --cov-report=xml
+        python -m pytest tests/ -v --cov=. --cov-report=xml --cov-fail-under=90
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
@@ -628,7 +628,7 @@ jobs:
         cd hub_api
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install -r requirements-kms.txt
+        pip install boto3
         pip install pytest pytest-cov pytest-asyncio
 
     - name: Run cross-module seam integration tests

@@ -108,7 +108,7 @@ test-go: ## Run Go service tests (if go.mod available)
 
 test-cov: ## Run hub_api tests with coverage report
 	@echo "📊 Running hub_api tests with coverage..."
-	@python3 -m pytest hub_api/tests/ --cov=hub_api --cov-report=term-missing --cov-report=html
+	@python3 -m pytest hub_api/tests/ --cov=hub_api --cov-report=term-missing --cov-report=html --cov-fail-under=90
 	@echo "✅ Coverage report generated (open htmlcov/index.html)"
 
 # Lint targets
