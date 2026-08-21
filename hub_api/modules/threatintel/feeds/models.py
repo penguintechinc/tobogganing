@@ -1,9 +1,19 @@
 """SQLAlchemy models for security threat feeds."""
+
 from __future__ import annotations
 
 from datetime import datetime
+
 from sqlalchemy import (
-    Column, String, Integer, DateTime, Boolean, JSON, Index, UniqueConstraint, ForeignKey
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
 )
 
 from hub_api.db.base import Base
@@ -30,7 +40,9 @@ class ThreatIndicator(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("value", "source", "tenant_id", name="uq_threat_indicators_value_source_tenant"),
+        UniqueConstraint(
+            "value", "source", "tenant_id", name="uq_threat_indicators_value_source_tenant"
+        ),
         Index("ix_threat_indicators_tenant_id", "tenant_id"),
     )
 
@@ -57,6 +69,34 @@ class FeedUpdate(Base):
     __table_args__ = (
         Index("ix_feed_updates_tenant_id", "tenant_id"),
         Index("ix_feed_updates_source", "source"),
+    )
+
+
+class FeedSourceConfig(Base):
+    """User-configured threat-intel feed source model (MISP/STIX/TAXII/CSV).
+
+    Schema authority for the ``threatintel_feed_sources`` table (see migration
+    0026). Distinct from the hardcoded built-in feeds driven by
+    SecurityFeedsManager.feed_configs, which have no persisted configuration.
+    """
+
+    __tablename__ = "threatintel_feed_sources"
+
+    id = Column(String(36), primary_key=True)
+    tenant_id = Column(String(36), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    source_type = Column(String(16), nullable=False, index=True)  # misp/stix/taxii/csv
+    url = Column(String(1024), nullable=False)
+    enabled = Column(Boolean, default=True)
+    last_refresh_at = Column(DateTime, nullable=True)
+    last_refresh_status = Column(String(16), nullable=True)
+    last_refresh_error = Column(String(500), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_threatintel_feed_sources_tenant_name"),
+        Index("ix_threatintel_feed_sources_tenant_id", "tenant_id"),
     )
 
 
