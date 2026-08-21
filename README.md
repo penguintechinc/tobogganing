@@ -19,7 +19,7 @@
 [![Build Status](https://github.com/penguintechinc/tobogganing/workflows/CI/badge.svg)](https://github.com/penguintechinc/tobogganing/actions)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
-**Tobogganing is an open-source SASE (Secure Access Service Edge) + Zero-Trust Network Access (ZTNA) platform.** It fuses identity-aware connectivity, DNS-layer security, and threat intelligence into a single, policy-driven secure service edge — enforcing least-privilege, micro-segmented access across **intra-cluster, inter-cluster, and external-cluster** boundaries.
+**Tobogganing is an open-source SASE (Secure Access Service Edge) + Zero-Trust Network Access (ZTNA) platform.** It fuses identity-aware connectivity, DNS-layer security, and threat intelligence into a single, policy-driven secure service edge — enforcing least-privilege, micro-segmented access across **intra-cluster, inter-cluster, and external** boundaries.
 
 Every request is authenticated, every peer is verified, every zone is scoped: *never trust, always verify.*
 
@@ -37,11 +37,13 @@ Tobogganing is organized around **Security, Connectivity, and Policies (SCP)**, 
 
 ### Applied across three connectivity domains
 
-| Domain | Boundary | Transport |
-|--------|----------|-----------|
-| **Intra-cluster** | Service ⇄ service inside one cluster | gRPC (`ManagerService`, port `50051`) |
-| **Inter-cluster** | Cluster ⇄ cluster (multi-datacenter / SD-WAN) | WireGuard tunnels + gRPC/REST |
-| **External-cluster** | Edge / bare-metal clients ⇄ the hub | REST `/api/v1` (HTTP/2) + WireGuard |
+| Domain | Connects | How Tobogganing does it |
+|--------|----------|--------------------------|
+| **Intra-cluster** | Node ⇄ node & service ⇄ service inside one cluster | Node-to-node **WireGuard woven into Cilium**, plus **Cilium NetworkPolicies + admission-controller policies** that enforce least-privilege, micro-segmented service-to-service traffic |
+| **Inter-cluster** | Cluster ⇄ cluster, across regions **and cloud vendors** | **Cluster gateways** that screen traffic between clusters and make it trivial to interconnect them — even across different clouds — with Kubernetes-native, easy-on WireGuard connectivity |
+| **External** | Endpoints & edge sites ⇄ the SASE fabric | Endpoints connect to the **SASE VPN concentrator nodes** over **OpenZiti or WireGuard** |
+
+> The gRPC (`ManagerService`, `:50051`) vs REST (`/api/v1`) split below is the **control-plane API transport** (how components fetch identity/policy/config) — distinct from these data-plane connectivity domains.
 
 ---
 
