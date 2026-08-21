@@ -1,14 +1,16 @@
 """Tests for DoT (DNS-over-TLS) server."""
+
 from __future__ import annotations
 
 import asyncio
+import ssl
 import struct
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-import dns.message
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.servers import dot
+import dns.message
+import pytest
 from app.pipeline import ResolvePipeline
+from app.servers import dot
 
 
 @pytest.fixture
@@ -81,9 +83,7 @@ async def test_dot_connection_multiple_queries(mock_pipeline: AsyncMock) -> None
         {
             "Status": 0,
             "Question": [{"name": "example.org", "type": "AAAA"}],
-            "Answer": [
-                {"name": "example.org", "type": "AAAA", "TTL": 300, "data": "2001:db8::1"}
-            ],
+            "Answer": [{"name": "example.org", "type": "AAAA", "TTL": 300, "data": "2001:db8::1"}],
         },
     ]
 
@@ -241,12 +241,7 @@ async def test_serve_dot_no_cert_returns_gracefully(mock_pipeline: AsyncMock) ->
     Guards against crash when cert_path=None, key_path=None (e.g., stdlib logging kwargs crash).
     Should return None without raising an exception.
     """
-    result = await dot.serve_dot(
-        pipeline=mock_pipeline,
-        port=853,
-        cert_path=None,
-        key_path=None
-    )
+    result = await dot.serve_dot(pipeline=mock_pipeline, port=853, cert_path=None, key_path=None)
     # Should return gracefully (None) without exception
     assert result is None
 
@@ -261,7 +256,168 @@ async def test_serve_dot_bad_cert_path_returns_gracefully(mock_pipeline: AsyncMo
         pipeline=mock_pipeline,
         port=853,
         cert_path="/nonexistent/cert.pem",
-        key_path="/nonexistent/key.pem"
+        key_path="/nonexistent/key.pem",
     )
     # Should return gracefully (None) without exception
     assert result is None
+
+
+# P5 coverage backfill: TLS setup, server start, and connection edge branches
+
+
+@pytest.mark.asyncio
+async def test_serve_dot_ssl_error_returns_gracefully(mock_pipeline: AsyncMock, tmp_path) -> None:
+    """serve_dot returns gracefully when load_cert_chain raises ssl.SSLError."""
+    cert = tmp_path / "cert.pem"
+    key = tmp_path / "key.pem"
+    cert.write_text("cert")
+    key.write_text("key")
+
+    with patch.object(ssl.SSLContext, "load_cert_chain", side_effect=ssl.SSLError("bad cert")):
+        result = await dot.serve_dot(
+            pipeline=mock_pipeline, port=853, cert_path=str(cert), key_path=str(key)
+        )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_serve_dot_starts_and_serves(mock_pipeline: AsyncMock, tmp_path) -> None:
+    """serve_dot loads the TLS context and serves forever when cert/key load succeeds."""
+    cert = tmp_path / "cert.pem"
+    key = tmp_path / "key.pem"
+    cert.write_text("cert")
+    key.write_text("key")
+
+    mock_server = MagicMock()
+    mock_server.__aenter__ = AsyncMock(return_value=mock_server)
+    mock_server.__aexit__ = AsyncMock(return_value=False)
+    mock_server.serve_forever = AsyncMock(return_value=None)
+
+    with (
+        patch.object(ssl.SSLContext, "load_cert_chain", return_value=None),
+        patch("app.servers.dot.asyncio.start_server", new=AsyncMock(return_value=mock_server)),
+    ):
+        result = await dot.serve_dot(
+            pipeline=mock_pipeline, port=853, cert_path=str(cert), key_path=str(key)
+        )
+
+    assert result is None
+    mock_server.serve_forever.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_serve_dot_start_server_error_logged(mock_pipeline: AsyncMock, tmp_path) -> None:
+    """serve_dot logs and returns gracefully if starting the listener fails."""
+    cert = tmp_path / "cert.pem"
+    key = tmp_path / "key.pem"
+    cert.write_text("cert")
+    key.write_text("key")
+
+    with (
+        patch.object(ssl.SSLContext, "load_cert_chain", return_value=None),
+        patch(
+            "app.servers.dot.asyncio.start_server",
+            new=AsyncMock(side_effect=OSError("addr in use")),
+        ),
+    ):
+        result = await dot.serve_dot(
+            pipeline=mock_pipeline, port=853, cert_path=str(cert), key_path=str(key)
+        )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_dot_connection_no_question_continues(mock_pipeline: AsyncMock) -> None:
+    """_handle_dot_connection logs and continues when a query has no question section."""
+    empty_msg = dns.message.Message()
+    empty_wire = empty_msg.to_wire()
+
+    reader = AsyncMock()
+    writer = AsyncMock()
+
+    length_prefix = struct.pack("!H", len(empty_wire))
+    reader.readexactly.side_effect = [
+        length_prefix,
+        empty_wire,
+        asyncio.IncompleteReadError(b"", 2),
+    ]
+    writer.get_extra_info.return_value = ("127.0.0.1", 12350)
+
+    await dot._handle_dot_connection(reader, writer, mock_pipeline)
+
+    mock_pipeline.resolve_query.assert_not_called()
+    writer.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_dot_connection_error_response_send_fails(mock_pipeline: AsyncMock) -> None:
+    """Inner exception handler logs when sending the SERVFAIL response itself fails."""
+    query = dns.message.make_query("example.com", "A")
+    query_wire = query.to_wire()
+
+    mock_pipeline.resolve_query.side_effect = Exception("pipeline boom")
+
+    reader = AsyncMock()
+    writer = AsyncMock()
+    # writer.write() is a synchronous, fire-and-forget call in the real asyncio API
+    # (never awaited by dot.py) — use a plain MagicMock so side_effect raises
+    # immediately on call, matching real behavior. An AsyncMock child here would
+    # return an unawaited coroutine and silently swallow the injected exception.
+    writer.write = MagicMock(side_effect=Exception("write failed"))
+
+    length_prefix = struct.pack("!H", len(query_wire))
+    reader.readexactly.side_effect = [
+        length_prefix,
+        query_wire,
+        asyncio.IncompleteReadError(b"", 2),
+    ]
+    writer.get_extra_info.return_value = ("127.0.0.1", 12351)
+
+    # Should not raise despite double failure (pipeline error + error-response write error)
+    await dot._handle_dot_connection(reader, writer, mock_pipeline)
+
+    writer.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_dot_connection_generic_error_logged(mock_pipeline: AsyncMock) -> None:
+    """_handle_dot_connection logs and closes on an unexpected connection-level error."""
+    reader = AsyncMock()
+    writer = AsyncMock()
+    reader.readexactly.side_effect = ConnectionResetError("reset")
+    writer.get_extra_info.return_value = ("127.0.0.1", 12352)
+
+    await dot._handle_dot_connection(reader, writer, mock_pipeline)
+
+    writer.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_dot_connection_wait_closed_error_suppressed(mock_pipeline: AsyncMock) -> None:
+    """_handle_dot_connection suppresses errors raised by writer.wait_closed() during cleanup."""
+    reader = AsyncMock()
+    writer = AsyncMock()
+    reader.readexactly.side_effect = asyncio.TimeoutError()
+    writer.get_extra_info.return_value = ("127.0.0.1", 12353)
+    writer.wait_closed.side_effect = Exception("close failed")
+
+    # Should not raise even though wait_closed() fails
+    await dot._handle_dot_connection(reader, writer, mock_pipeline)
+
+    writer.close.assert_called_once()
+
+
+def test_json_to_dns_message_skips_malformed_answer() -> None:
+    """_json_to_dns_message logs and skips an answer record that fails to parse."""
+    query = dns.message.make_query("example.com", "A")
+    json_result = {
+        "Status": 0,
+        "Answer": [{"name": "example.com", "type": "A", "TTL": 300, "data": "not-an-ip"}],
+    }
+
+    response = dot._json_to_dns_message(query, json_result)
+
+    assert response.rcode() == 0
+    assert len(response.answer) == 0
