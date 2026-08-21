@@ -1,0 +1,79 @@
+{{- if eq .Chart.AppVersion "2.0.0" }}
+# Alpha-only bootstrap resources for netsvcs-dns and node-agent
+# In production, these would be provisioned separately
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netsvcs-dns-tls-ca
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDXTCCAkWgAwIBAgIJAMN+OxFLxQzfMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+    BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+    aWRnaXRzIFB0eSBMdGQwHhcNMjQwMTAxMDAwMDAwWhcNMjUwMTAxMDAwMDAwWjBF
+    MQswCQYDVQQGEwJBVTETMBEGA1UECAwKU29tZS1TdGF0ZTEhMB8GA1UECgwYSW50
+    ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
+    CgKCAQEAyH8sQRtOKl1qmqM/jZ2JkF1ZZ9vJl7HZl1JX7gzF1lVBSxFT4M5rJ1Qx
+    Ls9Z1t6F2vF1W6vJvF1hJ+v7/yQxFZ1n+U5W8V1Z7M5r5vV7Z5/V1Zwz/v7FXvEw
+    U1Z+Z1t1z1Hx7M3t/Z2r1X5v3F1wvDxZ9X5t3z7HxzR5/W5r7X7vwFzwvDzZ+X5
+    t3z7HxzR5/W5r7X7vwFzwvDzZ+X5t3z7HxzR5/W5r7X7vwFzwvDzZ+X5t3z7Hxz
+    R5/W5r7X7vwFzwvDzZ+X5t3z7HxzR5/W5r7X7vwFzwvDzZ+X5t3z7HxzR5/W5r7
+    X7vwFzwvDzZ+X5t3z7HxzR5/W5r7X7vwFzwvDzZ+X5t3z7HxzQIDAQABo1AwTjBM
+    BgNVHQ4EFQQTbXlDQUNlcnRpZmljYXRlSWRlbzErBglghkgBhvhCAQEEHhwcV2lk
+    Z2l0cyBDQSBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkwDQYJKoZIhvcNAQELBQADggEB
+    AIHVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+    VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+    -----END CERTIFICATE-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: netsvcs-dns-bootstrap
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  token: "alpha-bootstrap-token-12345"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: node-agent-bootstrap
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  token: "alpha-bootstrap-token-67890"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tobogganing-node-agent-machine-jwt
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  machine-jwt: "alpha-placeholder-jwt-token-replace-with-real-value"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tobogganing-node-agent-config
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    control_plane:
+      url: "http://hub-api:8080"
+      grpc_addr: "hub-api:50051"
+    instance:
+      hostname: "node-agent-alpha"
+      region: "local"
+{{- end }}

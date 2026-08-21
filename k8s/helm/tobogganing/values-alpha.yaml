@@ -3,7 +3,12 @@
 
 namespace: tobogganing
 
+## Hub API Service — alpha local registry
 hubApi:
+  image:
+    repository: localhost:32000/tobogganing/hub-api
+    tag: alpha-local
+    pullPolicy: IfNotPresent
   replicas: 1
   resources:
     requests:
@@ -14,7 +19,7 @@ hubApi:
       cpu: "250m"
 
 hubRouter:
-  replicas: 1
+  replicas: 0
   resources:
     requests:
       memory: "128Mi"
@@ -23,7 +28,12 @@ hubRouter:
       memory: "256Mi"
       cpu: "250m"
 
+## Hub WebUI Service — alpha local registry
 hubWebui:
+  image:
+    repository: localhost:32000/tobogganing/hub-webui
+    tag: alpha-local
+    pullPolicy: IfNotPresent
   replicas: 1
   resources:
     requests:
@@ -34,6 +44,11 @@ hubWebui:
       cpu: "250m"
 
 redis:
+  image:
+    repository: valkey/valkey
+    tag: 8-bookworm
+    pullPolicy: IfNotPresent
+  replicas: 1
   resources:
     requests:
       memory: "64Mi"
@@ -49,14 +64,21 @@ redis:
 netsvcs-dns:
   enabled: true
   image:
-    repository: localhost:32000/netsvcs-dns
-    tag: alpha-latest
+    repository: localhost:32000/tobogganing/netsvcs-dns
+    tag: alpha-local
     pullPolicy: IfNotPresent
   service:
     type: NodePort
     ports:
       doh:
         nodePort: 30080
+  env:
+    - name: BIND_HOST
+      value: "0.0.0.0"
+    - name: CONTROL_PLANE_GRPC_ADDR
+      value: "http://hub-api:8080"
+    - name: GRPC_INSECURE_DEV_FLAG
+      value: "true"
   resources:
     requests:
       cpu: 100m
@@ -70,9 +92,10 @@ node-agent:
   enabled: true
   image:
     repository: localhost:32000/tobogganing/node-agent
-    tag: alpha-latest
+    tag: alpha-local
     pullPolicy: IfNotPresent
   nodeAgent:
+    controlPlaneUrl: "http://hub-api:8080"
     resources:
       requests:
         cpu: 50m
