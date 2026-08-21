@@ -1,7 +1,14 @@
-"""Tests for threatintel feed source management API endpoints (real_dal)."""
+"""Tests for threatintel feed source management API endpoints (real_dal).
+
+DNS resolution is mocked via the `_mock_safe_dns` autouse fixture so
+".example" test hostnames (which do not really resolve) behave as a normal
+public address by default; SSRF regression tests override this per-test to
+simulate malicious/rebound resolution.
+"""
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -12,6 +19,24 @@ from penguin_dal import AsyncDB
 from quart import Quart
 
 from hub_api.modules.threatintel.feeds.source_manager import FeedSourceManager
+
+
+def _fake_resolve_default(host: str) -> list[str]:
+    """Pass literal IPs through unchanged; fake hostnames resolve to 8.8.8.8."""
+    try:
+        ipaddress.ip_address(host)
+        return [host]
+    except ValueError:
+        return ["8.8.8.8"]
+
+
+@pytest.fixture(autouse=True)
+def _mock_safe_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default all feed URL DNS resolution to a safe public IP (8.8.8.8)."""
+    monkeypatch.setattr(
+        "hub_api.modules.threatintel.feeds.url_safety._resolve_addresses_sync",
+        _fake_resolve_default,
+    )
 
 
 @pytest.fixture
@@ -328,7 +353,11 @@ async def test_refresh_feed_source_success(
 async def test_refresh_feed_source_failure_recorded(
     app_with_threatintel_realdal: Quart, tenant_a_write_token: str, real_dal: AsyncDB
 ) -> None:
-    """POST /feeds/{id}/refresh records failure without 500ing the caller."""
+    """POST /feeds/{id}/refresh records failure without 500ing the caller.
+
+    Also asserts the upstream exception detail (e.g. an internal status code
+    or hostname) is never persisted or returned — only a generic message.
+    """
     client = app_with_threatintel_realdal.test_client()
 
     with _flag_on():
@@ -345,7 +374,7 @@ async def test_refresh_feed_source_failure_recorded(
 
         with patch(
             "hub_api.modules.threatintel.feeds.api.ingest_feed_source",
-            new=AsyncMock(side_effect=RuntimeError("HTTP 503 from feed source")),
+            new=AsyncMock(side_effect=RuntimeError("HTTP 503 from internal-host:8443")),
         ):
             refresh_resp = await client.post(
                 f"/api/v1/threatintel/feeds/{source_id}/refresh",
@@ -356,11 +385,16 @@ async def test_refresh_feed_source_failure_recorded(
         data = await refresh_resp.get_json()
         assert data["status"] == "failed"
         assert data["errors"] == 1
+        assert "503" not in str(data)
+        assert "internal-host" not in str(data)
 
         manager = FeedSourceManager(real_dal, "tenant-a")
         record = await manager.get_source(source_id)
         assert record.last_refresh_status == "failed"
-        assert "503" in (record.last_refresh_error or "")
+        # Generic message only — no upstream detail leak
+        assert record.last_refresh_error == "feed fetch failed"
+        assert "503" not in (record.last_refresh_error or "")
+        assert "internal-host" not in (record.last_refresh_error or "")
 
 
 @pytest.mark.asyncio
@@ -482,6 +516,154 @@ async def test_create_feed_source_requires_write_scope(
             json={"name": "no-write", "source_type": "csv", "url": "https://x.example/feed.csv"},
         )
         assert response.status_code == 403
+
+
+# --- SSRF guard -------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_feed_source_rejects_cloud_metadata_ip(
+    app_with_threatintel_realdal: Quart, tenant_a_write_token: str
+) -> None:
+    """POST /feeds rejects a URL targeting the cloud metadata IP."""
+    # SSRF guard
+    client = app_with_threatintel_realdal.test_client()
+
+    with _flag_on():
+        response = await client.post(
+            "/api/v1/threatintel/feeds",
+            headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            json={
+                "name": "metadata-probe",
+                "source_type": "csv",
+                "url": "http://169.254.169.254/latest/meta-data/",
+            },
+        )
+        assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_feed_source_rejects_loopback_ip(
+    app_with_threatintel_realdal: Quart, tenant_a_write_token: str
+) -> None:
+    """POST /feeds rejects a URL targeting 127.0.0.1."""
+    # SSRF guard
+    client = app_with_threatintel_realdal.test_client()
+
+    with _flag_on():
+        response = await client.post(
+            "/api/v1/threatintel/feeds",
+            headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            json={"name": "loopback-probe", "source_type": "csv", "url": "http://127.0.0.1/x"},
+        )
+        assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_feed_source_rejects_private_ip(
+    app_with_threatintel_realdal: Quart, tenant_a_write_token: str
+) -> None:
+    """POST /feeds rejects a URL targeting an RFC1918 private address."""
+    # SSRF guard
+    client = app_with_threatintel_realdal.test_client()
+
+    with _flag_on():
+        response = await client.post(
+            "/api/v1/threatintel/feeds",
+            headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            json={"name": "internal-probe", "source_type": "csv", "url": "http://10.0.0.1/x"},
+        )
+        assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_feed_source_rejects_hostname_resolving_to_private_ip(
+    app_with_threatintel_realdal: Quart, tenant_a_write_token: str
+) -> None:
+    """POST /feeds rejects a public-looking hostname that resolves to a private IP."""
+    # SSRF guard
+    client = app_with_threatintel_realdal.test_client()
+
+    with (
+        _flag_on(),
+        patch(
+            "hub_api.modules.threatintel.feeds.url_safety._resolve_addresses_sync",
+            return_value=["192.168.1.50"],
+        ),
+    ):
+        response = await client.post(
+            "/api/v1/threatintel/feeds",
+            headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            json={
+                "name": "rebind-probe",
+                "source_type": "csv",
+                "url": "https://looks-public.example.com/feed.csv",
+            },
+        )
+        assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_feed_source_allows_public_url(
+    app_with_threatintel_realdal: Quart, tenant_a_write_token: str
+) -> None:
+    """POST /feeds allows a normal public URL (resolves to a public IP)."""
+    # SSRF guard
+    client = app_with_threatintel_realdal.test_client()
+
+    with _flag_on():
+        response = await client.post(
+            "/api/v1/threatintel/feeds",
+            headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            json={
+                "name": "legit-feed",
+                "source_type": "csv",
+                "url": "https://feeds.example.com/threat.csv",
+            },
+        )
+        assert response.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_refresh_feed_source_rejects_dns_rebind_to_private_ip(
+    app_with_threatintel_realdal: Quart, tenant_a_write_token: str, real_dal: AsyncDB
+) -> None:
+    """POST /feeds/{id}/refresh re-validates at fetch time: a source whose URL now
+    resolves to a private IP (DNS rebound since creation) fails closed, not 500s.
+    """
+    # SSRF guard
+    client = app_with_threatintel_realdal.test_client()
+
+    with _flag_on():
+        create_resp = await client.post(
+            "/api/v1/threatintel/feeds",
+            headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            json={
+                "name": "rebinding-feed",
+                "source_type": "csv",
+                "url": "https://looks-public-later-rebinds.example.com/feed.csv",
+            },
+        )
+        source_id = (await create_resp.get_json())["id"]
+
+        # Simulate DNS rebinding: the same hostname now resolves internally.
+        with patch(
+            "hub_api.modules.threatintel.feeds.url_safety._resolve_addresses_sync",
+            return_value=["127.0.0.1"],
+        ):
+            refresh_resp = await client.post(
+                f"/api/v1/threatintel/feeds/{source_id}/refresh",
+                headers={"Authorization": f"Bearer {tenant_a_write_token}"},
+            )
+
+        assert refresh_resp.status_code == 200
+        data = await refresh_resp.get_json()
+        assert data["status"] == "failed"
+
+        manager = FeedSourceManager(real_dal, "tenant-a")
+        record = await manager.get_source(source_id)
+        assert record.last_refresh_status == "failed"
+        assert record.last_refresh_error == "feed fetch failed"
 
 
 # --- Feature flag gating --------------------------------------------------

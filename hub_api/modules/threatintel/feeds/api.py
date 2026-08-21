@@ -17,10 +17,16 @@ from hub_api.entitlements.gate import require_feature
 
 from .ingestor import ingest_feed_source
 from .source_manager import VALID_SOURCE_TYPES, FeedSourceManager, FeedSourceRecord
+from .url_safety import UnsafeFeedURLError, assert_safe_feed_url
 
 logger = structlog.get_logger()
 
 feeds_bp = Blueprint("threatintel_feeds", __name__, url_prefix="/feeds")
+
+# Generic failure message persisted/returned on refresh failure — never the raw
+# upstream exception or response body (may leak internal hostnames, ports, or
+# SSRF-probing feedback). Full detail is logged server-side only.
+_GENERIC_FETCH_FAILURE = "feed fetch failed"
 
 
 # Request DTOs
@@ -164,8 +170,13 @@ async def create_feed_source(data: CreateFeedSourceRequest) -> tuple[dict[str, A
                 400,
             )
 
-        if not data.url.startswith(("http://", "https://")):
-            return jsonify({"error": "url must be http:// or https://"}), 400
+        # SSRF guard: reject non-http(s) schemes and any URL that resolves to a
+        # private/loopback/link-local/reserved address (e.g. cloud metadata,
+        # 127.0.0.1, internal-only services) before ever persisting it.
+        try:
+            await assert_safe_feed_url(data.url)
+        except UnsafeFeedURLError as e:
+            return jsonify({"error": f"url is not allowed: {e}"}), 400
 
         db = get_db()
         tenant_id = current_claims()["tenant"]
@@ -254,6 +265,29 @@ async def refresh_feed_source(source_id: str) -> tuple[dict[str, Any], int]:
         if not source:
             return jsonify({"error": "Feed source not found"}), 404
 
+        # SSRF guard, checkpoint 1 of 2: re-validate before even attempting a
+        # fetch — DNS may have changed/rebound since the source was created.
+        # ingest_feed_source re-validates again before every actual request
+        # (initial + each redirect hop), which is checkpoint 2.
+        try:
+            await assert_safe_feed_url(source.url)
+        except UnsafeFeedURLError as e:
+            logger.warning("feed_source_refresh_blocked_ssrf", source_id=source_id, error=str(e))
+            await manager.mark_refresh_result(
+                source_id, status="failed", error=_GENERIC_FETCH_FAILURE
+            )
+            return (
+                {
+                    "id": source_id,
+                    "status": "failed",
+                    "added": 0,
+                    "updated": 0,
+                    "errors": 1,
+                    "meta": _meta(),
+                },
+                200,
+            )
+
         async with aiohttp.ClientSession() as session:
             try:
                 stats = await ingest_feed_source(
@@ -272,8 +306,13 @@ async def refresh_feed_source(source_id: str) -> tuple[dict[str, Any], int]:
                     200,
                 )
             except Exception as e:
-                await manager.mark_refresh_result(source_id, status="failed", error=str(e))
+                # Never persist/return raw upstream response bodies or exception
+                # detail (may include internal hostnames, ports, or probing
+                # feedback) — log full detail server-side only.
                 logger.warning("feed_source_refresh_failed", source_id=source_id, error=str(e))
+                await manager.mark_refresh_result(
+                    source_id, status="failed", error=_GENERIC_FETCH_FAILURE
+                )
                 return (
                     {
                         "id": source_id,
