@@ -1,9 +1,9 @@
 # DNS resolver service — core dependencies
 quart==0.20.0
 hypercorn==0.17.3
-grpcio==1.62.0
-grpcio-tools==1.62.0
-protobuf==4.25.2
+grpcio==1.66.2
+grpcio-tools==1.66.2
+protobuf==5.26.1
 
 # Async DNS resolution
 dnspython==2.6.1
