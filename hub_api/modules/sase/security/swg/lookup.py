@@ -1,4 +1,5 @@
 """Domain lookup and enforcement action resolution for SWG."""
+
 from __future__ import annotations
 
 import json
@@ -8,12 +9,12 @@ import structlog
 
 from hub_api.cache import CacheClient
 from hub_api.modules.sase.security.enforcement import (
-    EnforcementAction,
     DEFAULT_UNCATEGORIZED,
+    EnforcementAction,
 )
 from hub_api.modules.sase.security.swg.models import LookupResult
-from hub_api.modules.sase.security.swg.radix import RadixTree
 from hub_api.modules.sase.security.swg.policy import CategoryPolicyManager
+from hub_api.modules.sase.security.swg.radix import RadixTree
 
 logger = structlog.get_logger()
 
@@ -145,9 +146,9 @@ class SwgLookup:
         """
         # Check feature flag (fail-safe: if flag unavailable, no-op)
         try:
-            from hub_api.registry import feature_enabled
+            from hub_api.flags import feature_enabled
 
-            if not await feature_enabled("tobogganing.sase.swg_ai_categorizer"):
+            if not feature_enabled("tobogganing.sase", "swg_ai_categorizer", distinct_id=tenant):
                 logger.debug(
                     "uncategorized_enqueue_flag_off",
                     domain=domain,

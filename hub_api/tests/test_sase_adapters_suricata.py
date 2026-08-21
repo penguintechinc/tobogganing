@@ -1,4 +1,5 @@
 """Test Suricata EVE adapter."""
+
 from __future__ import annotations
 
 import json
@@ -173,7 +174,9 @@ def test_suricata_parse_alert_severity_mapping() -> None:
         )
         hits = adapter.parse(eve_line)
         assert len(hits) == 1
-        assert hits[0].severity == expected_str, f"severity {severity_int} should map to {expected_str}"
+        assert (
+            hits[0].severity == expected_str
+        ), f"severity {severity_int} should map to {expected_str}"
 
 
 def test_suricata_parse_non_alert_event() -> None:
@@ -251,6 +254,60 @@ def test_suricata_parse_multiline_eve() -> None:
     assert len(hits) == 2
     assert hits[0].value == "192.0.2.1"
     assert hits[1].value == "192.0.2.3"
+
+
+def test_suricata_map_severity_none_and_negative() -> None:
+    """Severity mapping falls back to low for falsy/None and <=0 values."""
+    adapter = SuricataAdapter()
+
+    assert adapter._map_severity(None) == "low"
+    assert adapter._map_severity(0) == "low"
+    assert adapter._map_severity(-1) == "low"
+
+
+def test_suricata_parse_url_without_hostname_uses_dest_ip() -> None:
+    """URL construction falls back to dest_ip:port when no hostname/sni present."""
+    adapter = SuricataAdapter()
+
+    eve_line = json.dumps(
+        {
+            "event_type": "alert",
+            "dest_ip": "192.0.2.55",
+            "dest_port": 8080,
+            "alert": {"signature": "Test", "severity": 2},
+            "http": {"url": "/payload"},
+        }
+    )
+
+    hits = adapter.parse(eve_line)
+
+    url_hits = [h for h in hits if h.ioc_type == "url"]
+    assert len(url_hits) == 1
+    assert url_hits[0].value == "http://192.0.2.55:8080/payload"
+
+
+def test_suricata_parse_blank_line_and_exception() -> None:
+    """Suricata parse skips blank lines and swallows per-event exceptions."""
+    adapter = SuricataAdapter()
+
+    # alert.severity is a non-numeric string -> "<=" comparison raises TypeError.
+    # Blank line placed mid-string since raw.strip() would eat a leading one.
+    raw = "\n".join(
+        [
+            json.dumps(
+                {
+                    "event_type": "alert",
+                    "dest_ip": "192.0.2.1",
+                    "alert": {"signature": "Test", "severity": "bad"},
+                }
+            ),
+            "",
+            "x",
+        ]
+    )
+
+    hits = adapter.parse(raw)
+    assert hits == []
 
 
 @pytest.mark.asyncio
