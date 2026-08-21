@@ -1,0 +1,39 @@
+# Alpha environment overrides (local K8s)
+
+image:
+  tag: alpha-latest  # Local build, pushed to localhost:32000
+  repository: localhost:32000/tobogganing/testserver
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: NodePort
+  port: 8080
+  nodePort: 30081  # tobogganing already uses 30080 (netsvcs-dns doh) — next free slot
+
+# Alpha: minimal resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+config:
+  authEnabled: "false"  # No JWT/API-key flow wired for alpha smoke tests yet
+  maxConcurrentTests: "10"
+
+# Alpha: local dev MariaDB (operator-provisioned — see values.yaml KNOWN
+# GAP note; this chart does not deploy the DB itself).
+db:
+  host: "testserver-mariadb.tobogganing.svc.cluster.local"
+  port: "3306"
+  user: "waddleperf"
+  name: "waddleperf"
+  passwordSecretName: "testserver-db-credentials"
+  passwordSecretKey: "password"
+
+autoscaling:
+  enabled: false

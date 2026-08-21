@@ -260,6 +260,20 @@ node-agent:
     tag: beta-1724152800
     digest: ""  # Set (sha256:...) for production — see values-production.yaml
 
+## WaddlePerf testserver Go engine (data-plane target for
+## hub_api/modules/perftest_cluster — http/tcp/udp/icmp/traceroute +
+## speedtest/throughput tests). Default ON: without it, intra-cluster perf
+## tests have no engine to hit. See charts/testserver/values.yaml for the
+## full field set and KNOWN GAP notes (no bundled MariaDB — must be
+## provisioned separately; ping/traceroute binaries missing from the
+## Dockerfile runtime image affect ICMP/traceroute test types only).
+testserver:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/testserver
+    tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
+
 ## ---------------------------------------------------------------------
 ## Optional out-of-band analysis tools (SASE Slice D adapters)
 ## ---------------------------------------------------------------------

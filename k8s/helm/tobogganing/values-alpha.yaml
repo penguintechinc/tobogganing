@@ -81,6 +81,31 @@ node-agent:
         cpu: 200m
         memory: 256Mi
 
+## testserver: local registry, NodePort exposure (mirrors
+## charts/testserver/alpha.yml for standalone parity)
+testserver:
+  enabled: true
+  image:
+    repository: localhost:32000/tobogganing/testserver
+    tag: alpha-latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: NodePort
+    nodePort: 30081
+  config:
+    authEnabled: "false"
+    maxConcurrentTests: "10"
+  db:
+    host: "testserver-mariadb.tobogganing.svc.cluster.local"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 autoscaling:
   enabled: false
 

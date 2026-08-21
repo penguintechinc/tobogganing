@@ -22,6 +22,16 @@ dependencies:
     repository: "file://./charts/node-agent"
     condition: node-agent.enabled
 
+  ## WaddlePerf Go test engine (data-plane target for
+  ## hub_api/modules/perftest_cluster) — see charts/testserver/values.yaml
+  ## for the KNOWN GAP notes (no bundled MariaDB, ping/traceroute binaries
+  ## missing from the Dockerfile runtime image). Default ON: without it,
+  ## intra-cluster performance tests have no engine to hit.
+  - name: testserver
+    version: "0.1.0"
+    repository: "file://./charts/testserver"
+    condition: testserver.enabled
+
   ## Optional, off-by-default out-of-band analysis-tool sub-charts (Slice D
   ## adapters — see docs/superpowers/specs/2026-08-06-sase-slice-d-adapters-design.md
   ## "Helm sub-charts"). Each condition maps to the matching top-level key in
