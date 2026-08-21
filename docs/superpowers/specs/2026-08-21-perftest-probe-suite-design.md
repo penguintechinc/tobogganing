@@ -72,6 +72,13 @@ All schedules tenant-scoped; results feed thresholds → alerting (existing `ale
    Security-sensitive + high-perf ⇒ Rust per standards. Parity verified against a side-by-side iperf2+iperf3 test matrix before it replaces the testserver `/speedtest` heavy path.
 6. **NIC inspection + configuration** — read: interfaces/addresses/MTU/link state via node-agent (rtnetlink, exists in connectivity crate) surfaced through the control plane + portal; write/config = gated admin action (scope + audit).
 
+## Results, reporting & telemetry
+
+- **Store everything**: every probe/check-in/throughput result persists (penguin-dal, tenant-scoped, retention-policied) — the single source for tier-cascade evaluation, std-dev thresholds, alerting, AND historical reporting. Results carry the protocol-aware phase timings, not just a headline RTT.
+- **Reports on findings**: API + portal reporting over stored results — per check-in / per target / per source-client history; aggregates (mean/min/max/std-dev/percentiles); failure + tier-escalation timelines ("what fired tier-2/3 and why"); exportable (JSON; CSV via the reports API). The multi-service live charts read the same store.
+- **OpenTelemetry export**: all metrics are emitted to **OTel (OTLP)** in addition to the existing Prometheus `/metrics` endpoints — hub_api orchestration metrics (check-in runs, tier escalations, threshold breaches), testserver probe metrics, and the Rust throughput server (opentelemetry Rust SDK). Collector endpoint configurable per env; results-in-DB and metrics-in-OTel are complementary (DB = queryable history/reports, OTel = fleet observability pipelines).
+- **Penguin desktop**: the `tobogganing-perf` module emits its telemetry through the **shared OTel agent already in the penguin framework** — no bespoke telemetry stack in the module; it only defines its instruments/attributes.
+
 ## Phases
 
 | Phase | Deliverable | Size |
