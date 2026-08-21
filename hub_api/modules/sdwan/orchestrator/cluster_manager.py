@@ -1,13 +1,16 @@
 """Cluster management using penguin-dal."""
+
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
-import structlog
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+import structlog
 
 logger = structlog.get_logger()
 
@@ -105,9 +108,7 @@ class ClusterManager:
 
         return (cluster_obj, api_key)
 
-    async def authenticate_cluster(
-        self, api_key: str
-    ) -> Cluster | None:
+    async def authenticate_cluster(self, api_key: str) -> Cluster | None:
         """Authenticate a cluster by API key.
 
         The API key hash is looked up globally (without tenant scoping) because
@@ -187,9 +188,7 @@ class ClusterManager:
         if not cluster_obj:
             return None
 
-        await self.db(self.db.clusters.id == cluster_id).update(
-            api_key_hash=new_api_key_hash
-        )
+        await self.db(self.db.clusters.id == cluster_id).update(api_key_hash=new_api_key_hash)
 
         logger.info(
             "Rotated API key for cluster",
@@ -199,9 +198,7 @@ class ClusterManager:
         )
         return new_api_key
 
-    async def update_heartbeat(
-        self, cluster_id: str, client_count: int | None = None
-    ) -> bool:
+    async def update_heartbeat(self, cluster_id: str, client_count: int | None = None) -> bool:
         """Update cluster heartbeat.
 
         Args:
@@ -319,7 +316,8 @@ class ClusterManager:
             List of Cluster objects
         """
         rowset = await self.db(
-            (self.db.clusters.datacenter == datacenter) & (self.db.clusters.tenant == self.tenant_id)
+            (self.db.clusters.datacenter == datacenter)
+            & (self.db.clusters.tenant == self.tenant_id)
         ).select()
 
         return [
@@ -370,7 +368,10 @@ class ClusterManager:
 
     async def _check_cluster_health(self) -> None:
         """Check cluster health and mark stale clusters."""
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
+        # NOTE: last_heartbeat is stored as a naive sa.DateTime() column, so the
+        # threshold must be naive too -- comparing against datetime.now(timezone.utc)
+        # raises TypeError: can't compare offset-naive and offset-aware datetimes.
+        stale_threshold = datetime.utcnow() - timedelta(minutes=5)
 
         rowset = await self.db(self.db.clusters.tenant == self.tenant_id).select()
 
@@ -405,9 +406,7 @@ class ClusterManager:
         except Exception:
             return False
 
-    async def get_optimal_cluster(
-        self, client_location: dict
-    ) -> Cluster | None:
+    async def get_optimal_cluster(self, client_location: dict) -> Cluster | None:
         """Get optimal cluster for client location.
 
         Args:
