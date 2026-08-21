@@ -1,11 +1,13 @@
 """Tests for ManagerClient gRPC client."""
+
 from __future__ import annotations
 
 import json
-import pytest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 from app.manager_client import ManagerClient
 
 
@@ -438,3 +440,251 @@ async def test_send_heartbeat(stub_server_addr: str) -> None:
         assert "should_sync" in result
 
         await client.close()
+
+
+# P5 coverage backfill: init edge cases, channel setup, cache/RPC error branches
+
+
+def test_init_chmod_oserror_ignored(tmp_path: Path) -> None:
+    """__init__ tolerates OSError raised while chmod'ing a pre-existing cache dir."""
+    with patch("app.manager_client.os.chmod", side_effect=OSError("no perm")):
+        client = ManagerClient(
+            grpc_addr="127.0.0.1:1",
+            tls_ca_path=None,
+            insecure_dev_flag=True,
+            cache_dir=str(tmp_path),
+            server_name="dns-test",
+        )
+
+    assert client.cache_dir == tmp_path
+
+
+def test_init_requires_tls_or_insecure_flag(tmp_path: Path) -> None:
+    """__init__ raises RuntimeError when no TLS CA path and insecure flag disabled."""
+    with pytest.raises(RuntimeError, match="Secure gRPC channel required"):
+        ManagerClient(
+            grpc_addr="127.0.0.1:1",
+            tls_ca_path=None,
+            insecure_dev_flag=False,
+            cache_dir=str(tmp_path),
+            server_name="dns-test",
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_channel_with_tls(tmp_path: Path) -> None:
+    """_create_channel builds a secure channel when tls_ca_path is configured."""
+    ca_path = tmp_path / "ca.pem"
+    ca_path.write_bytes(b"-----BEGIN CERTIFICATE-----\nMIIBAjCB2QIJ\n-----END CERTIFICATE-----\n")
+
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=str(ca_path),
+        insecure_dev_flag=False,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    channel = await client._create_channel()
+    try:
+        assert channel is not None
+    finally:
+        await channel.close()
+
+
+@pytest.mark.asyncio
+async def test_connect_idempotent(stub_server_addr: str, tmp_path: Path) -> None:
+    """connect() is a no-op when a channel is already established."""
+    client = ManagerClient(
+        grpc_addr=stub_server_addr,
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    await client.connect()
+    first_channel = client.channel
+    await client.connect()
+
+    assert client.channel is first_channel
+    await client.close()
+
+
+def test_load_cache_corrupt_file_returns_false(tmp_path: Path) -> None:
+    """_load_cache returns False and does not raise on a corrupt cache file."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+    client.cache_file.write_text("not valid json{{{")
+
+    assert client._load_cache() is False
+
+
+@pytest.mark.asyncio
+async def test_get_config_not_enrolled(tmp_path: Path) -> None:
+    """get_config returns None when not enrolled (no jwt/server_id)."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    assert await client.get_config() is None
+
+
+@pytest.mark.asyncio
+async def test_get_config_error_returns_none(tmp_path: Path) -> None:
+    """get_config returns None when the RPC call fails."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+    client.server_id = "test"
+    client.jwt = "test-jwt"
+
+    assert await client.get_config() is None
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_refresh_not_enrolled(tmp_path: Path) -> None:
+    """refresh returns False when not enrolled (no refresh_token/server_id)."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    assert await client.refresh() is False
+
+
+@pytest.mark.asyncio
+async def test_refresh_error_returns_false(tmp_path: Path) -> None:
+    """refresh returns False when the RPC call fails."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+    client.server_id = "test"
+    client.refresh_token = "test-refresh"
+
+    assert await client.refresh() is False
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_check_ioc_not_enrolled(tmp_path: Path) -> None:
+    """check_ioc fails open when not enrolled."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    assert await client.check_ioc("example.com") == {"blocked": False}
+
+
+@pytest.mark.asyncio
+async def test_validate_token_not_enrolled(tmp_path: Path) -> None:
+    """validate_token fails closed when not enrolled."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    assert await client.validate_token("some-token") == {
+        "valid": False,
+        "allowed_zone_ids": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_stream_config_updates_not_enrolled(tmp_path: Path) -> None:
+    """stream_config_updates returns immediately when not enrolled."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+    calls: list[dict] = []
+
+    await client.stream_config_updates(lambda cfg: calls.append(cfg))
+
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_stream_config_updates_error_logged(tmp_path: Path) -> None:
+    """stream_config_updates logs and returns on an RPC error."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+    client.server_id = "test"
+    client.jwt = "test-jwt"
+
+    async def on_update(cfg: dict) -> None:
+        pass
+
+    await client.stream_config_updates(on_update)  # should not raise
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_send_heartbeat_not_enrolled(tmp_path: Path) -> None:
+    """send_heartbeat returns zeroed result when not enrolled."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+
+    assert await client.send_heartbeat({}) == {
+        "config_version": 0,
+        "should_sync": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_send_heartbeat_error_returns_zeroed(tmp_path: Path) -> None:
+    """send_heartbeat returns zeroed result when the RPC call fails."""
+    client = ManagerClient(
+        grpc_addr="127.0.0.1:1",
+        tls_ca_path=None,
+        insecure_dev_flag=True,
+        cache_dir=str(tmp_path),
+        server_name="dns-test",
+    )
+    client.server_id = "test"
+    client.jwt = "test-jwt"
+
+    result = await client.send_heartbeat({"queries_total": 1})
+    assert result == {"config_version": 0, "should_sync": False}
+    await client.close()

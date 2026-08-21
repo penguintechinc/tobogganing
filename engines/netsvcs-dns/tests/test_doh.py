@@ -1,19 +1,19 @@
 """Tests for DoH (DNS-over-HTTPS) server."""
+
 from __future__ import annotations
 
 import base64
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
 import dns.message
 import dns.name
+import dns.rdataclass
 import dns.rdatatype
 import dns.rrset
-import dns.rdataclass
-
-from quart import Quart
-
-from app.servers import doh
+import pytest
 from app.pipeline import ResolvePipeline
+from app.servers import doh
+from quart import Quart
 
 
 @pytest.fixture
@@ -114,9 +114,7 @@ async def test_doh_json_query_refused(app_with_doh: Quart, mock_pipeline: AsyncM
 
 
 @pytest.mark.asyncio
-async def test_doh_wireformat_get_success(
-    app_with_doh: Quart, mock_pipeline: AsyncMock
-) -> None:
+async def test_doh_wireformat_get_success(app_with_doh: Quart, mock_pipeline: AsyncMock) -> None:
     """Test RFC 8484 DoH GET with wireformat."""
     client = app_with_doh.test_client()
 
@@ -155,9 +153,7 @@ async def test_doh_wireformat_get_missing_dns_param(app_with_doh: Quart) -> None
 
 
 @pytest.mark.asyncio
-async def test_doh_wireformat_post_success(
-    app_with_doh: Quart, mock_pipeline: AsyncMock
-) -> None:
+async def test_doh_wireformat_post_success(app_with_doh: Quart, mock_pipeline: AsyncMock) -> None:
     """Test RFC 8484 DoH POST with wireformat."""
     client = app_with_doh.test_client()
 
@@ -220,9 +216,7 @@ async def test_doh_wireformat_post_with_token(
 
 
 @pytest.mark.asyncio
-async def test_doh_wireformat_post_nxdomain(
-    app_with_doh: Quart, mock_pipeline: AsyncMock
-) -> None:
+async def test_doh_wireformat_post_nxdomain(app_with_doh: Quart, mock_pipeline: AsyncMock) -> None:
     """Test RFC 8484 DoH POST that returns NXDOMAIN."""
     client = app_with_doh.test_client()
 
@@ -247,3 +241,117 @@ async def test_doh_wireformat_post_nxdomain(
     response_msg = dns.message.from_wire(response_data)
     # NXDOMAIN rcode is 3
     assert response_msg.rcode() == 3
+
+
+# P5 coverage backfill: exception/edge branches
+
+
+@pytest.mark.asyncio
+async def test_doh_json_query_pipeline_exception(
+    app_with_doh: Quart, mock_pipeline: AsyncMock
+) -> None:
+    """DoH JSON query returns a soft-fail Status=2 body when the pipeline raises."""
+    client = app_with_doh.test_client()
+    mock_pipeline.resolve_query.side_effect = Exception("pipeline boom")
+
+    response = await client.get("/dns/query?name=example.com&type=A")
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["Status"] == 2
+    assert data["Answer"] == []
+
+
+@pytest.mark.asyncio
+async def test_doh_wireformat_get_no_question(app_with_doh: Quart) -> None:
+    """Wireformat GET with a query message that has no question section returns 400."""
+    client = app_with_doh.test_client()
+
+    empty_msg = dns.message.Message()
+    dns_param = base64.urlsafe_b64encode(empty_msg.to_wire()).decode().rstrip("=")
+
+    response = await client.get(f"/dns-query?dns={dns_param}")
+
+    assert response.status_code == 400
+    assert response.content_type == "application/dns-message"
+
+
+@pytest.mark.asyncio
+async def test_doh_wireformat_get_pipeline_exception(
+    app_with_doh: Quart, mock_pipeline: AsyncMock
+) -> None:
+    """Wireformat GET returns 500 when the pipeline raises."""
+    client = app_with_doh.test_client()
+    query = dns.message.make_query("example.com", "A")
+    dns_param = base64.urlsafe_b64encode(query.to_wire()).decode().rstrip("=")
+    mock_pipeline.resolve_query.side_effect = Exception("pipeline boom")
+
+    response = await client.get(f"/dns-query?dns={dns_param}")
+
+    assert response.status_code == 500
+    assert response.content_type == "application/dns-message"
+
+
+@pytest.mark.asyncio
+async def test_doh_wireformat_post_empty_body(app_with_doh: Quart) -> None:
+    """Wireformat POST with an empty body returns 400."""
+    client = app_with_doh.test_client()
+
+    response = await client.post(
+        "/dns-query",
+        data=b"",
+        headers={"Content-Type": "application/dns-message"},
+    )
+
+    assert response.status_code == 400
+    assert response.content_type == "application/dns-message"
+
+
+@pytest.mark.asyncio
+async def test_doh_wireformat_post_no_question(app_with_doh: Quart) -> None:
+    """Wireformat POST with a message that has no question section returns 400."""
+    client = app_with_doh.test_client()
+
+    empty_msg = dns.message.Message()
+
+    response = await client.post(
+        "/dns-query",
+        data=empty_msg.to_wire(),
+        headers={"Content-Type": "application/dns-message"},
+    )
+
+    assert response.status_code == 400
+    assert response.content_type == "application/dns-message"
+
+
+@pytest.mark.asyncio
+async def test_doh_wireformat_post_pipeline_exception(
+    app_with_doh: Quart, mock_pipeline: AsyncMock
+) -> None:
+    """Wireformat POST returns 500 when the pipeline raises."""
+    client = app_with_doh.test_client()
+    query = dns.message.make_query("example.com", "A")
+    mock_pipeline.resolve_query.side_effect = Exception("pipeline boom")
+
+    response = await client.post(
+        "/dns-query",
+        data=query.to_wire(),
+        headers={"Content-Type": "application/dns-message"},
+    )
+
+    assert response.status_code == 500
+    assert response.content_type == "application/dns-message"
+
+
+def test_json_to_dns_message_skips_malformed_answer() -> None:
+    """_json_to_dns_message logs and skips an answer record that fails to parse."""
+    query = dns.message.make_query("example.com", "A")
+    json_result = {
+        "Status": 0,
+        "Answer": [{"name": "example.com", "type": "A", "TTL": 300, "data": "not-an-ip"}],
+    }
+
+    response = doh._json_to_dns_message(query, json_result)
+
+    assert response.rcode() == 0
+    assert len(response.answer) == 0

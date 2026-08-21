@@ -3,19 +3,20 @@
 Handles enrollment (RegisterServer), config retrieval (GetConfig), token refresh,
 and offline disk-cache resilience.
 """
+
 from __future__ import annotations
 
-import asyncio
-import grpc
 import json
 import os
 import sys
-import structlog
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import grpc
+import structlog
 
 # Ensure proto modules are importable from repo root
 # __file__ = .../engines/netsvcs-dns/app/manager_client.py
@@ -24,7 +25,7 @@ _repo_root = Path(__file__).parent.parent.parent.parent
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
-from proto.netsvcs.v1 import manager_pb2, manager_pb2_grpc
+from proto.netsvcs.v1 import manager_pb2, manager_pb2_grpc  # noqa: E402
 
 logger = structlog.get_logger()
 
@@ -124,7 +125,13 @@ class ManagerClient:
             with open(self.tls_ca_path, "rb") as f:
                 ca_cert = f.read()
             credentials = grpc.ssl_channel_credentials(root_certificates=ca_cert)
-            return grpc.aio.secure_channel(self.grpc_addr, credentials, server_hostname=self.server_name)
+            # grpc.aio.secure_channel() has no server_hostname kwarg; SNI/cert-name
+            # override goes through the grpc.ssl_target_name_override channel option.
+            return grpc.aio.secure_channel(
+                self.grpc_addr,
+                credentials,
+                options=(("grpc.ssl_target_name_override", self.server_name),),
+            )
         else:
             return grpc.aio.insecure_channel(self.grpc_addr)
 
@@ -210,14 +217,19 @@ class ManagerClient:
             self.jwt = resp.jwt
             self.refresh_token = resp.refresh_token
             self.config = {
-                "zones": [{"id": z.id, "name": z.name, "visibility": z.visibility} for z in resp.config.zones],
+                "zones": [
+                    {"id": z.id, "name": z.name, "visibility": z.visibility}
+                    for z in resp.config.zones
+                ],
                 "version": resp.config_version,
             }
             self._persist_cache()
             logger.info("manager_enrollment_success", server_id=self.server_id)
             return True
         except Exception as e:
-            logger.warning("manager_enrollment_failed", error=str(e), msg="Falling back to disk cache")
+            logger.warning(
+                "manager_enrollment_failed", error=str(e), msg="Falling back to disk cache"
+            )
             if self._load_cache():
                 logger.info("manager_using_cached_enrollment", server_id=self.server_id)
                 return True
@@ -244,7 +256,10 @@ class ManagerClient:
         try:
             resp = await self.stub.GetConfig(req, metadata=self._metadata(self.jwt), timeout=5.0)
             config_dict = {
-                "zones": [{"id": z.id, "name": z.name, "visibility": z.visibility} for z in resp.config.zones],
+                "zones": [
+                    {"id": z.id, "name": z.name, "visibility": z.visibility}
+                    for z in resp.config.zones
+                ],
                 "version": resp.version,
             }
             self.config = config_dict
@@ -271,7 +286,9 @@ class ManagerClient:
         )
 
         try:
-            resp = await self.stub.RefreshToken(req, metadata=self._metadata(self.refresh_token), timeout=5.0)
+            resp = await self.stub.RefreshToken(
+                req, metadata=self._metadata(self.refresh_token), timeout=5.0
+            )
             self.jwt = resp.jwt
             self._persist_cache()
             logger.info("manager_token_refreshed", server_id=self.server_id)
@@ -312,7 +329,12 @@ class ManagerClient:
                 "feed_source": resp.feed_source,
             }
         except Exception as e:
-            logger.warning("check_ioc_error", domain=domain, error=str(e), msg="Failing open (allowing resolution)")
+            logger.warning(
+                "check_ioc_error",
+                domain=domain,
+                error=str(e),
+                msg="Failing open (allowing resolution)",
+            )
             return {"blocked": False}
 
     async def validate_token(self, token: str) -> dict:
@@ -341,7 +363,9 @@ class ManagerClient:
         )
 
         try:
-            resp = await self.stub.ValidateToken(req, metadata=self._metadata(self.jwt), timeout=2.0)
+            resp = await self.stub.ValidateToken(
+                req, metadata=self._metadata(self.jwt), timeout=2.0
+            )
             return {
                 "valid": resp.valid,
                 "allowed_zone_ids": list(resp.allowed_zone_ids),
@@ -399,7 +423,9 @@ class ManagerClient:
                     ],
                     "version": update.version,
                 }
-                logger.info("config_update_received", version=update.version, update_type=update.update_type)
+                logger.info(
+                    "config_update_received", version=update.version, update_type=update.update_type
+                )
                 await on_update(config_dict)
         except Exception as e:
             logger.error("stream_config_updates_error", error=str(e))
@@ -434,7 +460,9 @@ class ManagerClient:
         )
 
         try:
-            resp = await self.stub.SendHeartbeat(req, metadata=self._metadata(self.jwt), timeout=5.0)
+            resp = await self.stub.SendHeartbeat(
+                req, metadata=self._metadata(self.jwt), timeout=5.0
+            )
             return {
                 "config_version": resp.config_version,
                 "should_sync": resp.should_sync,
