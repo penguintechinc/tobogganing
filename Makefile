@@ -1,7 +1,7 @@
 # Tobogganing Root Makefile
 # Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint
+.PHONY: help all clean build test test-unit test-integration test-e2e test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint
 
 # Default target
 help: ## Show this help message
@@ -67,11 +67,23 @@ openapi-lint: openapi ## Validate OpenAPI spec with spectral
 	@echo "✅ OpenAPI spec validation complete"
 
 # Test targets
-test: test-unit test-portal test-go ## Run all tests (unit + portal + go if available)
+test: test-unit test-integration test-portal test-e2e test-go ## Run all tests (unit + integration + portal + e2e + go if available)
 
 test-unit: ## Run hub_api unit tests
 	@echo "🧪 Testing hub_api (Python/Quart brain)..."
-	@python3 -m pytest hub_api/tests/ -v
+	@python3 -m pytest hub_api/tests/ -v --ignore=hub_api/tests/integration
+
+test-integration: ## Run hub_api cross-module seam integration tests (P5-E2E/D)
+	@echo "🧪 Testing hub_api cross-module seams (real gRPC + real_dal)..."
+	@python3 -m pytest hub_api/tests/integration/ -v
+
+test-e2e: ## Run portal Playwright e2e/smoke tests against the mock API
+	@if [ -f portal/package.json ]; then \
+		echo "🧪 Running portal Playwright e2e tests..."; \
+		cd portal && npm run test:e2e; \
+	else \
+		echo "⏭️  Portal e2e tests skipped (no package.json)"; \
+	fi
 
 test-portal: ## Run portal tests (if npm available)
 	@if [ -f portal/package.json ]; then \
