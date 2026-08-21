@@ -4,51 +4,36 @@ P3-S4: Metrics collection and exposure for the resolver pipeline.
 Integrates with prometheus-client to track DNS operations, cache performance,
 IOC blocks, and upstream latency.
 """
+
 from __future__ import annotations
 
 from prometheus_client import Counter, Gauge, Histogram
 
 # Prometheus metric definitions (module-level singletons)
 queries_total = Counter(
-    'netsvcs_dns_queries_total',
-    'Total DNS queries received',
-    labelnames=['type']
+    "netsvcs_dns_queries_total", "Total DNS queries received", labelnames=["type"]
 )
-cache_hits_total = Counter(
-    'netsvcs_dns_cache_hits_total',
-    'Total cache hits'
-)
-cache_misses_total = Counter(
-    'netsvcs_dns_cache_misses_total',
-    'Total cache misses'
-)
+cache_hits_total = Counter("netsvcs_dns_cache_hits_total", "Total cache hits")
+cache_misses_total = Counter("netsvcs_dns_cache_misses_total", "Total cache misses")
 errors_total = Counter(
-    'netsvcs_dns_errors_total',
-    'Total DNS resolution errors',
-    labelnames=['error_type']
+    "netsvcs_dns_errors_total", "Total DNS resolution errors", labelnames=["error_type"]
 )
-ioc_blocks_total = Counter(
-    'netsvcs_dns_ioc_blocks_total',
-    'Total IOC-blocked queries'
-)
+ioc_blocks_total = Counter("netsvcs_dns_ioc_blocks_total", "Total IOC-blocked queries")
 
 # Histograms
 upstream_latency_seconds = Histogram(
-    'netsvcs_dns_upstream_latency_seconds',
-    'Upstream DNS query latency (seconds)',
-    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0)
+    "netsvcs_dns_upstream_latency_seconds",
+    "Upstream DNS query latency (seconds)",
+    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0),
 )
 query_latency_seconds = Histogram(
-    'netsvcs_dns_query_latency_seconds',
-    'Total query resolution latency (seconds)',
-    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0)
+    "netsvcs_dns_query_latency_seconds",
+    "Total query resolution latency (seconds)",
+    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0),
 )
 
 # Gauges
-cache_size_bytes = Gauge(
-    'netsvcs_dns_cache_size_bytes',
-    'Approximate cache size in bytes'
-)
+cache_size_bytes = Gauge("netsvcs_dns_cache_size_bytes", "Approximate cache size in bytes")
 
 
 class MetricsReporter:
@@ -118,13 +103,30 @@ class MetricsReporter:
     def to_heartbeat_dict() -> dict[str, float | int]:
         """Return current metrics as a dict for heartbeat reporting.
 
+        Sums each Counter across all its label combinations via the public
+        ``collect()`` API. Reading ``Counter._value`` directly raised
+        AttributeError on the labeled Counters (``queries_total``/``errors_total``
+        have no top-level ``_value`` — only their per-label children do), which
+        crashed every heartbeat cycle (the error was swallowed upstream).
+
         Returns:
             Dict with metric snapshots.
         """
+
+        def _total(counter: Counter) -> int:
+            return int(
+                sum(
+                    sample.value
+                    for metric in counter.collect()
+                    for sample in metric.samples
+                    if sample.name.endswith("_total")
+                )
+            )
+
         return {
-            'queries_total': int(queries_total._value._value) if queries_total._value else 0,
-            'cache_hits': int(cache_hits_total._value._value) if cache_hits_total._value else 0,
-            'cache_misses': int(cache_misses_total._value._value) if cache_misses_total._value else 0,
-            'errors': int(errors_total._value._value) if errors_total._value else 0,
-            'ioc_blocks': int(ioc_blocks_total._value._value) if ioc_blocks_total._value else 0,
+            "queries_total": _total(queries_total),
+            "cache_hits": _total(cache_hits_total),
+            "cache_misses": _total(cache_misses_total),
+            "errors": _total(errors_total),
+            "ioc_blocks": _total(ioc_blocks_total),
         }
