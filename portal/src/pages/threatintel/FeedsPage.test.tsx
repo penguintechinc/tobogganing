@@ -132,4 +132,142 @@ describe('FeedsPage', () => {
 
     expect(mockedApi.deleteFeed).not.toHaveBeenCalled();
   });
+
+  it('retries fetching after an error', async () => {
+    mockedApi.listFeeds.mockRejectedValueOnce(new Error('Failed to fetch'));
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Error loading data')).toBeInTheDocument();
+    });
+
+    mockedApi.listFeeds.mockResolvedValueOnce(mockFeeds);
+    fireEvent.click(screen.getByText('Retry'));
+
+    await waitFor(() => {
+      expect(screen.getByText('my-misp')).toBeInTheDocument();
+    });
+  });
+
+  it('requires name and URL before saving', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-misp')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Add new feed source'));
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Name and URL are required');
+    });
+    expect(mockedApi.createFeed).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('changes the source type and enabled checkbox before saving', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-misp')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Add new feed source'));
+    await user.type(screen.getByLabelText('Name'), 'stix-feed');
+    await user.type(screen.getByLabelText('URL'), 'https://stix.example.com/feed');
+    fireEvent.change(screen.getByLabelText('Source Type'), { target: { value: 'stix' } });
+    fireEvent.click(screen.getByLabelText('Enabled'));
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockedApi.createFeed).toHaveBeenCalledWith({
+        name: 'stix-feed',
+        source_type: 'stix',
+        url: 'https://stix.example.com/feed',
+        enabled: false,
+      });
+    });
+  });
+
+  it('closes the modal via cancel', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-misp')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Add new feed source'));
+    await waitFor(() => {
+      expect(screen.getByText('Add Feed Source')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Add Feed Source')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows an alert when creating a feed fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    const user = userEvent.setup();
+    mockedApi.createFeed.mockRejectedValue(new Error('boom'));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-misp')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Add new feed source'));
+    await user.type(screen.getByLabelText('Name'), 'broken-feed');
+    await user.type(screen.getByLabelText('URL'), 'https://broken.example.com/feed');
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to create feed source');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('SaveFeed error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('shows an alert when deleting a feed fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    window.confirm = jest.fn(() => true);
+    mockedApi.deleteFeed.mockRejectedValue(new Error('boom'));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-misp')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Delete feed my-misp'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to delete feed source');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('DeleteFeed error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('shows an alert when refreshing a feed fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    mockedApi.refreshFeed.mockRejectedValue(new Error('boom'));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-misp')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Refresh feed my-misp'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to refresh feed source');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('RefreshFeed error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
 });

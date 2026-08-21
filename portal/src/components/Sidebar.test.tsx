@@ -4,30 +4,39 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
 import { AuthProvider } from '../context/AuthContext';
+import type { PortalManifest } from '../hooks/useManifest';
 
+interface MockManifestResult {
+  data: PortalManifest | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}
+
+const mockManifestData: MockManifestResult = {
+  data: {
+    modules: [
+      {
+        name: 'Analytics',
+        nav: [
+          { label: 'Dashboard', path: '/m/analytics/dashboard', icon: 'bar-chart' },
+          { label: 'Reports', path: '/m/analytics/reports', icon: 'file' },
+        ],
+        flags: {},
+      },
+      {
+        name: 'Admin',
+        nav: [{ label: 'Settings', path: '/m/admin/settings', icon: 'settings' }],
+        flags: {},
+      },
+    ],
+    role: 'maintainer',
+  },
+  isLoading: false,
+  error: null,
+};
+const mockUseManifest = jest.fn((): MockManifestResult => mockManifestData);
 jest.mock('../hooks/useManifest', () => ({
-  useManifest: () => ({
-    data: {
-      modules: [
-        {
-          name: 'Analytics',
-          nav: [
-            { label: 'Dashboard', path: '/m/analytics/dashboard', icon: 'bar-chart' },
-            { label: 'Reports', path: '/m/analytics/reports', icon: 'file' },
-          ],
-          flags: {},
-        },
-        {
-          name: 'Admin',
-          nav: [{ label: 'Settings', path: '/m/admin/settings', icon: 'settings' }],
-          flags: {},
-        },
-      ],
-      role: 'maintainer',
-    },
-    isLoading: false,
-    error: null,
-  }),
+  useManifest: () => mockUseManifest(),
 }));
 
 jest.mock('../context/AuthContext', () => {
@@ -72,6 +81,7 @@ const renderSidebar = () => {
 
 describe('Sidebar', () => {
   beforeEach(() => {
+    mockUseManifest.mockReturnValue(mockManifestData);
     sessionStorage.clear();
     sessionStorage.setItem(
       'access_token',
@@ -235,5 +245,23 @@ describe('Sidebar', () => {
     // Open menu again
     fireEvent.click(toggleButton);
     expect(toggleButton).toBeInTheDocument();
+  });
+
+  it('renders nothing while the manifest has not loaded', () => {
+    mockUseManifest.mockReturnValue({ data: undefined, isLoading: true, error: null });
+
+    const { container } = render(
+      <MemoryRouter>
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
+          <AuthProvider>
+            <Sidebar />
+          </AuthProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 });

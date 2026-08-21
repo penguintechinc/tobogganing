@@ -195,6 +195,41 @@ describe('DevicesPage', () => {
     });
   });
 
+  it.each([
+    ['30 seconds ago', 30 * 1000, 'Just now'],
+    ['5 minutes ago', 5 * 60 * 1000, '5m ago'],
+    ['3 hours ago', 3 * 60 * 60 * 1000, '3h ago'],
+    ['2 days ago', 2 * 24 * 60 * 60 * 1000, '2d ago'],
+  ])('formats last_heartbeat %s as "%s"', async (_label, msAgo, expected) => {
+    const device: waddleperf.Device = {
+      id: 'd5',
+      name: 'Device 5',
+      serial: 'SN005',
+      hostname: 'host5.local',
+      os: 'Linux',
+      org_unit_id: 'ou-prod',
+      status: 'online',
+      last_heartbeat: new Date(Date.now() - msAgo).toISOString(),
+      created_at: '2026-07-14T06:00:00Z',
+    };
+
+    mockWaddleperf.listDevices.mockResolvedValueOnce([device]);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DevicesPage />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(expected)).toBeInTheDocument();
+    });
+  });
+
   it('calls retry on fetch failure', async () => {
     const error = new Error('Network error');
     mockWaddleperf.listDevices.mockRejectedValueOnce(error);
