@@ -96,6 +96,32 @@ app.get('/api/v1/portal/manifest', (req, res) => {
           'tobogganing.perftest_cluster.stats': true,
         },
       },
+      {
+        name: 'netsvcs',
+        nav: [
+          { label: 'Zones', path: '/api/v1/netsvcs/zones', icon: 'globe' },
+          { label: 'DNS Servers', path: '/api/v1/netsvcs/dns-servers', icon: 'server' },
+          { label: 'Analytics', path: '/api/v1/netsvcs/analytics', icon: 'bar-chart' },
+        ],
+        flags: {
+          'tobogganing.netsvcs.zones': true,
+          'tobogganing.netsvcs.dns-servers': true,
+          'tobogganing.netsvcs.analytics': true,
+        },
+      },
+      {
+        name: 'threatintel',
+        nav: [
+          { label: 'IOC Check', path: '/api/v1/threatintel/blocklist/check', icon: 'search' },
+          { label: 'Feeds', path: '/api/v1/threatintel/feeds', icon: 'refresh-cw' },
+          { label: 'Blocklist', path: '/api/v1/threatintel/blocklist', icon: 'alert-circle' },
+        ],
+        flags: {
+          'tobogganing.threatintel.ioc-check': true,
+          'tobogganing.threatintel.feeds': true,
+          'tobogganing.threatintel.blocklist': true,
+        },
+      },
     ],
     role: 'admin',
     meta: { version: 1, timestamp: new Date().toISOString() },
