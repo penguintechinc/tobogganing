@@ -1,4 +1,5 @@
 """Threat intelligence feed parsers for MISP, OpenIOC, CSV, and STIX formats."""
+
 from __future__ import annotations
 
 import csv
@@ -25,11 +26,16 @@ from .sources import FeedSource, ThreatIndicator, ThreatType
 logger = logging.getLogger(__name__)
 
 
-def parse_misp_feed(payload: Dict | list) -> list[ThreatIndicator]:
+def parse_misp_feed(
+    payload: Dict | list, source: FeedSource = FeedSource.BLACKWEB
+) -> list[ThreatIndicator]:
     """Parse MISP JSON export format.
 
     Args:
         payload: MISP JSON payload (dict or list).
+        source: Feed source to tag every parsed indicator with. Defaults to
+            BLACKWEB for backward compatibility with existing callers;
+            FeedSourceManager ingestion always passes FeedSource.MISP.
 
     Returns:
         List of ThreatIndicator dataclass instances.
@@ -40,11 +46,7 @@ def parse_misp_feed(payload: Dict | list) -> list[ThreatIndicator]:
     try:
         # Handle MISP event structure
         if isinstance(payload, dict) and "Event" in payload:
-            events = (
-                [payload["Event"]]
-                if isinstance(payload["Event"], dict)
-                else payload["Event"]
-            )
+            events = [payload["Event"]] if isinstance(payload["Event"], dict) else payload["Event"]
         elif isinstance(payload, dict) and "response" in payload:
             events = payload["response"]
         elif isinstance(payload, list):
@@ -84,12 +86,16 @@ def parse_misp_feed(payload: Dict | list) -> list[ThreatIndicator]:
 
                             indicator = ThreatIndicator(
                                 indicator_type=indicator_type,
-                                value=attr_value.lower() if indicator_type == "domain" else attr_value,
+                                value=attr_value.lower()
+                                if indicator_type == "domain"
+                                else attr_value,
                                 threat_types=threat_types,
-                                source=FeedSource.BLACKWEB,  # Default source
+                                source=source,
                                 confidence=attr_confidence,
-                                first_seen=_parse_misp_date(attr.get("first_seen")) or datetime.utcnow(),
-                                last_seen=_parse_misp_date(attr.get("last_seen")) or datetime.utcnow(),
+                                first_seen=_parse_misp_date(attr.get("first_seen"))
+                                or datetime.utcnow(),
+                                last_seen=_parse_misp_date(attr.get("last_seen"))
+                                or datetime.utcnow(),
                                 ttl=86400,  # 1 day default
                                 metadata=metadata,
                             )
@@ -107,11 +113,15 @@ def parse_misp_feed(payload: Dict | list) -> list[ThreatIndicator]:
     return indicators
 
 
-def parse_openioc_feed(xml_text: str) -> list[ThreatIndicator]:
+def parse_openioc_feed(
+    xml_text: str, source: FeedSource = FeedSource.BLACKWEB
+) -> list[ThreatIndicator]:
     """Parse OpenIOC XML format.
 
     Args:
         xml_text: OpenIOC XML content.
+        source: Feed source to tag every parsed indicator with. Defaults to
+            BLACKWEB for backward compatibility with existing callers.
 
     Returns:
         List of ThreatIndicator dataclass instances.
@@ -178,7 +188,7 @@ def parse_openioc_feed(xml_text: str) -> list[ThreatIndicator]:
                                 indicator_type="domain",
                                 value=indicator_value.lower(),
                                 threat_types=[ThreatType.BLACKLISTED_DOMAIN],
-                                source=FeedSource.BLACKWEB,
+                                source=source,
                                 confidence=75,
                                 first_seen=datetime.utcnow(),
                                 last_seen=datetime.utcnow(),
@@ -215,7 +225,7 @@ def parse_openioc_feed(xml_text: str) -> list[ThreatIndicator]:
                                         indicator_type="ip",
                                         value=ip,
                                         threat_types=[ThreatType.BLACKLISTED_IP],
-                                        source=FeedSource.BLACKWEB,
+                                        source=source,
                                         confidence=75,
                                         first_seen=datetime.utcnow(),
                                         last_seen=datetime.utcnow(),
@@ -249,7 +259,7 @@ def parse_openioc_feed(xml_text: str) -> list[ThreatIndicator]:
                                     indicator_type="domain",
                                     value=parsed_url.netloc.lower(),
                                     threat_types=[ThreatType.BLACKLISTED_DOMAIN],
-                                    source=FeedSource.BLACKWEB,
+                                    source=source,
                                     confidence=75,
                                     first_seen=datetime.utcnow(),
                                     last_seen=datetime.utcnow(),
@@ -272,11 +282,13 @@ def parse_openioc_feed(xml_text: str) -> list[ThreatIndicator]:
     return indicators
 
 
-def parse_threat_csv(text: str) -> list[ThreatIndicator]:
+def parse_threat_csv(text: str, source: FeedSource = FeedSource.BLACKWEB) -> list[ThreatIndicator]:
     """Parse CSV-based threat feeds.
 
     Args:
         text: CSV content as string.
+        source: Feed source to tag every parsed indicator with. Defaults to
+            BLACKWEB for backward compatibility with existing callers.
 
     Returns:
         List of ThreatIndicator dataclass instances.
@@ -315,7 +327,7 @@ def parse_threat_csv(text: str) -> list[ThreatIndicator]:
                         indicator_type="domain",
                         value=domain,
                         threat_types=[ThreatType.BLACKLISTED_DOMAIN],
-                        source=FeedSource.BLACKWEB,
+                        source=source,
                         confidence=confidence,
                         first_seen=datetime.utcnow(),
                         last_seen=datetime.utcnow(),
@@ -352,7 +364,7 @@ def parse_threat_csv(text: str) -> list[ThreatIndicator]:
                         indicator_type="ip",
                         value=ip,
                         threat_types=[ThreatType.BLACKLISTED_IP],
-                        source=FeedSource.BLACKWEB,
+                        source=source,
                         confidence=confidence,
                         first_seen=datetime.utcnow(),
                         last_seen=datetime.utcnow(),
@@ -371,11 +383,17 @@ def parse_threat_csv(text: str) -> list[ThreatIndicator]:
     return indicators
 
 
-def parse_stix_bundle(payload: Dict | str) -> list[ThreatIndicator]:
+def parse_stix_bundle(
+    payload: Dict | str, source: FeedSource = FeedSource.BLACKWEB
+) -> list[ThreatIndicator]:
     """Parse STIX 2.x bundle format using the stix2 library.
 
     Args:
         payload: STIX bundle as dict or JSON string.
+        source: Feed source to tag every parsed indicator with. Defaults to
+            BLACKWEB for backward compatibility with existing callers;
+            FeedSourceManager ingestion passes STIX or TAXII (TAXII 2.x
+            collection endpoints serve STIX bundles, so both are parsed here).
 
     Returns:
         List of ThreatIndicator dataclass instances.
@@ -448,9 +466,11 @@ def parse_stix_bundle(payload: Dict | str) -> list[ThreatIndicator]:
 
                             indicator = ThreatIndicator(
                                 indicator_type=indicator_type,
-                                value=indicator_value.lower() if indicator_type == "domain" else indicator_value,
+                                value=indicator_value.lower()
+                                if indicator_type == "domain"
+                                else indicator_value,
                                 threat_types=threat_types,
-                                source=FeedSource.BLACKWEB,
+                                source=source,
                                 confidence=confidence,
                                 first_seen=datetime.utcnow(),
                                 last_seen=datetime.utcnow(),
@@ -625,11 +645,6 @@ def _is_valid_ip(ip: str) -> bool:
     try:
         addr = ipaddress.ip_address(ip)
         # Skip private/local/multicast IPs for threat intelligence
-        return not (
-            addr.is_private
-            or addr.is_loopback
-            or addr.is_multicast
-            or addr.is_reserved
-        )
+        return not (addr.is_private or addr.is_loopback or addr.is_multicast or addr.is_reserved)
     except ValueError:
         return False

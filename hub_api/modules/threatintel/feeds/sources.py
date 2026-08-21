@@ -1,12 +1,13 @@
 """Security feed source parsers and fetchers."""
+
 from __future__ import annotations
 
 import ipaddress
 import logging
-from datetime import datetime
-from typing import Any, Dict, List
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List
 
 import aiohttp
 import dns.resolver
@@ -29,12 +30,22 @@ class ThreatType(Enum):
 
 
 class FeedSource(Enum):
-    """Security feed sources."""
+    """Security feed sources.
+
+    BLACKWEB/SPAMHAUS/IPVOID/DNSBL are the built-in, hardcoded system feeds
+    (SecurityFeedsManager.feed_configs). MISP/STIX/TAXII/CSV identify
+    user-configured feed sources (FeedSourceManager) ingested via
+    hub_api.modules.threatintel.feeds.ingestor.
+    """
 
     BLACKWEB = "blackweb"
     SPAMHAUS = "spamhaus"
     IPVOID = "ipvoid"
     DNSBL = "dnsbl"
+    MISP = "misp"
+    STIX = "stix"
+    TAXII = "taxii"
+    CSV = "csv"
 
 
 @dataclass(slots=True)
@@ -93,9 +104,7 @@ def parse_spamhaus_drop(content: str) -> List[str]:
     return networks
 
 
-async def fetch_blackweb_domains(
-    session: aiohttp.ClientSession, url: str
-) -> List[str]:
+async def fetch_blackweb_domains(session: aiohttp.ClientSession, url: str) -> List[str]:
     """Fetch and parse Blackweb domains feed.
 
     Raises:
@@ -129,9 +138,7 @@ async def fetch_blackweb_ips(session: aiohttp.ClientSession, url: str) -> List[s
         raise
 
 
-async def fetch_spamhaus_drop(
-    session: aiohttp.ClientSession, url: str
-) -> List[str]:
+async def fetch_spamhaus_drop(session: aiohttp.ClientSession, url: str) -> List[str]:
     """Fetch and parse Spamhaus DROP feed.
 
     Raises:
@@ -158,7 +165,7 @@ async def query_dnsbl(ip_addr: str, dnsbl_providers: List[str]) -> List[str]:
         for provider in dnsbl_providers:
             query_host = f"{reversed_ip}{provider}"
             try:
-                answers = dns.resolver.resolve(query_host, "A", lifetime=2)
+                dns.resolver.resolve(query_host, "A", lifetime=2)
                 results.append(provider)
             except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, Exception):
                 continue

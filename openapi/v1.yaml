@@ -1,5 +1,43 @@
 components:
   schemas:
+    BlocklistEntryResponse:
+      description: Blocklist entry response DTO.
+      properties:
+        active:
+          title: Active
+          type: boolean
+        confidence:
+          title: Confidence
+          type: integer
+        created_at:
+          title: Created At
+          type: string
+        id:
+          title: Id
+          type: string
+        indicator_type:
+          title: Indicator Type
+          type: string
+        source:
+          title: Source
+          type: string
+        updated_at:
+          title: Updated At
+          type: string
+        value:
+          title: Value
+          type: string
+      required:
+      - id
+      - indicator_type
+      - value
+      - source
+      - confidence
+      - active
+      - created_at
+      - updated_at
+      title: BlocklistEntryResponse
+      type: object
     DNSConfigRecord:
       description: DNS config record DTO.
       properties:
@@ -158,6 +196,54 @@ components:
       - last_heartbeat
       - created_at
       title: DNSServerResponse
+      type: object
+    FeedSourceResponse:
+      description: Feed source response DTO.
+      properties:
+        created_at:
+          title: Created At
+          type: string
+        enabled:
+          title: Enabled
+          type: boolean
+        id:
+          title: Id
+          type: string
+        last_refresh_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Refresh At
+        last_refresh_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Refresh Error
+        last_refresh_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Refresh Status
+        name:
+          title: Name
+          type: string
+        source_type:
+          title: Source Type
+          type: string
+        url:
+          title: Url
+          type: string
+      required:
+      - id
+      - name
+      - source_type
+      - url
+      - enabled
+      - last_refresh_at
+      - last_refresh_status
+      - last_refresh_error
+      - created_at
+      title: FeedSourceResponse
       type: object
     PerformanceMetric:
       description: Performance metric DTO.
@@ -2535,6 +2621,121 @@ paths:
       parameters: []
       responses: {}
       summary: Get all WireGuard peer configurations.
+  /api/v1/threatintel/blocklist:
+    get:
+      description: "\nQuery parameters:\n    indicator_type: Optional filter (ip/domain/url/hash)\n\
+        \    source: Optional filter by source\n    limit: Page size (default 50,\
+        \ max 200)\n    offset: Pagination offset (default 0)\n\nReturns:\n    JSON\
+        \ response with list of entries and meta (200)."
+      operationId: get_list_blocklist_entries
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: List blocklist entries response.
+                properties:
+                  entries:
+                    items:
+                      $ref: '#/components/schemas/BlocklistEntryResponse'
+                    title: Entries
+                    type: array
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                required:
+                - entries
+                - meta
+                title: BlocklistEntriesListResponse
+                type: object
+          description: List blocklist entries response.
+      summary: List blocklist entries for the tenant, with optional filters and pagination.
+      tags:
+      - threatintel
+    post:
+      description: "\nRequest body:\n{\n    \"indicator_type\": \"domain\",\n    \"\
+        value\": \"malicious.example.com\",\n    \"source\": \"manual\",\n    \"confidence\"\
+        : 100,\n    \"ttl\": 86400\n}\n\nReturns:\n    JSON response with created\
+        \ entry (201) or error (400/500)."
+      operationId: post_add_blocklist_entry
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Create blocklist entry request DTO.
+              properties:
+                confidence:
+                  default: 100
+                  title: Confidence
+                  type: integer
+                indicator_type:
+                  title: Indicator Type
+                  type: string
+                source:
+                  default: manual
+                  title: Source
+                  type: string
+                ttl:
+                  default: 86400
+                  title: Ttl
+                  type: integer
+                value:
+                  title: Value
+                  type: string
+              required:
+              - indicator_type
+              - value
+              title: CreateBlocklistEntryRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Blocklist entry response DTO.
+                properties:
+                  active:
+                    title: Active
+                    type: boolean
+                  confidence:
+                    title: Confidence
+                    type: integer
+                  created_at:
+                    title: Created At
+                    type: string
+                  id:
+                    title: Id
+                    type: string
+                  indicator_type:
+                    title: Indicator Type
+                    type: string
+                  source:
+                    title: Source
+                    type: string
+                  updated_at:
+                    title: Updated At
+                    type: string
+                  value:
+                    title: Value
+                    type: string
+                required:
+                - id
+                - indicator_type
+                - value
+                - source
+                - confidence
+                - active
+                - created_at
+                - updated_at
+                title: BlocklistEntryResponse
+                type: object
+          description: Blocklist entry response DTO.
+      summary: Add a manual blocklist entry for the tenant.
+      tags:
+      - threatintel
   /api/v1/threatintel/blocklist/check:
     get:
       description: "\nQuery parameters:\n    type: IOC type (ip, domain, url, hash)\n\
@@ -2544,6 +2745,246 @@ paths:
       parameters: []
       responses: {}
       summary: Check if an IOC is in the SASE blocklist.
+  /api/v1/threatintel/blocklist/{entry_id}:
+    delete:
+      description: "\nArgs:\n    entry_id: Entry ID to remove.\n\nReturns:\n    JSON\
+        \ response with removal status (200) or error (404/500)."
+      operationId: delete_remove_blocklist_entry
+      parameters:
+      - in: path
+        name: entry_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Generic message response DTO for blocklist management.
+                properties:
+                  message:
+                    title: Message
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                required:
+                - message
+                - meta
+                title: BlocklistMessageResponse
+                type: object
+          description: Generic message response DTO for blocklist management.
+      summary: Remove a blocklist entry for the tenant.
+      tags:
+      - threatintel
+  /api/v1/threatintel/feeds:
+    get:
+      description: "\nReturns:\n    JSON response with list of feed sources and meta."
+      operationId: get_list_feed_sources
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: List feed sources response.
+                properties:
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  sources:
+                    items:
+                      $ref: '#/components/schemas/FeedSourceResponse'
+                    title: Sources
+                    type: array
+                required:
+                - sources
+                - meta
+                title: FeedSourcesListResponse
+                type: object
+          description: List feed sources response.
+      summary: List all threat-intel feed sources for the tenant.
+      tags:
+      - threatintel
+    post:
+      description: "\nRequest body:\n{\n    \"name\": \"my-misp\",\n    \"source_type\"\
+        : \"misp\",\n    \"url\": \"https://misp.example.com/export.json\",\n    \"\
+        enabled\": true\n}\n\nReturns:\n    JSON response with created feed source\
+        \ (201) or error (400/500)."
+      operationId: post_create_feed_source
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Create feed source request DTO.
+              properties:
+                enabled:
+                  default: true
+                  title: Enabled
+                  type: boolean
+                name:
+                  title: Name
+                  type: string
+                source_type:
+                  title: Source Type
+                  type: string
+                url:
+                  title: Url
+                  type: string
+              required:
+              - name
+              - source_type
+              - url
+              title: CreateFeedSourceRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Feed source response DTO.
+                properties:
+                  created_at:
+                    title: Created At
+                    type: string
+                  enabled:
+                    title: Enabled
+                    type: boolean
+                  id:
+                    title: Id
+                    type: string
+                  last_refresh_at:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Last Refresh At
+                  last_refresh_error:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Last Refresh Error
+                  last_refresh_status:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                    title: Last Refresh Status
+                  name:
+                    title: Name
+                    type: string
+                  source_type:
+                    title: Source Type
+                    type: string
+                  url:
+                    title: Url
+                    type: string
+                required:
+                - id
+                - name
+                - source_type
+                - url
+                - enabled
+                - last_refresh_at
+                - last_refresh_status
+                - last_refresh_error
+                - created_at
+                title: FeedSourceResponse
+                type: object
+          description: Feed source response DTO.
+      summary: Create a new threat-intel feed source.
+      tags:
+      - threatintel
+  /api/v1/threatintel/feeds/{source_id}:
+    delete:
+      description: "\nArgs:\n    source_id: Feed source ID to delete.\n\nReturns:\n\
+        \    JSON response with deletion status (200) or error (404/500)."
+      operationId: delete_delete_feed_source
+      parameters:
+      - in: path
+        name: source_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Generic message response DTO.
+                properties:
+                  message:
+                    title: Message
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                required:
+                - message
+                - meta
+                title: MessageResponse
+                type: object
+          description: Generic message response DTO.
+      summary: Delete a threat-intel feed source.
+      tags:
+      - threatintel
+  /api/v1/threatintel/feeds/{source_id}/refresh:
+    post:
+      description: "\nFetches the source URL, parses it per source_type, and stores\
+        \ every\nindicator into threat_indicators for the tenant. Fetch/parse failures\n\
+        are recorded on the source (last_refresh_status=\"failed\") rather than\n\
+        raised, so a bad feed never 500s the caller.\n\nArgs:\n    source_id: Feed\
+        \ source ID to refresh.\n\nReturns:\n    JSON response with refresh stats\
+        \ (200) or error (404/500)."
+      operationId: post_refresh_feed_source
+      parameters:
+      - in: path
+        name: source_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Feed source refresh result response DTO.
+                properties:
+                  added:
+                    title: Added
+                    type: integer
+                  errors:
+                    title: Errors
+                    type: integer
+                  id:
+                    title: Id
+                    type: string
+                  meta:
+                    additionalProperties: true
+                    title: Meta
+                    type: object
+                  status:
+                    title: Status
+                    type: string
+                  updated:
+                    title: Updated
+                    type: integer
+                required:
+                - id
+                - status
+                - added
+                - updated
+                - errors
+                - meta
+                title: RefreshResultResponse
+                type: object
+          description: Feed source refresh result response DTO.
+      summary: Trigger an immediate ingest for a threat-intel feed source.
+      tags:
+      - threatintel
   /api/v1/wireguard/peers:
     get:
       description: "\nRequires machine-JWT authentication (or legacy static token\
@@ -2611,6 +3052,3 @@ paths:
         schema:
           type: string
       responses: {}
-tags:
-- name: netsvcs
-  description: DNS resolver services (registration, configuration, metrics, analytics)
