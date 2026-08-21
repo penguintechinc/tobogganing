@@ -1,54 +1,55 @@
 """Test that migrations create all Base.metadata tables."""
+
 from __future__ import annotations
 
 from hub_api.db.base import Base
 from hub_api.db.models import (
-    User,
-    RefreshToken,
-    PasswordResetToken,
-    Session,
-    FirewallRule,
     VRF,
-    OSPFArea,
-    OSPFNeighbor,
-    PortRange,
-    Cluster,
-    Client,
-    OrgUnit,
-    Device,
-    DeviceApiKey,
-    DeviceEnrollmentSecret,
-    PerfTestResult,
-    ClientConfig,
-    ServerKey,
-    TestSchedule,
+    AlertEvent,
+    AlertRule,
+    AutoPerfPolicy,
+    AutoPerfState,
     C2CEndpoint,
     C2CMatrixRun,
     C2CPairResult,
-    AlertRule,
-    AlertEvent,
-    AutoPerfPolicy,
-    AutoPerfState,
-    DNSZone,
+    Client,
+    ClientConfig,
+    Cluster,
+    Device,
+    DeviceApiKey,
+    DeviceEnrollmentSecret,
+    DNSConfigVersion,
     DNSRecord,
+    DNSResolverToken,
     DNSServer,
     DNSServerMetrics,
-    DNSResolverToken,
-    DNSConfigVersion,
-)
-from hub_api.modules.sase.security.scanner.models import (
-    SecurityScan,
-    SecurityFinding,
-    ScanSchedule,
+    DNSZone,
+    FirewallRule,
+    OrgUnit,
+    OSPFArea,
+    OSPFNeighbor,
+    PasswordResetToken,
+    PerfTestResult,
+    PortRange,
+    RefreshToken,
+    ServerKey,
+    Session,
+    TestSchedule,
+    User,
 )
 from hub_api.modules.sase.security.protection.models import (
-    SecurityEvent,
     RateLimitRule,
+    SecurityEvent,
+)
+from hub_api.modules.sase.security.scanner.models import (
+    ScanSchedule,
+    SecurityFinding,
+    SecurityScan,
 )
 from hub_api.modules.threatintel.feeds.models import (
-    ThreatIndicator,
     FeedUpdate,
     ThreatDetection,
+    ThreatIndicator,
 )
 
 
@@ -78,6 +79,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0019: autoperf_policies, autoperf_state
     Migration 0025: dns_zones, dns_records, dns_servers, dns_server_metrics,
                     dns_resolver_tokens, dns_config_versions
+    Migration 0026: threatintel_feed_sources
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -145,6 +147,14 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "dns_config_versions",
     }
 
+    # Tables created by migration 0026 (threatintel feed source management —
+    # squawk-merge P5 wave A; regression: this test's table registry wasn't
+    # updated when the migration landed, see hub_api/migrations/versions/
+    # 0026_threatintel_feed_sources.py)
+    created_by_migration_0026 = {
+        "threatintel_feed_sources",
+    }
+
     # All tables covered by migrations
     all_migration_tables = (
         created_by_existing_migrations
@@ -152,18 +162,15 @@ def test_alembic_migrations_cover_all_tables() -> None:
         | created_by_wpc_migrations
         | created_by_scheduler_migrations
         | created_by_migration_0025
+        | created_by_migration_0026
     )
 
     # Verify coverage
     missing_tables = expected_tables - all_migration_tables
-    assert (
-        not missing_tables
-    ), f"Missing from migrations: {missing_tables}"
+    assert not missing_tables, f"Missing from migrations: {missing_tables}"
 
     extra_tables = all_migration_tables - expected_tables
-    assert (
-        not extra_tables
-    ), f"Migration tables not in Base.metadata: {extra_tables}"
+    assert not extra_tables, f"Migration tables not in Base.metadata: {extra_tables}"
 
 
 def test_base_metadata_models_imported() -> None:
@@ -233,6 +240,4 @@ def test_security_tables_in_base_metadata() -> None:
     base_tables = set(Base.metadata.tables.keys())
     missing = security_tables - base_tables
 
-    assert (
-        not missing
-    ), f"Security tables missing from Base.metadata: {missing}"
+    assert not missing, f"Security tables missing from Base.metadata: {missing}"
