@@ -47,6 +47,7 @@ RUN groupadd --system node-agent && \
 # Copy the statically linked binary from builder
 COPY --from=builder /tmp/node-agent /usr/local/bin/node-agent
 RUN chmod 755 /usr/local/bin/node-agent
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates=20250419~deb12u1 && rm -rf /var/lib/apt/lists/*
 
 # Set the non-root user (numeric UID for hadolint compliance)
 USER 11000
