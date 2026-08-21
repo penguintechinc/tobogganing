@@ -3,11 +3,25 @@
 
 namespace: tobogganing
 
+## Shared image defaults, auto-injected by Helm into every sub-chart as
+## `.Values.global.*` (netsvcs-dns/node-agent/SASE tools). Per-service
+## `image.repository`/`image.tag` remain authoritative and always take
+## precedence — `global.image.pullPolicy` is the only field actually
+## consumed as a fallback today (see hub-api/hub-router/hub-webui/
+## node-agent/netsvcs-dns templates); registry/tag are declared here for
+## documentation/future consolidation, not yet wired as overrides.
+global:
+  image:
+    registry: ghcr.io/penguintechinc/tobogganing
+    tag: ""
+    pullPolicy: IfNotPresent
+
 ## Hub API Service
 hubApi:
   image:
     repository: tobogganing/hub-api
     tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 2
   port: 8080
@@ -47,6 +61,7 @@ hubRouter:
   image:
     repository: tobogganing/hub-router
     tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 1
   ports:
@@ -97,6 +112,7 @@ hubWebui:
   image:
     repository: tobogganing/hub-webui
     tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 2
   port: 80
@@ -209,6 +225,40 @@ config:
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
   dbType: "sqlite"
+
+## ---------------------------------------------------------------------
+## netsvcs-dns + node-agent (squawk -> netsvcs merge, P5-C)
+## ---------------------------------------------------------------------
+## Core sub-charts, ON by default — relocated from
+## engines/netsvcs-dns/k8s/helm and k8s/helm/node-agent (see Chart.yaml).
+## Overrides here are merged into each sub-chart's own values.yaml/
+## values-<env>.yaml defaults via standard Helm dependency value passing
+## (parent `netsvcs-dns:`/`node-agent:` key -> sub-chart root). See
+## charts/netsvcs-dns/values.yaml and charts/node-agent/values.yaml for
+## the full field set (env, probes, securityContext, etc.) not repeated
+## here.
+
+## DNS resolver fleet-node (DoH/DoT) DaemonSet — talks to hub-api over
+## gRPC :50051 for CheckIOC lookups and config-sync (see
+## templates/networkpolicy.yaml allow-netsvcs-grpc rules).
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
+    tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
+
+## Unified Rust DaemonSet (SASE connectivity + netsvcs-edge DNS/DHCP/NTP)
+## — control-plane calls to hub-api over gRPC :50051 (see
+## templates/networkpolicy.yaml allow-netsvcs-grpc rules). Keeps its own
+## NET_ADMIN/NET_BIND_SERVICE root exception and :53 binding — see
+## charts/node-agent/values.yaml nodeAgent.securityContext.
+node-agent:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/node-agent
+    tag: beta-1724152800
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
 
 ## ---------------------------------------------------------------------
 ## Optional out-of-band analysis tools (SASE Slice D adapters)

@@ -1,9 +1,20 @@
 # Default values for netsvcs-dns DaemonSet chart (production-safe baseline)
 # Per-environment overrides in alpha.yml, beta.yml, gamma.yml, production.yml
+# Also deployable as a k8s/helm/tobogganing dependency (squawk P5-C) — see
+# ../../Chart.yaml `netsvcs-dns` entry / ../../values*.yaml `netsvcs-dns:` block.
+
+# Standalone-render fallback for Helm's auto-injected `global` values. When
+# deployed as a tobogganing umbrella dependency, the parent's `global.image`
+# block (values.yaml) takes precedence over this default — same pattern the
+# SASE sub-charts document in charts/suricata/values.yaml.
+global:
+  image:
+    pullPolicy: IfNotPresent
 
 image:
   repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
   tag: latest  # Override in environment-specific values
+  digest: ""  # Set (sha256:...) for production — see production.yml
   pullPolicy: IfNotPresent
 
 # DaemonSet configuration

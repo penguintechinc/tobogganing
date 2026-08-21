@@ -5,13 +5,29 @@ type: application
 version: 2.0.0
 appVersion: "2.0.0"
 
-## Optional, off-by-default out-of-band analysis-tool sub-charts (Slice D
-## adapters — see docs/superpowers/specs/2026-08-06-sase-slice-d-adapters-design.md
-## "Helm sub-charts"). Each condition maps to the matching top-level key in
-## values.yaml (e.g. suricata.enabled); all default false, so the baseline
-## product renders without any of them. See charts/README.md for the
-## mirror -> tool -> adapter -> blocklist flow and per-tool notes.
+## Core squawk->netsvcs merge sub-charts (P5-C — see
+## docs/superpowers/specs/2026-08-20-squawk-P5-ui-helm-e2e.md section C).
+## Relocated from engines/netsvcs-dns/k8s/helm and k8s/helm/node-agent so
+## the umbrella can deploy the whole SASE + netsvcs stack as one Helm
+## release. Both default ON (netsvcs-dns.enabled / node-agent.enabled) —
+## unlike the optional analysis tools below, these are core product
+## components, not opt-in adapters.
 dependencies:
+  - name: netsvcs-dns
+    version: "0.1.0"
+    repository: "file://./charts/netsvcs-dns"
+    condition: netsvcs-dns.enabled
+  - name: node-agent
+    version: "0.1.0"
+    repository: "file://./charts/node-agent"
+    condition: node-agent.enabled
+
+  ## Optional, off-by-default out-of-band analysis-tool sub-charts (Slice D
+  ## adapters — see docs/superpowers/specs/2026-08-06-sase-slice-d-adapters-design.md
+  ## "Helm sub-charts"). Each condition maps to the matching top-level key in
+  ## values.yaml (e.g. suricata.enabled); all default false, so the baseline
+  ## product renders without any of them. See charts/README.md for the
+  ## mirror -> tool -> adapter -> blocklist flow and per-tool notes.
   - name: suricata
     version: "0.1.0"
     repository: "file://./charts/suricata"

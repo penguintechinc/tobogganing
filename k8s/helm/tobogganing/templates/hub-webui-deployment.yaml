@@ -26,8 +26,8 @@ spec:
         runAsUser: {{ .Values.hubWebui.securityContext.runAsUser }}
       containers:
         - name: hub-webui
-          image: "{{ .Values.hubWebui.image.repository }}:{{ .Values.hubWebui.image.tag }}"
-          imagePullPolicy: {{ .Values.hubWebui.image.pullPolicy }}
+          image: "{{ .Values.hubWebui.image.repository }}:{{ .Values.hubWebui.image.tag }}{{ if .Values.hubWebui.image.digest }}@{{ .Values.hubWebui.image.digest }}{{ end }}"
+          imagePullPolicy: {{ .Values.hubWebui.image.pullPolicy | default .Values.global.image.pullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.hubWebui.port }}
