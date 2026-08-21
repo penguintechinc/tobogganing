@@ -1,383 +1,262 @@
 ```
-              🛷 TOBOGGANING - Slide Into Zero Trust Security! 🛷
-                         
-                              ⛄ "Downhill to Security!" ⛄
-                                      
-                        ╭─────────────────────────────────╮
-                       ╱                                   ╲
-                      ╱    ◉     T O B O G G A N I N G     ◉    ╲
-                     ╱                                           ╲
-                    ╱         🛡️ Zero Trust Architecture         ╲
-                   ╱                                               ╲
-                  ╱─────────────────────────────────────────────────╲
-                 ╱███████████████████████████████████████████████████╲
-                ╱░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╲
-               ╱▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓╲
-              ╱════════════════════════════════════════════════════════╲
-             ╱      ❄️ WireGuard VPN  •  🔒 Enterprise Security        ╲  
-            ╱           💻 Multi-Platform  •  📱 Mobile Apps            ╲
-           ╱                                                             ╲
-          ╱_______________________________________________________________╲
-              ╲╲╲╲╲╲╲╲╲╲╲  Sliding down the security slope!  ╱╱╱╱╱╱╱╱╱╱╱
-                  
-    ╭───────────────────────────────────────────────────────────────────────╮
-    │  🛡️ SECURE  •  🚀 LIGHTNING FAST  •  🔓 OPEN SOURCE  •  🛷 POWERED  │
-    ╰───────────────────────────────────────────────────────────────────────╯
+              🛷 TOBOGGANING — Slide Into Zero Trust! 🛷
+                     ⛄ "Downhill to Security!" ⛄
+
+                ╭─────────────────────────────────╮
+               ╱   ◉   T O B O G G A N I N G   ◉   ╲
+              ╱      🛡️  Zero Trust · SASE Edge      ╲
+             ╱───────────────────────────────────────╲
+            ╱█████████████████████████████████████████╲
+           ╱░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╲
+          ╱  ❄️ WireGuard · DoH/DoT · Threat-Intel · mTLS ╲
+         ╱______________________________________________╲
+             ╲╲╲╲╲  Sliding down the security slope!  ╱╱╱╱╱
 ```
 
 # Tobogganing
 
-[![GitHub release](https://img.shields.io/github/release/penguintechinc/Tobogganing.svg)](https://github.com/penguintechinc/Tobogganing/releases)
-[![Build Status](https://github.com/penguintechinc/Tobogganing/workflows/CI/badge.svg)](https://github.com/penguintechinc/Tobogganing/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Report Card](https://goreportcard.com/badge/github.com/penguintechinc/Tobogganing)](https://goreportcard.com/report/github.com/penguintechinc/Tobogganing)
+[![GitHub release](https://img.shields.io/github/release/penguintechinc/tobogganing.svg)](https://github.com/penguintechinc/tobogganing/releases)
+[![Build Status](https://github.com/penguintechinc/tobogganing/workflows/CI/badge.svg)](https://github.com/penguintechinc/tobogganing/actions)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
-**Tobogganing** is an Open Source Secure Access Service Edge (SASE) solution implementing Zero Trust Network Architecture (ZTNA) principles. Built with modern technologies like WireGuard, Go, and Python, it provides enterprise-grade network security with the flexibility of open source.
+**Tobogganing is an open-source SASE (Secure Access Service Edge) + Zero-Trust Network Access (ZTNA) platform.** It fuses identity-aware connectivity, DNS-layer security, and threat intelligence into a single, policy-driven secure service edge — enforcing least-privilege, micro-segmented access across **intra-cluster, inter-cluster, and external-cluster** boundaries.
 
-🌐 **Website**: [tobogganing.io](https://tobogganing.io)  
-📚 **Documentation**: [docs.tobogganing.io](https://docs.tobogganing.io)
-
-## 🚀 Features
-
-### Zero Trust Security
-- **Dual Authentication**: X.509 certificates + JWT/SSO integration
-- **Never Trust, Always Verify**: Every connection authenticated and authorized
-- **Certificate Management**: Automated certificate lifecycle management
-- **Multi-Factor Authentication**: Support for various authentication methods
-- **Advanced Firewall System**: Domain, IP, protocol, and port-based access control
-- **Real-time Access Testing**: Test access rules before deployment
-
-### High Performance
-- **WireGuard VPN**: Modern, fast, and secure VPN protocol
-- **Concurrent Architecture**: Go-based headend with concurrent connection handling
-- **Async Python**: Manager service built with Python asyncio for high throughput
-- **Optimized Protocols**: Support for HTTP/HTTPS, TCP, and UDP traffic
-- **Dynamic Port Configuration**: Admin-configurable proxy listening ports
-- **PyDAL Database**: MySQL/PostgreSQL/SQLite with read replica support
-
-### Enterprise Ready
-- **Multi-Platform**: Native clients for Mac, Windows, and Linux with system tray integration
-- **Cloud Native**: Kubernetes-ready with auto-scaling and monitoring
-- **Kubernetes CNI**: High-performance Container Network Interface plugin for pod-level networking
-- **Traffic Mirroring**: Suricata IDS/IPS integration (VXLAN/GRE/ERSPAN)
-- **Compliance**: Syslog audit logging and compliance reporting
-- **High Availability**: Multi-datacenter orchestration with failover
-- **VRF & OSPF Support**: Enterprise network segmentation with FRR integration
-- **Database Backup System**: Local and S3-compatible storage with encryption
-- **External KMS**: AWS KMS / GCP Cloud KMS integration for enterprise key management (see [docs/KMS.md](docs/KMS.md))
-
-### Advanced Management
-- **Web Management Portal**: Beautiful py4web interface with role-based access (Admin/Reporter)
-- **Real-time Analytics**: Operating system distribution, traffic monitoring, and performance metrics
-- **Interactive Dashboards**: Chart.js visualizations with hourly/daily aggregations
-- **Comprehensive API**: RESTful API with OpenAPI documentation
-- **Prometheus Metrics**: Built-in metrics with authenticated endpoints
-- **Health Monitoring**: Kubernetes-compatible health checks (/health, /healthz)
-
-### Easy Deployment
-- **Multi-Architecture Support**: ARM64 and AMD64 Docker images
-- **Cross-Platform Binaries**: Native builds for all major platforms including embedded devices
-- **Automated CI/CD**: Complete GitHub Actions workflows for building, testing, and releasing
-- **Infrastructure as Code**: Terraform, Kubernetes, and Docker Compose configurations
-- **Next.js Marketing Website**: Cloudflare Pages deployment with Workers
-
-## 🏗️ Architecture
-
-SASEWaddle implements a comprehensive SASE architecture with three main components:
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           SASEWADDLE ARCHITECTURE                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│   ┌──────────────┐        ┌──────────────┐        ┌──────────────┐    │
-│   │   CLIENTS    │        │   HEADEND    │        │   MANAGER    │    │
-│   │              │        │   SERVER     │        │   SERVICE    │    │
-│   │ • Native GUI │◄──────►│ • WireGuard  │◄──────►│ • Web Portal │    │
-│   │ • Docker     │        │ • Go Proxy   │        │ • REST API   │    │
-│   │ • Mobile     │        │ • Firewall   │        │ • PyDAL DB   │    │
-│   │ • Embedded   │        │ • IDS/IPS    │        │ • Metrics    │    │
-│   └──────────────┘        └──────────────┘        └──────────────┘    │
-│         ▲                        ▲                        ▲            │
-│         │                        │                        │            │
-│   ┌─────▼──────────────────────▼────────────────────────▼─────┐      │
-│   │               SUPPORTING INFRASTRUCTURE                     │      │
-│   │  • Redis Cache  • MySQL/PostgreSQL  • Prometheus/Grafana   │      │
-│   │  • Suricata IDS • FRR (VRF/OSPF)   • Syslog Server        │      │
-│   └─────────────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Manager Service (Python 3.12)
-- **Web Management Portal**: py4web-based interface with role-based access control
-- **Certificate Authority**: Automated X.509 certificate generation and lifecycle management
-- **Database Backend**: PyDAL with MySQL/PostgreSQL/SQLite and read replica support
-- **API Gateway**: RESTful API for client registration and configuration distribution
-- **Analytics Engine**: Real-time metrics collection and aggregation
-- **Backup System**: Local and S3-compatible storage with encryption
-
-### Headend Server (Go 1.23)
-- **WireGuard VPN**: High-performance VPN termination with peer-to-peer routing
-- **Multi-Protocol Proxy**: TCP/UDP/HTTP/HTTPS with configurable listening ports
-- **Traffic Security**: Firewall rules with domain/IP/protocol/port filtering
-- **IDS/IPS Integration**: Traffic mirroring to Suricata via VXLAN/GRE/ERSPAN
-- **Authentication**: JWT validation and external IdP integration (SAML2/OAuth2)
-- **Network Routing**: VRF and OSPF support through FRR integration
-
-### Client Applications
-- **Native Desktop**: Go-based clients for Windows, macOS, and Linux with system tray
-- **Docker Container**: Containerized client for Kubernetes and Docker deployments
-- **Mobile Apps**: React Native applications for iOS and Android
-- **Embedded Support**: Lightweight clients for ARM, MIPS, and IoT devices
-- **Auto-Configuration**: Automatic certificate rotation and configuration updates
-
-## 🚀 Quick Start
-
-### Using Docker Compose (Recommended for Testing)
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-org/sasewaddle.git
-   cd sasewaddle/deploy/docker-compose
-   ```
-
-2. **Configure environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-3. **Start services**:
-   ```bash
-   docker-compose -f docker-compose.dev.yml up -d
-   ```
-
-4. **Access the interface**:
-   - Manager Web UI: http://localhost:8000
-   - API Documentation: http://localhost:8000/api/docs
-
-### Native Client Installation
-
-SASEWaddle provides two types of client applications optimized for different use cases:
-
-#### 🖼️ **Desktop GUI Clients** (Recommended for End Users)
-**Full system tray integration with one-click connect/disconnect**
-
-```bash
-# Quick install with GUI support
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-gui.sh | bash
-
-# Manual download
-# macOS (Universal - Intel + Apple Silicon)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-darwin-universal -o sasewaddle-client
-
-# Linux (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64 -o sasewaddle-client
-
-# Windows (AMD64)
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-windows-amd64.exe -o sasewaddle-client.exe
-```
-
-**GUI Features:**
-- ✅ System tray icon with real-time status
-- ✅ Connect/disconnect with single click  
-- ✅ Connection statistics and monitoring
-- ✅ Automatic configuration updates
-- ✅ Settings and about dialogs
-- ✅ Cross-platform native experience
-
-#### 🖥️ **Headless Clients** (For Servers & Automation)
-**CLI-only for Docker containers, servers, and embedded systems**
-
-```bash
-# Quick install headless version
-curl -sSL https://github.com/penguintechinc/sasewaddle/releases/latest/download/install-headless.sh | bash
-
-# Manual download - add "-headless" to any platform name
-curl -L https://github.com/penguintechinc/sasewaddle/releases/latest/download/sasewaddle-client-linux-amd64-headless -o sasewaddle-client
-```
-
-**Headless Features:**
-- ✅ Command-line interface only
-- ✅ Perfect for automation and scripts
-- ✅ Docker container friendly
-- ✅ Embedded system support (ARM, MIPS)
-- ✅ Smaller binary size
-- ✅ No GUI dependencies
-
-#### Configuration & Usage
-
-```bash
-# Initialize client (both GUI and headless)
-./sasewaddle-client init --manager-url https://manager.example.com:8000 --api-key YOUR_API_KEY
-
-# GUI Mode - Start with system tray
-./sasewaddle-client gui
-
-# Headless Mode - Connect as daemon
-./sasewaddle-client connect --daemon
-
-# Check connection status
-./sasewaddle-client status
-```
-
-## 📖 Documentation
-
-- **[Installation Guide](https://docs.sasewaddle.com/installation)** - Get up and running quickly
-- **[Architecture Guide](https://docs.sasewaddle.com/architecture)** - Understand the system design
-- **[Deployment Guide](https://docs.sasewaddle.com/deployment)** - Production deployment instructions
-- **[API Reference](https://docs.sasewaddle.com/api)** - Complete API documentation
-- **[Use Cases](https://docs.sasewaddle.com/use-cases)** - Real-world examples and configurations
-
-## 🛠️ Development
-
-### Prerequisites
-- Go 1.23+ (for headend and client)
-- Python 3.12+ (for manager)
-- Node.js 18+ (for website)
-- Docker (for containerized development)
-
-### Building from Source
-
-```bash
-# Clone repository
-git clone https://github.com/your-org/sasewaddle.git
-cd sasewaddle
-
-# Quick build all React applications + screenshots
-./scripts/build-apps.sh
-
-# Alternative: Build individual components
-./scripts/build-apps.sh --mobile-only      # Mobile app only
-./scripts/build-apps.sh --website-only     # Website only  
-./scripts/build-apps.sh --screenshots-only # Screenshots only
-
-# Build Manager Service
-cd manager
-pip install -r requirements.txt
-python -m manager.main
-
-# Build Headend Server
-cd headend
-go build -o build/headend ./cmd
-
-# Build Native Client
-cd clients/native
-make all  # Builds for all platforms
-# or
-make local  # Build for current platform only
-```
-
-### Running Tests
-
-```bash
-# Python tests
-cd manager && pytest
-
-# Go tests (headend)
-cd headend && go test ./...
-
-# Go tests (client)
-cd clients/native && go test ./...
-
-# Integration tests
-make test-integration
-```
-
-### Build Artifacts
-
-The build process generates the following artifacts:
-
-```bash
-build/
-├── apps/
-│   ├── mobile-android.bundle      # React Native Android bundle
-│   ├── mobile-ios.bundle         # React Native iOS bundle  
-│   ├── mobile-assets/            # Mobile app assets
-│   ├── website-static/           # Next.js static files
-│   └── website-export/           # Exported website
-├── screenshots/                  # Generated app screenshots
-└── BUILD_REPORT.md              # Comprehensive build report
-
-website/public/images/screenshots/  # Website screenshots
-├── homepage-desktop.png
-├── features-desktop.png
-├── mobile-connection-screen.png
-└── ...more screenshots
-```
-
-## 🚢 Deployment Options
-
-### Kubernetes (Production)
-```bash
-cd deploy/kubernetes
-kubectl apply -f .
-```
-
-### Terraform (Cloud)
-```bash
-cd deploy/terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-### Docker Compose (Development)
-```bash
-cd deploy/docker-compose
-docker-compose up -d
-```
-
-See the [Deployment Guide](deploy/README.md) for detailed instructions.
-
-## 🤝 Contributing
-
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
-
-- Code of conduct
-- Development setup
-- Pull request process
-- Coding standards
-- Testing requirements
-
-## 🛡️ Security
-
-Security is our top priority. We follow responsible disclosure practices:
-
-- Report security issues to: security@sasewaddle.com
-- See our [Security Policy](SECURITY.md) for details
-- Regular security audits and updates
-
-## 📄 License
-
-**License Highlights:**
-- **Personal & Internal Use**: Free under AGPL-3.0
-- **Commercial Use**: Requires commercial license
-- **SaaS Deployment**: Requires commercial license if providing as a service
-
-### Contributor Employer Exception (GPL-2.0 Grant)
-
-Companies employing official contributors receive GPL-2.0 access to community features:
-
-- **Perpetual for Contributed Versions**: GPL-2.0 rights to versions where the employee contributed remain valid permanently, even after the employee leaves the company
-- **Attribution Required**: Employee must be credited in CONTRIBUTORS, AUTHORS, commit history, or release notes
-- **Future Versions**: New versions released after employment ends require standard licensing
-- **Community Only**: Enterprise features still require a commercial license
-
-This exception rewards contributors by providing lasting fair use rights to their employers.
-
-See [LICENSE.md](docs/LICENSE.md) for complete licensing details.
-
-## 🙋 Support
-
-### Community Support
-- **GitHub Issues**: Bug reports and feature requests
-- **Discussions**: Questions and community help
-- **Discord**: Real-time chat and support
-- **Documentation**: Comprehensive guides and tutorials
+Every request is authenticated, every peer is verified, every zone is scoped: *never trust, always verify.*
 
 ---
 
-**Made with ❤️ by the open source community**
+## 🧭 The Three Pillars — SCP
 
-*SASEWaddle - Secure Access, Simplified*
+Tobogganing is organized around **Security, Connectivity, and Policies (SCP)**, each applied consistently across the three connectivity domains.
+
+| Pillar | What it delivers | Key building blocks |
+|--------|------------------|---------------------|
+| 🛡️ **Security** | Zero-trust identity + DNS-layer threat defense | Threat-intel IOC feeds, blocklist curation, DNS filtering; OIDC scopes; machine-JWT node enrollment; per-tenant isolation; mTLS/SPIFFE-ready |
+| 🔌 **Connectivity** | Identity-aware secure edge across every boundary | Unified Rust **node-agent** (WireGuard + local DNS/DHCP/NTP edge), **netsvcs** DNS control plane with DoH/DoT resolvers, SD-WAN |
+| 📜 **Policies** | Centralized, tenant-scoped policy enforcement | SASE Secure Web Gateway rules, DNS zones / records / split-horizon, SD-WAN routing policy, least-privilege access rules |
+
+### Applied across three connectivity domains
+
+| Domain | Boundary | Transport |
+|--------|----------|-----------|
+| **Intra-cluster** | Service ⇄ service inside one cluster | gRPC (`ManagerService`, port `50051`) |
+| **Inter-cluster** | Cluster ⇄ cluster (multi-datacenter / SD-WAN) | WireGuard tunnels + gRPC/REST |
+| **External-cluster** | Edge / bare-metal clients ⇄ the hub | REST `/api/v1` (HTTP/2) + WireGuard |
+
+---
+
+## 🏗️ Architecture
+
+A central **control plane** (`hub-api`) is the brain: it holds identity, policy, DNS config, and threat-intel state, and hands them out over **gRPC inside the cluster** and **REST to external edges**. Data-plane components — the DoH/DoT resolver fleet, the WireGuard router, and the Rust node-agents — enroll with machine JWTs and pull live config.
+
+```
+                        ┌──────────────────────────────────┐
+                        │   portal  (hub-webui)            │
+                        │   React + TypeScript · Vite       │
+                        └──────────────────┬───────────────┘
+                                           │ REST /api/v1 (OpenAPI 3.x)
+                                           ▼
+   ┌───────────────────┐   gRPC :50051  ┌──────────────────────────────────┐
+   │  netsvcs-dns      │  ManagerService│   hub-api   (CONTROL PLANE)      │
+   │  DoH :8080 / HTTP2│◀──────────────▶│   Quart · modular registry        │
+   │  DoT :853         │  GetConfig      │   netsvcs · threatintel · sase ·  │
+   │  split-horizon    │  StreamConfig   │   sdwan · perftest · ziti · ping  │
+   │  + IOC filtering  │  CheckIOC       │   REST :8080  ·  gRPC :50051      │
+   │  (DaemonSet)      │                 └───────┬──────────────────┬───────┘
+   └─────────▲─────────┘                gRPC :50051│         WireGuard /       │
+             │ :53 forward              (intra)    │         policy config     │
+             │                                     ▼                           │
+   ┌─────────┴───────────────┐          ┌────────────────────────────┐        │
+   │  node-agent  (Rust)     │◀────────▶│  hub-router  (DATA PLANE)  │        │
+   │  connectivity: WG/Ziti  │ WireGuard│  WireGuard :51820          │        │
+   │  netsvcs-edge: :53 DNS  │  tunnel  │  proxy :8443 · IDS/IPS      │        │
+   │  DHCP · NTP             │          │  mirror · metrics :9090     │        │
+   │  DaemonSet + musl binary│          └────────────────────────────┘        │
+   └─────────┬───────────────┘                                                │
+             │ REST /api/v1  —  external / bare-metal / inter-cluster edges ───┘
+             ▼
+      external clusters & edge sites
+```
+
+**Transport boundary:** gRPC is the intra-cluster contract (`hub-api` ⇄ `netsvcs-dns`, `hub-api` ⇄ `node-agent` DaemonSets); REST `/api/v1` serves external clients (edge/bare-metal node-agents, the portal, inter-cluster peers). The Rust node-agent's `transport` crate selects gRPC (tonic) or REST (reqwest) at runtime from `AgentConfig::mode`.
+
+---
+
+## 🧩 Components & Modules
+
+### Deployable services
+
+| Service | Stack | Role | Ports |
+|---------|-------|------|-------|
+| **hub-api** | Python 3.13 · Quart · gRPC | Control-plane brain — auth, policy, DNS config, threat-intel, module registry | REST `8080`, gRPC `50051` |
+| **hub-router** | WireGuard data plane | Tunnel termination + multi-protocol proxy + IDS/IPS traffic mirror | WG `51820`, proxy `8443`, metrics `9090` |
+| **hub-webui** (`portal/`) | React · TypeScript · Vite · Express | Management web UI (see [New in this release](#-new-in-this-release)) | `3000` |
+| **netsvcs-dns** (`engines/netsvcs-dns/`) | Python DaemonSet | DoH/DoT resolver — split-horizon + IOC filtering, Redis-cached | DoH `8080`, DoT `853`, metrics `9090` |
+| **node-agent** (`agents/node-agent/`) | Rust (aya · tonic · reqwest) | Unified edge client — WireGuard/Ziti connectivity + local DNS/DHCP/NTP edge | local DNS `53` |
+| **redis / valkey** | StatefulSet | Config + resolver response cache | `6379` |
+
+### `hub-api` modules (`hub_api/modules/`)
+
+| Module | Responsibility |
+|--------|----------------|
+| **netsvcs** | DNS control plane — zone/record/server managers, analytics, gRPC `ManagerService`, IOC check |
+| **threatintel** | IOC feed ingestion (STIX/TAXII + custom parsers), URL safety, blocklist curation & store |
+| **sase** | Secure Web Gateway policy, block-page/routing, out-of-band analysis-tool adapters |
+| **sdwan** | SD-WAN orchestration, certs, firewall, network segmentation |
+| **perftest_cluster / _client / _c2c** | Cluster, client, and cluster-to-cluster performance testing (WaddlePerf lineage) |
+| **ziti** | OpenZiti overlay integration |
+| **ping** | Lightweight reachability / health probes |
+
+### The unified Rust node-agent (`agents/node-agent/crates/`)
+
+One static binary, two jobs — SASE connectivity **and** local netsvcs edge — packaged both as a musl bare-metal build and a K8s DaemonSet container.
+
+| Crate | Role |
+|-------|------|
+| `agent` | Binary entrypoint — wires connectivity + edge into one process |
+| `connectivity` | WireGuard/Ziti data plane, XDP inspection tap |
+| `netsvcs-edge` | Local `:53` DNS + DHCP + NTP, forwarding DNS to the DoH resolver fleet |
+| `transport` | gRPC (tonic) + REST (reqwest) `ControlPlaneClient`, selected at runtime |
+| `core` | Shared config, errors, machine-JWT signing, control-plane contract |
+
+### gRPC control-plane contract (`proto/netsvcs/v1/manager.proto`)
+
+`package netsvcs.manager.v1` — `ManagerService`: `RegisterServer`, `RefreshToken`, `GetConfig`, `StreamConfigUpdates`, `SendHeartbeat`, `ValidateToken`, `CheckIOC`. Nodes enroll with a machine JWT and stream live config updates.
+
+---
+
+## ✨ New in This Release
+
+### 🖥️ netsvcs + threat-intel Web UI
+
+A full management surface for DNS and threat intelligence, served from `portal/`:
+
+- **netsvcs / DNS** — [`ZonesPage`](portal/src/pages/netsvcs/ZonesPage.tsx) (zones + split-horizon), [`ZoneRecordsPage`](portal/src/pages/netsvcs/ZoneRecordsPage.tsx) (records), [`DnsServersPage`](portal/src/pages/netsvcs/DnsServersPage.tsx) (resolver fleet health), [`AnalyticsPage`](portal/src/pages/netsvcs/AnalyticsPage.tsx) (query analytics)
+- **threat-intel** — [`IocCheckPage`](portal/src/pages/threatintel/IocCheckPage.tsx) (on-demand IOC lookup), [`FeedsPage`](portal/src/pages/threatintel/FeedsPage.tsx) (feed source management), [`BlocklistPage`](portal/src/pages/threatintel/BlocklistPage.tsx) (blocklist curation)
+
+### 🦀 Unified Rust node-agent
+
+WireGuard connectivity and the local DNS/DHCP/NTP edge collapse into **one** memory-safe Rust binary — a single install per node instead of a stack of daemons, with runtime gRPC/REST transport selection.
+
+### 📦 One Helm umbrella
+
+The whole SASE + netsvcs stack now deploys as a single Helm release — `hub-api`, `hub-router`, `hub-webui`, the `netsvcs-dns` resolver fleet, and the `node-agent` DaemonSet, with optional out-of-band analysis tools (Suricata, Zeek, Arkime, Strelka, CAPE) off by default.
+
+---
+
+## 🖼️ Screenshots
+
+> Captured against seeded mock data. See [`docs/screenshots/`](docs/screenshots/).
+
+**Authentication**
+
+![Login](docs/screenshots/login.png)
+
+**netsvcs — DNS control plane**
+
+| Zones | Servers | Analytics |
+|-------|---------|-----------|
+| ![DNS Zones](docs/screenshots/dns-zones.png) | ![DNS Servers](docs/screenshots/dns-servers.png) | ![DNS Analytics](docs/screenshots/dns-analytics.png) |
+
+**Threat intelligence**
+
+| IOC Check | Feeds | Blocklist |
+|-----------|-------|-----------|
+| ![IOC Check](docs/screenshots/threatintel-ioc.png) | ![Feeds](docs/screenshots/threatintel-feeds.png) | ![Blocklist](docs/screenshots/threatintel-blocklist.png) |
+
+---
+
+## 🚀 Deployment
+
+Tobogganing ships as a single Helm umbrella chart: [`k8s/helm/tobogganing`](k8s/helm/tobogganing). The environment lives in the kube-context and the values file — never in the namespace (always `tobogganing`).
+
+### Alpha — local MicroK8s
+
+```bash
+helm dependency build k8s/helm/tobogganing
+helm upgrade --install tobogganing k8s/helm/tobogganing \
+  --kube-context local-alpha \
+  --namespace tobogganing --create-namespace \
+  --values k8s/helm/tobogganing/values-alpha.yaml
+```
+
+### Beta → Gamma → Production
+
+CI builds and publishes images to `ghcr.io/penguintechinc/tobogganing/{service}`; deploy with the matching values file and context.
+
+| Env | Context | Values file |
+|-----|---------|-------------|
+| Alpha | `local-alpha` | `values-alpha.yaml` |
+| Beta | `dal2-beta` | `values-beta.yaml` |
+| Gamma | `dal2-gamma` | `values-gamma.yaml` |
+| Production | `tobogganing-prod` | `values-production.yaml` |
+
+```bash
+helm upgrade --install tobogganing k8s/helm/tobogganing \
+  --kube-context dal2-beta \
+  --namespace tobogganing \
+  --values k8s/helm/tobogganing/values-beta.yaml
+```
+
+Optional analysis-tool sub-charts (`suricata`, `zeek`, `arkime`, `strelka`, `cape`) are off by default — enable per [`k8s/helm/tobogganing/OPTIONAL_SUBCHARTS.md`](k8s/helm/tobogganing/OPTIONAL_SUBCHARTS.md).
+
+---
+
+## 🛠️ Development
+
+**Prerequisites:** Python 3.13+, Rust 1.98+, Node.js 20+, Docker, and a local Kubernetes (MicroK8s / Docker Desktop).
+
+```bash
+# Control plane (hub-api) — Quart + gRPC
+cd hub_api && pip install -r requirements.txt && python -m hub_api.app
+
+# DoH/DoT resolver
+cd engines/netsvcs-dns && pip install -r requirements.txt && python -m app.main
+
+# Unified node-agent
+cd agents/node-agent && cargo build --release
+
+# Web UI
+cd portal && npm ci && npm run dev
+```
+
+### Tests
+
+```bash
+make test              # full suite
+pytest hub_api/tests                              # control-plane
+cd engines/netsvcs-dns && pytest --cov --cov-fail-under=90   # resolver (90%+ gate)
+cd agents/node-agent && cargo test                # node-agent
+cd portal && npm test                             # web UI
+```
+
+The REST API publishes an OpenAPI 3.x spec at [`openapi/v1.yaml`](openapi/v1.yaml).
+
+---
+
+## 📖 Documentation
+
+| Guide | Path |
+|-------|------|
+| Overview | [`docs/OVERVIEW.md`](docs/OVERVIEW.md) |
+| Architecture | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Quickstart | [`docs/QUICKSTART.md`](docs/QUICKSTART.md) |
+| Authentication | [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md) |
+| API reference | [`docs/API.md`](docs/API.md) |
+| Client installation | [`docs/CLIENT_INSTALLATION.md`](docs/CLIENT_INSTALLATION.md) |
+| netsvcs-dns resolver | [`engines/netsvcs-dns/README.md`](engines/netsvcs-dns/README.md) |
+
+---
+
+## 🤝 Contributing & Security
+
+- Contributions: see [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md)
+- Report vulnerabilities responsibly: see [`SECURITY.md`](SECURITY.md)
+
+## 📄 License
+
+Licensed under **AGPL-3.0** for personal and internal use; commercial and SaaS deployments require a commercial license, and enterprise features are separately licensed. See [`LICENSE`](LICENSE) and [`docs/LICENSE.md`](docs/LICENSE.md) for the full terms, including the Contributor Employer (GPL-2.0) exception.
+
+---
+
+*Made with ❄️ by PenguinTech — secure access, simplified.*
