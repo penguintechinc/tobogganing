@@ -228,7 +228,7 @@ app.get('/api/v1/netsvcs/analytics/queries', (req, res) => {
     total_queries: 48200,
     total_cache_hits: 41000,
     total_errors: 35,
-    cache_hit_rate: 0.85,
+    cache_hit_rate: 85.0,
     timeline: [
       { timestamp: new Date(Date.now() - 7200000).toISOString(), queries: 15800 },
       { timestamp: new Date(Date.now() - 3600000).toISOString(), queries: 16400 },
