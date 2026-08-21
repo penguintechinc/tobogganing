@@ -51,9 +51,13 @@ All schedules tenant-scoped; results feed thresholds → alerting (existing `ale
 
 1. **hub_api `perftest_cluster`** — orchestration: check-in CRUD (model above), tier-cascade evaluation, jitter scheduler, std-dev threshold checks, results API. penguin-dal, tenant-scoped, quart-schema DTOs, feature-flagged.
 2. **`engines/testserver` (Go — kept, maintenance per Go phase-out)** — server-side probe engine + speedtest target. Fixes: **GORM multi-DB (DB_TYPE-selected: postgres default / mysql / sqlite)** replacing the hard MariaDB Fatalf; install `iputils-ping`/`traceroute`/`tcptraceroute` + `NET_RAW` (documented cap-exception); add h2/h3 + new-protocol probe handlers (fever-ch patterns).
-3. **Rust node-agent (`agents/node-agent`)** — the **end-user-client prober**: a `probes` capability consuming check-in schedules from the control plane (the existing `perftest_client` schedule-distribution API), running client-side probes, reporting results. Reuses its rustls/hickory/ntp-proto stacks.
+3. **Rust node-agent (`agents/node-agent`)** — the **k8s / VM server-client prober**: a `probes` capability consuming check-in schedules from the control plane (the existing `perftest_client` schedule-distribution API), running client-side probes, reporting results. Reuses its rustls/hickory/ntp-proto stacks. **This repo's client scope is servers only** (DaemonSet + bare-metal/VM).
+3b. **End-user desktop prober = `tobogganing-perf` module in the `penguin` desktop repo** (per client standards: desktop clients consolidate into `penguin`, never per-product). Consumes the SAME schedule-distribution + results REST API as the node-agent's `probes` capability — this spec defines that interface contract; the module itself is built and tracked in the `penguin` repo (separate workstream).
 4. **Portal** — (a) **Check-in admin UI** (CRUD the model above); (b) **multi-service live response-time charts** (N services on one chart; extend LiveTest/recharts); (c) **speed test, 3 authenticated modes: file-download / multi-stream / single-stream** (fast.com/speedtest.net-style; extends `df5e07c`); (d) **server-launched tests over WebSocket** — run a test FROM a chosen server node toward a target, streamed live (LA-user-vs-SFO-server / CDN-entry-node diagnosis).
-5. **Rust throughput server (new, `engines/`)** — replaces iperf3-style heavy testing: **modern auth (JWT/OIDC — not iperf3's weak RSA/PSK), true multi-client**, multi-stream/single-stream/download modes, packet/MTU/traffic-type analysis for Tier-3. Security-sensitive + high-perf ⇒ Rust per standards.
+5. **Rust throughput server (new, `engines/`)** — the iperf3 replacement, with **modern auth (JWT/OIDC — not iperf3's weak RSA/PSK)** and **true multi-client concurrency**, at **1:1 iperf3 feature parity** for test types and networking adjustments:
+   - Test types: TCP + UDP throughput, **reverse** (server→client), **bidirectional**, **parallel streams** (`-P`), single-stream, timed/size-bounded runs, interval reporting, JSON results.
+   - Networking adjustments: **packet/buffer length** (`-l`), **MSS** (`-M`), **socket window size** (`-w`), **bandwidth pacing** (`-b`), **DSCP/TOS marking** (`-S`), **congestion-control algorithm selection** (`-C`), IPv4/IPv6, port selection — the knobs needed to isolate packet-size / MTU / traffic-type problems (Tier-3 diagnosis).
+   Security-sensitive + high-perf ⇒ Rust per standards. Parity is verified against an iperf3 test matrix before it replaces the testserver `/speedtest` heavy path.
 6. **NIC inspection + configuration** — read: interfaces/addresses/MTU/link state via node-agent (rtnetlink, exists in connectivity crate) surfaced through the control plane + portal; write/config = gated admin action (scope + audit).
 
 ## Phases
@@ -71,4 +75,4 @@ Each phase: own `fix/`/`feature/` worktree(s) → tests green (90% floor) → me
 
 ## Out of scope
 
-Squawk/netsvcs work (done, PR #116); the penguin desktop client (separate repo — consumes the same REST API later).
+Squawk/netsvcs work (done, PR #116). The `tobogganing-perf` **penguin-desktop module's implementation** — its API interface is defined here, but the module is built/tracked in the `penguin` repo as its own workstream.
