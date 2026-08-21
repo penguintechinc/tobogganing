@@ -23,11 +23,7 @@ function formatMetric(latency: number): string {
   return `${latency.toFixed(2)}ms`;
 }
 
-export function MatrixGrid({
-  regions,
-  cells,
-  testType,
-}: MatrixGridProps) {
+export function MatrixGrid({ regions, cells, testType }: MatrixGridProps) {
   const sortedRegions = [...regions].sort();
   const cellMap = new Map<string, MatrixCell>();
 
@@ -36,7 +32,15 @@ export function MatrixGrid({
     cellMap.set(key, cell);
   }
 
-  console.log('[MatrixGrid] Render { regions:', sortedRegions.length, ', cells:', cells.length, ', testType:', testType, '}');
+  console.log(
+    '[MatrixGrid] Render { regions:',
+    sortedRegions.length,
+    ', cells:',
+    cells.length,
+    ', testType:',
+    testType,
+    '}'
+  );
 
   return (
     <div className="overflow-x-auto">
@@ -47,28 +51,19 @@ export function MatrixGrid({
         }}
       >
         <div className="bg-slate-800 p-2 min-w-[120px]">
-          <span className="text-xs font-semibold text-amber-300">
-            {testType}
-          </span>
+          <span className="text-xs font-semibold text-amber-300">{testType}</span>
         </div>
 
         {sortedRegions.map((region) => (
-          <div
-            key={`header-${region}`}
-            className="bg-slate-800 p-2 min-w-[100px] text-center"
-          >
-            <span className="text-xs font-semibold text-amber-300">
-              {region}
-            </span>
+          <div key={`header-${region}`} className="bg-slate-800 p-2 min-w-[100px] text-center">
+            <span className="text-xs font-semibold text-amber-300">{region}</span>
           </div>
         ))}
 
         {sortedRegions.map((source) => (
           <React.Fragment key={`row-${source}`}>
             <div className="bg-slate-800 p-2 min-w-[120px]">
-              <span className="text-xs font-semibold text-amber-300">
-                {source}
-              </span>
+              <span className="text-xs font-semibold text-amber-300">{source}</span>
             </div>
 
             {sortedRegions.map((dest) => {
@@ -91,12 +86,8 @@ export function MatrixGrid({
                   key={`cell-${cellKey}`}
                   className={`${getCellColor(cell)} p-2 min-w-[100px] text-center rounded`}
                 >
-                  <div className="text-xs font-semibold">
-                    {formatMetric(cell.latency)}
-                  </div>
-                  <div className="text-xs opacity-80">
-                    {cell.loss_pct.toFixed(1)}% loss
-                  </div>
+                  <div className="text-xs font-semibold">{formatMetric(cell.latency)}</div>
+                  <div className="text-xs opacity-80">{cell.loss_pct.toFixed(1)}% loss</div>
                 </div>
               );
             })}

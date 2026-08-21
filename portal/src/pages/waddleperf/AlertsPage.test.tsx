@@ -81,7 +81,6 @@ describe('AlertsPage', () => {
   });
 
   it('renders tabs', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -95,7 +94,6 @@ describe('AlertsPage', () => {
   });
 
   it('loads and displays rules', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -110,7 +108,6 @@ describe('AlertsPage', () => {
   });
 
   it('shows Add Rule button for authenticated users', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -139,7 +136,6 @@ describe('AlertsPage', () => {
   });
 
   it('toggles rule form visibility', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -167,7 +163,6 @@ describe('AlertsPage', () => {
   });
 
   it('submits create rule form', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -212,7 +207,6 @@ describe('AlertsPage', () => {
   });
 
   it('deletes alert rule', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -233,7 +227,6 @@ describe('AlertsPage', () => {
   });
 
   it('switches to Channels tab', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -251,7 +244,6 @@ describe('AlertsPage', () => {
   });
 
   it('toggles channel form visibility', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -282,7 +274,6 @@ describe('AlertsPage', () => {
   });
 
   it('submits create channel form for email', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -321,7 +312,6 @@ describe('AlertsPage', () => {
   });
 
   it('submits create channel form for webhook', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -360,7 +350,6 @@ describe('AlertsPage', () => {
   });
 
   it('deletes alert channel', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -384,7 +373,6 @@ describe('AlertsPage', () => {
   });
 
   it('displays webhook channel type', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -401,7 +389,6 @@ describe('AlertsPage', () => {
   });
 
   it('handles 402 license error when creating channel', async () => {
-
     const error = new Error('License required');
     Object.defineProperty(error, 'response', {
       value: {
@@ -443,12 +430,13 @@ describe('AlertsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Professional License Required')).toBeInTheDocument();
-      expect(screen.getByText('Webhook notifications require Professional tier')).toBeInTheDocument();
+      expect(
+        screen.getByText('Webhook notifications require Professional tier')
+      ).toBeInTheDocument();
     });
   });
 
   it('switches to Events tab and displays events', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -468,7 +456,6 @@ describe('AlertsPage', () => {
   });
 
   it('displays empty state when no data', async () => {
-
     (wpcOps.listAlertRules as jest.Mock).mockResolvedValue([]);
     const queryClient = createQueryClient();
     render(

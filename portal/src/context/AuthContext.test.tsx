@@ -7,9 +7,7 @@ jest.mock('../api/auth');
 
 const mockedAuthApi = authApi as jest.Mocked<typeof authApi>;
 
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <AuthProvider>{children}</AuthProvider>
-);
+const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
 
 describe('AuthContext', () => {
   beforeEach(() => {
@@ -150,11 +148,7 @@ describe('AuthContext', () => {
         await result.current.login('test@example.com', 'password', '123456');
       });
 
-      expect(mockedAuthApi.login).toHaveBeenCalledWith(
-        'test@example.com',
-        'password',
-        '123456'
-      );
+      expect(mockedAuthApi.login).toHaveBeenCalledWith('test@example.com', 'password', '123456');
     });
 
     it('propagates login errors', async () => {

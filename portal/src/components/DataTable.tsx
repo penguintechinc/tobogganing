@@ -51,9 +51,7 @@ export function DataTable<T extends { id?: string }>({
       }
 
       if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortDirection === 'asc'
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
 
       if (typeof aVal === 'number' && typeof bVal === 'number') {
@@ -121,9 +119,7 @@ export function DataTable<T extends { id?: string }>({
                 <th
                   key={String(col.key)}
                   className="px-4 py-3 text-left text-amber-400 font-semibold"
-                  onClick={() =>
-                    col.sortable !== false && handleSort(col.key)
-                  }
+                  onClick={() => col.sortable !== false && handleSort(col.key)}
                   style={{
                     cursor: col.sortable !== false ? 'pointer' : 'default',
                   }}
@@ -156,9 +152,7 @@ export function DataTable<T extends { id?: string }>({
                     key={`${row.id || idx}-${String(col.key)}`}
                     className="px-4 py-3 text-slate-200"
                   >
-                    {col.render
-                      ? col.render(row[col.key], row)
-                      : String(row[col.key] ?? '-')}
+                    {col.render ? col.render(row[col.key], row) : String(row[col.key] ?? '-')}
                   </td>
                 ))}
               </tr>
@@ -181,9 +175,7 @@ export function DataTable<T extends { id?: string }>({
               Prev
             </button>
             <button
-              onClick={() =>
-                setCurrentPage(Math.min(totalPages, currentPage + 1))
-              }
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
               disabled={currentPage === totalPages}
               className="px-3 py-1 bg-slate-700 hover:bg-sky-500 disabled:opacity-50 text-white rounded text-sm"
             >

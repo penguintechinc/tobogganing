@@ -1,4 +1,5 @@
 """NetSvcs control plane module for DNS, DHCP, and NTP services."""
+
 from __future__ import annotations
 
 from hub_api.modules.netsvcs.api import blueprints
@@ -16,7 +17,9 @@ def module() -> ModuleContract:
         name="netsvcs",
         blueprints=list(blueprints),
         nav=[
-            NavEntry("DNS", "/api/v1/netsvcs/zones", "globe"),
+            NavEntry("Zones", "/api/v1/netsvcs/zones", "globe"),
+            NavEntry("DNS Servers", "/api/v1/netsvcs/dns-servers", "server"),
+            NavEntry("Analytics", "/api/v1/netsvcs/analytics", "bar-chart"),
         ],
         flags=[
             "tobogganing.netsvcs.dns",

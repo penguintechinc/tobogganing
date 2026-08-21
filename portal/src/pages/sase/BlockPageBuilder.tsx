@@ -32,7 +32,16 @@ import {
 /** A markdown element block */
 export interface MarkdownBlock {
   id: string;
-  type: 'heading1' | 'heading2' | 'heading3' | 'heading4' | 'text' | 'image' | 'link' | 'list' | 'divider';
+  type:
+    | 'heading1'
+    | 'heading2'
+    | 'heading3'
+    | 'heading4'
+    | 'text'
+    | 'image'
+    | 'link'
+    | 'list'
+    | 'divider';
   content: Record<string, string>;
 }
 
@@ -229,7 +238,10 @@ export function BlockPageBuilder() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  console.log('[BlockPageBuilder] Render { pageName, blockCount }', { pageName, blockCount: blocks.length });
+  console.log('[BlockPageBuilder] Render { pageName, blockCount }', {
+    pageName,
+    blockCount: blocks.length,
+  });
 
   // Load existing pages
   const { data: pages = [] } = useQuery({
@@ -471,35 +483,49 @@ export function BlockPageBuilder() {
           <div className="bg-slate-800 rounded-lg p-4">
             <p className="text-sm text-slate-300 mb-3">Add blocks:</p>
             <div className="grid grid-cols-2 gap-2">
-              {(['heading1', 'heading2', 'heading3', 'heading4', 'text', 'image', 'link', 'list', 'divider'] as const).map(
-                (type) => (
-                  <button
-                    key={type}
-                    onClick={() => addBlock(type)}
-                    className="flex items-center gap-2 px-2 py-2 bg-slate-700 hover:bg-sky-600 text-white rounded text-xs transition-colors"
-                    aria-label={`Add ${type} block`}
-                  >
-                    <Plus size={14} />
-                    {type === 'heading1'
-                      ? 'H1'
-                      : type === 'heading2'
-                        ? 'H2'
-                        : type === 'heading3'
-                          ? 'H3'
-                          : type === 'heading4'
-                            ? 'H4'
-                            : type === 'text'
-                              ? 'Text'
-                              : type}
-                  </button>
-                )
-              )}
+              {(
+                [
+                  'heading1',
+                  'heading2',
+                  'heading3',
+                  'heading4',
+                  'text',
+                  'image',
+                  'link',
+                  'list',
+                  'divider',
+                ] as const
+              ).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => addBlock(type)}
+                  className="flex items-center gap-2 px-2 py-2 bg-slate-700 hover:bg-sky-600 text-white rounded text-xs transition-colors"
+                  aria-label={`Add ${type} block`}
+                >
+                  <Plus size={14} />
+                  {type === 'heading1'
+                    ? 'H1'
+                    : type === 'heading2'
+                      ? 'H2'
+                      : type === 'heading3'
+                        ? 'H3'
+                        : type === 'heading4'
+                          ? 'H4'
+                          : type === 'text'
+                            ? 'Text'
+                            : type}
+                </button>
+              ))}
             </div>
           </div>
 
           {/* Draggable Blocks */}
           {blocks.length > 0 ? (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
               <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-3">
                   {blocks.map((block) => (

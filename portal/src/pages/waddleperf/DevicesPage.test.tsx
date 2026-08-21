@@ -52,9 +52,7 @@ describe('DevicesPage', () => {
     );
 
     expect(screen.getByText('Devices')).toBeInTheDocument();
-    expect(
-      screen.getByText('Manage and monitor WaddlePerf cluster devices')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Manage and monitor WaddlePerf cluster devices')).toBeInTheDocument();
   });
 
   it('renders devices in table', async () => {
@@ -96,9 +94,7 @@ describe('DevicesPage', () => {
   });
 
   it('shows error state on fetch failure', async () => {
-    mockWaddleperf.listDevices.mockRejectedValueOnce(
-      new Error('Network error')
-    );
+    mockWaddleperf.listDevices.mockRejectedValueOnce(new Error('Network error'));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

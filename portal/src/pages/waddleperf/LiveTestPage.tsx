@@ -92,9 +92,7 @@ export function LiveTestPage() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-amber-400 mb-2">
-              Device ID *
-            </label>
+            <label className="block text-sm font-medium text-amber-400 mb-2">Device ID *</label>
             <input
               type="text"
               value={formData.device_id}
@@ -107,9 +105,7 @@ export function LiveTestPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-amber-400 mb-2">
-              Test Type *
-            </label>
+            <label className="block text-sm font-medium text-amber-400 mb-2">Test Type *</label>
             <select
               value={formData.test_type}
               onChange={(e) => handleFormChange('test_type', e.target.value)}
@@ -128,9 +124,7 @@ export function LiveTestPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-amber-400 mb-2">
-              Target *
-            </label>
+            <label className="block text-sm font-medium text-amber-400 mb-2">Target *</label>
             <input
               type="text"
               value={formData.target}
@@ -173,14 +167,8 @@ export function LiveTestPage() {
       {/* Chart */}
       {ChartComponent && chartData.length > 0 && (
         <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
-          <h2 className="text-xl font-semibold text-amber-400 mb-4">
-            Performance Metrics
-          </h2>
-          <Suspense
-            fallback={
-              <div className="w-full h-64 bg-slate-700 rounded animate-pulse" />
-            }
-          >
+          <h2 className="text-xl font-semibold text-amber-400 mb-4">Performance Metrics</h2>
+          <Suspense fallback={<div className="w-full h-64 bg-slate-700 rounded animate-pulse" />}>
             <div className="w-full h-64">
               <ChartComponent data={chartData} />
             </div>

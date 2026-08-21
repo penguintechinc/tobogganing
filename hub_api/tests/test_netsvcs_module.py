@@ -1,4 +1,5 @@
 """Tests for the NetSvcs module."""
+
 from __future__ import annotations
 
 import pytest
@@ -17,7 +18,7 @@ async def test_netsvcs_module_returns_valid_contract() -> None:
 
     assert contract.name == "netsvcs"
     assert len(contract.blueprints) == 3  # zones, dns_servers, analytics blueprints
-    assert len(contract.nav) == 1  # DNS nav entry
+    assert len(contract.nav) == 3  # Zones, DNS Servers, Analytics nav entries
     assert len(contract.flags) == 6  # dns, zones, dns_servers, analytics, dhcp, ntp
     assert len(contract.entitlements) == 6  # same set, per-entitlement
     assert len(contract.migrations) == 1  # 0025
@@ -28,6 +29,10 @@ async def test_netsvcs_module_returns_valid_contract() -> None:
     assert "netsvcs_zones" in blueprint_names
     assert "netsvcs_dns_servers" in blueprint_names
     assert "netsvcs_analytics" in blueprint_names
+
+    # Verify nav entries (portal sidebar slugs derive from these labels)
+    nav_labels = {entry.label for entry in contract.nav}
+    assert nav_labels == {"Zones", "DNS Servers", "Analytics"}
 
     # Verify flags
     expected_flags = {

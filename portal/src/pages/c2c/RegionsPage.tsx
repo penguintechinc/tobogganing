@@ -5,9 +5,7 @@ import { Region, VisibleNode, listRegions, listVisibleNodes } from '../../api/c2
 
 function RegionCard({ region }: { region: Region }) {
   const healthPercent =
-    region.node_count > 0
-      ? Math.round((region.healthy_count / region.node_count) * 100)
-      : 0;
+    region.node_count > 0 ? Math.round((region.healthy_count / region.node_count) * 100) : 0;
 
   return (
     <div className="bg-slate-800 p-4 rounded border border-slate-700 space-y-2">
@@ -15,16 +13,12 @@ function RegionCard({ region }: { region: Region }) {
       <div className="space-y-1 text-sm">
         <div className="flex justify-between text-slate-300">
           <span>Total Nodes:</span>
-          <span className="text-amber-300 font-semibold">
-            {region.node_count}
-          </span>
+          <span className="text-amber-300 font-semibold">{region.node_count}</span>
         </div>
         <div className="flex justify-between text-slate-300">
           <span>Healthy:</span>
           <span
-            className={`font-semibold ${
-              healthPercent >= 80 ? 'text-green-300' : 'text-amber-300'
-            }`}
+            className={`font-semibold ${healthPercent >= 80 ? 'text-green-300' : 'text-amber-300'}`}
           >
             {region.healthy_count}/{region.node_count}
           </span>
@@ -32,9 +26,7 @@ function RegionCard({ region }: { region: Region }) {
         <div className="flex justify-between text-slate-300">
           <span>Health %:</span>
           <span
-            className={`font-semibold ${
-              healthPercent >= 80 ? 'text-green-300' : 'text-amber-300'
-            }`}
+            className={`font-semibold ${healthPercent >= 80 ? 'text-green-300' : 'text-amber-300'}`}
           >
             {healthPercent}%
           </span>
@@ -96,9 +88,7 @@ function RegionsPage() {
       render: (enabled) => (
         <span
           className={`px-2 py-1 rounded text-sm ${
-            enabled
-              ? 'bg-green-900 text-green-200'
-              : 'bg-red-900 text-red-200'
+            enabled ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
           }`}
         >
           {enabled ? 'Healthy' : 'Offline'}
@@ -107,15 +97,19 @@ function RegionsPage() {
     },
   ];
 
-  console.log('[RegionsPage] Render { regions:', regions.length, ', selectedRegion:', selectedRegion, '}');
+  console.log(
+    '[RegionsPage] Render { regions:',
+    regions.length,
+    ', selectedRegion:',
+    selectedRegion,
+    '}'
+  );
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-amber-400">C2C Regions</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Region health summary and node inventory
-        </p>
+        <p className="text-slate-400 text-sm mt-1">Region health summary and node inventory</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -130,9 +124,7 @@ function RegionsPage() {
             <button
               key={region.region}
               onClick={() =>
-                setSelectedRegion(
-                  selectedRegion === region.region ? null : region.region
-                )
+                setSelectedRegion(selectedRegion === region.region ? null : region.region)
               }
               className={`text-left transition-all ${
                 selectedRegion === region.region
@@ -149,9 +141,7 @@ function RegionsPage() {
       {selectedRegion && (
         <div className="space-y-3 bg-slate-800 p-4 rounded border border-slate-700">
           <div className="flex justify-between items-center">
-            <h3 className="text-amber-400 font-semibold text-lg">
-              Nodes in {selectedRegion}
-            </h3>
+            <h3 className="text-amber-400 font-semibold text-lg">Nodes in {selectedRegion}</h3>
             <button
               onClick={() => setSelectedRegion(null)}
               className="text-slate-400 hover:text-slate-300 text-sm"

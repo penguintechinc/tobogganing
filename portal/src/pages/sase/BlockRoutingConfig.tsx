@@ -162,16 +162,25 @@ export function BlockRoutingConfig() {
         {
           source_type: newRoute.source_type,
           destination_kind: newRoute.destination_kind,
-          page_id: newRoute.destination_kind === 'page' ? newRoute.page_id : (null as string | null),
-          external_url: newRoute.destination_kind === 'external' ? newRoute.external_url : (null as string | null),
-          metadata: Object.keys(metadata).length > 0 ? metadata : (undefined as BlockRouteMetadata | undefined),
+          page_id:
+            newRoute.destination_kind === 'page' ? newRoute.page_id : (null as string | null),
+          external_url:
+            newRoute.destination_kind === 'external'
+              ? newRoute.external_url
+              : (null as string | null),
+          metadata:
+            Object.keys(metadata).length > 0
+              ? metadata
+              : (undefined as BlockRouteMetadata | undefined),
         },
       ]);
 
     // Remove empty metadata from all routes
     const finalRoutes = routesToUpsert.map((r) => {
       if (r.metadata) {
-        const hasMetadata = Object.values(r.metadata).some((v) => v !== undefined && v !== null && v !== '');
+        const hasMetadata = Object.values(r.metadata).some(
+          (v) => v !== undefined && v !== null && v !== ''
+        );
         if (!hasMetadata) {
           r.metadata = undefined;
         }
@@ -179,7 +188,9 @@ export function BlockRoutingConfig() {
       return r;
     });
 
-    console.log('[BlockRoutingConfig] SaveRoute { sourceType }', { sourceType: newRoute.source_type });
+    console.log('[BlockRoutingConfig] SaveRoute { sourceType }', {
+      sourceType: newRoute.source_type,
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     saveRoutes(finalRoutes as any);
@@ -209,7 +220,9 @@ export function BlockRoutingConfig() {
       // Remove empty metadata
       const finalRoutes = routesToUpsert.map((r) => {
         if (r.metadata) {
-          const hasMetadata = Object.values(r.metadata).some((v) => v !== undefined && v !== null && v !== '');
+          const hasMetadata = Object.values(r.metadata).some(
+            (v) => v !== undefined && v !== null && v !== ''
+          );
           if (!hasMetadata) {
             r.metadata = undefined;
           }
@@ -252,9 +265,13 @@ export function BlockRoutingConfig() {
               {routes.map((route, idx) => (
                 <tr
                   key={route.id}
-                  className={`border-b border-slate-600 ${idx % 2 === 0 ? 'bg-slate-800' : 'bg-slate-750'}`}
+                  className={`border-b border-slate-600 ${
+                    idx % 2 === 0 ? 'bg-slate-800' : 'bg-slate-750'
+                  }`}
                 >
-                  <td className="px-4 py-3 text-slate-100 font-mono text-xs">{route.source_type}</td>
+                  <td className="px-4 py-3 text-slate-100 font-mono text-xs">
+                    {route.source_type}
+                  </td>
                   <td className="px-4 py-3 text-slate-300">
                     {route.destination_kind === 'page'
                       ? pages.find((p) => p.id === route.page_id)?.name || route.page_id
@@ -384,7 +401,9 @@ export function BlockRoutingConfig() {
 
             {/* Governance Metadata */}
             <div className="border-t border-slate-600 pt-4">
-              <p className="text-sm text-slate-300 font-semibold mb-3">Governance Metadata (Optional)</p>
+              <p className="text-sm text-slate-300 font-semibold mb-3">
+                Governance Metadata (Optional)
+              </p>
 
               <div className="space-y-3">
                 <input

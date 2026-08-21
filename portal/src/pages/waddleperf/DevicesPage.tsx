@@ -23,11 +23,7 @@ function StatusBadge({ status }: { status: string }) {
         ? 'bg-red-900 text-red-200'
         : 'bg-yellow-900 text-yellow-200';
 
-  return (
-    <span className={`px-2 py-1 rounded text-sm ${colorClass}`}>
-      {status}
-    </span>
-  );
+  return <span className={`px-2 py-1 rounded text-sm ${colorClass}`}>{status}</span>;
 }
 
 export function DevicesPage() {
@@ -55,8 +51,7 @@ export function DevicesPage() {
       key: 'last_heartbeat',
       label: 'Last Heartbeat',
       sortable: true,
-      render: (heartbeat) =>
-        formatRelativeTime(heartbeat as string | null),
+      render: (heartbeat) => formatRelativeTime(heartbeat as string | null),
     },
   ];
 
@@ -66,9 +61,7 @@ export function DevicesPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-amber-400">Devices</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Manage and monitor WaddlePerf cluster devices
-        </p>
+        <p className="text-slate-400 text-sm mt-1">Manage and monitor WaddlePerf cluster devices</p>
       </div>
 
       <DataTable

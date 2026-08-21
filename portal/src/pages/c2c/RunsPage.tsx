@@ -17,7 +17,9 @@ function RunsPage() {
   const canWrite = canWriteFn();
   const [showForm, setShowForm] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const [matrixData, setMatrixData] = useState<{ regions: string[]; cells: MatrixCell[] } | null>(null);
+  const [matrixData, setMatrixData] = useState<{ regions: string[]; cells: MatrixCell[] } | null>(
+    null
+  );
   const [testTypes, setTestTypes] = useState<string>('http');
 
   const queryClient = useQueryClient();
@@ -99,9 +101,7 @@ function RunsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-amber-400">C2C Runs</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Cluster-to-cluster matrix runs and results
-        </p>
+        <p className="text-slate-400 text-sm mt-1">Cluster-to-cluster matrix runs and results</p>
       </div>
 
       {canWrite && (
@@ -159,11 +159,7 @@ function RunsPage() {
           {matrixMutation.isPending ? (
             <div className="text-slate-400">Loading matrix data...</div>
           ) : (
-            <MatrixGrid
-              regions={matrixData.regions}
-              cells={matrixData.cells}
-              testType="http"
-            />
+            <MatrixGrid regions={matrixData.regions} cells={matrixData.cells} testType="http" />
           )}
         </div>
       )}
