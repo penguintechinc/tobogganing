@@ -44,6 +44,43 @@ redis:
   storage:
     size: 512Mi
 
+## netsvcs-dns: local registry, NodePort exposure (mirrors
+## charts/netsvcs-dns/alpha.yml for standalone parity)
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: localhost:32000/netsvcs-dns
+    tag: alpha-latest
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    ports:
+      doh:
+        nodePort: 30080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+## node-agent: local registry (mirrors charts/node-agent/values-alpha.yaml)
+node-agent:
+  enabled: true
+  image:
+    repository: localhost:32000/tobogganing/node-agent
+    tag: alpha-latest
+    pullPolicy: IfNotPresent
+  nodeAgent:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
 autoscaling:
   enabled: false
 

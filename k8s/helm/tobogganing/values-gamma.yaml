@@ -1,5 +1,7 @@
-## Tobogganing - Beta Environment Overrides
-## Moderate resources for staging/QA
+## Tobogganing - Gamma Environment Overrides
+## Pre-release validation (dal2.penguintech.cloud, separate cluster/context
+## from beta — see penguintech.md Cluster Contexts). Mirrors values-beta.yaml
+## with gamma-tagged images and the gamma ingress host.
 
 namespace: tobogganing
 
@@ -44,12 +46,12 @@ redis:
   storage:
     size: 1Gi
 
-## netsvcs-dns: CI-built beta image (mirrors charts/netsvcs-dns/beta.yml)
+## netsvcs-dns: CI-built gamma image (mirrors charts/netsvcs-dns/gamma.yml)
 netsvcs-dns:
   enabled: true
   image:
     repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
-    tag: beta-1710000000  # Replaced by CI/CD with actual build tag
+    tag: gamma-1710000000  # Replaced by CI/CD with actual build tag
   resources:
     requests:
       cpu: 100m
@@ -58,12 +60,12 @@ netsvcs-dns:
       cpu: 250m
       memory: 256Mi
 
-## node-agent: CI-built beta image (mirrors charts/node-agent/values-beta.yaml)
+## node-agent: CI-built gamma image (mirrors charts/node-agent/values-gamma.yaml)
 node-agent:
   enabled: true
   image:
     repository: ghcr.io/penguintechinc/tobogganing/node-agent
-    tag: beta-1724152800  # Replaced by CI/CD with actual build tag
+    tag: gamma-1724152800  # Replaced by CI/CD with actual build tag
   nodeAgent:
     resources:
       requests:
@@ -87,7 +89,7 @@ ingress:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/use-regex: "true"
   hosts:
-    - host: tobogganing.penguintech.cloud
+    - host: tobogganing-gamma.penguintech.cloud
       paths:
         - path: /api
           pathType: Prefix
@@ -100,4 +102,4 @@ ingress:
   tls:
     - secretName: tobogganing-tls
       hosts:
-        - tobogganing.penguintech.cloud
+        - tobogganing-gamma.penguintech.cloud

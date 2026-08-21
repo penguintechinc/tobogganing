@@ -1,13 +1,24 @@
 # Default values for node-agent DaemonSet chart
 # Override per environment using values-{alpha,beta,gamma,production}.yaml
+# Also deployable as a k8s/helm/tobogganing dependency (squawk P5-C) — see
+# ../../Chart.yaml `node-agent` entry / ../../values*.yaml `node-agent:` block.
 
 # Namespace for the DaemonSet (typically matches the product name)
 namespace: tobogganing
+
+# Standalone-render fallback for Helm's auto-injected `global` values. When
+# deployed as a tobogganing umbrella dependency, the parent's `global.image`
+# block (values.yaml) takes precedence over this default — same pattern the
+# SASE sub-charts document in charts/suricata/values.yaml.
+global:
+  image:
+    pullPolicy: IfNotPresent
 
 # Image configuration
 image:
   repository: ghcr.io/penguintechinc/tobogganing/node-agent
   tag: beta-1724152800  # Replaced by CI/CD with actual build tag
+  digest: ""  # Set (sha256:...) for production — see values-production.yaml
   pullPolicy: IfNotPresent
 
 # Node agent configuration

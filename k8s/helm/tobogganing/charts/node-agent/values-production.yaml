@@ -5,7 +5,10 @@ namespace: tobogganing
 
 image:
   repository: ghcr.io/penguintechinc/tobogganing/node-agent
-  tag: v0.1.0  # Pinned to release version tag
+  tag: v0.1.0
+  # TODO: pin to released digest — replace with the real sha256 once a
+  # v0.1.0 node-agent image is published to ghcr.io.
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   pullPolicy: IfNotPresent
 
 nodeAgent:
