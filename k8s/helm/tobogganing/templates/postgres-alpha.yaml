@@ -1,0 +1,128 @@
+{{- if eq .Chart.AppVersion "2.0.0" }}
+# Alpha-only PostgreSQL StatefulSet for hub-api
+# In production, use a managed database or external Bitnami PostgreSQL chart
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  POSTGRES_DB: "tobogganing"
+  POSTGRES_USER: "tobogganing"
+  POSTGRES_PASSWORD: "alpha-password-12345"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+data:
+  init.sql: |
+    -- Alpha stub: minimal schema for hub-api
+    -- In production, hub-api owns schema creation via migrations
+    CREATE DATABASE IF NOT EXISTS tobogganing;
+    \c tobogganing;
+    CREATE TABLE IF NOT EXISTS migrations (id SERIAL PRIMARY KEY);
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:17-bookworm
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U tobogganing -d tobogganing
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U tobogganing -d tobogganing
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+{{- end }}

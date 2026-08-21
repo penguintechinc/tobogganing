@@ -8,7 +8,7 @@ hubApi:
   image:
     repository: localhost:32000/tobogganing/hub-api
     tag: alpha-local
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   replicas: 1
   resources:
     requests:
@@ -33,7 +33,7 @@ hubWebui:
   image:
     repository: localhost:32000/tobogganing/hub-webui
     tag: alpha-local
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   replicas: 1
   resources:
     requests:
@@ -47,7 +47,7 @@ redis:
   image:
     repository: valkey/valkey
     tag: 8-bookworm
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   replicas: 1
   resources:
     requests:
@@ -111,7 +111,12 @@ monitoring:
   enabled: false
 
 config:
-  logLevel: debug
+  logLevel: DEBUG
+  dbType: "postgresql"
+  dbHost: "postgres"
+  dbPort: "5432"
+  dbName: "tobogganing"
+  dbUser: "tobogganing"
 
 ## Ingress
 ingress:
