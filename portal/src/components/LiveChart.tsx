@@ -11,11 +11,13 @@ import {
 } from 'recharts';
 
 export interface LiveChartProps {
-  data: Array<Record<string, unknown> & {
-    timestamp: string;
-    latency?: number;
-    throughput?: number;
-  }>;
+  data: Array<
+    Record<string, unknown> & {
+      timestamp: string;
+      latency?: number;
+      throughput?: number;
+    }
+  >;
 }
 
 export default function LiveChart({ data }: LiveChartProps) {

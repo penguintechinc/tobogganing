@@ -14,9 +14,7 @@ function HealthBadge({ enabled }: { enabled: boolean }) {
   return (
     <span
       className={`px-2 py-1 rounded text-sm ${
-        enabled
-          ? 'bg-green-900 text-green-200'
-          : 'bg-red-900 text-red-200'
+        enabled ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
       }`}
     >
       {enabled ? 'Healthy' : 'Offline'}
@@ -82,20 +80,24 @@ function EndpointsPage() {
       sortable: false,
       render: (enabled) => <HealthBadge enabled={Boolean(enabled)} />,
     },
-    ...(canWrite ? [{
-      key: 'id',
-      label: 'Actions',
-      sortable: false,
-      render: (id) => (
-        <button
-          onClick={() => deleteMutation.mutate(String(id))}
-          className="text-red-400 hover:text-red-300"
-          aria-label={`Delete endpoint ${id}`}
-        >
-          Delete
-        </button>
-      ),
-    } as ColumnConfig<Endpoint>] : []),
+    ...(canWrite
+      ? [
+          {
+            key: 'id',
+            label: 'Actions',
+            sortable: false,
+            render: (id) => (
+              <button
+                onClick={() => deleteMutation.mutate(String(id))}
+                className="text-red-400 hover:text-red-300"
+                aria-label={`Delete endpoint ${id}`}
+              >
+                Delete
+              </button>
+            ),
+          } as ColumnConfig<Endpoint>,
+        ]
+      : []),
   ];
 
   console.log('[EndpointsPage] Render { endpoints:', endpoints.length, '}');
@@ -104,9 +106,7 @@ function EndpointsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-amber-400">C2C Nodes</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Manage cluster-to-cluster test endpoints
-        </p>
+        <p className="text-slate-400 text-sm mt-1">Manage cluster-to-cluster test endpoints</p>
       </div>
 
       {canWrite && (
@@ -130,9 +130,7 @@ function EndpointsPage() {
             <input
               type="text"
               value={formData.region}
-              onChange={(e) =>
-                setFormData({ ...formData, region: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, region: e.target.value })}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
               placeholder="e.g., us-west-2"
               required
@@ -143,9 +141,7 @@ function EndpointsPage() {
             <input
               type="text"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
               placeholder="e.g., primary-node"
               required
@@ -156,9 +152,7 @@ function EndpointsPage() {
             <input
               type="url"
               value={formData.engine_url}
-              onChange={(e) =>
-                setFormData({ ...formData, engine_url: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, engine_url: e.target.value })}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
               placeholder="http://engine.local:8080"
               required
@@ -169,9 +163,7 @@ function EndpointsPage() {
             <input
               type="text"
               value={formData.target}
-              onChange={(e) =>
-                setFormData({ ...formData, target: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, target: e.target.value })}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
               placeholder="node.example.com"
               required
@@ -182,9 +174,7 @@ function EndpointsPage() {
             <input
               type="password"
               value={formData.api_key || ''}
-              onChange={(e) =>
-                setFormData({ ...formData, api_key: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
               placeholder="auto-generated if empty"
             />

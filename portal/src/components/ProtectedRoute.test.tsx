@@ -6,7 +6,8 @@ import { AuthProvider } from '../context/AuthContext';
 
 const TestComponent = () => <div>Protected Content</div>;
 
-const testToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjk5OTk5OTk5OTksImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInJvbGUiOiJ2aWV3ZXIiLCJ0ZW5hbnQiOiJ0ZXN0In0.mock';
+const testToken =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjk5OTk5OTk5OTksImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInJvbGUiOiJ2aWV3ZXIiLCJ0ZW5hbnQiOiJ0ZXN0In0.mock';
 
 const renderProtectedRoute = (isAuthenticated: boolean = false) => {
   if (isAuthenticated) {

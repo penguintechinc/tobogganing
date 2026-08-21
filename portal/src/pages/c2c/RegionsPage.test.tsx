@@ -26,9 +26,7 @@ describe('RegionsPage', () => {
     );
 
     expect(screen.getByText('C2C Regions')).toBeInTheDocument();
-    expect(
-      screen.getByText('Region health summary and node inventory')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Region health summary and node inventory')).toBeInTheDocument();
   });
 
   it('loads and displays regions', async () => {

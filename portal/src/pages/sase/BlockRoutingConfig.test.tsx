@@ -200,7 +200,11 @@ describe('BlockRoutingConfig', () => {
       const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
       expect(calls.length).toBeGreaterThan(0);
       const callArgs = calls[0]![0]!;
-      expect(callArgs.some((r) => r.source_type === 'custom-rule:phishing' && r.destination_kind === 'page')).toBe(true);
+      expect(
+        callArgs.some(
+          (r) => r.source_type === 'custom-rule:phishing' && r.destination_kind === 'page'
+        )
+      ).toBe(true);
     });
   });
 
@@ -242,7 +246,9 @@ describe('BlockRoutingConfig', () => {
       const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
       expect(calls.length).toBeGreaterThan(0);
       const callArgs = calls[0]![0]!;
-      expect(callArgs.some((r) => r.source_type === 'soft-block' && r.destination_kind === 'external')).toBe(true);
+      expect(
+        callArgs.some((r) => r.source_type === 'soft-block' && r.destination_kind === 'external')
+      ).toBe(true);
     });
   });
 

@@ -2,7 +2,13 @@ import { render, screen } from '@testing-library/react';
 import TrendsChart from './TrendsChart';
 
 jest.mock('recharts', () => ({
-  LineChart: ({ children, data }: { children: React.ReactNode; data?: Array<{ name: string; value: number }> }) => (
+  LineChart: ({
+    children,
+    data,
+  }: {
+    children: React.ReactNode;
+    data?: Array<{ name: string; value: number }>;
+  }) => (
     <div data-testid="line-chart" data-count={data?.length}>
       {children}
     </div>

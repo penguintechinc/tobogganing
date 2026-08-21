@@ -18,6 +18,8 @@ import {
   ChevronUp,
   Home,
   RefreshCw,
+  Globe,
+  Server,
   LucideIcon,
 } from 'lucide-react';
 
@@ -43,6 +45,8 @@ const iconMap: Record<IconName, LucideIcon> = {
   'chevron-up': ChevronUp,
   home: Home,
   'refresh-cw': RefreshCw,
+  globe: Globe,
+  server: Server,
 };
 
 export function getIconComponent(name: IconName) {

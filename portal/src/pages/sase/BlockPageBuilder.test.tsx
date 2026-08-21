@@ -70,7 +70,7 @@ describe('BlockPageBuilder', () => {
   it('renders the builder with title and initial state', () => {
     renderComponent();
     expect(screen.getByText('Block Page Builder')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g., \'Malware Block Page\'')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g., 'Malware Block Page'")).toBeInTheDocument();
   });
 
   it('adds a heading block when clicking add button', async () => {
@@ -212,7 +212,9 @@ describe('BlockPageBuilder', () => {
 
     // Verify markdown output contains the list items (in the generated markdown <pre> block)
     await waitFor(() => {
-      const markdownOutput = screen.getByText(/- Item 1[\s\S]*- Item 2[\s\S]*- Item 3/, { selector: 'pre' });
+      const markdownOutput = screen.getByText(/- Item 1[\s\S]*- Item 2[\s\S]*- Item 3/, {
+        selector: 'pre',
+      });
       expect(markdownOutput).toBeInTheDocument();
     });
   });
@@ -259,7 +261,7 @@ describe('BlockPageBuilder', () => {
     renderComponent();
 
     // Enter page name
-    const pageName = screen.getByPlaceholderText('e.g., \'Malware Block Page\'');
+    const pageName = screen.getByPlaceholderText("e.g., 'Malware Block Page'");
     fireEvent.change(pageName, { target: { value: 'Malware Block' } });
 
     // Add a block

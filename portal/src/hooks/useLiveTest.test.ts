@@ -55,7 +55,7 @@ describe('useLiveTest', () => {
       expect(global.WebSocket).toHaveBeenCalled();
     });
 
-    const call = ((global.WebSocket as unknown) as jest.Mock).mock.calls[0];
+    const call = (global.WebSocket as unknown as jest.Mock).mock.calls[0];
     const wsUrl = call?.[0] as string;
     const subprotocols = call?.[1] as string[];
     // URL carries no credential

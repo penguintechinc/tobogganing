@@ -23,9 +23,7 @@ function DetailPanel({ test }: { test: Test }) {
         </div>
         <div>
           <p className="text-slate-400 text-sm">Throughput</p>
-          <p className="text-slate-200">
-            {test.throughput !== null ? test.throughput : 'N/A'}
-          </p>
+          <p className="text-slate-200">{test.throughput !== null ? test.throughput : 'N/A'}</p>
         </div>
         {test.target && (
           <div className="col-span-2">
@@ -156,9 +154,7 @@ export function TestsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-amber-400">Tests</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          View performance test results and metrics
-        </p>
+        <p className="text-slate-400 text-sm mt-1">View performance test results and metrics</p>
       </div>
 
       <div data-testid="datatable" className="overflow-x-auto border border-slate-700 rounded">
@@ -166,18 +162,10 @@ export function TestsPage() {
           <thead>
             <tr className="bg-slate-800 border-b border-slate-700">
               <th className="px-4 py-3 text-left w-8"></th>
-              <th className="px-4 py-3 text-left text-amber-400 font-semibold">
-                Test ID
-              </th>
-              <th className="px-4 py-3 text-left text-amber-400 font-semibold">
-                Device ID
-              </th>
-              <th className="px-4 py-3 text-left text-amber-400 font-semibold">
-                Type
-              </th>
-              <th className="px-4 py-3 text-left text-amber-400 font-semibold">
-                Status
-              </th>
+              <th className="px-4 py-3 text-left text-amber-400 font-semibold">Test ID</th>
+              <th className="px-4 py-3 text-left text-amber-400 font-semibold">Device ID</th>
+              <th className="px-4 py-3 text-left text-amber-400 font-semibold">Type</th>
+              <th className="px-4 py-3 text-left text-amber-400 font-semibold">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -186,9 +174,7 @@ export function TestsPage() {
                 key={test.id}
                 test={test}
                 expanded={expandedId === test.id}
-                onToggle={() =>
-                  setExpandedId(expandedId === test.id ? null : test.id)
-                }
+                onToggle={() => setExpandedId(expandedId === test.id ? null : test.id)}
               />
             ))}
           </tbody>

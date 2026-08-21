@@ -54,7 +54,6 @@ describe('RunsPage', () => {
   });
 
   it('renders the page title', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -62,13 +61,10 @@ describe('RunsPage', () => {
     );
 
     expect(screen.getByText('C2C Runs')).toBeInTheDocument();
-    expect(
-      screen.getByText('Cluster-to-cluster matrix runs and results')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Cluster-to-cluster matrix runs and results')).toBeInTheDocument();
   });
 
   it('loads and displays runs', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -82,7 +78,6 @@ describe('RunsPage', () => {
   });
 
   it('renders create button for admin', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -107,7 +102,6 @@ describe('RunsPage', () => {
   });
 
   it('toggles form visibility', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -118,23 +112,18 @@ describe('RunsPage', () => {
     await userEvent.click(createButton);
 
     await waitFor(() => {
-      expect(
-        screen.getByPlaceholderText('http, tcp, udp, icmp')
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('http, tcp, udp, icmp')).toBeInTheDocument();
     });
 
     const cancelButton = screen.getByText('Cancel');
     await userEvent.click(cancelButton);
 
     await waitFor(() => {
-      expect(
-        screen.queryByPlaceholderText('http, tcp, udp, icmp')
-      ).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('http, tcp, udp, icmp')).not.toBeInTheDocument();
     });
   });
 
   it('submits create run form', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -159,7 +148,6 @@ describe('RunsPage', () => {
   });
 
   it('shows matrix detail when expanded', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -179,7 +167,6 @@ describe('RunsPage', () => {
   });
 
   it('hides matrix detail when collapsed', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -206,7 +193,6 @@ describe('RunsPage', () => {
   });
 
   it('displays run status badges', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RunsPage />
@@ -220,7 +206,6 @@ describe('RunsPage', () => {
   });
 
   it('shows empty state when no runs', async () => {
-
     (c2cApi.listRuns as jest.Mock).mockResolvedValue([]);
 
     render(

@@ -4,15 +4,7 @@ import { getStatsSummary, getStatsTrends } from '../../api/waddleperf';
 
 const TrendsChart = lazy(() => import('../../components/TrendsChart'));
 
-function StatCard({
-  label,
-  value,
-  unit = '',
-}: {
-  label: string;
-  value: number;
-  unit?: string;
-}) {
+function StatCard({ label, value, unit = '' }: { label: string; value: number; unit?: string }) {
   return (
     <div className="bg-slate-800 border border-slate-700 rounded p-4">
       <p className="text-slate-400 text-sm">{label}</p>
@@ -80,33 +72,20 @@ export function StatsPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="h-24 bg-slate-700 rounded animate-pulse"
-            />
+            <div key={i} className="h-24 bg-slate-700 rounded animate-pulse" />
           ))}
         </div>
       ) : summary ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Total Tests" value={summary.total_tests} />
           <StatCard label="Total Devices" value={summary.total_devices} />
-          <StatCard
-            label="Success Rate"
-            value={Math.round(summary.success_rate * 100)}
-            unit="%"
-          />
-          <StatCard
-            label="Avg Latency"
-            value={Math.round(summary.avg_latency_ms)}
-            unit="ms"
-          />
+          <StatCard label="Success Rate" value={Math.round(summary.success_rate * 100)} unit="%" />
+          <StatCard label="Avg Latency" value={Math.round(summary.avg_latency_ms)} unit="ms" />
         </div>
       ) : null}
 
       <div className="bg-slate-800 border border-slate-700 rounded p-4">
-        <h2 className="text-lg font-semibold text-amber-400 mb-4">
-          Trends Over Time
-        </h2>
+        <h2 className="text-lg font-semibold text-amber-400 mb-4">Trends Over Time</h2>
         {trendsLoading ? (
           <div className="h-64 bg-slate-700 rounded animate-pulse" />
         ) : trendsError ? (

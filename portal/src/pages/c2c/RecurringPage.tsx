@@ -78,41 +78,43 @@ function RecurringPage() {
       render: (enabled) => (
         <span
           className={`px-2 py-1 rounded text-sm ${
-            enabled
-              ? 'bg-green-900 text-green-200'
-              : 'bg-slate-700 text-slate-300'
+            enabled ? 'bg-green-900 text-green-200' : 'bg-slate-700 text-slate-300'
           }`}
         >
           {enabled ? 'Enabled' : 'Disabled'}
         </span>
       ),
     },
-    ...(canWrite ? [{
-      key: 'id',
-      label: 'Actions',
-      sortable: false,
-      render: (id, row) => (
-        <div className="space-x-2 flex">
-          <button
-            onClick={() =>
-              toggleMutation.mutate({
-                jobId: String(id),
-                enabled: !(row as RecurringJob).enabled,
-              })
-            }
-            className="text-amber-400 hover:text-amber-300 text-sm"
-          >
-            {(row as RecurringJob).enabled ? 'Disable' : 'Enable'}
-          </button>
-          <button
-            onClick={() => deleteMutation.mutate(String(id))}
-            className="text-red-400 hover:text-red-300 text-sm"
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    } as ColumnConfig<RecurringJob>] : []),
+    ...(canWrite
+      ? [
+          {
+            key: 'id',
+            label: 'Actions',
+            sortable: false,
+            render: (id, row) => (
+              <div className="space-x-2 flex">
+                <button
+                  onClick={() =>
+                    toggleMutation.mutate({
+                      jobId: String(id),
+                      enabled: !(row as RecurringJob).enabled,
+                    })
+                  }
+                  className="text-amber-400 hover:text-amber-300 text-sm"
+                >
+                  {(row as RecurringJob).enabled ? 'Disable' : 'Enable'}
+                </button>
+                <button
+                  onClick={() => deleteMutation.mutate(String(id))}
+                  className="text-red-400 hover:text-red-300 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
+            ),
+          } as ColumnConfig<RecurringJob>,
+        ]
+      : []),
   ];
 
   console.log('[RecurringPage] Render { jobs:', jobs.length, '}');
@@ -121,9 +123,7 @@ function RecurringPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-amber-400">C2C Recurring Jobs</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Scheduled matrix runs and node health checks
-        </p>
+        <p className="text-slate-400 text-sm mt-1">Scheduled matrix runs and node health checks</p>
       </div>
 
       {canWrite && (
@@ -146,9 +146,7 @@ function RecurringPage() {
             <label className="block text-amber-400 text-sm mb-1">Job Type *</label>
             <select
               value={jobType}
-              onChange={(e) =>
-                setJobType(e.target.value as 'matrix_run' | 'node_health')
-              }
+              onChange={(e) => setJobType(e.target.value as 'matrix_run' | 'node_health')}
               className="w-full bg-slate-700 text-white px-3 py-2 rounded"
             >
               <option value="matrix_run">Matrix Run</option>
@@ -156,9 +154,7 @@ function RecurringPage() {
             </select>
           </div>
           <div>
-            <label className="block text-amber-400 text-sm mb-1">
-              Interval (seconds) *
-            </label>
+            <label className="block text-amber-400 text-sm mb-1">Interval (seconds) *</label>
             <input
               type="number"
               value={intervalSeconds}

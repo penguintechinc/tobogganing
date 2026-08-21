@@ -49,7 +49,6 @@ describe('EndpointsPage', () => {
   });
 
   it('renders the page title and description', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -57,13 +56,10 @@ describe('EndpointsPage', () => {
     );
 
     expect(screen.getByText('C2C Nodes')).toBeInTheDocument();
-    expect(
-      screen.getByText('Manage cluster-to-cluster test endpoints')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Manage cluster-to-cluster test endpoints')).toBeInTheDocument();
   });
 
   it('renders a create button when canWrite is true', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -89,7 +85,6 @@ describe('EndpointsPage', () => {
   });
 
   it('loads and displays endpoints', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -105,7 +100,6 @@ describe('EndpointsPage', () => {
   });
 
   it('displays health badge for healthy endpoint', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -119,7 +113,6 @@ describe('EndpointsPage', () => {
   });
 
   it('displays health badge for offline endpoint', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -133,7 +126,6 @@ describe('EndpointsPage', () => {
   });
 
   it('shows empty state when no endpoints', async () => {
-
     (c2cApi.listEndpoints as jest.Mock).mockResolvedValue([]);
 
     render(
@@ -148,7 +140,6 @@ describe('EndpointsPage', () => {
   });
 
   it('toggles form visibility', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -171,7 +162,6 @@ describe('EndpointsPage', () => {
   });
 
   it('submits endpoint creation form with all required fields', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -205,7 +195,6 @@ describe('EndpointsPage', () => {
   });
 
   it('submits endpoint creation form with optional api_key', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />
@@ -242,7 +231,6 @@ describe('EndpointsPage', () => {
   });
 
   it('deletes endpoint when admin clicks delete', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <EndpointsPage />

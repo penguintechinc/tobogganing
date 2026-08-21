@@ -8,9 +8,7 @@ jest.mock('../../api/waddleperf');
 jest.mock('../../components/TrendsChart', () => ({
   __esModule: true,
   default: ({ data }: { data: Array<{ timestamp: string; value: number }> }) => (
-    <div data-testid="trends-chart">
-      Chart with {data.length} points
-    </div>
+    <div data-testid="trends-chart">Chart with {data.length} points</div>
   ),
 }));
 
@@ -96,9 +94,7 @@ describe('StatsPage', () => {
   });
 
   it('shows error state on summary fetch failure', async () => {
-    mockWaddleperf.getStatsSummary.mockRejectedValueOnce(
-      new Error('Summary error')
-    );
+    mockWaddleperf.getStatsSummary.mockRejectedValueOnce(new Error('Summary error'));
     mockWaddleperf.getStatsTrends.mockResolvedValueOnce(mockTrends);
 
     const queryClient = new QueryClient({
@@ -118,12 +114,8 @@ describe('StatsPage', () => {
   });
 
   it('renders loading state', () => {
-    mockWaddleperf.getStatsSummary.mockImplementationOnce(
-      () => new Promise(() => {})
-    );
-    mockWaddleperf.getStatsTrends.mockImplementationOnce(
-      () => new Promise(() => {})
-    );
+    mockWaddleperf.getStatsSummary.mockImplementationOnce(() => new Promise(() => {}));
+    mockWaddleperf.getStatsTrends.mockImplementationOnce(() => new Promise(() => {}));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -140,9 +132,7 @@ describe('StatsPage', () => {
   });
 
   it('handles retry button click on error', async () => {
-    mockWaddleperf.getStatsSummary.mockRejectedValueOnce(
-      new Error('Summary error')
-    );
+    mockWaddleperf.getStatsSummary.mockRejectedValueOnce(new Error('Summary error'));
     mockWaddleperf.getStatsTrends.mockResolvedValueOnce(mockTrends);
 
     const queryClient = new QueryClient({
@@ -165,9 +155,7 @@ describe('StatsPage', () => {
 
   it('shows error state on trends fetch failure', async () => {
     mockWaddleperf.getStatsSummary.mockResolvedValueOnce(mockSummary);
-    mockWaddleperf.getStatsTrends.mockRejectedValueOnce(
-      new Error('Trends error')
-    );
+    mockWaddleperf.getStatsTrends.mockRejectedValueOnce(new Error('Trends error'));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -208,9 +196,7 @@ describe('StatsPage', () => {
   });
 
   it('retries on error', async () => {
-    mockWaddleperf.getStatsSummary.mockRejectedValueOnce(
-      new Error('Summary error')
-    );
+    mockWaddleperf.getStatsSummary.mockRejectedValueOnce(new Error('Summary error'));
     mockWaddleperf.getStatsTrends.mockResolvedValueOnce(mockTrends);
 
     const queryClient = new QueryClient({

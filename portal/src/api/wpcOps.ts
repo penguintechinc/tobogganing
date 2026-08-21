@@ -125,9 +125,7 @@ export async function listAlertEvents(): Promise<AlertEvent[]> {
 
 export async function listAlertChannels(): Promise<AlertChannel[]> {
   console.log('[wpcOps] listAlertChannels');
-  const response = await apiClient.get<AlertChannelsResponse>(
-    '/perftest_cluster/alerts/channels'
-  );
+  const response = await apiClient.get<AlertChannelsResponse>('/perftest_cluster/alerts/channels');
   return response.data.channels;
 }
 
@@ -138,10 +136,7 @@ export async function createAlertChannel(payload: {
   enabled?: boolean;
 }): Promise<AlertChannel> {
   console.log('[wpcOps] createAlertChannel { kind:', payload.kind, '}');
-  const response = await apiClient.post<AlertChannel>(
-    '/perftest_cluster/alerts/channels',
-    payload
-  );
+  const response = await apiClient.post<AlertChannel>('/perftest_cluster/alerts/channels', payload);
   return response.data;
 }
 
@@ -153,9 +148,7 @@ export async function deleteAlertChannel(channelId: string): Promise<void> {
 /** API Functions - Scheduled Tests */
 export async function listScheduledTests(): Promise<ScheduledTest[]> {
   console.log('[wpcOps] listScheduledTests');
-  const response = await apiClient.get<ScheduledTestsResponse>(
-    '/perftest_cluster/scheduled-tests'
-  );
+  const response = await apiClient.get<ScheduledTestsResponse>('/perftest_cluster/scheduled-tests');
   return response.data.jobs;
 }
 

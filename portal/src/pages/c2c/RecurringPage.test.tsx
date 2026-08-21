@@ -41,7 +41,6 @@ describe('RecurringPage', () => {
   });
 
   it('renders the page title', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -49,13 +48,10 @@ describe('RecurringPage', () => {
     );
 
     expect(screen.getByText('C2C Recurring Jobs')).toBeInTheDocument();
-    expect(
-      screen.getByText('Scheduled matrix runs and node health checks')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Scheduled matrix runs and node health checks')).toBeInTheDocument();
   });
 
   it('loads and displays recurring jobs', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -69,7 +65,6 @@ describe('RecurringPage', () => {
   });
 
   it('renders create button for admin', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -94,7 +89,6 @@ describe('RecurringPage', () => {
   });
 
   it('shows form with job type selector', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -112,7 +106,6 @@ describe('RecurringPage', () => {
   });
 
   it('submits create job form with job_type selector', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -142,7 +135,6 @@ describe('RecurringPage', () => {
   });
 
   it('toggles form visibility', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -165,7 +157,6 @@ describe('RecurringPage', () => {
   });
 
   it('displays enabled/disabled status badges', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -181,7 +172,6 @@ describe('RecurringPage', () => {
   });
 
   it('deletes recurring job', async () => {
-
     render(
       <QueryClientProvider client={queryClient}>
         <RecurringPage />
@@ -201,7 +191,6 @@ describe('RecurringPage', () => {
   });
 
   it('shows empty state when no jobs', async () => {
-
     (c2cApi.listRecurringJobs as jest.Mock).mockResolvedValue([]);
 
     render(

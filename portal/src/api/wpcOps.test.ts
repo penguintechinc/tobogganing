@@ -218,9 +218,7 @@ describe('wpcOps API', () => {
       mockApiClient.delete.mockResolvedValue({} as Record<string, unknown>);
 
       await wpcOps.deleteScheduledTest('job-1');
-      expect(mockApiClient.delete).toHaveBeenCalledWith(
-        '/perftest_cluster/scheduled-tests/job-1'
-      );
+      expect(mockApiClient.delete).toHaveBeenCalledWith('/perftest_cluster/scheduled-tests/job-1');
     });
   });
 
