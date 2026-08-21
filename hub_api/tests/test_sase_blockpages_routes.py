@@ -1,12 +1,15 @@
 """Test SASE BlockRouteManager with real DAL."""
+
 from __future__ import annotations
 
-import pytest
-from typing import Any
 from datetime import datetime
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
-from hub_api.modules.sase.security.blockpages.routes import BlockRouteManager
+import pytest
+
 from hub_api.modules.sase.security.blockpages.models import RouteDest
+from hub_api.modules.sase.security.blockpages.routes import BlockRouteManager
 
 
 @pytest.mark.asyncio
@@ -119,7 +122,7 @@ async def test_get_routes(real_dal: Any):
     manager = BlockRouteManager(real_dal)
     tenant = "tenant-route-test-a"
 
-    route1 = await manager.set_route(
+    await manager.set_route(
         tenant=tenant,
         source_type="web-category:gambling",
         destination_kind=RouteDest.page,
@@ -127,7 +130,7 @@ async def test_get_routes(real_dal: Any):
         metadata={"created_by": "user-123"},
     )
 
-    route2 = await manager.set_route(
+    await manager.set_route(
         tenant=tenant,
         source_type="web-category:adult",
         destination_kind=RouteDest.page,
@@ -232,3 +235,31 @@ async def test_update_route(real_dal: Any):
     assert updated.external_url == "https://new.example.com/block"
     assert updated.page_id is None
     assert updated.updated_by == "user-456"
+
+
+@pytest.mark.asyncio
+async def test_get_routes_db_error_returns_empty_list() -> None:
+    """get_routes swallows DB errors and returns an empty list (logged)."""
+    mock_db = MagicMock()
+    query = MagicMock()
+    query.select = AsyncMock(side_effect=RuntimeError("db exploded"))
+    mock_db.return_value = query
+
+    manager = BlockRouteManager(mock_db)
+    routes = await manager.get_routes(tenant="tenant-x")
+
+    assert routes == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_db_error_returns_none() -> None:
+    """resolve swallows DB errors and returns None (logged)."""
+    mock_db = MagicMock()
+    query = MagicMock()
+    query.select = AsyncMock(side_effect=RuntimeError("db exploded"))
+    mock_db.return_value = query
+
+    manager = BlockRouteManager(mock_db)
+    resolved = await manager.resolve(tenant="tenant-x", source_type="anything")
+
+    assert resolved is None

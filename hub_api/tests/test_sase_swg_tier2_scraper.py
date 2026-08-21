@@ -1,9 +1,16 @@
 """Tests for metadata-only scraper (Slice E Task 2)."""
+
 from __future__ import annotations
 
-import pytest
+from unittest.mock import patch
 
-from hub_api.modules.sase.security.swg.tier2.scraper import extract_metadata
+import pytest
+from bs4 import BeautifulSoup
+
+from hub_api.modules.sase.security.swg.tier2.scraper import (
+    _extract_visible_text,
+    extract_metadata,
+)
 
 
 class TestExtractMetadata:
@@ -43,11 +50,7 @@ class TestExtractMetadata:
 
     def test_extracts_visible_text(self) -> None:
         """Extract visible text content."""
-        html = (
-            b"<html><body>"
-            b"<p>Visible paragraph</p>"
-            b"</body></html>"
-        )
+        html = b"<html><body>" b"<p>Visible paragraph</p>" b"</body></html>"
         result = extract_metadata(html)
         assert "Visible paragraph" in result
 
@@ -110,11 +113,47 @@ class TestExtractMetadata:
     def test_injection_defense_script_in_paragraph(self) -> None:
         """Script tags inside paragraphs must not leak into output."""
         html = (
-            b"<html><body>"
-            b"<p>Before <script>alert('XSS')</script> After</p>"
-            b"</body></html>"
+            b"<html><body>" b"<p>Before <script>alert('XSS')</script> After</p>" b"</body></html>"
         )
         result = extract_metadata(html)
         assert "alert" not in result
         assert "XSS" not in result
         # The words "Before" and "After" may or may not be in output depending on BeautifulSoup's handling
+
+    def test_no_body_tag_uses_fallback_extraction(self) -> None:
+        """HTML with no <body> tag falls back to extracting from the whole soup."""
+        html = b"<p>Fallback text here</p>"
+        result = extract_metadata(html)
+        assert "Fallback text here" in result
+
+    def test_parse_exception_returns_empty_string(self) -> None:
+        """A failure while parsing/extracting is caught, returning an empty string."""
+        with patch(
+            "hub_api.modules.sase.security.swg.tier2.scraper.BeautifulSoup",
+            side_effect=RuntimeError("parser exploded"),
+        ):
+            result = extract_metadata(b"<p>irrelevant</p>")
+        assert result == ""
+
+
+class TestExtractVisibleText:
+    """Direct tests for the private _extract_visible_text traversal helper."""
+
+    def test_object_without_get_is_treated_as_not_hidden(self) -> None:
+        """An element lacking .get() (e.g. non-Tag) is treated as not hidden."""
+
+        class _NoGetTag:
+            name = "div"
+            children: list[object] = []
+
+        result = _extract_visible_text(_NoGetTag())
+        assert result == ""
+
+    def test_script_or_style_tag_is_skipped_directly(self) -> None:
+        """A script/style Tag passed directly is skipped (redundant safety net)."""
+        soup = BeautifulSoup("<script>alert(1)</script>", "html.parser")
+        script_tag = soup.find("script")
+
+        result = _extract_visible_text(script_tag)
+
+        assert result == ""

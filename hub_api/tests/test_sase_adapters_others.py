@@ -1,4 +1,5 @@
 """Test Zeek, Strelka, CAPE, and Arkime adapters."""
+
 from __future__ import annotations
 
 import json
@@ -6,10 +7,10 @@ import json
 import pytest
 
 from hub_api.cache.client import CacheClient
-from hub_api.modules.sase.security.adapters.zeek import ZeekAdapter
-from hub_api.modules.sase.security.adapters.strelka import StrelkaAdapter
-from hub_api.modules.sase.security.adapters.cape import CapeAdapter
 from hub_api.modules.sase.security.adapters.arkime import ArkimeAdapter
+from hub_api.modules.sase.security.adapters.cape import CapeAdapter
+from hub_api.modules.sase.security.adapters.strelka import StrelkaAdapter
+from hub_api.modules.sase.security.adapters.zeek import ZeekAdapter
 from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 
 
@@ -221,8 +222,7 @@ def test_cape_parse_verdict() -> None:
     assert len(hits) >= 2
     assert any(
         h.ioc_type == "hash"
-        and h.value
-        == "deadbeefcafebabecafebabecafebabecafebabecafebabecafebabecafebabe"
+        and h.value == "deadbeefcafebabecafebabecafebabecafebabecafebabecafebabecafebabe"
         for h in hits
     )
     assert any(h.ioc_type == "ip" and h.value == "192.0.2.99" for h in hits)
@@ -379,6 +379,116 @@ async def test_cape_ingest_writes_to_store(cache_client: CacheClient) -> None:
 
     assert stats.source == "cape"
     assert stats.stored >= 2  # At least hash + IP or domain
+
+
+# ============================================================================
+# Blank-line / malformed-JSON / per-event-exception coverage
+# ============================================================================
+
+
+def test_zeek_parse_blank_line_and_exception() -> None:
+    """Zeek parse skips blank lines and swallows per-event exceptions."""
+    adapter = ZeekAdapter()
+
+    # note=42 (non-string) makes `.lower()` raise inside _severity_from_note.
+    # Blank line placed mid-string since raw.strip() would eat a leading one.
+    raw = "\n".join([json.dumps({"note": 42, "src": "192.0.2.1"}), "", "x"])
+
+    hits = adapter.parse(raw)
+    assert hits == []
+
+
+def test_zeek_severity_critical_medium_low_branches() -> None:
+    """Zeek severity heuristic covers critical, medium, and low/else paths."""
+    adapter = ZeekAdapter()
+
+    critical = adapter.parse(json.dumps({"note": "Malware::Trojan_Detected", "src": "192.0.2.1"}))
+    assert critical[0].severity == "critical"
+
+    medium = adapter.parse(json.dumps({"note": "Anomaly::Policy_Violation", "src": "192.0.2.1"}))
+    assert medium[0].severity == "medium"
+
+    low = adapter.parse(json.dumps({"note": "Unremarkable::Event", "src": "192.0.2.1"}))
+    assert low[0].severity == "low"
+
+
+def test_strelka_parse_blank_line_malformed_and_exception() -> None:
+    """Strelka parse skips blank lines, malformed JSON, and per-event exceptions."""
+    adapter = StrelkaAdapter()
+
+    # modules is a list (not dict) -> .get("yara") raises AttributeError.
+    # Blank line placed mid-string since raw.strip() would eat a leading one.
+    raw = "\n".join(
+        [
+            "{ not json",
+            "",
+            json.dumps({"modules": ["broken"], "hashes": {"sha256": "a" * 64}}),
+        ]
+    )
+
+    hits = adapter.parse(raw)
+    assert hits == []
+
+
+def test_strelka_multiple_yara_rules_critical_severity() -> None:
+    """Strelka bumps severity to critical when 3+ YARA rules match."""
+    adapter = StrelkaAdapter()
+
+    event = json.dumps(
+        {
+            "hashes": {"sha256": "b" * 64},
+            "modules": {
+                "yara": {
+                    "rules": [
+                        {"rule": "R1", "matches": [{"identifier": "x"}]},
+                        {"rule": "R2", "matches": [{"identifier": "y"}]},
+                        {"rule": "R3", "matches": [{"identifier": "z"}]},
+                    ]
+                }
+            },
+        }
+    )
+
+    hits = adapter.parse(event)
+    assert len(hits) == 1
+    assert hits[0].severity == "critical"
+
+
+def test_cape_parse_blank_line_malformed_and_exception() -> None:
+    """CAPE parse skips blank lines, malformed JSON, and per-event exceptions."""
+    adapter = CapeAdapter()
+
+    # verdict is an int (not string) -> .lower() raises AttributeError.
+    # Blank line placed mid-string since raw.strip() would eat a leading one.
+    raw = "\n".join(["{ not json", "", json.dumps({"verdict": 123, "malscore": 9.0})])
+
+    hits = adapter.parse(raw)
+    assert hits == []
+
+
+def test_cape_malscore_high_and_medium_branches() -> None:
+    """CAPE malscore mapping covers the high (>=6.0) and medium (else) branches."""
+    adapter = CapeAdapter()
+
+    high = adapter.parse(json.dumps({"malscore": 6.5, "verdict": "suspicious", "sha256": "c" * 64}))
+    assert high[0].severity == "high"
+
+    medium = adapter.parse(
+        json.dumps({"malscore": 5.5, "verdict": "suspicious", "sha256": "d" * 64})
+    )
+    assert medium[0].severity == "medium"
+
+
+def test_arkime_parse_blank_line_malformed_and_exception() -> None:
+    """Arkime parse skips blank lines, malformed JSON, and per-event exceptions."""
+    adapter = ArkimeAdapter()
+
+    # tags contains a non-string element -> .lower() raises AttributeError.
+    # Blank line placed mid-string since raw.strip() would eat a leading one.
+    raw = "\n".join(["{ not json", "", json.dumps({"tags": [123], "srcIp": "10.0.0.1"})])
+
+    hits = adapter.parse(raw)
+    assert hits == []
 
 
 @pytest.mark.asyncio

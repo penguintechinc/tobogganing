@@ -1,4 +1,5 @@
 """Test adapter poller and scheduler integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -225,3 +226,38 @@ async def test_poller_loop_respects_backoff(cache_client: CacheClient) -> None:
 
     # Should have multiple calls with some backoff applied
     assert len(call_times) >= 2
+
+
+@pytest.mark.asyncio
+async def test_poller_loop_outer_exception_triggers_backoff(
+    cache_client: CacheClient,
+) -> None:
+    """Test poller loop's outer except branch backs off when run_once itself raises.
+
+    run_once() normally swallows reader/ingest errors internally, so this
+    directly stubs run_once to raise, exercising the loop()'s own
+    except-Exception/backoff-sleep path (distinct from run_once's handling).
+    """
+    adapter = _StubAdapter()
+    store = BlocklistStore(cache=cache_client)
+
+    poller = AdapterPoller(
+        adapter=adapter,
+        reader=AsyncMock(return_value=""),
+        store=store,
+        interval=0.02,
+    )
+    poller.run_once = AsyncMock(side_effect=RuntimeError("loop-level boom"))
+
+    task = asyncio.create_task(poller.loop())
+    await asyncio.sleep(0.15)
+    task.cancel()
+
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    # Backoff should have grown beyond the initial value of 1
+    assert poller.backoff >= 2
+    assert poller.run_once.await_count >= 1
