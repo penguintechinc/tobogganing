@@ -50,6 +50,12 @@ spec:
               {{- range .Values.securityContext.capabilities.drop }}
               - {{ . }}
               {{- end }}
+            {{- with .Values.securityContext.capabilities.add }}
+            add:
+              {{- range . }}
+              - {{ . }}
+              {{- end }}
+            {{- end }}
         ports:
         - name: http
           containerPort: 8080

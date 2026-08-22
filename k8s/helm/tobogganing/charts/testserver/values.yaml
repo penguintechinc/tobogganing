@@ -96,6 +96,12 @@ securityContext:
   capabilities:
     drop:
       - ALL
+    # NET CAPABILITY EXCEPTION (approved): NET_RAW is required for the ICMP
+    # probe type — internal/protocols/icmp.go shells out to `ping`, which
+    # needs a raw socket. Without it the icmp/traceroute probe types fail at
+    # runtime. Still non-root (uid 1000) with every other capability dropped.
+    add:
+      - NET_RAW
 
 # Health probes against GET /health (cmd/testserver/main.go — no separate
 # /ready route exists in the router today, so both probes target /health).
