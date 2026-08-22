@@ -12,7 +12,7 @@ type: Opaque
 stringData:
   POSTGRES_DB: "tobogganing"
   POSTGRES_USER: "tobogganing"
-  POSTGRES_PASSWORD: "alpha-password-12345"
+  POSTGRES_PASSWORD: {{ required "postgres.password is required" .Values.postgres.password | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -71,7 +71,7 @@ spec:
       containers:
         - name: postgres
           image: postgres:17-bookworm
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 5432
               name: postgres
