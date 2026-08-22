@@ -22,9 +22,16 @@ RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 # Runtime stage
 FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
 
-# Install runtime dependencies (ca-certificates for TLS)
+# Install runtime dependencies:
+#  - ca-certificates: TLS verification for HTTP probe/trace targets
+#  - iputils-ping, traceroute, tcptraceroute: internal/protocols/icmp.go and
+#    trace.go shell out to these for the icmp/traceroute/http_trace probe
+#    types (Tier-1 path-localization probes per the perftest-probe-suite spec)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ca-certificates=20250419~deb12u1 \
+    iputils-ping=3:20221126-1+deb12u1 \
+    traceroute=1:2.1.2-1 \
+    tcptraceroute=1.5beta7+debian-4.1+b1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -38,8 +45,18 @@ COPY --from=builder /build/testserver .
 # Set ownership
 RUN chown -R app:app /app
 
-# ROOT EXCEPTION (approved): NET_RAW required for ICMP raw sockets in network testing
-USER app
+# Container stays non-root (USER 1000 below) — no capability is granted here.
+# `ping`/`traceroute` need NET_RAW to open raw ICMP sockets; the previous
+# comment on this line claimed a Dockerfile-level exception that doesn't
+# exist (capabilities aren't a Dockerfile concept). The actual grant belongs
+# in the K8s deployment's securityContext:
+#   # NET CAPABILITY EXCEPTION (approved): NET_RAW required for ICMP raw sockets
+#   securityContext:
+#     capabilities:
+#       drop: [ALL]
+#       add: [NET_RAW]
+# — owned by the sibling Helm chart branch, not this Dockerfile.
+USER 1000
 
 EXPOSE 8080
 
