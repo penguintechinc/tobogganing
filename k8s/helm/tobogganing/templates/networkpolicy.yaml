@@ -174,3 +174,63 @@ spec:
       ports:
         - port: {{ .Values.hubApi.grpcPort }}
           protocol: TCP
+---
+## testserver (charts/testserver, ships its own `app: testserver` pod
+## labels — not the `tobogganing.*` selector helpers, same reasoning as
+## netsvcs-dns/node-agent above) is the WaddlePerf data-plane engine
+## hub_api/modules/perftest_cluster drives over plain HTTP :8080
+## (hub_api/modules/perftest_cluster/services/engine_client.py, default
+## ENGINE_URL=http://testserver:8080) — REST, not gRPC, so this is a
+## separate rule pair from the hub-api gRPC :50051 rules above.
+## node-agent is included as a future c2c-testing caller (see
+## docs/superpowers/plans/2026-07-10-phase-4-waddleperf-c2c.md) even
+## though no code path calls it yet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-testserver-ingress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: testserver
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: hub-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: node-agent
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-hub-api-testserver-egress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: testserver
+      ports:
+        - port: 8080
+          protocol: TCP

@@ -1,0 +1,39 @@
+# Production environment overrides
+
+image:
+  tag: v1.0.0
+  repository: ghcr.io/penguintechinc/tobogganing/testserver
+  # TODO: pin to released digest — replace with the real sha256 once a
+  # v1.0.0 testserver image is published to ghcr.io.
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+config:
+  authEnabled: "true"
+  maxConcurrentTests: "200"
+
+# Production: point at an externally managed MariaDB (HA, backed up,
+# at-rest encryption) — never a self-hosted single pod. Override host to
+# the real managed endpoint before deploying.
+db:
+  host: "CHANGE-ME-managed-mariadb.internal"
+  port: "3306"
+  user: "waddleperf"
+  name: "waddleperf"
+  passwordSecretName: "testserver-db-credentials"
+  passwordSecretKey: "password"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

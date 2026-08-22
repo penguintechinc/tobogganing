@@ -98,6 +98,30 @@ node-agent:
     enabled: true
     minAvailable: 1
 
+## testserver: production digest pin (mirrors charts/testserver/production.yml)
+testserver:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/testserver
+    tag: v1.0.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  replicaCount: 3
+  db:
+    host: "CHANGE-ME-managed-mariadb.internal"  # externally managed, HA MariaDB
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
 autoscaling:
   enabled: true
   hubApi:
