@@ -7,6 +7,7 @@ import uuid
 # Scope sets by node type (least privilege)
 CLUSTER_SCOPES = "firewall:read wireguard:read ports:read metrics:write certs:issue swg:read"
 CLIENT_SCOPES = "wireguard:read"
+DNS_RESOLVER_SCOPES = "dns:config:read metrics:write ioc:read"
 
 
 def build_machine_claims(
@@ -18,17 +19,18 @@ def build_machine_claims(
     aud: str = "headend",
     token_type: str = "access",
 ) -> dict:
-    """Build claims dict for machine-JWT (cluster or client node).
+    """Build claims dict for machine-JWT (cluster, client, or DNS resolver node).
 
     Constructs the standard claims for access and refresh tokens issued
-    to authenticated clusters or clients. Does NOT include iat/exp—the
+    to authenticated clusters, clients, or DNS resolver nodes. Does NOT include iat/exp—the
     encoder adds those based on TTL. Scopes are derived from node_type:
-    clusters get full access; clients get wireguard:read only (least privilege).
+    clusters get full access; clients get wireguard:read only; DNS resolvers get
+    config/metrics/ioc scopes (least privilege).
 
     Args:
-        sub_id: Subject ID (cluster.id or client.id).
-        node_type: Node type (kubernetes_node, raw_compute, headend, client_docker, client_native).
-        tenant: Tenant ID (from cluster.tenant or client.tenant).
+        sub_id: Subject ID (cluster.id, client.id, or resolver.id).
+        node_type: Node type (kubernetes_node, raw_compute, headend, client_docker, client_native, dns_resolver).
+        tenant: Tenant ID (from cluster.tenant, client.tenant, or enrollment tenant for DNS resolvers).
         iss: Issuer claim (e.g. "tobogganing").
         aud: Audience claim, defaults to "headend".
         token_type: Token type; "access" (default) or "refresh".
@@ -37,10 +39,20 @@ def build_machine_claims(
         Claims dict with sub, iss, aud, tenant, scope, jti, and optionally token_type.
     """
     is_cluster = node_type in ("kubernetes_node", "raw_compute", "headend")
-    scope = CLUSTER_SCOPES if is_cluster else CLIENT_SCOPES
+    is_dns_resolver = node_type == "dns_resolver"
+
+    if is_cluster:
+        scope = CLUSTER_SCOPES
+        sub_prefix = "cluster"
+    elif is_dns_resolver:
+        scope = DNS_RESOLVER_SCOPES
+        sub_prefix = "resolver"
+    else:
+        scope = CLIENT_SCOPES
+        sub_prefix = "client"
 
     claims = {
-        "sub": f"cluster:{sub_id}" if is_cluster else f"client:{sub_id}",
+        "sub": f"{sub_prefix}:{sub_id}",
         "iss": iss,
         "aud": aud,
         "tenant": tenant,

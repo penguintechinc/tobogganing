@@ -16,13 +16,7 @@ describe('MatrixGrid', () => {
       },
     ];
 
-    render(
-      <MatrixGrid
-        regions={regions}
-        cells={cells}
-        testType="latency"
-      />
-    );
+    render(<MatrixGrid regions={regions} cells={cells} testType="latency" />);
 
     expect(screen.getByText('latency')).toBeInTheDocument();
     expect(screen.getAllByText('us-east-1').length).toBeGreaterThan(0);
@@ -48,13 +42,7 @@ describe('MatrixGrid', () => {
       },
     ];
 
-    const { container } = render(
-      <MatrixGrid
-        regions={regions}
-        cells={cells}
-        testType="latency"
-      />
-    );
+    const { container } = render(<MatrixGrid regions={regions} cells={cells} testType="latency" />);
 
     const cells_dom = container.querySelectorAll('.bg-green-900, .bg-amber-900');
     expect(cells_dom.length).toBeGreaterThan(0);
@@ -72,13 +60,7 @@ describe('MatrixGrid', () => {
       },
     ];
 
-    render(
-      <MatrixGrid
-        regions={regions}
-        cells={cells}
-        testType="latency"
-      />
-    );
+    render(<MatrixGrid regions={regions} cells={cells} testType="latency" />);
 
     expect(screen.getByText('42.50ms')).toBeInTheDocument();
     expect(screen.getByText('1.5% loss')).toBeInTheDocument();
@@ -88,13 +70,7 @@ describe('MatrixGrid', () => {
     const regions = ['region-a', 'region-b'];
     const cells: MatrixCell[] = [];
 
-    render(
-      <MatrixGrid
-        regions={regions}
-        cells={cells}
-        testType="latency"
-      />
-    );
+    render(<MatrixGrid regions={regions} cells={cells} testType="latency" />);
 
     const emptyCells = screen.getAllByText('—');
     expect(emptyCells.length).toBeGreaterThan(0);
@@ -112,13 +88,7 @@ describe('MatrixGrid', () => {
       },
     ];
 
-    const { container } = render(
-      <MatrixGrid
-        regions={regions}
-        cells={cells}
-        testType="latency"
-      />
-    );
+    const { container } = render(<MatrixGrid regions={regions} cells={cells} testType="latency" />);
 
     const headers = container.querySelectorAll('div');
     const regionHeaders = Array.from(headers)
@@ -140,13 +110,7 @@ describe('MatrixGrid', () => {
       },
     ];
 
-    const { container } = render(
-      <MatrixGrid
-        regions={regions}
-        cells={cells}
-        testType="latency"
-      />
-    );
+    const { container } = render(<MatrixGrid regions={regions} cells={cells} testType="latency" />);
 
     const redCells = container.querySelectorAll('.bg-red-900');
     expect(redCells.length).toBeGreaterThan(0);

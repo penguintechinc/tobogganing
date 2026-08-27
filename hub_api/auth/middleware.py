@@ -241,9 +241,9 @@ async def _validate_and_store_session(
 
         # Get user for this session (tenant-scoped)
         user_rowset = await dal(
-            dal.users.id == session_row.user_id,
-            dal.users.tenant == session_row.tenant,
-            dal.users.is_active == True,  # noqa: E712
+            (dal.users.id == session_row.user_id)
+            & (dal.users.tenant == session_row.tenant)
+            & (dal.users.is_active == True)  # noqa: E712
         ).select()
 
         user_row = user_rowset.first()

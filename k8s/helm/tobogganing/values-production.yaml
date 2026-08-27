@@ -1,0 +1,150 @@
+## Tobogganing - Production Environment Overrides
+## Full resources with autoscaling
+
+namespace: tobogganing
+
+## First-party images: production requires immutable digest pins (see
+## critical-rules.md Dependency Pinning + devops-containers.md). Real
+## digests TODO — placeholders below until CI publishes a v2.0.0 release.
+hubApi:
+  replicas: 3
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/hub-api
+    tag: v2.0.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+hubRouter:
+  replicas: 3
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/hub-router
+    tag: v2.0.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+hubWebui:
+  replicas: 3
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/hub-webui
+    tag: v2.0.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+redis:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  storage:
+    size: 5Gi
+
+## netsvcs-dns: production digest pin (mirrors charts/netsvcs-dns/production.yml)
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
+    tag: v0.1.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+## node-agent: production digest pin (mirrors charts/node-agent/values-production.yaml)
+node-agent:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/node-agent
+    tag: v0.1.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  nodeAgent:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+## testserver: production digest pin (mirrors charts/testserver/production.yml)
+testserver:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/testserver
+    tag: v1.0.0
+    # TODO: pin to released digest
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  replicaCount: 3
+  db:
+    host: "CHANGE-ME-managed-mariadb.internal"  # externally managed, HA MariaDB
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+autoscaling:
+  enabled: true
+  hubApi:
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  hubWebui:
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+
+monitoring:
+  enabled: true
+  prometheus:
+    scrapeInterval: 15s
+
+config:
+  logLevel: warn

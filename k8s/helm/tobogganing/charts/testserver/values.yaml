@@ -1,0 +1,146 @@
+# Default values for the WaddlePerf testserver Go engine chart (production-
+# safe baseline). Per-environment overrides in alpha.yml, beta.yml,
+# gamma.yml, production.yml.
+# Also deployable as a k8s/helm/tobogganing dependency — see
+# ../../Chart.yaml `testserver` entry / ../../values*.yaml `testserver:`
+# block.
+#
+# KNOWN GAP (flagged, not silently worked around — see chart README note
+# in the umbrella OPTIONAL_SUBCHARTS.md-style docs / PR description):
+# engines/testserver/internal/database/database.go has NO SQLite fallback
+# and NO schema migration — database.New() calls log.Fatalf on connect
+# failure, and the app expects `users`, `jwt_tokens`, `server_keys`, and
+# `server_test_results` tables to already exist. This chart does NOT
+# bundle a MariaDB backing store (rootless-mandate: the official mariadb
+# image's entrypoint needs root for first-boot volume chown, which would
+# require a root exception — not granted without explicit user approval
+# per devops-containers.md). `db.host` below is a placeholder; point it
+# at an operator-provisioned MariaDB (schema pre-applied) before this
+# engine will start successfully.
+#
+# Also flagged: engines/testserver/Dockerfile installs only
+# ca-certificates in the runtime stage, but internal/protocols/icmp.go
+# and trace.go shell out to `ping`/`traceroute`/`tcptraceroute` via
+# os/exec — those binaries are not present in the image, so ICMP and
+# traceroute test types will fail at runtime (http/tcp/udp/speedtest are
+# unaffected, pure-Go). The Dockerfile's "ROOT EXCEPTION (approved):
+# NET_RAW required for ICMP raw sockets" comment does not match the code
+# path (it shells out to system ping, doesn't open raw sockets itself)
+# and no capability is actually granted — pre-existing Dockerfile
+# inconsistency, not introduced or fixed here.
+
+# Standalone-render fallback for Helm's auto-injected `global` values.
+# When deployed as a tobogganing umbrella dependency, the parent's
+# `global.image` block (values.yaml) takes precedence — same pattern the
+# SASE sub-charts and netsvcs-dns/node-agent document.
+global:
+  image:
+    pullPolicy: IfNotPresent
+
+image:
+  repository: ghcr.io/penguintechinc/tobogganing/testserver
+  tag: latest  # Override per environment
+  digest: ""  # Set (sha256:...) for production — see production.yml
+  pullPolicy: IfNotPresent
+
+# Deployment (not DaemonSet) — testserver is addressed as a single
+# logical target: hub_api/modules/perftest_cluster/services/engine_client.py
+# defaults ENGINE_URL to "http://testserver:8080" (one ClusterIP Service
+# name, confirmed by hub_api/tests/test_wpc_engine_client.py), not a
+# per-node fan-out. A ClusterIP-backed Deployment with N replicas behind
+# one Service satisfies that contract; a DaemonSet would require the
+# control plane to address each node individually, which nothing in
+# hub_api does today.
+replicaCount: 3
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# testserver runtime config — env vars read by cmd/testserver/main.go
+config:
+  authEnabled: "true"
+  maxConcurrentTests: "100"
+
+# MariaDB connection (go-sql-driver/mysql) — see KNOWN GAP note above.
+# DB_PASS is never rendered by this chart: reference a pre-provisioned
+# Secret (Vault/Sealed Secrets/External Secrets Operator), matching the
+# netsvcs-dns-bootstrap pattern in charts/netsvcs-dns.
+db:
+  host: "testserver-mariadb"
+  port: "3306"
+  user: "waddleperf"
+  name: "waddleperf"
+  passwordSecretName: "testserver-db-credentials"
+  passwordSecretKey: "password"
+
+# ENGINE_API_KEY consumed by hub_api's EngineClient (hub_api side) must
+# match a `users.api_key` row seeded in the testserver DB — provisioning
+# is out of scope for this chart (app-data concern, not infra).
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Security context (mandatory: non-root, read-only FS, drop all caps).
+# Matches engines/testserver/Dockerfile `USER app` (uid 1000, gid 1000).
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+    # NET CAPABILITY EXCEPTION (approved): NET_RAW is required for the ICMP
+    # probe type — internal/protocols/icmp.go shells out to `ping`, which
+    # needs a raw socket. Without it the icmp/traceroute probe types fail at
+    # runtime. Still non-root (uid 1000) with every other capability dropped.
+    add:
+      - NET_RAW
+
+# Health probes against GET /health (cmd/testserver/main.go — no separate
+# /ready route exists in the router today, so both probes target /health).
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+serviceAccount:
+  create: true
+  name: testserver
+  annotations: {}
+
+podAnnotations: {}
+
+affinity: {}
+tolerations: []
+nodeSelector: {}
+
+# Autoscaling (prod only — see templates/hpa.yaml)
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+labels:
+  app: testserver
+  component: test-engine

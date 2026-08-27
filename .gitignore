@@ -39,6 +39,8 @@ config.json
 !tsconfig.*.json
 !**/tsconfig.json
 !**/tsconfig.*.json
+# ...and the pre-commit hook config matches *config*.yaml but MUST be committed
+!.pre-commit-config.yaml
 .env
 .env.local
 .env.*.local
@@ -175,3 +177,13 @@ services/hub-router/proxy/headend-proxy
 # update`/`build` output regenerated from Chart.lock — the unpacked
 # k8s/helm/*/charts/<name>/ source directories themselves stay tracked.
 k8s/helm/*/charts/*.tgz
+
+# stray 0-byte file some tooling keeps creating at repo root
+/tobogganing
+
+# Rust binary-workspace lockfile MUST be committed (critical-rules.md Dependency
+# Pinning) — the blanket Cargo.lock ignore above is for library crates only.
+!agents/node-agent/Cargo.lock
+
+# Subagent local memory (mem0-style) — persists locally, never committed; do NOT delete it
+.claude/agent-memory/

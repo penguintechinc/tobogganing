@@ -46,7 +46,11 @@ describe('ScheduledTestsPage', () => {
     jest.clearAllMocks();
     (wpcOps.listScheduledTests as jest.Mock).mockResolvedValue(mockTests);
     (wpcOps.createScheduledTest as jest.Mock).mockResolvedValue({ id: 'job-3', ...mockTests[0] });
-    (wpcOps.updateScheduledTest as jest.Mock).mockResolvedValue({ id: 'job-1', ...mockTests[0], enabled: false });
+    (wpcOps.updateScheduledTest as jest.Mock).mockResolvedValue({
+      id: 'job-1',
+      ...mockTests[0],
+      enabled: false,
+    });
     (wpcOps.deleteScheduledTest as jest.Mock).mockResolvedValue(undefined);
     mockUseRole.mockReturnValue({ role: 'admin', canWrite: () => true });
   });
@@ -63,7 +67,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('loads and displays scheduled tests', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -80,7 +83,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('shows Create Test button for admin', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -109,7 +111,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('displays enable/disable and delete actions for admin', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -127,7 +128,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('toggles form visibility', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -155,7 +155,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('submits create test form', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -194,7 +193,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('disables enabled test', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -215,7 +213,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('enables disabled test', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -236,7 +233,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('deletes scheduled test', async () => {
-
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
@@ -257,7 +253,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('displays empty state when no tests', async () => {
-
     (wpcOps.listScheduledTests as jest.Mock).mockResolvedValue([]);
     const queryClient = createQueryClient();
     render(
@@ -272,7 +267,6 @@ describe('ScheduledTestsPage', () => {
   });
 
   it('shows loading state', async () => {
-
     (wpcOps.listScheduledTests as jest.Mock).mockImplementation(() => new Promise(() => {}));
     const queryClient = createQueryClient();
     render(

@@ -19,14 +19,24 @@ penguin-licensing>=0.1.0
 python-dotenv==1.0.1
 structlog==24.4.0
 stix2==3.0.2
+defusedxml==0.7.1
 beautifulsoup4==4.12.3
 scikit-learn==1.5.2
-numpy==1.26.4
+numpy==2.2.3
 scipy==1.14.1
 joblib==1.4.2
 celery==5.4.0
 markdown==3.10.2
 bleach==6.1.0
+grpcio==1.83.0
+grpcio-health-checking==1.62.0
+grpcio-reflection==1.62.0
+protobuf==4.25.2
+redis==5.0.1
+aiohttp==3.11.11
+dnspython==2.6.1
+greenlet==3.1.1
+PyYAML==6.0.2
 
 # Test dependencies
 pytest==8.3.4

@@ -98,9 +98,7 @@ describe('TestsPage', () => {
   });
 
   it('shows loading state', () => {
-    mockWaddleperf.listTests.mockImplementationOnce(
-      () => new Promise(() => {})
-    );
+    mockWaddleperf.listTests.mockImplementationOnce(() => new Promise(() => {}));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -135,9 +133,7 @@ describe('TestsPage', () => {
   });
 
   it('shows error state on fetch failure', async () => {
-    mockWaddleperf.listTests.mockRejectedValueOnce(
-      new Error('API error')
-    );
+    mockWaddleperf.listTests.mockRejectedValueOnce(new Error('API error'));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -156,9 +152,7 @@ describe('TestsPage', () => {
   });
 
   it('shows retry button on error', async () => {
-    mockWaddleperf.listTests.mockRejectedValueOnce(
-      new Error('API error')
-    );
+    mockWaddleperf.listTests.mockRejectedValueOnce(new Error('API error'));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -245,9 +239,7 @@ describe('TestsPage', () => {
   });
 
   it('handles retry button click on error', async () => {
-    mockWaddleperf.listTests.mockRejectedValueOnce(
-      new Error('API error')
-    );
+    mockWaddleperf.listTests.mockRejectedValueOnce(new Error('API error'));
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

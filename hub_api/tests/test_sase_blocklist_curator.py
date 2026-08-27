@@ -7,8 +7,8 @@ from uuid import uuid4
 import pytest
 
 from hub_api.cache.client import CacheClient
-from hub_api.modules.sase.security.blocklist.curator import BlocklistCurator
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.curator import BlocklistCurator
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 
 
 @pytest.fixture

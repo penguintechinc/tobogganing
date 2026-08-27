@@ -88,9 +88,7 @@ export function parseJwt(token: string): Claims {
   // derive a singular role and a display identity that never crash the UI.
   const roles = payload.roles;
   const role =
-    Array.isArray(roles) && roles.length > 0
-      ? String(roles[0])
-      : String(payload.role ?? 'viewer');
+    Array.isArray(roles) && roles.length > 0 ? String(roles[0]) : String(payload.role ?? 'viewer');
   const email = typeof payload.email === 'string' ? payload.email : String(payload.sub ?? '');
   return { ...payload, email, role } as unknown as Claims;
 }

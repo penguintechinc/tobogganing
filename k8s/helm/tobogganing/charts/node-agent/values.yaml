@@ -1,0 +1,106 @@
+# Default values for node-agent DaemonSet chart
+# Override per environment using values-{alpha,beta,gamma,production}.yaml
+# Also deployable as a k8s/helm/tobogganing dependency (squawk P5-C) — see
+# ../../Chart.yaml `node-agent` entry / ../../values*.yaml `node-agent:` block.
+
+# Namespace for the DaemonSet (typically matches the product name)
+namespace: tobogganing
+
+# Standalone-render fallback for Helm's auto-injected `global` values. When
+# deployed as a tobogganing umbrella dependency, the parent's `global.image`
+# block (values.yaml) takes precedence over this default — same pattern the
+# SASE sub-charts document in charts/suricata/values.yaml.
+global:
+  image:
+    pullPolicy: IfNotPresent
+
+# Image configuration
+image:
+  repository: ghcr.io/penguintechinc/tobogganing/node-agent
+  tag: beta-1724152800  # Replaced by CI/CD with actual build tag
+  digest: ""  # Set (sha256:...) for production — see values-production.yaml
+  pullPolicy: IfNotPresent
+
+# Node agent configuration
+nodeAgent:
+  # Deployment mode: "daemonset" or "edge"
+  mode: daemonset
+
+  # Control plane URL (hub_api)
+  controlPlaneUrl: "https://hub-api.tobogganing.svc:8443"
+
+  # Path to the machine JWT file (should be provided via secret volume mount)
+  machineJwtPath: "/etc/node-agent/machine.pem"
+
+  # Runtime features (gated by PostHog flags at agent startup)
+  features:
+    connectivity: true
+    netsvcsEdge: true
+
+  # Heartbeat interval (seconds)
+  heartbeatIntervalSecs: 30
+
+  # Request timeout (seconds)
+  requestTimeoutSecs: 10
+
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Security context for the pod
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 11000
+    fsGroup: 11000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+      add:
+        - NET_ADMIN        # Required: WireGuard TUN device access
+        - NET_BIND_SERVICE # Required: bind to :53 for DNS
+
+  # Probes
+  probes:
+    liveness:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      enabled: true
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: node-agent
+  annotations: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Tolerations for node taints (DaemonSet typically tolerates all node types)
+tolerations:
+  - operator: "Exists"
+
+# Node affinity (empty = run on all nodes; DaemonSet default)
+affinity: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Node selector (optional, e.g., run only on specific nodes)
+nodeSelector: {}

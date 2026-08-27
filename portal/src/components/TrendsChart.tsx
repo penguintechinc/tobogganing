@@ -20,11 +20,7 @@ export interface TrendsChartProps {
 
 export default function TrendsChart({ data }: TrendsChartProps) {
   if (data.length === 0) {
-    return (
-      <div className="text-center py-8 text-slate-400">
-        No trend data available
-      </div>
-    );
+    return <div className="text-center py-8 text-slate-400">No trend data available</div>;
   }
 
   const chartData = data.map((point) => ({

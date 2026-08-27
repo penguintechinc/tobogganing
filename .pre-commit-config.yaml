@@ -1,0 +1,102 @@
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
+# Generated proto stubs + vendored/build dirs are not hand-maintained code.
+exclude: |
+  (?x)^(
+    proto/.*_pb2(_grpc)?\.py|
+    .*/node_modules/.*|
+    .*/\.venv/.*
+  )$
+
+repos:
+  # ── Hygiene ────────────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        # Helm templates are Go-template YAML, not valid standalone YAML.
+        exclude: ^.*/templates/.*\.ya?ml$
+      - id: check-json
+      - id: check-executables-have-shebangs
+      - id: detect-private-key
+
+  # ── Secrets (mandatory, every repo) ────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ── Shell (Bash must stay 3.2-compatible — see general.md) ─────────────────
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  # ── Python — ruff ONLY, never alongside flake8/black/isort ─────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ── Dockerfiles ────────────────────────────────────────────────────────────
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint-docker
+
+  # ── GitHub Actions ─────────────────────────────────────────────────────────
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
+
+  # ── Node/TS (portal) — eslint + prettier via the portal's own tooling ──────
+  - repo: local
+    hooks:
+      - id: portal-prettier
+        name: portal prettier (check)
+        entry: bash -c 'cd portal && npx --no-install prettier --check src'
+        language: system
+        files: ^portal/src/.*\.(ts|tsx|js|jsx|css|json)$
+        pass_filenames: false
+      - id: portal-eslint
+        name: portal eslint
+        entry: bash -c 'cd portal && npx --no-install eslint src --max-warnings=0'
+        language: system
+        files: ^portal/src/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
+  # ── Security (pre-push — heavier, keeps commits fast) ──────────────────────
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+        stages: [pre-push]
+
+  # ── IaC / K8s misconfig (pre-push) ─────────────────────────────────────────
+  # NOTE: checkov omitted — its rustworkx dependency has no prebuilt wheel here
+  # and requires a Rust compiler to build (fails in this env + CI). Add IaC
+  # scanning via `trivy config` (binary, no Python build) once trivy is
+  # provisioned in the toolchain.
+
+  - repo: local
+    hooks:
+      - id: dockerfile-rootless
+        name: Dockerfile runs as non-root
+        entry: scripts/hooks/check-dockerfile-rootless.sh
+        language: script
+        files: (^|/)Dockerfile[^/]*$
+        stages: [pre-push]

@@ -1,4 +1,13 @@
 dependencies:
+- name: netsvcs-dns
+  repository: file://./charts/netsvcs-dns
+  version: 0.1.0
+- name: node-agent
+  repository: file://./charts/node-agent
+  version: 0.1.0
+- name: testserver
+  repository: file://./charts/testserver
+  version: 0.1.0
 - name: suricata
   repository: file://./charts/suricata
   version: 0.1.0
@@ -14,5 +23,5 @@ dependencies:
 - name: cape
   repository: file://./charts/cape
   version: 0.1.0
-digest: sha256:45644284ec5a84943042834dae5c37265d32a51b854e6e0decc53efd52d5ece7
-generated: "2026-08-06T21:47:26.76865112-05:00"
+digest: sha256:a6f8d7675a05e002d69d2cfc0de8ff7e6adbee714b7bc3defa5c7ff0094289f0
+generated: "2026-08-21T17:11:09.955252269-05:00"

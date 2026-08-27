@@ -9,7 +9,7 @@ from hub_api.modules.sase.security.adapters.base import (
     AdapterStats,
     AnalysisAdapter,
 )
-from hub_api.modules.sase.security.blocklist.store import BlocklistStore
+from hub_api.modules.threatintel.blocklist.store import BlocklistStore
 
 
 @pytest.fixture

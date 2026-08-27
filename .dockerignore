@@ -1,0 +1,21 @@
+# Root-level .dockerignore for Docker builds starting from worktree root
+# (agents/node-agent/Dockerfile specifies COPY proto ./proto from worktree root)
+
+# Exclude everything by default, then explicitly allow what we need
+**
+
+# Allow Cargo files and source
+!agents/node-agent/Cargo.toml
+!agents/node-agent/Cargo.lock
+!agents/node-agent/crates/
+!agents/node-agent/rust-toolchain.toml
+
+# Allow proto files
+!proto/
+!proto/netsvcs/
+!proto/netsvcs/v1/
+!proto/netsvcs/v1/manager.proto
+
+# Allow hub_api and shared for hub-api builds
+!hub_api/
+!shared/

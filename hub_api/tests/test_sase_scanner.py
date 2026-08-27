@@ -1,4 +1,5 @@
 """Tests for SASE security scanner module."""
+
 from __future__ import annotations
 
 import asyncio
@@ -206,6 +207,26 @@ class TestParsers:
         assert len(warnings) == 1
         assert len(failures) == 1
 
+    def test_parse_trivy_results_exception_swallowed(self) -> None:
+        """A malformed trivy_results (not a dict) is caught and returns []."""
+        findings = parse_trivy_results("scan_123", None, "target")  # type: ignore[arg-type]
+        assert findings == []
+
+    def test_parse_safety_results_exception_swallowed(self) -> None:
+        """A malformed safety_results (not iterable-of-dicts) is caught and returns []."""
+        findings = parse_safety_results("scan_123", None)  # type: ignore[arg-type]
+        assert findings == []
+
+    def test_parse_govulncheck_results_exception_swallowed(self) -> None:
+        """A malformed output (non-string) is caught and returns []."""
+        findings = parse_govulncheck_results("scan_123", None)  # type: ignore[arg-type]
+        assert findings == []
+
+    def test_parse_docker_bench_results_exception_swallowed(self) -> None:
+        """A malformed output (non-string) is caught and returns []."""
+        findings = parse_docker_bench_results("scan_123", None)  # type: ignore[arg-type]
+        assert findings == []
+
     def test_count_findings_by_severity(self) -> None:
         """Test counting findings by severity."""
         now = datetime.utcnow()
@@ -314,7 +335,6 @@ class TestScannerAsync:
         assert should_run is True
 
 
-
 class TestTenantScoping:
     """Test tenant scoping in scanner operations."""
 
@@ -325,4 +345,3 @@ class TestTenantScoping:
         scanner = SecurityScanner(mock_db, tenant_id=tenant_id)
 
         assert scanner.tenant_id == tenant_id
-

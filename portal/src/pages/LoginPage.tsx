@@ -41,9 +41,7 @@ export function LoginPage() {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="bg-slate-800 rounded-lg border border-slate-700 shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-amber-400 mb-2 text-center">
-            Tobogganing Portal
-          </h1>
+          <h1 className="text-3xl font-bold text-amber-400 mb-2 text-center">Tobogganing Portal</h1>
           <p className="text-amber-600 text-center mb-8">Sign in to continue</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

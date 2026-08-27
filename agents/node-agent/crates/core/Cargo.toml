@@ -1,0 +1,25 @@
+[package]
+name = "node-agent-core"
+description = "Shared config, error, machine-JWT signing, and the ControlPlaneClient contract for the tobogganing node-agent."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "node_agent_core"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+figment = { workspace = true, features = ["env", "json", "toml"] }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

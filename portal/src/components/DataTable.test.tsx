@@ -20,9 +20,7 @@ describe('DataTable', () => {
   ];
 
   it('renders datatable with data', () => {
-    render(
-      <DataTable columns={columns} data={testData} pageSize={25} />
-    );
+    render(<DataTable columns={columns} data={testData} pageSize={25} />);
 
     const table = screen.getByTestId('datatable');
     expect(table).toBeInTheDocument();
@@ -43,14 +41,7 @@ describe('DataTable', () => {
     const error = new Error('Test error');
     const onRetry = jest.fn();
 
-    render(
-      <DataTable
-        columns={columns}
-        data={[]}
-        error={error}
-        onRetry={onRetry}
-      />
-    );
+    render(<DataTable columns={columns} data={[]} error={error} onRetry={onRetry} />);
 
     expect(screen.getByText('Error loading data')).toBeInTheDocument();
     expect(screen.getByText('Test error')).toBeInTheDocument();
@@ -63,13 +54,7 @@ describe('DataTable', () => {
   it('shows error state without retry when onRetry not provided', () => {
     const error = new Error('Test error');
 
-    render(
-      <DataTable
-        columns={columns}
-        data={[]}
-        error={error}
-      />
-    );
+    render(<DataTable columns={columns} data={[]} error={error} />);
 
     expect(screen.getByText('Error loading data')).toBeInTheDocument();
     expect(screen.queryByText('Retry')).not.toBeInTheDocument();
@@ -82,9 +67,7 @@ describe('DataTable', () => {
   });
 
   it('sorts data ascending when column header clicked', () => {
-    const { container } = render(
-      <DataTable columns={columns} data={testData} pageSize={25} />
-    );
+    const { container } = render(<DataTable columns={columns} data={testData} pageSize={25} />);
 
     const headers = container.querySelectorAll('th') as NodeListOf<HTMLTableCellElement>;
     const nameHeader = headers[0];
@@ -100,9 +83,7 @@ describe('DataTable', () => {
   });
 
   it('sorts data descending on second click', () => {
-    const { container } = render(
-      <DataTable columns={columns} data={testData} pageSize={25} />
-    );
+    const { container } = render(<DataTable columns={columns} data={testData} pageSize={25} />);
 
     const headers = container.querySelectorAll('th') as NodeListOf<HTMLTableCellElement>;
     const nameHeader = headers[0];
@@ -119,9 +100,7 @@ describe('DataTable', () => {
   });
 
   it('sorts numeric columns correctly', () => {
-    const { container } = render(
-      <DataTable columns={columns} data={testData} pageSize={25} />
-    );
+    const { container } = render(<DataTable columns={columns} data={testData} pageSize={25} />);
 
     const headers = container.querySelectorAll('th') as NodeListOf<HTMLTableCellElement>;
     const valueHeader = headers[1];
@@ -198,9 +177,7 @@ describe('DataTable', () => {
   });
 
   it('shows sort indicators on sortable columns', () => {
-    const { container } = render(
-      <DataTable columns={columns} data={testData} pageSize={25} />
-    );
+    const { container } = render(<DataTable columns={columns} data={testData} pageSize={25} />);
 
     const headers = container.querySelectorAll('th') as NodeListOf<HTMLTableCellElement>;
     const nameHeader = headers[0];
@@ -297,9 +274,7 @@ describe('DataTable', () => {
   });
 
   it('handles sort direction toggle on same column', () => {
-    const { container } = render(
-      <DataTable columns={columns} data={testData} pageSize={25} />
-    );
+    const { container } = render(<DataTable columns={columns} data={testData} pageSize={25} />);
 
     const headers = container.querySelectorAll('th') as NodeListOf<HTMLTableCellElement>;
     const nameHeader = headers[0];

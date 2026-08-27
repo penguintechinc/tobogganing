@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { DragEndEvent } from '@dnd-kit/core';
 import { BlockPageBuilder } from './BlockPageBuilder';
 import * as saseApi from '../../api/sase';
+import type { BlockPage } from '../../api/sase';
 
 // Mock react-markdown to avoid ESM transform issues
 jest.mock('react-markdown', () => ({
@@ -16,10 +18,26 @@ jest.mock('react-markdown', () => ({
 jest.mock('../../api/sase');
 const mockedSaseApi = saseApi as jest.Mocked<typeof saseApi>;
 
+// Capture the onDragEnd handler passed to DndContext so drag-reorder logic
+// can be exercised directly without simulating full pointer drag sequences.
+let mockCapturedOnDragEnd: ((event: DragEndEvent) => void) | undefined;
+jest.mock('@dnd-kit/core', () => {
+  const actual = jest.requireActual('@dnd-kit/core');
+  return {
+    ...actual,
+    DndContext: (props: Record<string, unknown>) => {
+      mockCapturedOnDragEnd = props.onDragEnd as (event: DragEndEvent) => void;
+      const ActualDndContext = actual.DndContext;
+      return <ActualDndContext {...props} />;
+    },
+  };
+});
+
 describe('BlockPageBuilder', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -70,7 +88,7 @@ describe('BlockPageBuilder', () => {
   it('renders the builder with title and initial state', () => {
     renderComponent();
     expect(screen.getByText('Block Page Builder')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g., \'Malware Block Page\'')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g., 'Malware Block Page'")).toBeInTheDocument();
   });
 
   it('adds a heading block when clicking add button', async () => {
@@ -212,7 +230,9 @@ describe('BlockPageBuilder', () => {
 
     // Verify markdown output contains the list items (in the generated markdown <pre> block)
     await waitFor(() => {
-      const markdownOutput = screen.getByText(/- Item 1[\s\S]*- Item 2[\s\S]*- Item 3/, { selector: 'pre' });
+      const markdownOutput = screen.getByText(/- Item 1[\s\S]*- Item 2[\s\S]*- Item 3/, {
+        selector: 'pre',
+      });
       expect(markdownOutput).toBeInTheDocument();
     });
   });
@@ -259,7 +279,7 @@ describe('BlockPageBuilder', () => {
     renderComponent();
 
     // Enter page name
-    const pageName = screen.getByPlaceholderText('e.g., \'Malware Block Page\'');
+    const pageName = screen.getByPlaceholderText("e.g., 'Malware Block Page'");
     fireEvent.change(pageName, { target: { value: 'Malware Block' } });
 
     // Add a block
@@ -342,5 +362,317 @@ describe('BlockPageBuilder', () => {
     });
 
     consoleSpy.mockRestore();
+  });
+
+  it.each([
+    ['heading2', '##'],
+    ['heading3', '###'],
+    ['heading4', '####'],
+  ])('serializes %s block to markdown', async (type, prefix) => {
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText(`Add ${type} block`));
+
+    const expandButtons = await waitFor(() => {
+      const buttons = screen.getAllByLabelText(/Expand block/i);
+      expect(buttons.length).toBeGreaterThan(0);
+      return buttons;
+    });
+    fireEvent.click(expandButtons[0]!);
+
+    const inputs = screen.getAllByPlaceholderText('Enter heading text');
+    fireEvent.change(inputs[0]!, { target: { value: 'Test' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(`${prefix} Test`)).toBeInTheDocument();
+    });
+  });
+
+  it('toggles the preview panel visibility', async () => {
+    renderComponent();
+
+    const toggleButton = screen.getByLabelText('Show preview');
+    expect(screen.getByText('Show Preview')).toBeInTheDocument();
+
+    fireEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Hide preview')).toBeInTheDocument();
+      expect(screen.getByText('Hide Preview')).toBeInTheDocument();
+    });
+  });
+
+  it('reorders blocks when a drag-end event fires with a different position', async () => {
+    let now = 1000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now++);
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText('Add heading1 block'));
+    fireEvent.click(screen.getByLabelText('Add text block'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Heading 1').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Text/Paragraph').length).toBeGreaterThan(0);
+    });
+
+    expect(mockCapturedOnDragEnd).toBeDefined();
+
+    act(() => {
+      mockCapturedOnDragEnd!({
+        active: { id: 'block-1000' },
+        over: { id: 'block-1001' },
+      } as DragEndEvent);
+    });
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Reorder'),
+        expect.objectContaining({ oldIndex: 0, newIndex: 1 })
+      );
+    });
+
+    consoleSpy.mockRestore();
+  });
+
+  it('does not reorder when drag ends over the same block', async () => {
+    let now = 2000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now++);
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    renderComponent();
+    fireEvent.click(screen.getByLabelText('Add heading1 block'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Heading 1').length).toBeGreaterThan(0);
+    });
+
+    expect(mockCapturedOnDragEnd).toBeDefined();
+    consoleSpy.mockClear();
+
+    act(() => {
+      mockCapturedOnDragEnd!({
+        active: { id: 'block-2000' },
+        over: { id: 'block-2000' },
+      } as DragEndEvent);
+    });
+
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Reorder'),
+      expect.anything()
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it('does not reorder when drag ends without a drop target', async () => {
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    renderComponent();
+    fireEvent.click(screen.getByLabelText('Add heading1 block'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Heading 1').length).toBeGreaterThan(0);
+    });
+
+    expect(mockCapturedOnDragEnd).toBeDefined();
+    consoleSpy.mockClear();
+
+    act(() => {
+      mockCapturedOnDragEnd!({
+        active: { id: 'block-1' },
+        over: null,
+      } as unknown as DragEndEvent);
+    });
+
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Reorder'),
+      expect.anything()
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  const existingPage: BlockPage = {
+    id: 'page-2',
+    tenant: 'tenant-1',
+    name: 'Existing Page',
+    markdown: '# Hi',
+    status: 'draft',
+    version: 1,
+    created_by: 'user-1',
+    updated_by: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  it('loads an existing page from the dropdown', async () => {
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: 'page-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("e.g., 'Malware Block Page'")).toHaveValue(
+        'Existing Page'
+      );
+      expect(screen.getByText('Publish')).toBeInTheDocument();
+    });
+  });
+
+  it('does not error selecting the blank dropdown option', async () => {
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: '' } });
+
+    expect(screen.getByPlaceholderText("e.g., 'Malware Block Page'")).toHaveValue('');
+  });
+
+  it('updates an existing page on save instead of creating a new one', async () => {
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: 'page-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Publish')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockedSaseApi.updateBlockPage).toHaveBeenCalledWith('page-2', expect.any(String));
+    });
+    expect(mockedSaseApi.createBlockPage).not.toHaveBeenCalled();
+  });
+
+  it('shows an alert when saving fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    mockedSaseApi.createBlockPage.mockRejectedValue(new Error('network error'));
+
+    renderComponent();
+
+    fireEvent.change(screen.getByPlaceholderText("e.g., 'Malware Block Page'"), {
+      target: { value: 'Broken Page' },
+    });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to save page');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('SavePage error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('publishes an existing page successfully', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+    mockedSaseApi.publishBlockPage.mockResolvedValue({ ...existingPage, status: 'live' });
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: 'page-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Publish')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => {
+      expect(mockedSaseApi.publishBlockPage).toHaveBeenCalledWith('page-2');
+      expect(alertSpy).toHaveBeenCalledWith('Page published!');
+    });
+
+    alertSpy.mockRestore();
+  });
+
+  it('shows an alert when publishing fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+    mockedSaseApi.publishBlockPage.mockRejectedValue(new Error('boom'));
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: 'page-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Publish')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Publish'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to publish page');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('PublishPage error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('generates a preview for an existing page successfully', async () => {
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: 'page-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Preview')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Preview'));
+
+    await waitFor(() => {
+      expect(mockedSaseApi.previewBlockPage).toHaveBeenCalledWith('page-2');
+      expect(screen.getByTestId('markdown-preview')).toBeInTheDocument();
+    });
+  });
+
+  it('shows an alert when preview generation fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    mockedSaseApi.listBlockPages.mockResolvedValue([existingPage]);
+    mockedSaseApi.previewBlockPage.mockRejectedValue(new Error('boom'));
+
+    renderComponent();
+
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: 'page-2' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Preview')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Preview'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to generate preview');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Preview error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 });

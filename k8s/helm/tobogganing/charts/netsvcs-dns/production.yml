@@ -1,0 +1,52 @@
+# Production environment overrides
+
+image:
+  tag: v0.1.0
+  # TODO: pin to released digest — replace with the real sha256 once a
+  # v0.1.0 netsvcs-dns image is published to ghcr.io.
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# Production: proper HA with full resource allocation
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Production: replicas for HA (via StatefulSet or manual Pod overrides; DaemonSet runs on every node)
+# For DaemonSet, ensure multiple nodes exist; for higher density, consider Deployment+replicas
+
+daemonset:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1  # Never take down all DNS resolvers at once
+
+env:
+  - name: BIND_HOST
+    value: "0.0.0.0"
+  - name: DOH_PORT
+    value: "8080"
+  - name: DOT_PORT
+    value: "853"
+  - name: METRICS_PORT
+    value: "9090"
+  - name: CONTROL_PLANE_GRPC_ADDR
+    value: "hub-api-grpc:50051"  # Override with production hub-api endpoint
+  - name: GRPC_TLS_CA_PATH
+    value: "/etc/tls/ca/ca.crt"
+  - name: GRPC_INSECURE_DEV_FLAG
+    value: "false"
+  - name: CACHE_URL
+    value: "redis://valkey:6379"  # Override with production Redis/Valkey endpoint
+  - name: CONFIG_CACHE_DIR
+    value: "/tmp/dns-resolver-cache"
+  - name: ENROLLMENT_BOOTSTRAP_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: netsvcs-dns-bootstrap
+        key: token
+  - name: VERSION
+    value: "0.1.0"

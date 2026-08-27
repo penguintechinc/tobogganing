@@ -1,13 +1,16 @@
 """Client registry using penguin-dal with hashed API keys."""
+
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
-import structlog
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+import structlog
 
 logger = structlog.get_logger()
 
@@ -56,9 +59,7 @@ class ClientRegistry:
         """Shutdown the ClientRegistry."""
         logger.info("ClientRegistry shutdown complete")
 
-    async def register_client(
-        self, client_data: dict
-    ) -> tuple[Client, str]:
+    async def register_client(self, client_data: dict) -> tuple[Client, str]:
         """Register a new client.
 
         Args:
@@ -109,9 +110,7 @@ class ClientRegistry:
 
         return (client_obj, api_key)
 
-    async def authenticate_client(
-        self, api_key: str
-    ) -> Client | None:
+    async def authenticate_client(self, api_key: str) -> Client | None:
         """Authenticate a client by API key.
 
         Args:
@@ -379,15 +378,15 @@ class ClientRegistry:
 
     async def _cleanup_stale_clients(self) -> None:
         """Clean up stale clients."""
-        stale_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+        # NOTE: last_seen is stored as a naive sa.DateTime() column, so the
+        # threshold must be naive too -- comparing against datetime.now(timezone.utc)
+        # raises TypeError: can't compare offset-naive and offset-aware datetimes.
+        stale_threshold = datetime.utcnow() - timedelta(hours=24)
 
         rowset = await self.db(self.db.clients.tenant == self.tenant_id).select()
 
         for client_obj in rowset:
-            if (
-                client_obj.last_seen < stale_threshold
-                and client_obj.status != "active"
-            ):
+            if client_obj.last_seen < stale_threshold and client_obj.status != "active":
                 await self.db(self.db.clients.id == client_obj.id).delete()
                 logger.info(
                     "Cleaned up stale client",
@@ -435,9 +434,7 @@ class ClientRegistry:
         if not client_obj:
             return None
 
-        await self.db(self.db.clients.id == client_id).update(
-            api_key_hash=new_api_key_hash
-        )
+        await self.db(self.db.clients.id == client_id).update(api_key_hash=new_api_key_hash)
 
         logger.info(
             "Rotated API key for client",

@@ -45,12 +45,20 @@ def create_app(config: Config | None = None) -> Quart:
 
     # Initialize QuartSchema for OpenAPI spec generation (disable auto-mounted routes)
     # We implement custom /openapi.json (auth-gated) and /docs/public (login-only)
+    from quart_schema import HttpSecurityScheme
+
     QuartSchema(
         app,
         openapi_path=None,
         swagger_ui_path=None,
         redoc_ui_path=None,
         scalar_ui_path=None,
+        security_schemes={
+            "BearerAuth": HttpSecurityScheme(
+                scheme="bearer",
+                bearer_format="JWT",
+            )
+        },
     )
 
     # Configure logging

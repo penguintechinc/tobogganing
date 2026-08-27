@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-NAMESPACES = frozenset({"auth", "sase:blocklist", "sase:catcache", "rl"})
+NAMESPACES = frozenset({"auth", "threatintel:blocklist", "sase:catcache", "rl"})
 
 
 class NamespaceError(ValueError):

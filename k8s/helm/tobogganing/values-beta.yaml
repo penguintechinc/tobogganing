@@ -44,6 +44,52 @@ redis:
   storage:
     size: 1Gi
 
+## netsvcs-dns: CI-built beta image (mirrors charts/netsvcs-dns/beta.yml)
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
+    tag: beta-1710000000  # Replaced by CI/CD with actual build tag
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+## node-agent: CI-built beta image (mirrors charts/node-agent/values-beta.yaml)
+node-agent:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/node-agent
+    tag: beta-1724152800  # Replaced by CI/CD with actual build tag
+  nodeAgent:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+## testserver: CI-built beta image (mirrors charts/testserver/beta.yml)
+testserver:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/testserver
+    tag: beta-1710000000  # Replaced by CI/CD with actual build tag
+  replicaCount: 1
+  db:
+    host: "testserver-mariadb.tobogganing.svc.cluster.local"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 autoscaling:
   enabled: false
 

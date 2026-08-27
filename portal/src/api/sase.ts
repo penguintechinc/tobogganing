@@ -154,10 +154,9 @@ export async function previewBlockPage(
   variables?: Record<string, string>
 ): Promise<BlockPagePreview> {
   console.log('[BlockPages] previewBlockPage { pageId }', { pageId });
-  const response = await apiClient.post<BlockPagePreview>(
-    `/blockpages/pages/${pageId}/preview`,
-    { variables: variables || {} }
-  );
+  const response = await apiClient.post<BlockPagePreview>(`/blockpages/pages/${pageId}/preview`, {
+    variables: variables || {},
+  });
   return response.data;
 }
 

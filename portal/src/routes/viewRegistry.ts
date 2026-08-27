@@ -2,6 +2,8 @@ import type { ComponentType } from 'react';
 import { wpcViews } from './wpcViews';
 import { c2cViews } from './c2cViews';
 import { saseViews } from './saseViews';
+import { netsvcsViews } from './netsvcsViews';
+import { threatintelViews } from './threatintelViews';
 
 /**
  * Central (module, view-slug) -> page component registry.
@@ -12,6 +14,8 @@ const registry: Record<string, Record<string, ComponentType>> = {
   perftest_cluster: wpcViews,
   perftest_c2c: c2cViews,
   sase: saseViews,
+  netsvcs: netsvcsViews,
+  threatintel: threatintelViews,
 };
 
 export function resolveView(module: string, view: string): ComponentType | null {

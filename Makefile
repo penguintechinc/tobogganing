@@ -1,7 +1,7 @@
 # Tobogganing Root Makefile
 # Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test test-unit test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push
+.PHONY: help all clean build test test-unit test-integration test-e2e test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint
 
 # Default target
 help: ## Show this help message
@@ -35,12 +35,55 @@ docker-push: ## Push Docker image to registry
 	@docker push hub-api:latest
 	@echo "✅ Docker push complete"
 
+# Proto generation
+proto: ## Generate gRPC stubs from .proto files
+	@echo "📝 Generating gRPC stubs..."
+	@python3 -m grpc_tools.protoc \
+		-I proto \
+		--python_out=proto \
+		--grpc_python_out=proto \
+		proto/netsvcs/v1/manager.proto
+	@touch proto/__init__.py proto/netsvcs/__init__.py proto/netsvcs/v1/__init__.py
+	@# Fix imports to use relative paths for PEP 328 compliance
+	@sed -i 's/^from netsvcs\.v1 import/from . import/g' proto/netsvcs/v1/manager_pb2_grpc.py
+	@echo "✅ gRPC stubs generated"
+
+# OpenAPI spec generation and validation
+openapi: ## Generate OpenAPI 3.x spec (openapi/v1.yaml)
+	@echo "📝 Generating OpenAPI spec..."
+	@python3 scripts/generate_openapi.py
+	@echo "✅ OpenAPI spec generated at openapi/v1.yaml"
+
+openapi-lint: openapi ## Validate OpenAPI spec with spectral
+	@echo "🔍 Linting OpenAPI spec..."
+	@if command -v spectral &> /dev/null; then \
+		spectral lint openapi/v1.yaml --format json 2>/dev/null | jq . || spectral lint openapi/v1.yaml; \
+	elif command -v npx &> /dev/null; then \
+		npx @stoplight/spectral-cli lint openapi/v1.yaml; \
+	else \
+		echo "⚠️  Spectral not found. Install with: npm install -g @stoplight/spectral-cli"; \
+		exit 1; \
+	fi
+	@echo "✅ OpenAPI spec validation complete"
+
 # Test targets
-test: test-unit test-portal test-go ## Run all tests (unit + portal + go if available)
+test: test-unit test-integration test-portal test-e2e test-go ## Run all tests (unit + integration + portal + e2e + go if available)
 
 test-unit: ## Run hub_api unit tests
 	@echo "🧪 Testing hub_api (Python/Quart brain)..."
-	@python3 -m pytest hub_api/tests/ -v
+	@python3 -m pytest hub_api/tests/ -v --ignore=hub_api/tests/integration
+
+test-integration: ## Run hub_api cross-module seam integration tests (P5-E2E/D)
+	@echo "🧪 Testing hub_api cross-module seams (real gRPC + real_dal)..."
+	@python3 -m pytest hub_api/tests/integration/ -v
+
+test-e2e: ## Run portal Playwright e2e/smoke tests against the mock API
+	@if [ -f portal/package.json ]; then \
+		echo "🧪 Running portal Playwright e2e tests..."; \
+		cd portal && npm run test:e2e; \
+	else \
+		echo "⏭️  Portal e2e tests skipped (no package.json)"; \
+	fi
 
 test-portal: ## Run portal tests (if npm available)
 	@if [ -f portal/package.json ]; then \
@@ -65,7 +108,7 @@ test-go: ## Run Go service tests (if go.mod available)
 
 test-cov: ## Run hub_api tests with coverage report
 	@echo "📊 Running hub_api tests with coverage..."
-	@python3 -m pytest hub_api/tests/ --cov=hub_api --cov-report=term-missing --cov-report=html
+	@python3 -m pytest hub_api/tests/ --cov=hub_api --cov-report=term-missing --cov-report=html --cov-fail-under=90
 	@echo "✅ Coverage report generated (open htmlcov/index.html)"
 
 # Lint targets
@@ -123,9 +166,11 @@ portal-dev: ## Start portal dev server
 	@echo "🚀 Starting portal dev server..."
 	@cd portal && npm install && npm run dev
 
-install-hooks: ## Install Git hooks (pre-commit, pre-push)
-	@echo "📦 Installing Git hooks..."
-	@if [ -f .git/hooks/pre-commit ]; then echo "✅ Git hooks already installed"; else echo "Run: sh scripts/install-hooks.sh"; fi
+install-hooks: ## Install pre-commit framework + register pre-commit and pre-push hooks
+	@./scripts/install-pre-commit.sh
+
+verify-hooks: ## Report whether pre-commit/pre-push hooks are installed and non-empty
+	@./scripts/install-pre-commit.sh --verify
 
 # Portal-specific targets (convenience)
 portal-build: ## Build portal for production

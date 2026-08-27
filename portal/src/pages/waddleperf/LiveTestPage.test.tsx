@@ -31,18 +31,14 @@ describe('LiveTestPage', () => {
       canWrite: () => true,
     });
 
-    (useLazyLoadChartHook.useLazyLoadChart as jest.Mock).mockReturnValue(
-      mockChartComponent
-    );
+    (useLazyLoadChartHook.useLazyLoadChart as jest.Mock).mockReturnValue(mockChartComponent);
   });
 
   it('renders page title and description', () => {
     render(<LiveTestPage />);
 
     expect(screen.getByText('Live Test')).toBeInTheDocument();
-    expect(
-      screen.getByText('Real-time network performance testing')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Real-time network performance testing')).toBeInTheDocument();
   });
 
   it('shows connection status', () => {
@@ -205,9 +201,7 @@ describe('LiveTestPage', () => {
   });
 
   it('displays error events with red styling', () => {
-    const events = [
-      { event: 'error' as const, data: { message: 'Connection failed' } },
-    ];
+    const events = [{ event: 'error' as const, data: { message: 'Connection failed' } }];
 
     (useLiveTestHook.useLiveTest as jest.Mock).mockReturnValue({
       status: 'error',
@@ -224,9 +218,7 @@ describe('LiveTestPage', () => {
   });
 
   it('displays complete events with green styling', () => {
-    const events = [
-      { event: 'test_complete' as const, data: { message: 'Test success' } },
-    ];
+    const events = [{ event: 'test_complete' as const, data: { message: 'Test success' } }];
 
     (useLiveTestHook.useLiveTest as jest.Mock).mockReturnValue({
       status: 'open',

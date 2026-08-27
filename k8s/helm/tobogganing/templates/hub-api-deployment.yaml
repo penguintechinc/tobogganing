@@ -26,8 +26,8 @@ spec:
         runAsUser: {{ .Values.hubApi.securityContext.runAsUser }}
       containers:
         - name: hub-api
-          image: "{{ .Values.hubApi.image.repository }}:{{ .Values.hubApi.image.tag }}"
-          imagePullPolicy: {{ .Values.hubApi.image.pullPolicy }}
+          image: "{{ .Values.hubApi.image.repository }}:{{ .Values.hubApi.image.tag }}{{ if .Values.hubApi.image.digest }}@{{ .Values.hubApi.image.digest }}{{ end }}"
+          imagePullPolicy: {{ .Values.hubApi.image.pullPolicy | default .Values.global.image.pullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.hubApi.port }}

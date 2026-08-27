@@ -8,9 +8,7 @@ jest.mock('recharts', () => ({
   Line: (props: { dataKey: string; name?: string }) => (
     <div data-testid={`line-${props.dataKey}`}>{props.name || props.dataKey}</div>
   ),
-  XAxis: ({ dataKey }: { dataKey: string }) => (
-    <div data-testid="x-axis">{dataKey}</div>
-  ),
+  XAxis: ({ dataKey }: { dataKey: string }) => <div data-testid="x-axis">{dataKey}</div>,
   YAxis: () => <div data-testid="y-axis" />,
   CartesianGrid: () => <div data-testid="cartesian-grid" />,
   Tooltip: () => <div data-testid="tooltip" />,
@@ -75,9 +73,7 @@ describe('LiveChart', () => {
   });
 
   it('renders axes and legend', () => {
-    const data = [
-      { timestamp: '10:00:00', latency: 100, throughput: 1000 },
-    ];
+    const data = [{ timestamp: '10:00:00', latency: 100, throughput: 1000 }];
 
     render(<LiveChart data={data} />);
 
@@ -110,11 +106,7 @@ describe('LiveChart', () => {
 
     render(<LiveChart data={data} />);
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[LiveChart] Render { points:',
-      1,
-      '}'
-    );
+    expect(consoleSpy).toHaveBeenCalledWith('[LiveChart] Render { points:', 1, '}');
     consoleSpy.mockRestore();
   });
 });

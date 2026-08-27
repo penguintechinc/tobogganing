@@ -26,9 +26,7 @@ export interface LiveTestHookState {
 }
 
 export function useLiveTest(): LiveTestHookState {
-  const [status, setStatus] = useState<'connecting' | 'open' | 'closed' | 'error'>(
-    'closed'
-  );
+  const [status, setStatus] = useState<'connecting' | 'open' | 'closed' | 'error'>('closed');
   const [events, setEvents] = useState<StreamMessage[]>([]);
   const [series, setSeries] = useState<SeriesPoint[]>([]);
 

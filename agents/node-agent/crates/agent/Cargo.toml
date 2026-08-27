@@ -1,0 +1,43 @@
+[package]
+name = "node-agent"
+description = "Unified tobogganing node-agent: SASE connectivity + netsvcs-edge in one binary, packaged as a static musl bare-metal build and a K8s DaemonSet container."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "node-agent"
+path = "src/main.rs"
+
+[features]
+default = ["connectivity", "netsvcs-edge"]
+connectivity = ["dep:node-agent-connectivity"]
+netsvcs-edge = ["dep:node-agent-netsvcs-edge"]
+
+[dependencies]
+node-agent-core = { workspace = true }
+node-agent-transport = { workspace = true }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+node-agent-connectivity = { path = "../connectivity", version = "0.1.0", optional = true }
+node-agent-netsvcs-edge = { path = "../netsvcs-edge", version = "0.1.0", optional = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs"] }
+tokio-util = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+# `ExpClaim` (the lifecycle loop's unverified access-token exp decode) is
+# regular (non-test) code, so serde is a normal dependency here.
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+# Only used by the lifecycle-loop unit tests' in-memory `MockClient`.
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+wiremock = "=0.6.5"
+# Generates a fresh throwaway P-256 EC key at test time for the run()
+# integration test's machine-JWT signer — never a committed key value.
+p256 = "=0.13.2"
+rand_core = { version = "=0.6.4", features = ["getrandom"] }

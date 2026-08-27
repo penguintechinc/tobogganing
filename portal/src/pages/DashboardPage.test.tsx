@@ -7,8 +7,7 @@ import { AuthProvider } from '../context/AuthContext';
 
 jest.mock('../hooks/useManifest');
 
-const mockUseManifest = jest.requireMock('../hooks/useManifest')
-  .useManifest as jest.Mock;
+const mockUseManifest = jest.requireMock('../hooks/useManifest').useManifest as jest.Mock;
 
 const renderDashboard = () => {
   const queryClient = new QueryClient({

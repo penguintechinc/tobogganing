@@ -200,7 +200,11 @@ describe('BlockRoutingConfig', () => {
       const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
       expect(calls.length).toBeGreaterThan(0);
       const callArgs = calls[0]![0]!;
-      expect(callArgs.some((r) => r.source_type === 'custom-rule:phishing' && r.destination_kind === 'page')).toBe(true);
+      expect(
+        callArgs.some(
+          (r) => r.source_type === 'custom-rule:phishing' && r.destination_kind === 'page'
+        )
+      ).toBe(true);
     });
   });
 
@@ -242,7 +246,9 @@ describe('BlockRoutingConfig', () => {
       const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
       expect(calls.length).toBeGreaterThan(0);
       const callArgs = calls[0]![0]!;
-      expect(callArgs.some((r) => r.source_type === 'soft-block' && r.destination_kind === 'external')).toBe(true);
+      expect(
+        callArgs.some((r) => r.source_type === 'soft-block' && r.destination_kind === 'external')
+      ).toBe(true);
     });
   });
 
@@ -379,6 +385,182 @@ describe('BlockRoutingConfig', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('TICKET-123')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Redirect to external block page')).toBeInTheDocument();
+    });
+  });
+
+  it('validates page selection is required for page destination', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText('Add new route'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
+    });
+
+    const sourceInputs = screen.getAllByPlaceholderText('e.g., web-category:gambling');
+    fireEvent.change(sourceInputs[0]!, { target: { value: 'custom-rule:no-page' } });
+
+    // Leave page selection empty, attempt save
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Page selection is required');
+    });
+    expect(mockedSaseApi.upsertBlockRoutes).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('validates external URL is required for external destination', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText('Add new route'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
+    });
+
+    const sourceInputs = screen.getAllByPlaceholderText('e.g., web-category:gambling');
+    fireEvent.change(sourceInputs[0]!, { target: { value: 'custom-rule:no-url' } });
+
+    const destSelects = screen.getAllByDisplayValue('Page');
+    fireEvent.change(destSelects[0]!, { target: { value: 'external' } });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('https://example.com/block')).toBeInTheDocument();
+    });
+
+    // Leave external URL empty, attempt save
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('External URL is required');
+    });
+    expect(mockedSaseApi.upsertBlockRoutes).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('excludes the original entry when saving an edited route', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      const editButtons = screen.getAllByLabelText(/Edit route/);
+      expect(editButtons.length).toBeGreaterThan(0);
+      fireEvent.click(editButtons[0]!); // Edit route-1 (web-category:malware)
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Route')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(mockedSaseApi.upsertBlockRoutes).toHaveBeenCalled();
+      const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
+      const callArgs = calls[0]![0]!;
+      // Only one entry for web-category:malware should be present (no duplicate)
+      const matches = callArgs.filter((r) => r.source_type === 'web-category:malware');
+      expect(matches.length).toBe(1);
+    });
+  });
+
+  it('shows an alert when saving routes fails', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+    mockedSaseApi.upsertBlockRoutes.mockRejectedValue(new Error('network error'));
+
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText('Add new route'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
+    });
+
+    const sourceInputs = screen.getAllByPlaceholderText('e.g., web-category:gambling');
+    fireEvent.change(sourceInputs[0]!, { target: { value: 'custom-rule:fails' } });
+
+    const pageSelects = screen.getAllByDisplayValue('-- Select a page --');
+    fireEvent.change(pageSelects[0]!, { target: { value: 'page-1' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Failed to save routes');
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('SaveRoutes error'),
+      expect.any(Object)
+    );
+
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('deletes a route leaving only routes with empty metadata', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      const deleteButtons = screen.getAllByLabelText(/Delete route/);
+      expect(deleteButtons.length).toBeGreaterThan(1);
+    });
+
+    window.confirm = jest.fn(() => true);
+
+    // Delete route-2 (has metadata), leaving route-1 (all-null metadata) remaining
+    const deleteButtons = screen.getAllByLabelText(/Delete route/);
+    fireEvent.click(deleteButtons[1]!);
+
+    await waitFor(() => {
+      expect(mockedSaseApi.upsertBlockRoutes).toHaveBeenCalled();
+      const calls = mockedSaseApi.upsertBlockRoutes.mock.calls;
+      const callArgs = calls[0]![0]!;
+      const remaining = callArgs.find((r) => r.source_type === 'web-category:malware');
+      expect(remaining?.metadata).toBeUndefined();
+    });
+  });
+
+  it('does not delete a route when confirm is cancelled', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      const deleteButtons = screen.getAllByLabelText(/Delete route/);
+      expect(deleteButtons.length).toBeGreaterThan(0);
+    });
+
+    window.confirm = jest.fn(() => false);
+
+    const deleteButtons = screen.getAllByLabelText(/Delete route/);
+    fireEvent.click(deleteButtons[0]!);
+
+    expect(mockedSaseApi.upsertBlockRoutes).not.toHaveBeenCalled();
+  });
+
+  it('sets an expiry date and closes the modal via cancel', async () => {
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText('Add new route'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add route/i })).toBeInTheDocument();
+    });
+
+    const container = screen.getByPlaceholderText('Ticket ID').closest('div');
+    const expiryInput = container?.querySelector('input[type="date"]');
+    expect(expiryInput).toBeInTheDocument();
+    fireEvent.change(expiryInput as Element, { target: { value: '2026-12-31' } });
+    expect((expiryInput as HTMLInputElement).value).toBe('2026-12-31');
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /add route/i })).not.toBeInTheDocument();
     });
   });
 });
