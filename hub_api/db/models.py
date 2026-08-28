@@ -1,10 +1,22 @@
 """SQLAlchemy table models for core database."""
+
 from __future__ import annotations
 
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, UUID, UniqueConstraint, JSON
+from sqlalchemy import (
+    JSON,
+    UUID,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import func
 
 from hub_api.db.base import Base
@@ -28,12 +40,8 @@ class User(Base):
     mfa_enabled: Column[bool] = Column(Boolean, default=False, nullable=False)
     mfa_secret: Column[str | None] = Column(String(255), nullable=True)
     role: Column[str | None] = Column(String(50), default="reporter", nullable=True)
-    tenant: Column[str] = Column(
-        String(255), nullable=False, index=True
-    )  # MANDATORY tenant column
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    tenant: Column[str] = Column(String(255), nullable=False, index=True)  # MANDATORY tenant column
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -59,14 +67,10 @@ class RefreshToken(Base):
         default=lambda: str(uuid4()),
         nullable=False,
     )
-    user_id: Column[str] = Column(
-        UUID(as_uuid=False), nullable=False, index=True
-    )  # FK to users.id
+    user_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)  # FK to users.id
     token: Column[str] = Column(Text, nullable=False, unique=True, index=True)
     expires_at: Column[datetime] = Column(DateTime, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -84,14 +88,10 @@ class PasswordResetToken(Base):
         default=lambda: str(uuid4()),
         nullable=False,
     )
-    user_id: Column[str] = Column(
-        UUID(as_uuid=False), nullable=False, index=True
-    )  # FK to users.id
+    user_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)  # FK to users.id
     token: Column[str] = Column(Text, nullable=False, unique=True, index=True)
     expires_at: Column[datetime] = Column(DateTime, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -109,14 +109,10 @@ class Session(Base):
         default=lambda: str(uuid4()),
         nullable=False,
     )
-    user_id: Column[str] = Column(
-        UUID(as_uuid=False), nullable=False, index=True
-    )  # FK to users.id
+    user_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)  # FK to users.id
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
     token: Column[str] = Column(Text, nullable=False, unique=True, index=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     expires_at: Column[datetime] = Column(DateTime, nullable=False)
 
     def __repr__(self) -> str:
@@ -136,10 +132,10 @@ class FirewallRule(Base):
         nullable=False,
     )
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
-    user_id: Column[str] = Column(
-        UUID(as_uuid=False), nullable=False, index=True
-    )  # FK to users.id
-    rule_type: Column[str] = Column(String(50), nullable=False)  # domain, ip, ip_range, url_pattern, protocol_rule
+    user_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)  # FK to users.id
+    rule_type: Column[str] = Column(
+        String(50), nullable=False
+    )  # domain, ip, ip_range, url_pattern, protocol_rule
     access_type: Column[str] = Column(String(20), nullable=False)  # allow, deny
     pattern: Column[str] = Column(String(500), nullable=False)
     priority: Column[int] = Column(Integer, default=100, nullable=False)
@@ -151,9 +147,7 @@ class FirewallRule(Base):
     src_port: Column[str | None] = Column(String(100), nullable=True)
     dst_port: Column[str | None] = Column(String(100), nullable=True)
     direction: Column[str | None] = Column(String(20), nullable=True)  # inbound, outbound, both
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -181,20 +175,18 @@ class VRF(Base):
     rt_import: Column[str | None] = Column(Text, nullable=True)  # JSON array
     rt_export: Column[str | None] = Column(Text, nullable=True)  # JSON array
     ip_ranges: Column[str | None] = Column(Text, nullable=True)  # JSON array
-    status: Column[str] = Column(String(20), default="inactive", nullable=False)  # active, inactive, pending, error
+    status: Column[str] = Column(
+        String(20), default="inactive", nullable=False
+    )  # active, inactive, pending, error
     ospf_enabled: Column[bool] = Column(Boolean, default=False, nullable=False)
     ospf_router_id: Column[str | None] = Column(String(50), nullable=True)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False, index=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        UniqueConstraint("tenant", "name", name="uq_vrfs_tenant_name"),
-    )
+    __table_args__ = (UniqueConstraint("tenant", "name", name="uq_vrfs_tenant_name"),)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -213,9 +205,7 @@ class OSPFArea(Base):
         nullable=False,
     )
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
-    vrf_id: Column[str] = Column(
-        UUID(as_uuid=False), nullable=False, index=True
-    )  # FK to vrfs.id
+    vrf_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)  # FK to vrfs.id
     area_id: Column[str] = Column(String(20), nullable=False)  # Area ID (e.g., 0.0.0.0)
     area_type: Column[str] = Column(
         String(20), default="normal", nullable=False
@@ -224,9 +214,7 @@ class OSPFArea(Base):
     auth_type: Column[str | None] = Column(String(20), nullable=True)  # none, simple, md5
     auth_key: Column[str | None] = Column(String(255), nullable=True)
     stub_default_cost: Column[int] = Column(Integer, default=1, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -252,9 +240,7 @@ class OSPFNeighbor(Base):
         nullable=False,
     )
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
-    vrf_id: Column[str] = Column(
-        UUID(as_uuid=False), nullable=False, index=True
-    )  # FK to vrfs.id
+    vrf_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)  # FK to vrfs.id
     neighbor_id: Column[str] = Column(String(50), nullable=False)
     neighbor_ip: Column[str] = Column(String(50), nullable=False)
     interface: Column[str] = Column(String(50), nullable=False)
@@ -264,9 +250,7 @@ class OSPFNeighbor(Base):
     dead_interval: Column[int] = Column(Integer, default=40, nullable=False)
     hello_interval: Column[int] = Column(Integer, default=10, nullable=False)
     last_seen: Column[datetime | None] = Column(DateTime, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -295,9 +279,7 @@ class PortRange(Base):
     protocol: Column[str] = Column(String(20), nullable=False)  # tcp, udp
     description: Column[str | None] = Column(Text, nullable=True)
     enabled: Column[bool] = Column(Boolean, default=True, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -328,16 +310,12 @@ class Cluster(Base):
     client_count: Column[int] = Column(Integer, default=0, nullable=False)
     api_key_hash: Column[str | None] = Column(String(255), nullable=True, index=True)
     cluster_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        UniqueConstraint("tenant", "id", name="uq_clusters_tenant_id"),
-    )
+    __table_args__ = (UniqueConstraint("tenant", "id", name="uq_clusters_tenant_id"),)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -364,16 +342,12 @@ class Client(Base):
     ip_address: Column[str] = Column(String(50), nullable=False)
     status: Column[str] = Column(String(50), default="pending", nullable=False)
     client_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     last_seen: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        UniqueConstraint("tenant", "id", name="uq_clients_tenant_id"),
-    )
+    __table_args__ = (UniqueConstraint("tenant", "id", name="uq_clients_tenant_id"),)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -396,16 +370,12 @@ class OrgUnit(Base):
     parent_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
     description: Column[str | None] = Column(Text, nullable=True)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False, index=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        UniqueConstraint("tenant", "name", name="uq_org_units_tenant_name"),
-    )
+    __table_args__ = (UniqueConstraint("tenant", "name", name="uq_org_units_tenant_name"),)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -433,16 +403,12 @@ class Device(Base):
     status: Column[str] = Column(String(50), default="offline", nullable=False, index=True)
     last_heartbeat: Column[datetime | None] = Column(DateTime, nullable=True)
     device_metadata: Column[dict] = Column("metadata", JSON, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        UniqueConstraint("tenant", "serial", name="uq_devices_tenant_serial"),
-    )
+    __table_args__ = (UniqueConstraint("tenant", "serial", name="uq_devices_tenant_serial"),)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -463,9 +429,7 @@ class DeviceApiKey(Base):
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
     device_id: Column[str] = Column(UUID(as_uuid=False), nullable=False, index=True)
     api_key_hash: Column[str] = Column(String(255), nullable=False, index=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     revoked_at: Column[datetime | None] = Column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
@@ -488,9 +452,7 @@ class DeviceEnrollmentSecret(Base):
     org_unit_id: Column[str | None] = Column(UUID(as_uuid=False), nullable=True, index=True)
     secret_hash: Column[str] = Column(String(255), nullable=False, index=True)
     expires_at: Column[datetime | None] = Column(DateTime, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     created_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
 
     def __repr__(self) -> str:
@@ -519,9 +481,7 @@ class PerfTestResult(Base):
     latency_ms: Column[float | None] = Column(Float, nullable=True)
     throughput: Column[float | None] = Column(Float, nullable=True)
     test_output: Column[str | None] = Column(Text, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -566,9 +526,7 @@ class ServerKey(Base):
     tenant: Column[str] = Column(String(255), nullable=False, index=True)
     key_id: Column[str] = Column(String(255), nullable=False, index=True)
     public_key: Column[str] = Column(Text, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -592,15 +550,19 @@ class TestSchedule(Base):
     target: Column[str] = Column(String(255), nullable=False)
     interval_seconds: Column[int] = Column(Integer, nullable=False)
     enabled: Column[bool] = Column(Boolean, default=True, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     __table_args__ = (
-        UniqueConstraint("tenant", "org_unit_id", "test_type", "target", name="uq_test_schedules_tenant_ou_type_target"),
+        UniqueConstraint(
+            "tenant",
+            "org_unit_id",
+            "test_type",
+            "target",
+            name="uq_test_schedules_tenant_ou_type_target",
+        ),
     )
 
     def __repr__(self) -> str:
@@ -630,9 +592,7 @@ class C2CEndpoint(Base):
     provider: Column[str | None] = Column(String(64), nullable=True)
     health_status: Column[str] = Column(String(16), nullable=False, server_default="unknown")
     last_health_check: Column[datetime | None] = Column(DateTime, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -664,9 +624,7 @@ class C2CMatrixRun(Base):
     completed_pairs: Column[int] = Column(Integer, default=0, nullable=False)
     failed_pairs: Column[int] = Column(Integer, default=0, nullable=False)
     created_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     started_at: Column[datetime | None] = Column(DateTime, nullable=True)
     completed_at: Column[datetime | None] = Column(DateTime, nullable=True)
 
@@ -702,7 +660,11 @@ class C2CPairResult(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tenant", "run_id", "source_endpoint_id", "dest_endpoint_id", "test_type",
+            "tenant",
+            "run_id",
+            "source_endpoint_id",
+            "dest_endpoint_id",
+            "test_type",
             name="uq_c2c_pair_results_tenant_run_endpoints_type",
         ),
     )
@@ -887,6 +849,66 @@ class AutoPerfState(Base):
         return f"<AutoPerfState(id={self.id}, policy_id={self.policy_id}, current_tier={self.current_tier})>"
 
 
+class AutoCheckIn(Base):
+    """Admin-configured Auto Check-in: compiles down to a scheduled_jobs row."""
+
+    __tablename__ = "auto_checkins"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    name: Column[str] = Column(String(128), nullable=False)
+    device_id: Column[str] = Column(String(36), nullable=False)
+    target_kind: Column[str] = Column(String(16), nullable=False)
+    target: Column[str] = Column(String(500), nullable=False)
+    test_types: Column[str] = Column(Text, nullable=False)
+    interval_minutes: Column[int] = Column(Integer, nullable=False, server_default="5")
+    jitter_pct: Column[int] = Column(Integer, nullable=False, server_default="0")
+    samples_per_run: Column[int] = Column(Integer, nullable=False, server_default="1")
+    threshold_stddev_min: Column[float | None] = Column(Float, nullable=True)
+    threshold_stddev_max: Column[float | None] = Column(Float, nullable=True)
+    threshold_mean: Column[float | None] = Column(Float, nullable=True)
+    tier: Column[int] = Column(Integer, nullable=False, server_default="1")
+    parent_checkin_id: Column[str | None] = Column(String(36), nullable=True)
+    enabled: Column[bool] = Column(Boolean, nullable=False, server_default="true")
+    created_at: Column[datetime] = Column(DateTime, nullable=False)
+    updated_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<AutoCheckIn(id={self.id}, tenant={self.tenant}, tier={self.tier})>"
+
+
+class AutoCheckInState(Base):
+    """Cascade breach-tracking state for an AutoCheckIn (tier-2/3 gate)."""
+
+    __tablename__ = "auto_checkin_state"
+
+    id: Column[str] = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(36), nullable=False, index=True)
+    checkin_id: Column[str] = Column(String(36), nullable=False, unique=True)
+    last_breached: Column[bool] = Column(Boolean, nullable=False, server_default="false")
+    last_mean_latency_ms: Column[float | None] = Column(Float, nullable=True)
+    last_stddev_latency_ms: Column[float | None] = Column(Float, nullable=True)
+    last_run_at: Column[datetime | None] = Column(DateTime, nullable=True)
+    updated_at: Column[datetime] = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return (
+            f"<AutoCheckInState(checkin_id={self.checkin_id}, last_breached={self.last_breached})>"
+        )
+
+
 class DNSZone(Base):
     """DNS zone configuration for netsvcs module."""
 
@@ -902,16 +924,12 @@ class DNSZone(Base):
     name: Column[str] = Column(String(255), nullable=False)
     visibility: Column[str] = Column(String(50), default="public", nullable=False)
     description: Column[str | None] = Column(Text, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        UniqueConstraint("tenant", "name", name="uq_dns_zones_tenant_name"),
-    )
+    __table_args__ = (UniqueConstraint("tenant", "name", name="uq_dns_zones_tenant_name"),)
 
     def __repr__(self) -> str:
         """Return string representation."""
@@ -940,22 +958,20 @@ class DNSRecord(Base):
     priority: Column[int | None] = Column(Integer, nullable=True)
     weight: Column[int | None] = Column(Integer, nullable=True)
     port: Column[int | None] = Column(Integer, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "zone_id", "name", "type", name="uq_dns_records_zone_name_type"
-        ),
+        UniqueConstraint("zone_id", "name", "type", name="uq_dns_records_zone_name_type"),
     )
 
     def __repr__(self) -> str:
         """Return string representation."""
-        return f"<DNSRecord(id={self.id}, zone_id={self.zone_id}, name={self.name}, type={self.type})>"
+        return (
+            f"<DNSRecord(id={self.id}, zone_id={self.zone_id}, name={self.name}, type={self.type})>"
+        )
 
 
 class DNSServer(Base):
@@ -976,9 +992,7 @@ class DNSServer(Base):
     region: Column[str | None] = Column(String(100), nullable=True)
     hostname: Column[str | None] = Column(String(255), nullable=True)
     last_heartbeat: Column[datetime | None] = Column(DateTime, nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -1008,14 +1022,10 @@ class DNSServerMetrics(Base):
     cache_hits: Column[int] = Column(Integer, default=0, nullable=False)
     errors: Column[int] = Column(Integer, default=0, nullable=False)
     avg_response_ms: Column[float] = Column(Float, default=0.0, nullable=False)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint(
-            "server_id", "timestamp", name="uq_dns_server_metrics_server_timestamp"
-        ),
+        UniqueConstraint("server_id", "timestamp", name="uq_dns_server_metrics_server_timestamp"),
     )
 
     def __repr__(self) -> str:
@@ -1041,9 +1051,7 @@ class DNSResolverToken(Base):
     expires_at: Column[datetime | None] = Column(DateTime, nullable=True)
     last_used: Column[datetime | None] = Column(DateTime, nullable=True)
     created_by: Column[str | None] = Column(UUID(as_uuid=False), nullable=True)
-    created_at: Column[datetime] = Column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )

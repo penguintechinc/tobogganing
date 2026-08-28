@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -9,9 +10,15 @@ import pytest
 
 from hub_api.modules.perftest_cluster.services.engine_client import (
     ALLOWED_TEST_TYPES,
+    TEST_TYPE_ALIASES,
     EngineClient,
     EngineError,
+    TestserverSpeedtestBackend,
 )
+
+# "throughput" is dispatched through ThroughputBackend, not the generic
+# /api/v1/test/{type} POST convention exercised by test_run_test_all_types.
+_GENERIC_TEST_TYPES = ALLOWED_TEST_TYPES - {"throughput"}
 
 
 class TestEngineClientInit:
@@ -194,7 +201,7 @@ class TestEngineClientRunTest:
 
     @pytest.mark.asyncio
     async def test_run_test_all_types(self) -> None:
-        """Test that all allowed test types are accepted."""
+        """Test that all generic (non-throughput) allowed test types are accepted."""
         client = EngineClient(base_url="http://engine:8080")
 
         with patch.object(
@@ -205,7 +212,7 @@ class TestEngineClientRunTest:
             mock_response.json.return_value = {"status": "success"}
             mock_post.return_value = mock_response
 
-            for test_type in ALLOWED_TEST_TYPES:
+            for test_type in _GENERIC_TEST_TYPES:
                 result = await client.run_test(
                     test_type=test_type,
                     target="example.com",
@@ -366,6 +373,244 @@ class TestEngineClientRunTest:
                     test_type="http",
                     target="example.com",
                 )
+
+        await client.close()
+
+
+class TestEngineClientThroughput:
+    """Tests for the "throughput" test type (heavy-tier speed test)."""
+
+    @pytest.mark.asyncio
+    async def test_throughput_maps_throughput_mbps(self) -> None:
+        """throughput_mbps from the engine maps into `throughput` in the result."""
+        client = EngineClient(base_url="http://engine:8080", api_key="sk-test-key")
+        device_headers = {"X-Device-ID": "d1"}
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "success": True,
+                "bytes_received": 10485760,
+                "duration_ms": 812,
+                "throughput_mbps": 103.4,
+            }
+            mock_post.return_value = mock_response
+
+            result = await client.run_test(
+                test_type="throughput",
+                target="10.0.0.1",
+                device_headers=device_headers,
+            )
+
+            assert result["throughput"] == 103.4
+            assert result["throughput_mbps"] == 103.4
+            assert result["bytes_transferred"] == 10485760
+            assert result["duration_ms"] == 812
+
+            call_args, call_kwargs = mock_post.call_args
+            assert call_args[0] == "http://engine:8080/speedtest/upload"
+            assert call_kwargs["headers"]["Authorization"] == "Bearer sk-test-key"
+            assert call_kwargs["headers"]["X-Device-ID"] == "d1"
+            # Payload is uploaded as raw bytes, not JSON.
+            assert "content" in call_kwargs
+            assert isinstance(call_kwargs["content"], bytes)
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_speedtest_alias_resolves_to_throughput(self) -> None:
+        """"speedtest" is accepted as an alias and routes identically."""
+        assert TEST_TYPE_ALIASES["speedtest"] == "throughput"
+
+        client = EngineClient(base_url="http://engine:8080")
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"throughput_mbps": 50.0}
+            mock_post.return_value = mock_response
+
+            result = await client.run_test(test_type="speedtest", target="10.0.0.1")
+            assert result["throughput"] == 50.0
+
+            called_url = mock_post.call_args[0][0]
+            assert called_url == "http://engine:8080/speedtest/upload"
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_throughput_respects_size_mb_param(self) -> None:
+        """`size_mb` param is clamped to [1, 100] and controls payload size."""
+        client = EngineClient(base_url="http://engine:8080")
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"throughput_mbps": 1.0}
+            mock_post.return_value = mock_response
+
+            await client.run_test(test_type="throughput", target="x", size_mb=500)
+            payload = mock_post.call_args[1]["content"]
+            assert len(payload) == 100 * 1024 * 1024  # clamped to MAX
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_throughput_http_error_raises_engine_error(self) -> None:
+        """A non-2xx response from /speedtest/upload raises EngineError."""
+        client = EngineClient(base_url="http://engine:8080")
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 503
+            mock_response.text = "Service unavailable"
+            mock_post.return_value = mock_response
+
+            with pytest.raises(EngineError, match="Test execution failed"):
+                await client.run_test(test_type="throughput", target="10.0.0.1")
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_throughput_network_error_raises_engine_error(self) -> None:
+        """A network error during the upload raises EngineError."""
+        client = EngineClient(base_url="http://engine:8080")
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_post.side_effect = httpx.RequestError("Connection refused")
+
+            with pytest.raises(EngineError, match="Failed to communicate"):
+                await client.run_test(test_type="throughput", target="10.0.0.1")
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_custom_throughput_backend_is_used(self) -> None:
+        """A custom ThroughputBackend can be injected without touching run_test."""
+
+        class _FakeBackend:
+            called_with: dict[str, Any] = {}
+
+            async def run(
+                self,
+                client: httpx.AsyncClient,
+                base_url: str,
+                target: str,
+                headers: dict[str, str],
+                **params: Any,
+            ) -> dict[str, Any]:
+                self.called_with = {"base_url": base_url, "target": target}
+                return {"throughput": 777.0}
+
+        backend = _FakeBackend()
+        client = EngineClient(base_url="http://engine:8080", throughput_backend=backend)
+
+        result = await client.run_test(test_type="throughput", target="10.0.0.1")
+
+        assert result == {"throughput": 777.0}
+        assert backend.called_with == {
+            "base_url": "http://engine:8080",
+            "target": "10.0.0.1",
+        }
+
+        await client.close()
+
+    def test_default_throughput_backend_is_testserver_speedtest(self) -> None:
+        """EngineClient defaults to TestserverSpeedtestBackend."""
+        client = EngineClient(base_url="http://engine:8080")
+        assert isinstance(client.throughput_backend, TestserverSpeedtestBackend)
+
+
+class TestEngineClientHttp2Ping:
+    """Tests for the "http2" test type (Tier-1 HTTP/2 reachability/latency probe).
+
+    Follows the same generic `/api/v1/test/{type}` convention as `http`,
+    distinct from ThroughputBackend's dedicated speedtest path. The
+    testserver-side handler is a documented follow-up seam (Go dev work);
+    this only verifies hub_api's routing/mapping via a mocked h2 response.
+    """
+
+    @pytest.mark.asyncio
+    async def test_http2_dispatches_to_generic_test_endpoint(self) -> None:
+        """run_test("http2", ...) POSTs to /api/v1/test/http2 and passes
+        through the (mocked) HTTP/2 response untouched."""
+        client = EngineClient(base_url="http://engine:8080")
+
+        h2_response = {
+            "latency_ms": 15.2,
+            "http_version": "HTTP/2",
+            "reachable": True,
+        }
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = h2_response
+            mock_post.return_value = mock_response
+
+            result = await client.run_test(test_type="http2", target="example.com")
+
+            assert result == h2_response
+            called_url = mock_post.call_args[0][0]
+            assert called_url == "http://engine:8080/api/v1/test/http2"
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_http2_ping_alias_resolves_to_http2(self) -> None:
+        """"http2_ping" is accepted as an alias and routes identically."""
+        assert TEST_TYPE_ALIASES["http2_ping"] == "http2"
+
+        client = EngineClient(base_url="http://engine:8080")
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"latency_ms": 9.9}
+            mock_post.return_value = mock_response
+
+            result = await client.run_test(test_type="http2_ping", target="example.com")
+            assert result == {"latency_ms": 9.9}
+
+            called_url = mock_post.call_args[0][0]
+            assert called_url == "http://engine:8080/api/v1/test/http2"
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_http2_not_yet_implemented_on_testserver_surfaces_engine_error(
+        self,
+    ) -> None:
+        """Until the Go testserver adds the h2 handler, a 404 from the
+        (real, unmodified) testserver surfaces as a normal EngineError --
+        the documented seam, not a silent failure."""
+        client = EngineClient(base_url="http://engine:8080")
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock
+        ) as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 404
+            mock_response.text = "404 page not found"
+            mock_post.return_value = mock_response
+
+            with pytest.raises(EngineError, match="Test execution failed"):
+                await client.run_test(test_type="http2", target="example.com")
 
         await client.close()
 

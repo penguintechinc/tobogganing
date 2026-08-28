@@ -57,6 +57,7 @@ async def app_all_perftest_realdal(real_dal: Any, monkeypatch: Any) -> Quart:
         "hub_api.modules.perftest_cluster.api.scheduled_tests",
         "hub_api.modules.perftest_cluster.api.alerts",
         "hub_api.modules.perftest_cluster.api.autoperf",
+        "hub_api.modules.perftest_cluster.api.auto_checkins",
         "hub_api.modules.perftest_cluster.api.devices",
         "hub_api.modules.perftest_cluster.api.enrollment",
         "hub_api.modules.perftest_cluster.api.org_units",

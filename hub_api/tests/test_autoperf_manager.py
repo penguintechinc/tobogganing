@@ -147,6 +147,58 @@ async def test_create_policy_tenant_isolation(real_dal: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_per_target_scheduling_intervals_are_independent(real_dal: Any) -> None:
+    """Two policies (different targets, same tenant) get independent
+    scheduler jobs and intervals -- escalating one never retunes the other."""
+    from hub_api.modules.perftest_cluster.services.autoperf_manager import (
+        AutoPerfManager,
+    )
+    from hub_api.scheduler.job_manager import JobManager
+
+    manager = AutoPerfManager(real_dal)
+    jm = JobManager(real_dal)
+
+    policy_a = await manager.create_policy(
+        "tenant1",
+        name="Target A",
+        device_id="dev-a",
+        target="10.0.0.1",
+        t1_interval_seconds=600,
+        t2_interval_seconds=300,
+        t3_interval_seconds=120,
+        deescalate_after_clean=3,
+    )
+    policy_b = await manager.create_policy(
+        "tenant1",
+        name="Target B",
+        device_id="dev-b",
+        target="10.0.0.2",
+        t1_interval_seconds=300,
+        t2_interval_seconds=120,
+        t3_interval_seconds=60,
+        deescalate_after_clean=3,
+    )
+
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
+    job_a = next(j for j in jobs if j["payload"]["policy_id"] == policy_a["id"])
+    job_b = next(j for j in jobs if j["payload"]["policy_id"] == policy_b["id"])
+    assert job_a["interval_seconds"] == 600
+    assert job_b["interval_seconds"] == 300
+
+    # Breach policy A only -> its job retunes to t2 (300); B is untouched.
+    await manager.record_cycle("tenant1", policy_a["id"], breached=True)
+
+    jobs = await jm.list_jobs("tenant1", "perftest_cluster")
+    job_a = next(j for j in jobs if j["payload"]["policy_id"] == policy_a["id"])
+    job_b = next(j for j in jobs if j["payload"]["policy_id"] == policy_b["id"])
+    assert job_a["interval_seconds"] == 300
+    assert job_b["interval_seconds"] == 300  # unchanged (still its own t1)
+
+    state_b = await manager.get_state("tenant1", policy_b["id"])
+    assert state_b["current_tier"] == 1
+
+
+@pytest.mark.asyncio
 async def test_record_cycle_breach_escalates(real_dal: Any) -> None:
     """Breach escalates tier T1->T2->T3, caps at 3."""
     from hub_api.modules.perftest_cluster.services.autoperf_manager import (

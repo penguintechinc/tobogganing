@@ -89,6 +89,37 @@ export interface AutoPerfState {
   escalated_at?: string | null;
 }
 
+/** AutoCheckIn */
+export interface AutoCheckIn {
+  id: string;
+  tenant: string;
+  name: string;
+  device_id: string;
+  target_kind: 'ours' | 'external';
+  target: string;
+  test_types: string[];
+  interval_minutes: number;
+  jitter_pct: number;
+  samples_per_run: number;
+  threshold_stddev_min: number | null;
+  threshold_stddev_max: number | null;
+  threshold_mean: number | null;
+  tier: number;
+  parent_checkin_id: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutoCheckInState {
+  checkin_id: string;
+  last_breached: boolean;
+  last_mean_latency_ms: number | null;
+  last_stddev_latency_ms: number | null;
+  last_run_at: string | null;
+  updated_at: string;
+}
+
 /** API Functions - Alerts */
 export async function listAlertRules(): Promise<AlertRule[]> {
   console.log('[wpcOps] listAlertRules');
@@ -219,6 +250,74 @@ export async function getAutoPerfPolicyState(policyId: string): Promise<AutoPerf
   console.log('[wpcOps] getAutoPerfPolicyState { policy_id:', policyId.slice(0, 8), '}');
   const response = await apiClient.get<AutoPerfState>(
     `/perftest_cluster/autoperf/policies/${policyId}/state`
+  );
+  return response.data;
+}
+/** API Functions - AutoCheckIn */
+export async function listAutoCheckIns(): Promise<AutoCheckIn[]> {
+  console.log('[wpcOps] listAutoCheckIns');
+  const response = await apiClient.get<{ checkins: AutoCheckIn[] }>(
+    '/perftest_cluster/auto-checkins'
+  );
+  return response.data.checkins;
+}
+
+export async function createAutoCheckIn(payload: {
+  name: string;
+  device_id: string;
+  target_kind: 'ours' | 'external';
+  target: string;
+  test_types?: string[];
+  interval_minutes?: number;
+  jitter_pct?: number;
+  samples_per_run?: number;
+  threshold_stddev_min?: number;
+  threshold_stddev_max?: number;
+  threshold_mean?: number;
+  tier?: number;
+  parent_checkin_id?: string;
+  enabled?: boolean;
+}): Promise<AutoCheckIn> {
+  console.log('[wpcOps] createAutoCheckIn { name:', payload.name, '}');
+  const response = await apiClient.post<AutoCheckIn>('/perftest_cluster/auto-checkins', payload);
+  return response.data;
+}
+
+export async function updateAutoCheckIn(
+  checkinId: string,
+  payload: Partial<
+    Pick<
+      AutoCheckIn,
+      | 'name'
+      | 'target'
+      | 'test_types'
+      | 'interval_minutes'
+      | 'jitter_pct'
+      | 'samples_per_run'
+      | 'threshold_stddev_min'
+      | 'threshold_stddev_max'
+      | 'threshold_mean'
+      | 'enabled'
+    >
+  >
+): Promise<AutoCheckIn> {
+  console.log('[wpcOps] updateAutoCheckIn { checkin_id:', checkinId.slice(0, 8), '}');
+  const response = await apiClient.patch<AutoCheckIn>(
+    `/perftest_cluster/auto-checkins/${checkinId}`,
+    payload
+  );
+  return response.data;
+}
+
+export async function deleteAutoCheckIn(checkinId: string): Promise<void> {
+  console.log('[wpcOps] deleteAutoCheckIn { checkin_id:', checkinId.slice(0, 8), '}');
+  await apiClient.delete(`/perftest_cluster/auto-checkins/${checkinId}`);
+}
+
+export async function getAutoCheckInState(checkinId: string): Promise<AutoCheckInState> {
+  console.log('[wpcOps] getAutoCheckInState { checkin_id:', checkinId.slice(0, 8), '}');
+  const response = await apiClient.get<AutoCheckInState>(
+    `/perftest_cluster/auto-checkins/${checkinId}/state`
   );
   return response.data;
 }

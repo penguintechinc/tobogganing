@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from quart import Quart
 
@@ -669,3 +670,93 @@ async def test_run_test_sync_outer_exception_returns_500(
         headers={"Authorization": f"Bearer {pf_write_token}"},
     )
     assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: "throughput" test type through the real EngineClient, mocking
+# only the testserver HTTP transport (not EngineClient itself).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_test_sync_throughput_maps_and_persists(
+    app_all_perftest_realdal: Quart, pf_write_token: str, real_dal: Any
+) -> None:
+    """POST /run with test_type=throughput drives the real EngineClient +
+    TestserverSpeedtestBackend against a mocked testserver HTTP response,
+    and persists the mapped `throughput` value via TestManager."""
+    dev_mgr = DeviceManager(real_dal, "test-tenant")
+    device, _key = await dev_mgr.register_device({"name": "tp-d", "serial": "TP-SN"})
+
+    with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "bytes_received": 10485760,
+            "duration_ms": 812,
+            "throughput_mbps": 103.4,
+        }
+        mock_post.return_value = mock_response
+
+        client = app_all_perftest_realdal.test_client()
+        resp = await client.post(
+            "/api/v1/perftest_cluster/live-test/run",
+            json={
+                "test_type": "throughput",
+                "target": "8.8.8.8",
+                "device_id": device.id,
+            },
+            headers={"Authorization": f"Bearer {pf_write_token}"},
+        )
+        assert resp.status_code == 200
+        body = await resp.get_json()
+        assert body["data"]["throughput"] == 103.4
+        assert body["data"]["throughput_mbps"] == 103.4
+
+        # Confirm the real backend hit the testserver's speedtest upload
+        # endpoint, not the generic /api/v1/test/{type} path.
+        called_url = mock_post.call_args[0][0]
+        assert called_url.endswith("/speedtest/upload")
+
+    results = await real_dal(real_dal.perf_test_results.tenant == "test-tenant").select()
+    matching = [r for r in results if r["device_id"] == device.id]
+    assert len(matching) == 1
+    assert matching[0]["throughput"] == 103.4
+
+
+@pytest.mark.asyncio
+async def test_run_test_sync_speedtest_alias_maps_to_throughput(
+    app_all_perftest_realdal: Quart, pf_write_token: str, real_dal: Any
+) -> None:
+    """The "speedtest" alias resolves to the same throughput backend/path."""
+    dev_mgr = DeviceManager(real_dal, "test-tenant")
+    device, _key = await dev_mgr.register_device({"name": "sp-d", "serial": "SP-SN"})
+
+    with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "bytes_received": 1048576,
+            "duration_ms": 100,
+            "throughput_mbps": 83.9,
+        }
+        mock_post.return_value = mock_response
+
+        client = app_all_perftest_realdal.test_client()
+        resp = await client.post(
+            "/api/v1/perftest_cluster/live-test/run",
+            json={
+                "test_type": "speedtest",
+                "target": "8.8.8.8",
+                "device_id": device.id,
+            },
+            headers={"Authorization": f"Bearer {pf_write_token}"},
+        )
+        assert resp.status_code == 200
+        body = await resp.get_json()
+        assert body["data"]["throughput"] == 83.9
+
+        called_url = mock_post.call_args[0][0]
+        assert called_url.endswith("/speedtest/upload")

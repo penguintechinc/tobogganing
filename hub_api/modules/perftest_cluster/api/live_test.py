@@ -208,7 +208,7 @@ async def _stream_test_progress(
         try:
             await ws.send(msg.to_json())
         except Exception:
-            pass  # Connection may be closed
+            logger.debug("websocket_send_failed_during_teardown", exc_info=True)
         return None
 
 
@@ -218,11 +218,15 @@ async def live_test_stream() -> None:
 
     Expects client to send:
         {
-            "test_type": "http|tcp|udp|icmp|http_trace|tcp_trace|udp_trace|traceroute",
+            "test_type": "http|tcp|udp|icmp|http_trace|tcp_trace|udp_trace|"
+                          "traceroute|throughput|http2",
             "target": "host or IP",
             "device_id": "device-uuid",
             "params": { "port": 80, "timeout": 30, "count": 10, ... }
         }
+
+    "speedtest" is accepted as an alias for "throughput", "http2_ping" for
+    "http2".
 
     Streams back:
         { "event": "test_started", "data": {...} }
@@ -280,9 +284,7 @@ async def live_test_stream() -> None:
                 if not test_type or not target or not device_id:
                     error_msg = StreamMessage(
                         event="error",
-                        data={
-                            "message": "Missing required fields: test_type, target, device_id"
-                        },
+                        data={"message": "Missing required fields: test_type, target, device_id"},
                     )
                     await ws.send(error_msg.to_json())
                     continue
@@ -365,6 +367,8 @@ async def live_test_stream() -> None:
                             "status": "completed",
                             "started_at": datetime.now(timezone.utc),
                             "completed_at": datetime.now(timezone.utc),
+                            "latency_ms": result.get("latency_ms"),
+                            "throughput": result.get("throughput"),
                         }
                     )
 
@@ -373,6 +377,8 @@ async def live_test_stream() -> None:
                         test_record.id,
                         {
                             "status": "completed",
+                            "latency_ms": result.get("latency_ms"),
+                            "throughput": result.get("throughput"),
                             "test_output": json.dumps(result),
                             "completed_at": datetime.now(timezone.utc),
                         },
@@ -409,7 +415,7 @@ async def live_test_stream() -> None:
                 try:
                     await ws.send(error_msg.to_json())
                 except Exception:
-                    pass
+                    logger.debug("websocket_send_failed_during_teardown", exc_info=True)
 
     except asyncio.CancelledError:
         logger.info("websocket_cancelled", tenant=tenant)
@@ -422,7 +428,7 @@ async def live_test_stream() -> None:
             )
             await ws.send(error_msg.to_json())
         except Exception:
-            pass
+            logger.debug("websocket_send_failed_during_teardown", exc_info=True)
     finally:
         await engine_client.close()
         logger.info("websocket_closed", tenant=tenant)
@@ -439,11 +445,15 @@ async def run_test_sync() -> tuple[dict[str, Any], int]:
 
     Request body:
         {
-            "test_type": "http|tcp|udp|icmp|...",
+            "test_type": "http|tcp|udp|icmp|http_trace|tcp_trace|udp_trace|"
+                          "traceroute|throughput|http2",
             "target": "host or IP",
             "device_id": "device-uuid",
             "params": { "port": 80, "timeout": 30, "count": 10, ... }
         }
+
+    "speedtest" is accepted as an alias for "throughput", "http2_ping" for
+    "http2".
 
     Returns:
         JSON response with test result and metadata.
@@ -531,6 +541,8 @@ async def run_test_sync() -> tuple[dict[str, Any], int]:
                         "status": "completed",
                         "started_at": datetime.now(timezone.utc),
                         "completed_at": datetime.now(timezone.utc),
+                        "latency_ms": result.get("latency_ms"),
+                        "throughput": result.get("throughput"),
                     }
                 )
 
@@ -538,6 +550,8 @@ async def run_test_sync() -> tuple[dict[str, Any], int]:
                     test_record.id,
                     {
                         "status": "completed",
+                        "latency_ms": result.get("latency_ms"),
+                        "throughput": result.get("throughput"),
                         "test_output": json.dumps(result),
                         "completed_at": datetime.now(timezone.utc),
                     },
