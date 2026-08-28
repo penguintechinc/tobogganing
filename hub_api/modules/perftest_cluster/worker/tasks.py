@@ -37,6 +37,35 @@ def _default_engine_factory(device: dict[str, Any]) -> EngineClient:
     return EngineClient()
 
 
+def _test_types_for_tier(tier: int) -> list[str]:
+    """Determine the AutoPerf test set to run for a monitoring tier.
+
+    Tier 1 (continuous baseline) runs cheap path-localization probes --
+    http_trace (HTTP/1.1 hop tracing), traceroute, udp, and http2 (an
+    HTTP/2-specific reachability/latency ping run alongside http_trace,
+    since h2 multiplexing/HOL and CDN/proxy handling can diverge from
+    h1.1) -- distinguishing wifi vs ISP vs upstream vs whole-path issues,
+    including issues specific to the HTTP/2 traffic most real sites use.
+    On a threshold breach, the policy escalates to tier 2+ (see
+    AutoPerfManager.record_cycle), which additionally runs the heavier
+    "throughput" test (EngineClient's ThroughputBackend, currently the
+    testserver's /speedtest endpoint) to confirm and quantify the
+    degradation.
+
+    Args:
+        tier: Current AutoPerf tier. The escalation state machine caps at
+            3, but there is currently only one heavy-diagnostic set, so
+            tier 2 and tier 3 both run the same test types.
+
+    Returns:
+        Ordered list of test types to execute this cycle.
+    """
+    test_types = ["http_trace", "traceroute", "udp", "http2"]
+    if tier >= 2:
+        test_types.append("throughput")
+    return test_types
+
+
 async def _execute_and_store_test(
     db: Any,
     tenant: str,
@@ -410,16 +439,7 @@ async def _autoperf_cycle_async(
 
         # Determine tests to run based on current tier
         current_tier = state["current_tier"]
-        test_types: list[str] = []
-
-        if current_tier >= 1:
-            test_types.extend(["icmp", "http"])
-        if current_tier >= 2:
-            test_types.extend(["tcp", "udp", "http_trace"])
-        if current_tier >= 3:
-            # TODO(deferred): Add a true bandwidth/speedtest engine endpoint.
-            # For now, tier-3 escalation includes only engine-supported types.
-            test_types.extend(["traceroute"])
+        test_types = _test_types_for_tier(current_tier)
 
         logger.info(
             "autoperf_cycle_starting",

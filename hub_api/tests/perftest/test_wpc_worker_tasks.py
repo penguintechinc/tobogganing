@@ -328,7 +328,8 @@ async def test_autoperf_cycle_state_not_found(real_dal: AsyncDB, monkeypatch: An
 async def test_autoperf_cycle_tier1_no_breach_runs_and_advances(
     real_dal: AsyncDB,
 ) -> None:
-    """A tier-1 cycle with no breach executes icmp/http and records a clean cycle."""
+    """A tier-1 cycle with no breach executes the baseline path-localization
+    probe set (http_trace/traceroute/udp) and records a clean cycle."""
     tenant = "tenant-ap4"
     dev_mgr = DeviceManager(real_dal, tenant)
     device, _key = await dev_mgr.register_device({"name": "d", "serial": "SN"})
@@ -355,13 +356,19 @@ async def test_autoperf_cycle_tier1_no_breach_runs_and_advances(
     assert state["last_cycle_at"] is not None
 
     results = await real_dal(real_dal.perf_test_results.tenant == tenant).select()
-    # tier 1 -> icmp + http = 2 tests executed
-    assert len(results) == 2
+    # tier 1 -> http_trace + traceroute + udp + http2 = 4 tests executed
+    assert len(results) == 4
+    assert {r["test_type"] for r in results} == {
+        "http_trace",
+        "traceroute",
+        "udp",
+        "http2",
+    }
 
 
 @pytest.mark.asyncio
 async def test_autoperf_cycle_tier3_breach_runs_full_suite(real_dal: AsyncDB) -> None:
-    """A tier-3 policy runs the full icmp/http/tcp/udp/http_trace/traceroute set."""
+    """A tier-3 policy runs the baseline set plus the heavy throughput test."""
     tenant = "tenant-ap5"
     dev_mgr = DeviceManager(real_dal, tenant)
     device, _key = await dev_mgr.register_device({"name": "d", "serial": "SN"})
@@ -390,8 +397,15 @@ async def test_autoperf_cycle_tier3_breach_runs_full_suite(real_dal: AsyncDB) ->
     )
 
     results = await real_dal(real_dal.perf_test_results.tenant == tenant).select()
-    # tier 3 -> icmp, http, tcp, udp, http_trace, traceroute = 6 tests
-    assert len(results) == 6
+    # tier 3 -> http_trace, traceroute, udp, http2, throughput = 5 tests
+    assert len(results) == 5
+    assert {r["test_type"] for r in results} == {
+        "http_trace",
+        "traceroute",
+        "udp",
+        "http2",
+        "throughput",
+    }
 
 
 @pytest.mark.asyncio
