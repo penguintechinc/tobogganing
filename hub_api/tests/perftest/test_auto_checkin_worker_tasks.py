@@ -361,3 +361,316 @@ def test_auto_checkin_cycle_celery_wrapper_invokes_asyncio_run(monkeypatch) -> N
         "job1", "t1", "perftest_cluster", "auto_checkin", {"checkin_id": "c1"}
     )
     assert "coro" in called
+
+
+# ---------------------------------------------------------------------------
+# _execute_auto_checkin_sample error paths (registered device, engine raises)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_execute_auto_checkin_sample_engine_error_recorded(real_dal: AsyncDB) -> None:
+    """A registered device whose engine raises EngineError -> None, failed row."""
+    device_mgr = DeviceManager(real_dal, "t1")
+    device, _key = await device_mgr.register_device({"name": "flaky-dev", "serial": "SN-EE"})
+
+    class _FakeEngineError:
+        async def run_test(self, test_type: str, target: str, **kwargs: Any) -> dict[str, Any]:
+            raise EngineError("engine unreachable")
+
+    latency = await wpc_tasks._execute_auto_checkin_sample(
+        real_dal,
+        "t1",
+        device.id,
+        "icmp",
+        "example.com",
+        lambda device: _FakeEngineError(),
+    )
+    assert latency is None
+
+
+@pytest.mark.asyncio
+async def test_execute_auto_checkin_sample_generic_exception_recorded(real_dal: AsyncDB) -> None:
+    """A registered device whose engine raises an unexpected error -> None, failed row."""
+    device_mgr = DeviceManager(real_dal, "t1")
+    device, _key = await device_mgr.register_device({"name": "broken-dev", "serial": "SN-GE"})
+
+    class _FakeEngineCrash:
+        async def run_test(self, test_type: str, target: str, **kwargs: Any) -> dict[str, Any]:
+            raise RuntimeError("totally unexpected")
+
+    latency = await wpc_tasks._execute_auto_checkin_sample(
+        real_dal,
+        "t1",
+        device.id,
+        "icmp",
+        "example.com",
+        lambda device: _FakeEngineCrash(),
+    )
+    assert latency is None
+
+
+# ---------------------------------------------------------------------------
+# _auto_checkin_cycle_async edge/error paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_dal_creation_config_failure_logged_and_returns(
+    monkeypatch,
+) -> None:
+    """db=None and Config() construction fails -> logged, returns without raising."""
+
+    def _boom_config(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("no config available")
+
+    monkeypatch.setattr(wpc_tasks, "Config", _boom_config)
+
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": "c1"},
+        db=None,
+    )  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_dal_creation_reflect_failure_logged_and_returns(
+    monkeypatch,
+) -> None:
+    """db=None, Config()/build_db_uri()/AsyncDB() all succeed but reflect() fails --
+    still logged and swallowed, not propagated. Exercises the full db=None
+    construction path (Config -> build_db_uri -> AsyncDB -> reflect) up to the
+    point of failure."""
+
+    class _FakeAsyncDBRaisesOnReflect:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def reflect(self) -> None:
+            raise RuntimeError("reflect failed")
+
+    monkeypatch.setattr(wpc_tasks, "AsyncDB", _FakeAsyncDBRaisesOnReflect)
+
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": "c1"},
+        db=None,
+    )  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_missing_checkin_id_in_payload(real_dal: AsyncDB) -> None:
+    """An empty payload (no checkin_id key) is treated as invalid and returns early."""
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={},
+        db=real_dal,
+    )  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_disabled_checkin_is_noop(real_dal: AsyncDB) -> None:
+    """A disabled check-in's cycle is a no-op: no probes, state untouched."""
+    manager = AutoCheckInManager(real_dal)
+    checkin = await manager.create_checkin(
+        tenant="t1",
+        name="disabled",
+        device_id="dev1",
+        target_kind="external",
+        target="example.com",
+        test_types=["icmp"],
+        enabled=False,
+    )
+
+    engine = _FakeEngineFixedLatency(5.0)
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": checkin["id"]},
+        db=real_dal,
+        engine_factory=lambda device: engine,
+    )
+
+    assert engine.calls == []
+    state = await manager.get_state("t1", checkin["id"])
+    assert state["last_run_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_tier_gt1_missing_parent_id_defensive(
+    real_dal: AsyncDB,
+) -> None:
+    """A tier>1 row with no parent_checkin_id (data anomaly bypassing manager
+    validation) is defensively rejected: logged, jitter-rescheduled, no probes."""
+    from datetime import datetime
+    from datetime import timezone as tz
+    from uuid import uuid4 as _uuid4
+
+    now = datetime.now(tz.utc)
+    checkin_id = str(_uuid4())
+    await real_dal.auto_checkins.async_insert(
+        id=checkin_id,
+        tenant="t1",
+        name="orphaned-tier2",
+        device_id="dev1",
+        target_kind="external",
+        target="example.com",
+        test_types='["icmp"]',
+        interval_minutes=5,
+        jitter_pct=0,
+        samples_per_run=1,
+        tier=2,
+        parent_checkin_id=None,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+    )
+
+    from hub_api.scheduler.job_manager import JobManager
+
+    jm = JobManager(real_dal)
+    job = await jm.create_job(
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": checkin_id},
+        interval_seconds=300,
+    )
+
+    engine = _FakeEngineFixedLatency(5.0)
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id=job["id"],
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": checkin_id},
+        db=real_dal,
+        engine_factory=lambda device: engine,
+    )  # must not raise
+
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_inserts_state_row_when_missing(real_dal: AsyncDB) -> None:
+    """If the state row was deleted out-of-band, the cycle inserts a fresh one."""
+    device_mgr = DeviceManager(real_dal, "t1")
+    device, _key = await device_mgr.register_device({"name": "d-state", "serial": "SN-ST"})
+
+    manager = AutoCheckInManager(real_dal)
+    checkin = await manager.create_checkin(
+        tenant="t1",
+        name="state-gap",
+        device_id=device.id,
+        target_kind="external",
+        target="example.com",
+        test_types=["icmp"],
+    )
+
+    await real_dal(real_dal.auto_checkin_state.checkin_id == checkin["id"]).delete()
+    assert await manager.get_state("t1", checkin["id"]) is None
+
+    engine = _FakeEngineFixedLatency(7.0)
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": checkin["id"]},
+        db=real_dal,
+        engine_factory=lambda device: engine,
+    )
+
+    state = await manager.get_state("t1", checkin["id"])
+    assert state is not None
+    assert state["last_mean_latency_ms"] == pytest.approx(7.0)
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_notify_failure_is_caught(real_dal: AsyncDB, monkeypatch) -> None:
+    """A breach whose notification dispatch raises is logged, not propagated."""
+    device_mgr = DeviceManager(real_dal, "t1")
+    device, _key = await device_mgr.register_device({"name": "d-notify", "serial": "SN-NF"})
+
+    manager = AutoCheckInManager(real_dal)
+    checkin = await manager.create_checkin(
+        tenant="t1",
+        name="notify-fail",
+        device_id=device.id,
+        target_kind="external",
+        target="example.com",
+        test_types=["icmp"],
+        threshold_mean=1.0,
+    )
+
+    from hub_api.notifications.service import NotificationService
+
+    async def _boom_notify(self, tenant: str, **kwargs: Any) -> None:
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(NotificationService, "notify", _boom_notify)
+
+    engine = _FakeEngineFixedLatency(999.0)
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": checkin["id"]},
+        db=real_dal,
+        engine_factory=lambda device: engine,
+    )  # must not raise despite the notify failure
+
+    state = await manager.get_state("t1", checkin["id"])
+    assert state["last_breached"] is True
+
+
+@pytest.mark.asyncio
+async def test_auto_checkin_cycle_top_level_exception_is_swallowed(
+    real_dal: AsyncDB,
+) -> None:
+    """A malformed test_types payload (bad JSON) raises inside the cycle body
+    but is caught by the outer handler, not propagated to the caller."""
+    from datetime import datetime
+    from datetime import timezone as tz
+    from uuid import uuid4 as _uuid4
+
+    now = datetime.now(tz.utc)
+    checkin_id = str(_uuid4())
+    await real_dal.auto_checkins.async_insert(
+        id=checkin_id,
+        tenant="t1",
+        name="malformed",
+        device_id="dev1",
+        target_kind="external",
+        target="example.com",
+        test_types="not-valid-json",
+        interval_minutes=5,
+        jitter_pct=0,
+        samples_per_run=1,
+        tier=1,
+        parent_checkin_id=None,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+    )
+
+    await wpc_tasks._auto_checkin_cycle_async(
+        job_id="job1",
+        tenant="t1",
+        module="perftest_cluster",
+        job_type="auto_checkin",
+        payload={"checkin_id": checkin_id},
+        db=real_dal,
+    )  # must not raise

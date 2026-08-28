@@ -261,3 +261,173 @@ async def test_tenant_isolation(real_dal: Any) -> None:
     )
     assert await manager.get_checkin("tenant-b", created["id"]) is None
     assert await manager.delete_checkin("tenant-b", created["id"]) is False
+
+
+@pytest.mark.asyncio
+async def test_manager_rejects_none_db() -> None:
+    """Constructing a manager with db=None raises ValueError immediately."""
+    with pytest.raises(ValueError, match="Database instance cannot be None"):
+        AutoCheckInManager(None)
+
+
+@pytest.mark.asyncio
+async def test_create_checkin_empty_test_types_rejected(real_dal: Any) -> None:
+    """test_types=[] is rejected as non-empty-list, distinct from unsupported-type."""
+    manager = AutoCheckInManager(real_dal)
+    with pytest.raises(ValueError, match="test_types must be a non-empty list"):
+        await manager.create_checkin(
+            "t1",
+            "bad",
+            "dev1",
+            "external",
+            "example.com",
+            [],
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_checkin_invalid_tier_rejected(real_dal: Any) -> None:
+    """tier outside {1,2,3} is rejected."""
+    manager = AutoCheckInManager(real_dal)
+    with pytest.raises(ValueError, match="tier must be one of"):
+        await manager.create_checkin(
+            "t1",
+            "bad",
+            "dev1",
+            "external",
+            "example.com",
+            ["icmp"],
+            tier=5,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_checkin_parent_not_found(real_dal: Any) -> None:
+    """A tier>1 parent_checkin_id that doesn't exist is rejected."""
+    manager = AutoCheckInManager(real_dal)
+    with pytest.raises(ValueError, match="parent_checkin_id not found or cross-tenant"):
+        await manager.create_checkin(
+            "t1",
+            "bad",
+            "dev1",
+            "external",
+            "example.com",
+            ["throughput"],
+            tier=2,
+            parent_checkin_id="does-not-exist",
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_not_found_returns_none(real_dal: Any) -> None:
+    """Updating an unknown checkin_id returns None (no ValueError)."""
+    manager = AutoCheckInManager(real_dal)
+    result = await manager.update_checkin("t1", "ghost", name="x")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_test_types_unsupported_rejected(real_dal: Any) -> None:
+    """Updating test_types to an unsupported type raises ValueError."""
+    manager = AutoCheckInManager(real_dal)
+    created = await manager.create_checkin(
+        "t1",
+        "retest",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+    )
+    with pytest.raises(ValueError, match="Unsupported test_types"):
+        await manager.update_checkin("t1", created["id"], test_types=["not_a_real_type"])
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_test_types_valid_round_trips(real_dal: Any) -> None:
+    """Updating test_types to a valid list persists and JSON round-trips."""
+    manager = AutoCheckInManager(real_dal)
+    created = await manager.create_checkin(
+        "t1",
+        "retest2",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+    )
+    updated = await manager.update_checkin(
+        "t1", created["id"], test_types=["http_trace", "traceroute"]
+    )
+    assert updated["test_types"] == ["http_trace", "traceroute"]
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_interval_out_of_bounds_rejected(real_dal: Any) -> None:
+    manager = AutoCheckInManager(real_dal)
+    created = await manager.create_checkin(
+        "t1",
+        "bounds1",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+    )
+    with pytest.raises(ValueError, match="interval_minutes"):
+        await manager.update_checkin("t1", created["id"], interval_minutes=999)
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_jitter_out_of_bounds_rejected(real_dal: Any) -> None:
+    manager = AutoCheckInManager(real_dal)
+    created = await manager.create_checkin(
+        "t1",
+        "bounds2",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+    )
+    with pytest.raises(ValueError, match="jitter_pct"):
+        await manager.update_checkin("t1", created["id"], jitter_pct=99)
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_samples_per_run_out_of_bounds_rejected(real_dal: Any) -> None:
+    manager = AutoCheckInManager(real_dal)
+    created = await manager.create_checkin(
+        "t1",
+        "bounds3",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+    )
+    with pytest.raises(ValueError, match="samples_per_run"):
+        await manager.update_checkin("t1", created["id"], samples_per_run=99)
+
+
+@pytest.mark.asyncio
+async def test_update_checkin_enabled_false_disables_job(real_dal: Any) -> None:
+    """Setting enabled=False on update propagates to the scheduled job."""
+    manager = AutoCheckInManager(real_dal)
+    jm = JobManager(real_dal)
+    created = await manager.create_checkin(
+        "t1",
+        "disable-me",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+    )
+    updated = await manager.update_checkin("t1", created["id"], enabled=False)
+    assert updated["enabled"] is False
+
+    jobs = await jm.list_jobs("t1", "perftest_cluster")
+    assert jobs[0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_find_job_returns_none_when_no_match(real_dal: Any) -> None:
+    """_find_job scans and returns None when no scheduled job matches."""
+    manager = AutoCheckInManager(real_dal)
+    result = await manager._find_job("t1", "no-such-checkin-id")
+    assert result is None
