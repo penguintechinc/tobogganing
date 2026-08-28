@@ -1,4 +1,5 @@
 """Tests for WaddlePerf Cluster module registration and URL mapping contract."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -50,9 +51,11 @@ async def test_wpc_routes_mounted(app_with_wpc: Quart) -> None:
     for route in routes_to_check:
         response = await client.get(route)
         # Should be 401 (no auth) or 403 (auth required), NOT 404 (route not found)
-        assert response.status_code in [401, 403, 402], (
-            f"Route {route} returned {response.status_code} (expected auth error, not 404)"
-        )
+        assert response.status_code in [
+            401,
+            403,
+            402,
+        ], f"Route {route} returned {response.status_code} (expected auth error, not 404)"
 
 
 @pytest.mark.asyncio
@@ -133,4 +136,4 @@ async def test_wpc_migrations_declared(app_with_wpc: Quart) -> None:
     from hub_api.modules.perftest_cluster import module as wpc_module
 
     contract = wpc_module()
-    assert contract.migrations == ["0010", "0011", "0012"]
+    assert contract.migrations == ["0010", "0011", "0012", "0027"]

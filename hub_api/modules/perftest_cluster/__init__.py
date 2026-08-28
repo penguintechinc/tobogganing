@@ -1,4 +1,5 @@
 """WaddlePerf cluster module - network performance testing control plane."""
+
 from __future__ import annotations
 
 from hub_api.modules.perftest_cluster.api import blueprints
@@ -24,6 +25,7 @@ def module() -> ModuleContract:
             NavEntry("Alerts", "/api/v1/perftest_cluster/alerts", "bell"),
             NavEntry("Scheduled Tests", "/api/v1/perftest_cluster/scheduled-tests", "clock"),
             NavEntry("AutoPerf", "/api/v1/perftest_cluster/autoperf", "zap"),
+            NavEntry("Auto Check-ins", "/api/v1/perftest_cluster/auto-checkins", "check-circle"),
             NavEntry("Live Test", "/api/v1/perftest_cluster/live-test", "radio"),
         ],
         flags=[
@@ -38,6 +40,7 @@ def module() -> ModuleContract:
             "tobogganing.perftest.cluster.alerts",
             "tobogganing.perftest.cluster.alert_routing",
             "tobogganing.perftest.cluster.autoperf",
+            "tobogganing.perftest.cluster.auto_checkins",
         ],
         entitlements=[
             Entitlement("perftest.cluster.org_units", "community"),
@@ -51,8 +54,9 @@ def module() -> ModuleContract:
             Entitlement("perftest.cluster.alerts", "community"),
             Entitlement("perftest.cluster.alert_routing", "professional"),
             Entitlement("perftest.cluster.autoperf", "professional"),
+            Entitlement("perftest.cluster.auto_checkins", "professional"),
         ],
-        migrations=["0010", "0011", "0012"],
+        migrations=["0010", "0011", "0012", "0027"],
         health=None,
     )
 
@@ -75,6 +79,13 @@ def module() -> ModuleContract:
         "perftest_cluster",
         "autoperf_cycle",
         "hub_api.modules.perftest_cluster.worker.tasks.autoperf_cycle",
+    )
+
+    # Register handler for AutoCheckIn cycle
+    register_job_handler(
+        "perftest_cluster",
+        "auto_checkin",
+        "hub_api.modules.perftest_cluster.worker.tasks.auto_checkin_cycle",
     )
 
     return contract
