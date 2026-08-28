@@ -1912,6 +1912,83 @@ paths:
           type: string
       responses: {}
       summary: Delete an alert rule.
+  /api/v1/perftest_cluster/auto-checkins:
+    get:
+      description: "\nRequired scope: tests:read\nRequired feature: perftest_cluster.auto_checkins\n\
+        \nReturns:\n    JSON response with checkins list (200)."
+      operationId: get_list_auto_checkins
+      parameters: []
+      responses: {}
+      summary: List AutoCheckIns for the tenant.
+    post:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.auto_checkins\n\
+        \nJSON body:\n    name, device_id, target_kind (\"ours\"|\"external\"), target:\
+        \ required strings\n    test_types: optional list[str] subset of ALLOWED_TEST_TYPES\
+        \ (defaults to\n        the tier's standard set via _test_types_for_tier)\n\
+        \    interval_minutes: int 1-60 (default 5)\n    jitter_pct: int 0-10 (default\
+        \ 0)\n    samples_per_run: int 1-5 (default 1)\n    threshold_stddev_min/threshold_stddev_max/threshold_mean:\
+        \ optional floats\n    tier: int 1-3 (default 1)\n    parent_checkin_id: required\
+        \ if tier > 1, forbidden if tier == 1\n    enabled: bool (default true)\n\n\
+        Returns:\n    JSON response with created check-in (201)."
+      operationId: post_create_auto_checkin
+      parameters: []
+      responses: {}
+      summary: Create an AutoCheckIn.
+  /api/v1/perftest_cluster/auto-checkins/{checkin_id}:
+    delete:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.auto_checkins\n\
+        \nReturns:\n    Empty response (204), 404 if not found, or 409 if it has dependents."
+      operationId: delete_delete_auto_checkin
+      parameters:
+      - in: path
+        name: checkin_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Delete an AutoCheckIn (must have no tier-dependent children).
+    get:
+      description: "\nRequired scope: tests:read\nRequired feature: perftest_cluster.auto_checkins\n\
+        \nReturns:\n    JSON response with check-in (200) or 404 if not found."
+      operationId: get_get_auto_checkin
+      parameters:
+      - in: path
+        name: checkin_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get a single AutoCheckIn.
+    patch:
+      description: "\nRequired scope: tests:write\nRequired feature: perftest_cluster.auto_checkins\n\
+        \nJSON body (all optional): name, target, test_types, interval_minutes,\n\
+        \    jitter_pct, samples_per_run, threshold_stddev_min, threshold_stddev_max,\n\
+        \    threshold_mean, enabled. Structural fields (device_id, target_kind,\n\
+        \    tier, parent_checkin_id) are immutable -- create a new check-in instead.\n\
+        \nReturns:\n    JSON response with updated check-in (200) or 404 if not found."
+      operationId: patch_update_auto_checkin
+      parameters:
+      - in: path
+        name: checkin_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Update mutable AutoCheckIn fields.
+  /api/v1/perftest_cluster/auto-checkins/{checkin_id}/state:
+    get:
+      description: "\nRequired scope: tests:read\nRequired feature: perftest_cluster.auto_checkins\n\
+        \nReturns:\n    JSON response with state (200) or 404 if not found."
+      operationId: get_get_auto_checkin_state
+      parameters:
+      - in: path
+        name: checkin_id
+        required: true
+        schema:
+          type: string
+      responses: {}
+      summary: Get cascade state (last_breached, last mean/stddev, last_run_at) for
+        a check-in.
   /api/v1/perftest_cluster/autoperf/policies:
     get:
       description: "\nRequired scope: autoperf:read\nRequired feature: perftest_cluster.autoperf\n\
@@ -2069,10 +2146,12 @@ paths:
   /api/v1/perftest_cluster/live-test/run:
     post:
       description: "\nRequires valid JWT with tenant claim.\n\nRequest body:\n   \
-        \ {\n        \"test_type\": \"http|tcp|udp|icmp|...\",\n        \"target\"\
+        \ {\n        \"test_type\": \"http|tcp|udp|icmp|http_trace|tcp_trace|udp_trace|\"\
+        \n                      \"traceroute|throughput|http2\",\n        \"target\"\
         : \"host or IP\",\n        \"device_id\": \"device-uuid\",\n        \"params\"\
-        : { \"port\": 80, \"timeout\": 30, \"count\": 10, ... }\n    }\n\nReturns:\n\
-        \    JSON response with test result and metadata."
+        : { \"port\": 80, \"timeout\": 30, \"count\": 10, ... }\n    }\n\n\"speedtest\"\
+        \ is accepted as an alias for \"throughput\", \"http2_ping\" for\n\"http2\"\
+        .\n\nReturns:\n    JSON response with test result and metadata."
       operationId: post_run_test_sync
       parameters: []
       responses: {}

@@ -1,7 +1,11 @@
 """WaddlePerf cluster API blueprints."""
+
 from __future__ import annotations
 
 from hub_api.modules.perftest_cluster.api.alerts import alerts_bp as alerts_blueprint
+from hub_api.modules.perftest_cluster.api.auto_checkins import (
+    auto_checkins_bp as auto_checkins_blueprint,
+)
 from hub_api.modules.perftest_cluster.api.autoperf import autoperf_bp as autoperf_blueprint
 from hub_api.modules.perftest_cluster.api.devices import blueprint as devices_blueprint
 from hub_api.modules.perftest_cluster.api.enrollment import blueprint as enrollment_blueprint
@@ -23,6 +27,7 @@ blueprints = [
     live_test_blueprint,
     alerts_blueprint,
     autoperf_blueprint,
+    auto_checkins_blueprint,
 ]
 
 __all__ = ["blueprints"]
