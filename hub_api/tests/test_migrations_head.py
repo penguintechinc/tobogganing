@@ -7,6 +7,8 @@ from hub_api.db.models import (
     VRF,
     AlertEvent,
     AlertRule,
+    AutoCheckIn,
+    AutoCheckInState,
     AutoPerfPolicy,
     AutoPerfState,
     C2CEndpoint,
@@ -80,6 +82,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
     Migration 0025: dns_zones, dns_records, dns_servers, dns_server_metrics,
                     dns_resolver_tokens, dns_config_versions
     Migration 0026: threatintel_feed_sources
+    Migration 0027: auto_checkins, auto_checkin_state
     """
     # Get expected tables from Base.metadata
     expected_tables = set(Base.metadata.tables.keys())
@@ -155,6 +158,12 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "threatintel_feed_sources",
     }
 
+    # Tables created by migration 0027 (Auto Check-in tier cascade — W2)
+    created_by_migration_0027 = {
+        "auto_checkins",
+        "auto_checkin_state",
+    }
+
     # All tables covered by migrations
     all_migration_tables = (
         created_by_existing_migrations
@@ -163,6 +172,7 @@ def test_alembic_migrations_cover_all_tables() -> None:
         | created_by_scheduler_migrations
         | created_by_migration_0025
         | created_by_migration_0026
+        | created_by_migration_0027
     )
 
     # Verify coverage
@@ -202,6 +212,8 @@ def test_base_metadata_models_imported() -> None:
         AlertEvent,
         AutoPerfPolicy,
         AutoPerfState,
+        AutoCheckIn,
+        AutoCheckInState,
         SecurityScan,
         SecurityFinding,
         ScanSchedule,
