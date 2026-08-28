@@ -299,4 +299,96 @@ describe('wpcOps API', () => {
       );
     });
   });
+
+  describe('AutoCheckIns', () => {
+    const mockCheckin = {
+      id: 'checkin-1',
+      tenant: 'tenant-1',
+      name: 'Wifi Baseline',
+      device_id: 'dev-1',
+      target_kind: 'external' as const,
+      target: 'example.com',
+      test_types: ['http_trace', 'traceroute'],
+      interval_minutes: 5,
+      jitter_pct: 10,
+      samples_per_run: 2,
+      threshold_stddev_min: null,
+      threshold_stddev_max: 50,
+      threshold_mean: null,
+      tier: 1,
+      parent_checkin_id: null,
+      enabled: true,
+      created_at: '2026-08-28T00:00:00Z',
+      updated_at: '2026-08-28T00:00:00Z',
+    };
+
+    it('lists auto check-ins', async () => {
+      mockApiClient.get.mockResolvedValue({
+        data: { checkins: [mockCheckin] },
+      } as Record<string, unknown>);
+
+      const result = await wpcOps.listAutoCheckIns();
+      expect(result).toEqual([mockCheckin]);
+      expect(mockApiClient.get).toHaveBeenCalledWith('/perftest_cluster/auto-checkins');
+    });
+
+    it('creates an auto check-in', async () => {
+      mockApiClient.post.mockResolvedValue({ data: mockCheckin } as Record<string, unknown>);
+
+      const result = await wpcOps.createAutoCheckIn({
+        name: 'Wifi Baseline',
+        device_id: 'dev-1',
+        target_kind: 'external',
+        target: 'example.com',
+      });
+
+      expect(result).toEqual(mockCheckin);
+      expect(mockApiClient.post).toHaveBeenCalledWith('/perftest_cluster/auto-checkins', {
+        name: 'Wifi Baseline',
+        device_id: 'dev-1',
+        target_kind: 'external',
+        target: 'example.com',
+      });
+    });
+
+    it('updates an auto check-in', async () => {
+      const updated = { ...mockCheckin, enabled: false };
+      mockApiClient.patch.mockResolvedValue({ data: updated } as Record<string, unknown>);
+
+      const result = await wpcOps.updateAutoCheckIn('checkin-1', { enabled: false });
+      expect(result).toEqual(updated);
+      expect(mockApiClient.patch).toHaveBeenCalledWith(
+        '/perftest_cluster/auto-checkins/checkin-1',
+        { enabled: false }
+      );
+    });
+
+    it('deletes an auto check-in', async () => {
+      mockApiClient.delete.mockResolvedValue({} as Record<string, unknown>);
+
+      await wpcOps.deleteAutoCheckIn('checkin-1');
+      expect(mockApiClient.delete).toHaveBeenCalledWith(
+        '/perftest_cluster/auto-checkins/checkin-1'
+      );
+    });
+
+    it('gets auto check-in state', async () => {
+      const mockState = {
+        checkin_id: 'checkin-1',
+        last_breached: false,
+        last_mean_latency_ms: 12.5,
+        last_stddev_latency_ms: 1.2,
+        last_run_at: '2026-08-28T00:05:00Z',
+        updated_at: '2026-08-28T00:05:00Z',
+      };
+
+      mockApiClient.get.mockResolvedValue({ data: mockState } as Record<string, unknown>);
+
+      const result = await wpcOps.getAutoCheckInState('checkin-1');
+      expect(result).toEqual(mockState);
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/perftest_cluster/auto-checkins/checkin-1/state'
+      );
+    });
+  });
 });
