@@ -208,7 +208,7 @@ async def _stream_test_progress(
         try:
             await ws.send(msg.to_json())
         except Exception:
-            pass  # Connection may be closed
+            logger.debug("websocket_send_failed_during_teardown", exc_info=True)
         return None
 
 
@@ -284,9 +284,7 @@ async def live_test_stream() -> None:
                 if not test_type or not target or not device_id:
                     error_msg = StreamMessage(
                         event="error",
-                        data={
-                            "message": "Missing required fields: test_type, target, device_id"
-                        },
+                        data={"message": "Missing required fields: test_type, target, device_id"},
                     )
                     await ws.send(error_msg.to_json())
                     continue
@@ -417,7 +415,7 @@ async def live_test_stream() -> None:
                 try:
                     await ws.send(error_msg.to_json())
                 except Exception:
-                    pass
+                    logger.debug("websocket_send_failed_during_teardown", exc_info=True)
 
     except asyncio.CancelledError:
         logger.info("websocket_cancelled", tenant=tenant)
@@ -430,7 +428,7 @@ async def live_test_stream() -> None:
             )
             await ws.send(error_msg.to_json())
         except Exception:
-            pass
+            logger.debug("websocket_send_failed_during_teardown", exc_info=True)
     finally:
         await engine_client.close()
         logger.info("websocket_closed", tenant=tenant)
