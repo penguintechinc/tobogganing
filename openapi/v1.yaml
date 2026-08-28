@@ -459,6 +459,42 @@ paths:
       parameters: []
       responses: {}
       summary: Refresh JWT access token using refresh token with rotation.
+  /api/v1/auth/refresh-token:
+    post:
+      description: '
+
+        Request body: {refresh_token}
+
+        Returns:
+
+        - 200 {access_token, refresh_token, expires_in: 3600, token_type: "Bearer"}
+
+        - 401 on invalid/expired refresh token
+
+        - 400 on missing fields
+
+
+        Route-shadowing regression (fixed): this used to be registered at
+
+        POST /api/v1/auth/refresh, which collided with headend_bp''s machine
+
+        refresh route at the exact same path (headend_routes.py:502). Because
+
+        auth_bp is registered first in create_app(), it silently shadowed the
+
+        machine handler for every request. Moved to /refresh-token so both
+
+        user and machine refresh flows are independently reachable. The
+
+        machine path is documented in docs/architecture/headend-machine-jwt-contract.md
+
+        and consumed by live Go clients (services/hub-router, clients/native),
+
+        so it keeps its original path instead.'
+      operationId: post_refresh
+      parameters: []
+      responses: {}
+      summary: Refresh an access token using a refresh token.
   /api/v1/auth/token:
     post:
       description: "\nThis is the FLAT equivalent of `/api/v1/sase/jwt/token`.\nUsed\

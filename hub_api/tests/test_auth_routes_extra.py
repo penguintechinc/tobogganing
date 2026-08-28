@@ -64,9 +64,9 @@ async def test_login_unexpected_exception_returns_401(auth_client: Quart) -> Non
 
 @pytest.mark.asyncio
 async def test_refresh_missing_body_returns_400(auth_client: Quart) -> None:
-    """POST /auth/refresh with no JSON body returns 400."""
+    """POST /auth/refresh-token with no JSON body returns 400."""
     client = auth_client.test_client()
-    resp = await client.post("/api/v1/auth/refresh", data="not json")
+    resp = await client.post("/api/v1/auth/refresh-token", data="not json")
     assert resp.status_code == 400
     data = await resp.get_json()
     assert data["error"] == "Missing request body"
@@ -74,10 +74,10 @@ async def test_refresh_missing_body_returns_400(auth_client: Quart) -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_unexpected_exception_returns_401(auth_client: Quart) -> None:
-    """POST /auth/refresh returns 401 when AuthService raises unexpectedly."""
+    """POST /auth/refresh-token returns 401 when AuthService raises unexpectedly."""
     client = auth_client.test_client()
     with patch("hub_api.api.auth_routes.AuthService", side_effect=RuntimeError("boom")):
-        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": "sometoken"})
+        resp = await client.post("/api/v1/auth/refresh-token", json={"refresh_token": "sometoken"})
     assert resp.status_code == 401
     data = await resp.get_json()
     assert data["error"] == "Invalid credentials"

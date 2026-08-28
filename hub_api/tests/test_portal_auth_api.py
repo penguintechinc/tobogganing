@@ -1,4 +1,5 @@
 """Test authentication API endpoints with real database."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,9 +8,9 @@ from typing import Any
 from uuid import uuid4
 
 import bcrypt
+import pyotp
 import pytest
 import pytest_asyncio
-import pyotp
 from penguin_dal import AsyncDB
 from quart import Quart
 
@@ -38,12 +39,14 @@ def test_config() -> Config:
 
 
 @pytest_asyncio.fixture
-async def auth_app(real_dal: AsyncDB, test_config: Config, key_provider: InAppKeyProvider, monkeypatch: Any) -> Quart:
+async def auth_app(
+    real_dal: AsyncDB, test_config: Config, key_provider: InAppKeyProvider, monkeypatch: Any
+) -> Quart:
     """Create an app with auth routes registered."""
-    from hub_api.app import create_app
-    import hub_api.db
     import hub_api.api.auth_routes
     import hub_api.api.portal_routes
+    import hub_api.db
+    from hub_api.app import create_app
 
     # Monkeypatch get_db everywhere it's imported
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
@@ -61,7 +64,9 @@ async def auth_app(real_dal: AsyncDB, test_config: Config, key_provider: InAppKe
 
 
 @pytest.mark.asyncio
-async def test_login_success(auth_app: Quart, real_dal: AsyncDB, key_provider: InAppKeyProvider) -> None:
+async def test_login_success(
+    auth_app: Quart, real_dal: AsyncDB, key_provider: InAppKeyProvider
+) -> None:
     """Test successful login returns tokens."""
     # Create user
     user_id = str(uuid4())
@@ -283,7 +288,7 @@ async def test_refresh_success(auth_app: Quart, real_dal: AsyncDB) -> None:
 
     # Refresh
     response = await client.post(
-        "/api/v1/auth/refresh",
+        "/api/v1/auth/refresh-token",
         json={"refresh_token": refresh_token},
     )
 
@@ -298,13 +303,40 @@ async def test_refresh_invalid_token(auth_app: Quart) -> None:
     """Test refresh with invalid token returns 401."""
     client = auth_app.test_client()
     response = await client.post(
-        "/api/v1/auth/refresh",
+        "/api/v1/auth/refresh-token",
         json={"refresh_token": "invalid_token"},
     )
 
     assert response.status_code == 401
     data = await response.get_json()
     assert data["error"] == "Invalid credentials"
+
+
+@pytest.mark.asyncio
+async def test_refresh_routes_do_not_collide(auth_app: Quart) -> None:
+    """User refresh and machine refresh must resolve to distinct handlers.
+
+    Regression test for a route-shadowing bug: auth_bp's user refresh and
+    headend_bp's machine refresh were both registered at
+    POST /api/v1/auth/refresh. Since auth_bp is registered first in
+    create_app(), it silently shadowed headend_bp's machine handler for
+    every request (see headend_routes.py:502 and
+    docs/architecture/headend-machine-jwt-contract.md). User refresh now
+    lives at /api/v1/auth/refresh-token so both paths route independently
+    with no collision.
+    """
+    adapter = auth_app.url_map.bind("localhost")
+
+    user_endpoint, _ = adapter.match("/api/v1/auth/refresh-token", method="POST")
+    assert user_endpoint == "auth.refresh"
+
+    machine_endpoint, _ = adapter.match("/api/v1/auth/refresh", method="POST")
+    assert machine_endpoint == "headend.refresh_auth_token"
+
+    # Exactly one rule per path — no duplicate registrations left behind.
+    for path in ("/api/v1/auth/refresh-token", "/api/v1/auth/refresh"):
+        rules = [r for r in auth_app.url_map.iter_rules() if r.rule == path]
+        assert len(rules) == 1, f"expected exactly one rule for {path}, got {rules}"
 
 
 @pytest.mark.asyncio
@@ -350,7 +382,7 @@ async def test_logout_success(auth_app: Quart, real_dal: AsyncDB) -> None:
 
     # Try to refresh with revoked token
     response = await client.post(
-        "/api/v1/auth/refresh",
+        "/api/v1/auth/refresh-token",
         json={"refresh_token": refresh_token},
     )
 

@@ -50,7 +50,7 @@ apiClient.interceptors.response.use(
         // Single-flight: queue behind one refresh promise
         if (!refreshPromise) {
           refreshPromise = (async () => {
-            const res = await apiClient.post<TokenPair>('/auth/refresh', {
+            const res = await apiClient.post<TokenPair>('/auth/refresh-token', {
               refresh_token: refreshToken,
             });
             return res.data;

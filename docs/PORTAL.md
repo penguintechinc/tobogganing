@@ -5,7 +5,7 @@ Single React portal for all modules — served by its own Express container, dri
 ## Architecture
 
 - **Manifest-driven**: on login the portal fetches `GET /api/v1/portal/manifest` — every registered module's nav entries (`label`, `path`, `icon` = lucide slug) plus its evaluated feature-flag states and the caller's role. The sidebar and routes render from this, so UI gating always tracks backend flag/entitlement gating; new modules appear without portal changes.
-- **Auth**: `POST /api/v1/auth/login` (email/password, TOTP MFA step on `{"mfa_required": true}`), `/auth/refresh`, `/auth/logout`. Uniform 401s (no user enumeration). Tokens live in memory + sessionStorage; the axios client injects Bearer and performs a single-flight refresh-and-retry on 401.
+- **Auth**: `POST /api/v1/auth/login` (email/password, TOTP MFA step on `{"mfa_required": true}`), `/auth/refresh-token`, `/auth/logout`. Uniform 401s (no user enumeration). Tokens live in memory + sessionStorage; the axios client injects Bearer and performs a single-flight refresh-and-retry on 401. (`/auth/refresh` is a distinct, separately-routed endpoint reserved for machine/headend token refresh — see `docs/architecture/headend-machine-jwt-contract.md`.)
 - **Routes**: `/login` public; everything else behind ProtectedRoute. Module views mount at `/m/{module}/{slug(label)}`; unimplemented views render a placeholder.
 - **Roles**: `useRole()`/`canWrite()` from JWT claims — `viewer` sees read-only UI.
 

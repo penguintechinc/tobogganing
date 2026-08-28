@@ -453,7 +453,14 @@ async def test_post_auth_token_cluster_auth_failed(app_with_sase: Quart) -> None
 
 @pytest.mark.asyncio
 async def test_post_auth_refresh_missing_token(app_with_sase: Quart) -> None:
-    """Test POST /api/v1/auth/refresh requires refresh_token.
+    """Test POST /api/v1/auth/refresh (machine/headend refresh) requires refresh_token.
+
+    Regression test for a route-shadowing bug: this path used to be
+    silently claimed by auth_bp's user-refresh handler (registered first
+    in create_app()), so this test exercised the wrong handler by
+    accident. Now that auth_bp's user-refresh lives at
+    /api/v1/auth/refresh-token, this correctly reaches
+    headend_routes.refresh_auth_token().
 
     Args:
         app_with_sase: Test app with SASE module.
@@ -472,11 +479,21 @@ async def test_post_auth_refresh_missing_token(app_with_sase: Quart) -> None:
 
 @pytest.mark.asyncio
 async def test_post_auth_refresh_invalid_token(app_with_sase: Quart) -> None:
-    """Test POST /api/v1/auth/refresh rejects invalid refresh token.
+    """Test POST /api/v1/auth/refresh (machine/headend refresh) rejects invalid tokens.
+
+    Regression test for a route-shadowing bug (see
+    test_post_auth_refresh_missing_token docstring). CACHE and DAL are
+    configured here so the request reaches headend_routes.refresh_auth_token()'s
+    decode_token() check instead of short-circuiting on a missing
+    dependency, proving the *machine* refresh handler's own 401 rejection
+    path (not auth_bp's) is what actually runs.
 
     Args:
         app_with_sase: Test app with SASE module.
     """
+    app_with_sase.config["CACHE"] = MagicMock()
+    app_with_sase.config["DAL"] = MagicMock()
+
     client = app_with_sase.test_client()
 
     # Send an invalid refresh token (no mocking, let it fail naturally)
@@ -485,10 +502,67 @@ async def test_post_auth_refresh_invalid_token(app_with_sase: Quart) -> None:
         json={"refresh_token": "invalid-token"},
     )
 
-    # Should reject as invalid or expired
-    assert response.status_code in (401, 500)  # 500 if DB unavailable
+    # A garbage/undecodable token is rejected by decode_token() before any
+    # cache/DB lookup, so this must be a genuine 401, not a masked 500.
+    assert response.status_code == 401
     data = await response.get_json()
-    assert "error" in data
+    assert data["error"] == "Invalid or expired refresh token"
+
+
+@pytest.mark.asyncio
+async def test_post_auth_refresh_dispatches_to_machine_handler(app_with_sase: Quart) -> None:
+    """POST /api/v1/auth/refresh must invoke the machine/headend handler, not auth_bp.
+
+    Regression test for the route-shadowing bug fixed alongside this test:
+    auth_bp and headend_bp both used to register POST /api/v1/auth/refresh;
+    auth_bp (registered first in create_app()) silently shadowed headend_bp's
+    machine handler for every request. Proves dispatch by minting a real
+    machine refresh token (build_machine_claims: token_type=refresh,
+    node_type, permissions) and mocking only rotate_refresh() — reaching
+    that mock requires decode_token() to have accepted the token, which
+    only headend_routes.refresh_auth_token() attempts.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+    """
+    from hub_api.auth.jwt import encode_access_token
+    from hub_api.auth.machine_claims import build_machine_claims
+
+    provider = app_with_sase.config["KEY_PROVIDER"]
+    claims = build_machine_claims(
+        sub_id="cluster-1",
+        node_type="kubernetes_node",
+        tenant="acme",
+        iss="tobogganing",
+        aud="tobogganing",
+        token_type="refresh",
+    )
+    refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
+
+    app_with_sase.config["CACHE"] = MagicMock()
+    app_with_sase.config["DAL"] = MagicMock()
+
+    client = app_with_sase.test_client()
+
+    with patch(
+        "hub_api.auth.refresh.rotate_refresh",
+        new=AsyncMock(
+            return_value={
+                "access_token": "new-machine-access",
+                "refresh_token": "new-machine-refresh",
+            }
+        ),
+    ) as mock_rotate:
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+
+    assert mock_rotate.await_count == 1
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["access_token"] == "new-machine-access"
+    assert data["refresh_token"] == "new-machine-refresh"
 
 
 @pytest.mark.asyncio
@@ -683,7 +757,7 @@ async def test_get_headend_ports_tenant_param_ignored(app_with_sase: Quart) -> N
             mock_get_db.return_value = MagicMock()
 
             # Request with ?tenant=other-tenant (attacker tries cross-tenant read)
-            response = await client.get(
+            await client.get(
                 "/api/v1/headend/headend-1/ports?tenant=other-tenant",
                 headers={"Authorization": f"Bearer {test_token}"},
             )

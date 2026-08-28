@@ -1,8 +1,9 @@
 """Authentication routes: login, refresh, logout."""
+
 from __future__ import annotations
 
 import structlog
-from quart import Blueprint, current_app, jsonify, request
+from quart import Blueprint, current_app, request
 
 from hub_api.auth.service import AuthService
 from hub_api.db import get_db
@@ -76,7 +77,7 @@ async def login() -> tuple[dict, int]:
         return {"error": "Invalid credentials"}, 401
 
 
-@auth_bp.route("/refresh", methods=["POST"])
+@auth_bp.route("/refresh-token", methods=["POST"])
 async def refresh() -> tuple[dict, int]:
     """Refresh an access token using a refresh token.
 
@@ -85,6 +86,16 @@ async def refresh() -> tuple[dict, int]:
     - 200 {access_token, refresh_token, expires_in: 3600, token_type: "Bearer"}
     - 401 on invalid/expired refresh token
     - 400 on missing fields
+
+    Route-shadowing regression (fixed): this used to be registered at
+    POST /api/v1/auth/refresh, which collided with headend_bp's machine
+    refresh route at the exact same path (headend_routes.py:502). Because
+    auth_bp is registered first in create_app(), it silently shadowed the
+    machine handler for every request. Moved to /refresh-token so both
+    user and machine refresh flows are independently reachable. The
+    machine path is documented in docs/architecture/headend-machine-jwt-contract.md
+    and consumed by live Go clients (services/hub-router, clients/native),
+    so it keeps its original path instead.
     """
     try:
         data = await request.get_json()
