@@ -411,7 +411,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
         )  # Fall back to node_id if no id attr
 
         # Build machine JWT claims (includes jti, scope, tenant)
-        claims = build_machine_claims(
+        claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator ("access"), not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -435,7 +435,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
             )
 
         # Generate refresh token (24 hours) — rebuild from machine_claims with refresh type
-        refresh_claims = build_machine_claims(
+        refresh_claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator ("refresh"), not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
