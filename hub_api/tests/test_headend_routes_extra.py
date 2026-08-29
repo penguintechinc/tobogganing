@@ -511,15 +511,19 @@ class TestIssueAuthToken:
 class TestRefreshAuthToken:
     """Direct tests for headend_routes.refresh_auth_token().
 
-    NOTE: `/api/v1/auth/refresh` is registered by BOTH `auth_bp`
-    (api/auth_routes.py) and `headend_bp` (this module) — a pre-existing
-    route collision where `auth_bp`, registered first in create_app(),
-    shadows headend_bp's handler at that exact path. This is flagged
-    separately as a pre-existing issue; it is out of scope to fix here. To
-    actually exercise headend_routes.refresh_auth_token()'s own code (the
-    point of this coverage file) these tests call the handler function
-    directly inside a manually-entered request context instead of going
-    through the (shadowed) HTTP route.
+    NOTE: `/api/v1/auth/refresh` used to be registered by BOTH `auth_bp`
+    (api/auth_routes.py) and `headend_bp` (this module) — auth_bp,
+    registered first in create_app(), silently shadowed headend_bp's
+    handler at that exact path. Fixed by moving auth_bp's user refresh to
+    /api/v1/auth/refresh-token (see auth_routes.py:79 and
+    test_portal_auth_api.py::test_refresh_routes_do_not_collide /
+    test_headend_policy_routes.py::test_post_auth_refresh_dispatches_to_machine_handler
+    for HTTP-level dispatch regression coverage). These tests still call
+    the handler function directly inside a manually-entered request
+    context — that's a deliberate choice to exercise
+    refresh_auth_token()'s internal branches (missing dependencies, decode
+    failures, rotate_refresh error propagation) without needing a full
+    HTTP round trip, not a workaround for the collision anymore.
     """
 
     async def _call_refresh(
@@ -566,18 +570,32 @@ class TestRefreshAuthToken:
 
     @pytest.mark.asyncio
     async def test_no_dal_configured(self, app_with_headend: Quart) -> None:
-        """Returns 500 when DAL isn't configured."""
+        """Returns 500 when get_db() returns None.
+
+        DAL-accessor regression: refresh_auth_token() used to read
+        db = current_app.config.get("DAL"), a key never set in production
+        create_app() (headend_routes.py:551 now uses get_db(), the same
+        accessor every other handler in this module uses — see
+        get_firewall_rules()/test_get_firewall_rules_no_db above). Forcing
+        get_db() itself to return None (rather than merely leaving
+        config["DAL"] unset) is what actually exercises this branch now.
+        """
         app_with_headend.config["CACHE"] = MagicMock()
-        result, status = await self._call_refresh(
-            app_with_headend, json_body={"refresh_token": "sometoken"}
-        )
+        with patch("hub_api.api.headend_routes.get_db", return_value=None):
+            result, status = await self._call_refresh(
+                app_with_headend, json_body={"refresh_token": "sometoken"}
+            )
         assert status == 500
 
     @pytest.mark.asyncio
     async def test_invalid_refresh_token(self, app_with_headend: Quart) -> None:
-        """Returns 401 when the refresh token doesn't decode."""
+        """Returns 401 when the refresh token doesn't decode.
+
+        DAL comes from the real get_db() accessor here (app_with_headend's
+        underlying app fixture wires a real, if tableless, AsyncDB) —
+        config["DAL"] is intentionally left unset.
+        """
         app_with_headend.config["CACHE"] = MagicMock()
-        app_with_headend.config["DAL"] = MagicMock()
 
         result, status = await self._call_refresh(
             app_with_headend, json_body={"refresh_token": "garbage"}
@@ -601,8 +619,9 @@ class TestRefreshAuthToken:
         )
         refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
 
+        # DAL intentionally unset in config — the real get_db() accessor
+        # supplies it (DAL-accessor regression; see test_no_dal_configured).
         app_with_headend.config["CACHE"] = MagicMock()
-        app_with_headend.config["DAL"] = MagicMock()
 
         with patch(
             "hub_api.auth.refresh.rotate_refresh",
@@ -629,8 +648,9 @@ class TestRefreshAuthToken:
         )
         refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
 
+        # DAL intentionally unset in config — the real get_db() accessor
+        # supplies it (DAL-accessor regression; see test_no_dal_configured).
         app_with_headend.config["CACHE"] = MagicMock()
-        app_with_headend.config["DAL"] = MagicMock()
 
         with patch(
             "hub_api.auth.refresh.rotate_refresh",

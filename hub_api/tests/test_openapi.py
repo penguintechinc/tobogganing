@@ -1,4 +1,5 @@
 """Tests for OpenAPI spec generation and routing."""
+
 from __future__ import annotations
 
 import pytest
@@ -67,7 +68,7 @@ async def test_public_docs_no_auth_required(app: Quart) -> None:
     assert data["info"]["title"]  # Should have a title
     assert "/api/v1/auth/login" in data["paths"]
     # Public docs should NOT expose other auth endpoints (require token)
-    assert "/api/v1/auth/refresh" not in data["paths"]
+    assert "/api/v1/auth/refresh-token" not in data["paths"]
     assert "/api/v1/auth/logout" not in data["paths"]
 
 
@@ -115,7 +116,7 @@ async def test_openapi_json_with_valid_token_returns_200(
     assert data["info"]["title"]  # Should have a title
     # Full spec should expose all endpoints
     assert "/api/v1/auth/login" in data["paths"]
-    assert "/api/v1/auth/refresh" in data["paths"]
+    assert "/api/v1/auth/refresh-token" in data["paths"]
     assert "/api/v1/auth/logout" in data["paths"]
     assert "/health" in data["paths"]
     assert "/ready" in data["paths"]

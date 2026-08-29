@@ -15,8 +15,8 @@ from hub_api.cache import CacheClient
 from hub_api.config import Config, build_db_uri
 from hub_api.config.readiness import validate_prod_readiness
 from hub_api.crypto.secrets import SecretEncryptor, set_encryptor
-from hub_api.crypto.selection import build_signing_provider, build_data_key_provider
-from hub_api.db import init_dal, get_db
+from hub_api.crypto.selection import build_data_key_provider, build_signing_provider
+from hub_api.db import get_db, init_dal
 from hub_api.registry import ModuleContext, ModuleRegistry
 from hub_api.registry.contract import Entitlement
 
@@ -70,8 +70,8 @@ def create_app(config: Config | None = None) -> Quart:
 
     # Register core API blueprints
     from hub_api.api.auth_routes import auth_bp
-    from hub_api.api.portal_routes import portal_bp
     from hub_api.api.headend_routes import headend_bp
+    from hub_api.api.portal_routes import portal_bp
     from hub_api.core.api import certs_blueprint, jwt_blueprint
 
     app.register_blueprint(auth_bp)
@@ -100,9 +100,7 @@ def create_app(config: Config | None = None) -> Quart:
     app.registry = registry  # type: ignore[attr-defined]
 
     # Register core-level entitlements and flags
-    registry.register_entitlements(
-        [Entitlement(feature="hub_api.external_kms", tier="enterprise")]
-    )
+    registry.register_entitlements([Entitlement(feature="hub_api.external_kms", tier="enterprise")])
     registry._flags.append("tobogganing.hub_api.external_kms")
 
     # Import and register modules from hub_api.modules
@@ -155,9 +153,7 @@ def create_app(config: Config | None = None) -> Quart:
             db = get_db()
             app.db = db  # type: ignore[attr-defined]
             # Apply registry to app with the module context
-            ctx = ModuleContext(
-                config=config, db=db, key_provider=app.config.get("KEY_PROVIDER")
-            )
+            ctx = ModuleContext(config=config, db=db, key_provider=app.config.get("KEY_PROVIDER"))
             registry.apply_to(app, ctx)
 
             # Initialize the global encryptor from the selected data key provider
@@ -165,9 +161,7 @@ def create_app(config: Config | None = None) -> Quart:
                 data_key_provider = build_data_key_provider(registry)
                 encryptor = SecretEncryptor(data_key_provider.get_data_key())
                 set_encryptor(encryptor)
-                logger.info(
-                    f"Initialized encryptor: {type(data_key_provider).__name__}"
-                )
+                logger.info(f"Initialized encryptor: {type(data_key_provider).__name__}")
             except Exception as e:
                 logger.error(f"Failed to initialize encryptor: {e}")
                 raise
@@ -198,9 +192,7 @@ def create_app(config: Config | None = None) -> Quart:
                                 await asyncio.sleep(3600)  # 1 hour
                                 success = await reporter.report()
                                 if not success:
-                                    logger.warning(
-                                        "Usage report failed (will retry in 1h)"
-                                    )
+                                    logger.warning("Usage report failed (will retry in 1h)")
                             except asyncio.CancelledError:
                                 logger.info("Hourly keepalive task cancelled")
                                 break
@@ -211,9 +203,7 @@ def create_app(config: Config | None = None) -> Quart:
                     app.keepalive_task = asyncio.create_task(hourly_keepalive())  # type: ignore[attr-defined]
                     logger.info("Usage reporter initialized with hourly keepalive")
                 else:
-                    logger.warning(
-                        "License client not available; usage reporting disabled"
-                    )
+                    logger.warning("License client not available; usage reporting disabled")
             except Exception as e:
                 logger.error(f"Failed to initialize usage reporter: {e}")
                 # Non-fatal; continue startup
@@ -320,15 +310,9 @@ def create_app(config: Config | None = None) -> Quart:
                                                 {
                                                     "type": "object",
                                                     "properties": {
-                                                        "access_token": {
-                                                            "type": "string"
-                                                        },
-                                                        "refresh_token": {
-                                                            "type": "string"
-                                                        },
-                                                        "expires_in": {
-                                                            "type": "integer"
-                                                        },
+                                                        "access_token": {"type": "string"},
+                                                        "refresh_token": {"type": "string"},
+                                                        "expires_in": {"type": "integer"},
                                                         "token_type": {
                                                             "type": "string",
                                                             "enum": ["Bearer"],
@@ -390,9 +374,7 @@ def create_app(config: Config | None = None) -> Quart:
         # Validate authentication token
         token_valid = await _validate_and_store_token()
         if not token_valid:
-            error_resp = {
-                "error": "Unauthorized: missing or invalid token"
-            }
+            error_resp = {"error": "Unauthorized: missing or invalid token"}
             return error_resp, 401
 
         # For now, return a placeholder full spec.
@@ -448,7 +430,7 @@ def create_app(config: Config | None = None) -> Quart:
                         },
                     }
                 },
-                "/api/v1/auth/refresh": {
+                "/api/v1/auth/refresh-token": {
                     "post": {
                         "summary": "Refresh access token",
                         "operationId": "refreshToken",

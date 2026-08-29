@@ -9,7 +9,6 @@ Auth: Bearer token validated against HEADEND_API_TOKEN environment variable.
 
 from __future__ import annotations
 
-import asyncio
 import hmac
 import os
 from datetime import datetime, timezone
@@ -26,7 +25,7 @@ from hub_api.auth.middleware import (
     require_scope,
     require_tenant,
 )
-from hub_api.core import UserManager, CertificateManager
+from hub_api.core import CertificateManager, UserManager
 from hub_api.crypto.keys import KeyProvider
 from hub_api.db import get_db
 from hub_api.modules.sdwan.firewall.access_control import AccessControlManager
@@ -344,9 +343,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
         permissions = []
         metadata: dict[str, Any] = {}
         tenant_id = "default"
-        authenticated_principal: Any = (
-            None  # Track authenticated principal for sub claim
-        )
+        authenticated_principal: Any = None  # Track authenticated principal for sub claim
 
         if node_type in ("kubernetes_node", "raw_compute"):
             # Authenticate cluster/headend nodes
@@ -358,9 +355,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                         authenticated_principal = cluster
                         permissions = ["headend", "proxy", "wireguard"]
                         metadata = {
-                            "cluster_id": (
-                                cluster.id if hasattr(cluster, "id") else str(cluster)
-                            ),
+                            "cluster_id": (cluster.id if hasattr(cluster, "id") else str(cluster)),
                             "region": getattr(cluster, "region", "unknown"),
                             "datacenter": getattr(cluster, "datacenter", "unknown"),
                         }
@@ -384,9 +379,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
                         authenticated_principal = client
                         permissions = ["connect", "tunnel", "route"]
                         metadata = {
-                            "client_id": (
-                                client.id if hasattr(client, "id") else str(client)
-                            ),
+                            "client_id": (client.id if hasattr(client, "id") else str(client)),
                             "client_type": getattr(client, "type", "unknown"),
                             "cluster_id": getattr(client, "cluster_id", "unknown"),
                         }
@@ -418,7 +411,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
         )  # Fall back to node_id if no id attr
 
         # Build machine JWT claims (includes jti, scope, tenant)
-        claims = build_machine_claims(
+        claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator ("access"), not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -442,7 +435,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
             )
 
         # Generate refresh token (24 hours) — rebuild from machine_claims with refresh type
-        refresh_claims = build_machine_claims(
+        refresh_claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator ("refresh"), not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -455,9 +448,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
         refresh_claims["permissions"] = " ".join(permissions)
         refresh_claims["metadata"] = metadata
         try:
-            refresh_token = await encode_access_token(
-                refresh_claims, key_provider, ttl_hours=24
-            )
+            refresh_token = await encode_access_token(refresh_claims, key_provider, ttl_hours=24)
         except ValueError as e:
             logger.error("refresh_token_encoding_failed", error=str(e))
             return (
@@ -519,7 +510,7 @@ async def refresh_auth_token() -> tuple[dict[str, Any], int]:
         - 500: {error: "..."} on server error
     """
     try:
-        from hub_api.auth.refresh import rotate_refresh, RefreshError
+        from hub_api.auth.refresh import RefreshError, rotate_refresh
         from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
 
         data = await request.get_json()
@@ -548,13 +539,9 @@ async def refresh_auth_token() -> tuple[dict[str, Any], int]:
             )
 
         # Get or create cluster manager (use default tenant or extract from token)
-        db = current_app.config.get("DAL")
-        if not db:
-            logger.error("dal_not_configured")
-            return (
-                {"error": "Internal server error"},
-                500,
-            )
+        db = get_db()
+        if db is None:
+            return {"error": "Database unavailable"}, 500
 
         # Decode refresh token to get tenant
         claims = decode_token(refresh_token, key_provider)
@@ -725,9 +712,7 @@ async def validate_auth_token() -> tuple[dict[str, Any], int]:
                 "node_type": claims.get("node_type"),
                 "tenant": claims.get("tenant"),
                 "permissions": (
-                    claims.get("permissions", "").split()
-                    if claims.get("permissions")
-                    else []
+                    claims.get("permissions", "").split() if claims.get("permissions") else []
                 ),
                 "metadata": claims.get("metadata", {}),
                 "expires_at": claims.get("exp"),
