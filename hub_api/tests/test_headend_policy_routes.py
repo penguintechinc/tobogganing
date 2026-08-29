@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -397,33 +398,29 @@ async def test_post_auth_token_cluster_auth_success(app_with_sase: Quart) -> Non
     """
     client = app_with_sase.test_client()
 
-    with patch("hub_api.api.headend_routes.asyncio.to_thread") as mock_thread:
-        # Mock successful cluster authentication
-        mock_cluster = MagicMock(
-            id="cluster-1",
-            region="us-east-1",
-            datacenter="dc1",
-            tenant_id="default",
-        )
-        mock_thread.return_value = mock_cluster
+    # app_with_sase does not configure CLUSTER_MANAGER, so authentication
+    # always falls through to the "not authenticated" branch below — this
+    # test only asserts that fallback is a clean 401/500, not a crash.
+    # (asyncio.to_thread was never on the real call path here — the
+    # handler awaits cluster_manager.authenticate_cluster() directly — so
+    # a prior mock on it was dead and has been removed.)
+    response = await client.post(
+        "/api/v1/auth/token",
+        json={
+            "node_id": "cluster-1",
+            "node_type": "kubernetes_node",
+            "api_key": "test-api-key",
+        },
+    )
 
-        response = await client.post(
-            "/api/v1/auth/token",
-            json={
-                "node_id": "cluster-1",
-                "node_type": "kubernetes_node",
-                "api_key": "test-api-key",
-            },
-        )
-
-        if response.status_code == 200:
-            data = await response.get_json()
-            assert "access_token" in data
-            assert "refresh_token" in data
-            assert data["expires_in"] == 3600
-        else:
-            # Acceptable if cluster_manager not configured
-            assert response.status_code in (401, 500)
+    if response.status_code == 200:
+        data = await response.get_json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["expires_in"] == 3600
+    else:
+        # Acceptable if cluster_manager not configured
+        assert response.status_code in (401, 500)
 
 
 @pytest.mark.asyncio
@@ -491,8 +488,14 @@ async def test_post_auth_refresh_invalid_token(app_with_sase: Quart) -> None:
     Args:
         app_with_sase: Test app with SASE module.
     """
+    # CACHE is checked before DAL and must be present to reach decode_token().
+    # DAL is intentionally left unset in config: refresh_auth_token() must
+    # source it from the real get_db() accessor (DAL-accessor regression;
+    # app_with_sase's underlying create_app() wires a real, if tableless,
+    # AsyncDB via get_db() the same way every other headend handler gets
+    # it) rather than a config["DAL"] mock that would silently mask a
+    # revert to the old current_app.config.get("DAL") bug.
     app_with_sase.config["CACHE"] = MagicMock()
-    app_with_sase.config["DAL"] = MagicMock()
 
     client = app_with_sase.test_client()
 
@@ -539,8 +542,9 @@ async def test_post_auth_refresh_dispatches_to_machine_handler(app_with_sase: Qu
     )
     refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
 
+    # DAL intentionally unset in config here too — see
+    # test_post_auth_refresh_invalid_token for why (DAL-accessor regression).
     app_with_sase.config["CACHE"] = MagicMock()
-    app_with_sase.config["DAL"] = MagicMock()
 
     client = app_with_sase.test_client()
 
@@ -563,6 +567,84 @@ async def test_post_auth_refresh_dispatches_to_machine_handler(app_with_sase: Qu
     data = await response.get_json()
     assert data["access_token"] == "new-machine-access"
     assert data["refresh_token"] == "new-machine-refresh"
+
+
+@pytest.mark.asyncio
+async def test_post_auth_refresh_reaches_real_db_and_rotates(
+    app_with_sase: Quart, real_dal: Any, monkeypatch: Any
+) -> None:
+    """POST /api/v1/auth/refresh reaches the real DB and mints fresh machine tokens.
+
+    DAL-accessor regression: refresh_auth_token() used to read
+    db = current_app.config.get("DAL"), which is never set anywhere in
+    production create_app() (only ever injected as a test double), so this
+    endpoint always 500'd in production even after the route-shadowing fix
+    (headend_routes.py:551, now uses get_db() like every other handler in
+    this module, e.g. get_firewall_rules() at :152). This test wires
+    get_db() to a real, migrated database via the real_dal fixture (not a
+    config["DAL"] mock) and registers a genuine active cluster through
+    ClusterManager.register_cluster() — the same path production
+    enrollment uses — so it fails again if refresh_auth_token() reverts to
+    reading config["DAL"].
+
+    Args:
+        app_with_sase: Test app with SASE module.
+        real_dal: Real, alembic-migrated AsyncDB fixture.
+        monkeypatch: Pytest monkeypatch fixture.
+    """
+    import hub_api.api.headend_routes as headend_routes_module
+    from hub_api.auth.jwt import encode_access_token
+    from hub_api.auth.machine_claims import build_machine_claims
+    from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
+
+    # Wire get_db() (the accessor refresh_auth_token() must use) to the real
+    # migrated DB, exactly how the module resolves it at request time.
+    monkeypatch.setattr(headend_routes_module, "get_db", lambda: real_dal)
+
+    tenant = "acme"
+    cluster_mgr = ClusterManager(real_dal, tenant)
+    cluster, _api_key = await cluster_mgr.register_cluster(
+        {
+            "id": "cluster-real-1",
+            "name": "real-cluster",
+            "region": "us-east-1",
+            "datacenter": "dc1",
+            "headend_url": "https://headend.example.com",
+        }
+    )
+
+    provider = app_with_sase.config["KEY_PROVIDER"]
+    claims = build_machine_claims(
+        sub_id=cluster.id,
+        node_type="kubernetes_node",
+        tenant=tenant,
+        iss="tobogganing",
+        aud="tobogganing",
+        token_type="refresh",
+    )
+    refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
+
+    # CACHE is orthogonal to the DAL-accessor bug; a stub that reports the
+    # token's own jti as the current one (no replay) is sufficient here —
+    # the DB is what must be real.
+    cache = AsyncMock()
+    cache.get = AsyncMock(return_value=claims["jti"])
+    cache.set = AsyncMock()
+    app_with_sase.config["CACHE"] = cache
+    # DAL intentionally unset in config — get_db() must be what supplies it.
+
+    client = app_with_sase.test_client()
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    # Refresh token is single-use/rotating: the new one must differ.
+    assert data["refresh_token"] != refresh_token
 
 
 @pytest.mark.asyncio
@@ -631,27 +713,27 @@ async def test_post_auth_token_cluster_identity_spoofing_rejected(
     )
     mock_cluster_manager.authenticate_cluster = MagicMock(return_value=mock_cluster)
 
-    with patch("hub_api.api.headend_routes.asyncio.to_thread") as mock_thread:
-        mock_thread.return_value = mock_cluster
+    # (asyncio.to_thread was never on the real call path here — the handler
+    # awaits cluster_manager.authenticate_cluster() directly — so a prior
+    # mock on it was dead and has been removed.)
+    # Attempt to mint token for cluster-1 but request node_id as cluster-2
+    # This should fail because the authenticated cluster id (cluster-1) does
+    # not match the requested node_id (cluster-2)
+    response = await client.post(
+        "/api/v1/auth/token",
+        json={
+            "node_id": "cluster-2",  # Mismatched: authenticated is cluster-1
+            "node_type": "kubernetes_node",
+            "api_key": "test-api-key",
+        },
+    )
 
-        # Attempt to mint token for cluster-1 but request node_id as cluster-2
-        # This should fail because the authenticated cluster id (cluster-1) does
-        # not match the requested node_id (cluster-2)
-        response = await client.post(
-            "/api/v1/auth/token",
-            json={
-                "node_id": "cluster-2",  # Mismatched: authenticated is cluster-1
-                "node_type": "kubernetes_node",
-                "api_key": "test-api-key",
-            },
-        )
-
-        # Must reject with 401 (identity mismatch)
-        assert (
-            response.status_code == 401
-        ), f"Expected 401 for identity spoofing attempt, got {response.status_code}"
-        data = await response.get_json()
-        assert "error" in data
+    # Must reject with 401 (identity mismatch)
+    assert (
+        response.status_code == 401
+    ), f"Expected 401 for identity spoofing attempt, got {response.status_code}"
+    data = await response.get_json()
+    assert "error" in data
 
 
 @pytest.mark.asyncio

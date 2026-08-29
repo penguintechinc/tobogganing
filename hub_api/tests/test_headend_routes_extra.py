@@ -570,18 +570,32 @@ class TestRefreshAuthToken:
 
     @pytest.mark.asyncio
     async def test_no_dal_configured(self, app_with_headend: Quart) -> None:
-        """Returns 500 when DAL isn't configured."""
+        """Returns 500 when get_db() returns None.
+
+        DAL-accessor regression: refresh_auth_token() used to read
+        db = current_app.config.get("DAL"), a key never set in production
+        create_app() (headend_routes.py:551 now uses get_db(), the same
+        accessor every other handler in this module uses — see
+        get_firewall_rules()/test_get_firewall_rules_no_db above). Forcing
+        get_db() itself to return None (rather than merely leaving
+        config["DAL"] unset) is what actually exercises this branch now.
+        """
         app_with_headend.config["CACHE"] = MagicMock()
-        result, status = await self._call_refresh(
-            app_with_headend, json_body={"refresh_token": "sometoken"}
-        )
+        with patch("hub_api.api.headend_routes.get_db", return_value=None):
+            result, status = await self._call_refresh(
+                app_with_headend, json_body={"refresh_token": "sometoken"}
+            )
         assert status == 500
 
     @pytest.mark.asyncio
     async def test_invalid_refresh_token(self, app_with_headend: Quart) -> None:
-        """Returns 401 when the refresh token doesn't decode."""
+        """Returns 401 when the refresh token doesn't decode.
+
+        DAL comes from the real get_db() accessor here (app_with_headend's
+        underlying app fixture wires a real, if tableless, AsyncDB) —
+        config["DAL"] is intentionally left unset.
+        """
         app_with_headend.config["CACHE"] = MagicMock()
-        app_with_headend.config["DAL"] = MagicMock()
 
         result, status = await self._call_refresh(
             app_with_headend, json_body={"refresh_token": "garbage"}
@@ -605,8 +619,9 @@ class TestRefreshAuthToken:
         )
         refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
 
+        # DAL intentionally unset in config — the real get_db() accessor
+        # supplies it (DAL-accessor regression; see test_no_dal_configured).
         app_with_headend.config["CACHE"] = MagicMock()
-        app_with_headend.config["DAL"] = MagicMock()
 
         with patch(
             "hub_api.auth.refresh.rotate_refresh",
@@ -633,8 +648,9 @@ class TestRefreshAuthToken:
         )
         refresh_token = await encode_access_token(claims, provider, ttl_hours=24)
 
+        # DAL intentionally unset in config — the real get_db() accessor
+        # supplies it (DAL-accessor regression; see test_no_dal_configured).
         app_with_headend.config["CACHE"] = MagicMock()
-        app_with_headend.config["DAL"] = MagicMock()
 
         with patch(
             "hub_api.auth.refresh.rotate_refresh",
