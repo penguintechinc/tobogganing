@@ -240,11 +240,14 @@ func (s *ProxyServer) getOrCreateProxy(targetHost string) *httputil.ReverseProxy
 	targetURL, _ := url.Parse(fmt.Sprintf("https://%s", targetHost))
 	proxy = httputil.NewSingleHostReverseProxy(targetURL)
 
-	// Configure proxy
+	// Configure proxy. TLS verification of backend targets is always
+	// enforced — this is a security proxy sitting in front of every
+	// backend, so a skip-verify toggle here is a standing MITM footgun.
+	// There is intentionally no config escape hatch; use a properly
+	// trusted/issued certificate on the backend, including in dev.
 	proxy.Transport = &http.Transport{
 		TLSClientConfig: &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: viper.GetBool("proxy.skip_tls_verify"),
+			MinVersion: tls.VersionTLS12,
 		},
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
