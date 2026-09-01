@@ -344,7 +344,7 @@ Optional analysis-tool sub-charts (`suricata`, `zeek`, `arkime`, `strelka`, `cap
 
 ```bash
 # Control plane (hub-api) — Quart + gRPC
-cd hub_api && pip install -r requirements.txt && python -m hub_api.app
+cd hub_api && uv pip install --system --require-hashes -r requirements.txt && python -m hub_api.app
 
 # DoH/DoT resolver
 cd engines/netsvcs-dns && pip install -r requirements.txt && python -m app.main
@@ -355,6 +355,8 @@ cd agents/node-agent && cargo build --release
 # Web UI
 cd portal && npm ci && npm run dev
 ```
+
+Python dependencies are compiled with `uv pip compile --generate-hashes` (hash-verified installs everywhere, per org standard) and installed with `uv pip install --require-hashes`. After editing any `requirements*.in`, regenerate the matching lock file with `make compile-deps` (or the narrower `make compile-deps-hub-api`) — never hand-edit a `requirements*.txt`.
 
 ### Tests
 
