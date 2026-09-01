@@ -14,14 +14,25 @@ import (
 )
 
 type OAuth2Provider struct {
-	config       *oauth2.Config
-	oidcProvider *oidc.Provider
-	verifier     *oidc.IDTokenVerifier
-	issuer       string
-	clientID     string
+	config            *oauth2.Config
+	oidcProvider      *oidc.Provider
+	verifier          *oidc.IDTokenVerifier
+	issuer            string
+	clientID          string
+	sessionSigningKey []byte
 }
 
-func NewOAuth2Provider(issuer, clientID, clientSecret string) (*OAuth2Provider, error) {
+// NewOAuth2Provider constructs an OAuth2/OIDC auth provider. sessionSigningKey
+// is a dedicated, high-entropy server secret used exclusively to sign and
+// verify the proxy's own session JWT — it must never be the OAuth2 client_id
+// (public, present in the /authorize redirect URL) or client_secret (a
+// different trust boundary: IdP token-exchange credential, not a session key).
+func NewOAuth2Provider(issuer, clientID, clientSecret, sessionSigningKey string) (*OAuth2Provider, error) {
+	signingKey, err := validateSessionSigningKey(sessionSigningKey)
+	if err != nil {
+		return nil, fmt.Errorf("oauth2 provider: %w", err)
+	}
+
 	ctx := context.Background()
 
 	provider, err := oidc.NewProvider(ctx, issuer)
@@ -42,11 +53,12 @@ func NewOAuth2Provider(issuer, clientID, clientSecret string) (*OAuth2Provider, 
 	})
 
 	return &OAuth2Provider{
-		config:       config,
-		oidcProvider: provider,
-		verifier:     verifier,
-		issuer:       issuer,
-		clientID:     clientID,
+		config:            config,
+		oidcProvider:      provider,
+		verifier:          verifier,
+		issuer:            issuer,
+		clientID:          clientID,
+		sessionSigningKey: signingKey,
 	}, nil
 }
 
@@ -120,7 +132,7 @@ func (p *OAuth2Provider) CallbackHandler() gin.HandlerFunc {
 			"exp":    time.Now().Add(24 * time.Hour).Unix(),
 		})
 
-		tokenString, err := sessionToken.SignedString([]byte(p.clientID))
+		tokenString, err := sessionToken.SignedString(p.sessionSigningKey)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 			return
@@ -143,7 +155,7 @@ func (p *OAuth2Provider) ValidateToken(tokenString string) (*User, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(p.clientID), nil
+		return p.sessionSigningKey, nil
 	})
 
 	if err != nil {
