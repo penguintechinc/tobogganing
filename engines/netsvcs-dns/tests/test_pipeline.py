@@ -1,13 +1,42 @@
 """Tests for the ResolvePipeline."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from app.cache import CacheManager
 from app.pipeline import ResolvePipeline, ResolvePipelineConfig
 from app.resolver import DNSResolver
 from app.router import SelectiveRouter, TokenClaims
-from app.cache import CacheManager
+
+
+class _CountingCache:
+    """In-memory cache double that records every ``get`` call.
+
+    Used to prove the permission check gates the cache read (not just the
+    final response) — a real Redis-backed cache would otherwise silently
+    serve a warmed split-horizon answer to any caller.
+    """
+
+    def __init__(self) -> None:
+        """Initialize empty store and call log."""
+        self.store: dict[str, dict] = {}
+        self.get_calls: list[tuple[str, str]] = []
+
+    async def get(self, domain: str, record_type: str) -> dict | None:
+        """Record the lookup and return the stored entry, if any."""
+        self.get_calls.append((domain, record_type))
+        return self.store.get(f"dns:{domain}:{record_type}")
+
+    async def set(
+        self, domain: str, record_type: str, result: dict, ttl: int | None = None
+    ) -> None:
+        """Store the entry under the same key shape as CacheManager."""
+        self.store[f"dns:{domain}:{record_type}"] = result
+
+    async def disconnect(self) -> None:
+        """No-op; satisfies ResolvePipeline.close()."""
 
 
 @pytest.fixture
@@ -146,9 +175,7 @@ async def test_resolve_query_degraded_mode_public_only(pipeline: ResolvePipeline
         # In degraded mode, public zones are served but internal zones are denied
         pipeline.router.should_serve_zone.return_value = False
 
-        result = await pipeline.resolve_query(
-            "internal.example.com", "A", mode="degraded"
-        )
+        result = await pipeline.resolve_query("internal.example.com", "A", mode="degraded")
 
     assert result["Status"] == 5  # REFUSED
     pipeline.resolver.resolve.assert_not_called()
@@ -233,6 +260,7 @@ async def test_claims_for_token_stub(pipeline: ResolvePipeline) -> None:
 async def test_ioc_check_with_manager_client(stub_server_addr: str) -> None:
     """Test IOC check via control-plane CheckIOC gRPC (fail-open on error)."""
     import tempfile
+
     from app.manager_client import ManagerClient
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -279,6 +307,7 @@ async def test_ioc_check_with_manager_client(stub_server_addr: str) -> None:
 async def test_ioc_check_fail_open(stub_server_addr: str) -> None:
     """Test IOC check fails open on control-plane error."""
     import tempfile
+
     from app.manager_client import ManagerClient
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -318,6 +347,7 @@ async def test_ioc_check_fail_open(stub_server_addr: str) -> None:
 async def test_validate_token_with_manager_client(stub_server_addr: str) -> None:
     """Test token validation via control-plane ValidateToken gRPC."""
     import tempfile
+
     from app.manager_client import ManagerClient
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -365,6 +395,7 @@ async def test_validate_token_with_manager_client(stub_server_addr: str) -> None
 async def test_token_scoped_zones(stub_server_addr: str) -> None:
     """Test that tokens with allowed_zone_ids can only access their zones."""
     import tempfile
+
     from app.manager_client import ManagerClient
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -388,22 +419,24 @@ async def test_token_scoped_zones(stub_server_addr: str) -> None:
         # Use internal zones with no team restrictions to test zone scoping
         # independently from team-based visibility logic.
         router = SelectiveRouter()
-        router.load_zones([
-            {
-                "id": "z1",  # Zone ID for control-plane scoping
-                "name": "example.com",
-                "visibility": "public",
-                "allowed_teams": [],
-                "records": [],
-            },
-            {
-                "id": "z2",  # Zone ID for control-plane scoping
-                "name": "internal.example.com",
-                "visibility": "internal",  # Internal with no team restrictions
-                "allowed_teams": [],  # No team restrictions, any token allowed
-                "records": [],
-            },
-        ])
+        router.load_zones(
+            [
+                {
+                    "id": "z1",  # Zone ID for control-plane scoping
+                    "name": "example.com",
+                    "visibility": "public",
+                    "allowed_teams": [],
+                    "records": [],
+                },
+                {
+                    "id": "z2",  # Zone ID for control-plane scoping
+                    "name": "internal.example.com",
+                    "visibility": "internal",  # Internal with no team restrictions
+                    "allowed_teams": [],  # No team restrictions, any token allowed
+                    "records": [],
+                },
+            ]
+        )
 
         resolver = AsyncMock(spec=DNSResolver)
         cache = AsyncMock(spec=CacheManager)
@@ -448,6 +481,7 @@ async def test_token_scoped_zones(stub_server_addr: str) -> None:
 async def test_invalid_token_no_access(stub_server_addr: str) -> None:
     """Test that invalid/unvalidatable tokens get no access (fail-closed)."""
     import tempfile
+
     from app.manager_client import ManagerClient
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -484,3 +518,76 @@ async def test_invalid_token_no_access(stub_server_addr: str) -> None:
         assert invalid_claims is None
 
         await manager_client.close()
+
+
+@pytest.mark.asyncio
+async def test_cache_never_serves_restricted_answer_to_unauthorized_client() -> None:
+    """Regression: cache lookup must not leak split-horizon answers.
+
+    Warms the cache as an authorized client resolving a restricted zone,
+    then resolves the same name as an unauthenticated (tokenless) client
+    and asserts the restricted record is never returned. Also asserts the
+    cache is never read for the unauthorized request, proving the
+    permission check gates the cache lookup rather than running after it.
+    """
+    router = SelectiveRouter()
+    router.load_zones(
+        [
+            {
+                "id": "z1",
+                "name": "restricted.example.com",
+                "visibility": "restricted",
+                "allowed_teams": ["team-a"],
+                "records": [
+                    {
+                        "name": "restricted.example.com",
+                        "type": "A",
+                        "ttl": 300,
+                        "value": "10.9.9.9",
+                    },
+                ],
+            },
+        ]
+    )
+
+    restricted_result = {
+        "Status": 0,
+        "Question": [{"name": "restricted.example.com", "type": "A"}],
+        "Answer": [{"name": "restricted.example.com", "type": "A", "TTL": 300, "data": "10.9.9.9"}],
+    }
+
+    resolver = MagicMock(spec=DNSResolver)
+    resolver.resolve_custom_zone.return_value = restricted_result
+    cache = _CountingCache()
+
+    pipeline = ResolvePipeline(
+        resolver=resolver, router=router, cache=cache, config=ResolvePipelineConfig()
+    )
+
+    authorized_claims = TokenClaims(teams=["team-a"], allowed_zone_ids=["z1"], role=None)
+
+    # Step 1: authorized client warms the cache with the restricted answer.
+    with patch.object(pipeline, "_claims_for_token", AsyncMock(return_value=authorized_claims)):
+        warm_result = await pipeline.resolve_query(
+            "restricted.example.com", "A", token="authorized-token"
+        )
+
+    assert warm_result == restricted_result
+    assert cache.store  # cache is now warmed with the restricted answer
+    resolver.resolve_custom_zone.assert_called_once()
+
+    # Step 2: unauthenticated/tokenless client requests the same name.
+    with patch.object(pipeline, "_claims_for_token", AsyncMock(return_value=None)):
+        leaked_result = await pipeline.resolve_query("restricted.example.com", "A", token=None)
+
+    assert leaked_result["Status"] == 5  # REFUSED
+    assert leaked_result["Answer"] == []
+    assert "10.9.9.9" not in str(leaked_result)
+
+    # Permission check must deny before the cache is ever consulted for the
+    # unauthorized request: only the first (authorized) call should have
+    # reached cache.get.
+    assert cache.get_calls == [("restricted.example.com", "A")]
+
+    # Custom-zone resolution must not have been invoked a second time either.
+    resolver.resolve_custom_zone.assert_called_once()
