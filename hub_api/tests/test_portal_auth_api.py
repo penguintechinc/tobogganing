@@ -295,7 +295,74 @@ async def test_refresh_success(auth_app: Quart, real_dal: AsyncDB) -> None:
     assert response.status_code == 200
     data = await response.get_json()
     assert "access_token" in data
-    assert data["refresh_token"] == refresh_token
+    # Refresh tokens are single-use and rotated on every call (security-review
+    # finding HIGH-A) — the response must NEVER echo back the token the
+    # caller presented.
+    assert data["refresh_token"] != refresh_token
+    assert data["refresh_token"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_reuse_rejected(auth_app: Quart, real_dal: AsyncDB) -> None:
+    """Replaying an already-rotated refresh token is rejected as compromise.
+
+    regression: security-review finding HIGH-A. Confirms (1) reusing a
+    consumed refresh token is rejected, and (2) the replay is treated as a
+    compromise signal that revokes the entire session family, not just the
+    stale token — the newly-rotated (still valid) refresh token must also
+    stop working.
+    """
+    user_id = str(uuid4())
+    tenant_id = str(uuid4())
+    password = "test_password_123"
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    await real_dal.users.async_insert(
+        id=user_id,
+        email="grace@example.com",
+        username="grace",
+        password_hash=password_hash,
+        tenant=tenant_id,
+        role="viewer",
+        is_active=True,
+        mfa_enabled=False,
+        mfa_secret=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    client = auth_app.test_client()
+
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "grace@example.com", "password": password},
+    )
+    login_data = await login_response.get_json()
+    refresh_token_v1 = login_data["refresh_token"]
+
+    # First refresh rotates v1 -> v2.
+    first_refresh = await client.post(
+        "/api/v1/auth/refresh-token",
+        json={"refresh_token": refresh_token_v1},
+    )
+    assert first_refresh.status_code == 200
+    refresh_token_v2 = (await first_refresh.get_json())["refresh_token"]
+    assert refresh_token_v2 != refresh_token_v1
+
+    # Replaying the now-consumed v1 token must be rejected.
+    replay_response = await client.post(
+        "/api/v1/auth/refresh-token",
+        json={"refresh_token": refresh_token_v1},
+    )
+    assert replay_response.status_code == 401
+
+    # The replay is treated as compromise: v2 (otherwise still valid) must
+    # also have been revoked as part of the same-family cleanup.
+    v2_after_replay = await client.post(
+        "/api/v1/auth/refresh-token",
+        json={"refresh_token": refresh_token_v2},
+    )
+    assert v2_after_replay.status_code == 401
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,7 @@ import bcrypt
 import pyotp
 import structlog
 
-from hub_api.auth.jwt import decode_token, encode_access_token
+from hub_api.auth.jwt import encode_access_token
 from hub_api.config import Config
 from hub_api.crypto.keys import KeyProvider
 from hub_api.crypto.secrets import decrypt_secret, encrypt_secret
@@ -108,9 +108,7 @@ class AuthService:
                 if not mfa_token:
                     # Generate a temporary MFA token for the client to use
                     # (in a real implementation, this would be a short-lived token)
-                    mfa_tok = hashlib.sha256(
-                        (user.id + str(uuid4())).encode()
-                    ).hexdigest()
+                    mfa_tok = hashlib.sha256((user.id + str(uuid4())).encode()).hexdigest()
                     return AuthResult(mfa_required=True, mfa_token=mfa_tok)
 
                 # Decrypt and verify TOTP token
@@ -138,13 +136,21 @@ class AuthService:
 
     async def refresh_access_token(self, refresh_token: str) -> AuthResult:
         """
-        Refresh an access token using a refresh token.
+        Refresh an access token using a refresh token, rotating it on every use.
+
+        The presented refresh token is single-use: on success it is marked
+        consumed (``revoked_at``) and a brand-new refresh token is minted and
+        persisted in its place, mirroring the machine-JWT rotation semantics
+        in ``auth/refresh.py``. If a caller presents a refresh token that was
+        already consumed once (replay), this is treated as a compromise
+        signal — ALL of the user's refresh tokens are revoked, forcing a full
+        re-authentication (security-review finding HIGH-A).
 
         Args:
             refresh_token: The refresh token string.
 
         Returns:
-            AuthResult with new access token or error.
+            AuthResult with a new access token AND a new refresh token, or error.
         """
         try:
             # Query refresh token
@@ -153,11 +159,21 @@ class AuthService:
             if not rt_record:
                 return AuthResult(success=False, error="Invalid or revoked refresh token")
 
+            # Replay detection: this token was already rotated once. Treat as
+            # a compromise indicator and revoke the entire session family.
+            if getattr(rt_record, "revoked_at", None) is not None:
+                logger.warning(
+                    "refresh_token_replay_detected",
+                    user_id=rt_record.user_id,
+                )
+                await self.revoke_tokens(rt_record.user_id)
+                return AuthResult(success=False, error="Invalid or revoked refresh token")
+
             # Verify expiration (handle both aware and naive datetimes)
             expires_at = rt_record.expires_at
             if isinstance(expires_at, str):
                 # Parse from ISO format if stored as string
-                expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
             elif expires_at.tzinfo is None:
                 # Assume UTC if naive
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
@@ -171,10 +187,21 @@ class AuthService:
             if not user or not user.is_active:
                 return AuthResult(success=False, error="User not found or inactive")
 
+            # Single-use rotation: mark the presented token consumed, then
+            # mint and persist a brand-new refresh token.
+            await self.db(self.db.refresh_tokens.token == refresh_token).update(
+                revoked_at=datetime.now(timezone.utc)
+            )
+            new_refresh_token = await self._generate_and_store_refresh_token(user.id)
+
             # Generate new access token
             access_token = await self._generate_access_token(user)
 
-            return AuthResult(success=True, access_token=access_token)
+            return AuthResult(
+                success=True,
+                access_token=access_token,
+                refresh_token=new_refresh_token,
+            )
         except Exception as e:
             logger.error("token_refresh_error", error=str(e))
             return AuthResult(success=False, error=f"Token refresh failed: {str(e)}")
@@ -221,9 +248,7 @@ class AuthService:
         secret = pyotp.random_base32()
 
         # Generate backup codes (in a real implementation, these would be hashed)
-        backup_codes = [
-            hashlib.sha256(f"{secret}:{i}".encode()).hexdigest()[:8] for i in range(10)
-        ]
+        backup_codes = [hashlib.sha256(f"{secret}:{i}".encode()).hexdigest()[:8] for i in range(10)]
 
         return secret, backup_codes
 
@@ -363,9 +388,7 @@ class AuthService:
         """
         from datetime import timedelta
 
-        refresh_token = hashlib.sha256(
-            (user_id + os.urandom(32).hex()).encode()
-        ).hexdigest()
+        refresh_token = hashlib.sha256((user_id + os.urandom(32).hex()).encode()).hexdigest()
 
         # Store in database (expires in 30 days)
         now = datetime.now(timezone.utc)

@@ -142,12 +142,40 @@ class TestRefreshAccessToken:
         assert "Invalid or revoked" in result.error
 
     @pytest.mark.asyncio
+    async def test_replay_of_consumed_token_revokes_all_tokens(
+        self, mock_db_for_auth: MagicMock, test_config: Config, key_provider: InAppKeyProvider
+    ) -> None:
+        """A refresh token with revoked_at already set is a replay.
+
+        regression: security-review finding HIGH-A. The whole token family
+        for that user must be revoked as a compromise response.
+        """
+        already_consumed = make_mock_row(
+            {
+                "user_id": "u1",
+                "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
+                "revoked_at": datetime.now(timezone.utc) - timedelta(minutes=5),
+            }
+        )
+        query_proxy = mock_db_for_auth(mock_db_for_auth.refresh_tokens.token == "x")
+        query_proxy.select = AsyncMock(return_value=make_mock_rowset([already_consumed]))
+        query_proxy.delete = AsyncMock(return_value=None)
+        mock_db_for_auth.__call__ = MagicMock(return_value=query_proxy)
+
+        service = AuthService(mock_db_for_auth, test_config, key_provider)
+        result = await service.refresh_access_token("replayed-token")
+
+        assert result.success is False
+        assert "Invalid or revoked" in result.error
+        query_proxy.delete.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_expired_token_string_format(
         self, mock_db_for_auth: MagicMock, test_config: Config, key_provider: InAppKeyProvider
     ) -> None:
         """Returns error when the refresh token is expired (ISO string expires_at)."""
         expired_iso = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-        rt_record = make_mock_row({"user_id": "u1", "expires_at": expired_iso})
+        rt_record = make_mock_row({"user_id": "u1", "expires_at": expired_iso, "revoked_at": None})
         query_proxy = mock_db_for_auth(mock_db_for_auth.refresh_tokens.token == "x")
         query_proxy.select = AsyncMock(return_value=make_mock_rowset([rt_record]))
         mock_db_for_auth.__call__ = MagicMock(return_value=query_proxy)
@@ -164,7 +192,9 @@ class TestRefreshAccessToken:
     ) -> None:
         """Returns error when expires_at is a naive (tz-less) datetime in the past."""
         expired_naive = datetime.utcnow() - timedelta(hours=1)
-        rt_record = make_mock_row({"user_id": "u1", "expires_at": expired_naive})
+        rt_record = make_mock_row(
+            {"user_id": "u1", "expires_at": expired_naive, "revoked_at": None}
+        )
         query_proxy = mock_db_for_auth(mock_db_for_auth.refresh_tokens.token == "x")
         query_proxy.select = AsyncMock(return_value=make_mock_rowset([rt_record]))
         mock_db_for_auth.__call__ = MagicMock(return_value=query_proxy)
@@ -173,6 +203,7 @@ class TestRefreshAccessToken:
         result = await service.refresh_access_token("expired-token")
 
         assert result.success is False
+        assert "expired" in result.error.lower()
 
     @pytest.mark.asyncio
     async def test_user_not_found(
@@ -180,7 +211,7 @@ class TestRefreshAccessToken:
     ) -> None:
         """Returns error when the refresh token's user no longer exists."""
         future = datetime.now(timezone.utc) + timedelta(days=1)
-        rt_record = make_mock_row({"user_id": "u1", "expires_at": future})
+        rt_record = make_mock_row({"user_id": "u1", "expires_at": future, "revoked_at": None})
 
         call_count = {"n": 0}
 
@@ -206,7 +237,7 @@ class TestRefreshAccessToken:
     ) -> None:
         """Returns error when the refresh token's user is inactive."""
         future = datetime.now(timezone.utc) + timedelta(days=1)
-        rt_record = make_mock_row({"user_id": "u1", "expires_at": future})
+        rt_record = make_mock_row({"user_id": "u1", "expires_at": future, "revoked_at": None})
         inactive_user = make_mock_row({"id": "u1", "is_active": False, "role": "viewer"})
 
         call_count = {"n": 0}
@@ -225,6 +256,7 @@ class TestRefreshAccessToken:
         result = await service.refresh_access_token("valid-token")
 
         assert result.success is False
+        assert "User not found or inactive" in result.error
 
     @pytest.mark.asyncio
     async def test_swallows_unexpected_exception(
