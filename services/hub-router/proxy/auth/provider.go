@@ -12,6 +12,8 @@
 package auth
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,4 +31,23 @@ type Provider interface {
 	LogoutHandler() gin.HandlerFunc
 	ValidateToken(token string) (*User, error)
 	GetUser(ctx *gin.Context) (*User, error)
+}
+
+// minSessionSigningKeyBytes is the minimum acceptable length (in bytes) for the
+// proxy session-signing secret. 32 bytes gives an HS256 key at least 256 bits
+// of nominal entropy, matching the HMAC-SHA256 output size.
+const minSessionSigningKeyBytes = 32
+
+// validateSessionSigningKey enforces that the proxy session-signing secret is
+// present and sufficiently high-entropy before it is used to sign or verify
+// session JWTs. Session tokens MUST be signed with a dedicated, high-entropy
+// server secret (PROXY_SESSION_SIGNING_KEY) — never a value derivable from
+// public request data such as an OAuth2 client_id or SAML SP entity ID, both
+// of which are exposed in redirect URLs and would let anyone forge a valid
+// session token with arbitrary claims.
+func validateSessionSigningKey(key string) ([]byte, error) {
+	if len(key) < minSessionSigningKeyBytes {
+		return nil, fmt.Errorf("session signing key must be set and at least %d bytes (got %d); set PROXY_SESSION_SIGNING_KEY", minSessionSigningKeyBytes, len(key))
+	}
+	return []byte(key), nil
 }

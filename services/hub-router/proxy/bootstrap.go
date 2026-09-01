@@ -154,15 +154,33 @@ func (s *ProxyServer) Initialize() error {
 			viper.GetString("auth.jwt_public_key_path"),
 		)
 	case "oauth2":
+		// PROXY_SESSION_SIGNING_KEY is a dedicated, high-entropy server
+		// secret for signing the proxy's own session JWT. It must never be
+		// derived from the OAuth2 client_id (public — present in the
+		// /authorize redirect URL) or fall back to any default; fail closed
+		// if unset rather than let the provider silently sign with
+		// attacker-guessable material.
+		sessionSigningKey := os.Getenv("PROXY_SESSION_SIGNING_KEY")
+		if sessionSigningKey == "" {
+			return fmt.Errorf("PROXY_SESSION_SIGNING_KEY must be set when auth.type=oauth2")
+		}
 		s.authProvider, err = auth.NewOAuth2Provider(
 			viper.GetString("auth.oauth2.issuer"),
 			viper.GetString("auth.oauth2.client_id"),
 			viper.GetString("auth.oauth2.client_secret"),
+			sessionSigningKey,
 		)
 	case "saml2":
+		// Same session-signing requirement as oauth2 above — the SAML SP
+		// entity ID is likewise public (advertised in every AuthnRequest).
+		sessionSigningKey := os.Getenv("PROXY_SESSION_SIGNING_KEY")
+		if sessionSigningKey == "" {
+			return fmt.Errorf("PROXY_SESSION_SIGNING_KEY must be set when auth.type=saml2")
+		}
 		s.authProvider, err = auth.NewSAML2Provider(
 			viper.GetString("auth.saml2.idp_metadata_url"),
 			viper.GetString("auth.saml2.sp_entity_id"),
+			sessionSigningKey,
 		)
 	default:
 		return fmt.Errorf("unsupported auth type: %s", authType)
