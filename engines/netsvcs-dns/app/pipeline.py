@@ -4,18 +4,19 @@ This is the core resolve logic that both HTTP and TLS transports feed into.
 It composes the S1 components (resolver, router, cache) with resilience modes,
 IOC checking, and split-horizon routing.
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
 
-from app.resolver import DNSResolver
-from app.router import SelectiveRouter, TokenClaims
 from app.cache import CacheManager
 from app.manager_client import ManagerClient
 from app.metrics import MetricsReporter
+from app.resolver import DNSResolver
+from app.router import SelectiveRouter, TokenClaims
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,12 @@ class ResolvePipeline:
 
     Orchestrates:
     1. Resilience mode detection (normal/cached/degraded)
-    2. IOC blocking (S3 wiring hook)
+    2. Split-horizon routing + token permission checks (S3 wiring hook) —
+       runs BEFORE cache lookup so an unauthorized client can never be
+       served a cached split-horizon answer (cache keys are not scoped by
+       identity/visibility)
     3. Cache lookup
-    4. Split-horizon routing + token permission checks (S3 wiring hook)
+    4. IOC blocking (S3 wiring hook)
     5. Custom zone or upstream recursion
     6. Cache storage (on success)
     7. Metrics recording (hook)
@@ -99,7 +103,31 @@ class ResolvePipeline:
 
         logger.info(f"resolve_query: {name} {record_type} mode={mode}")
 
-        # Step 1: Cache lookup
+        # Step 1: Extract token claims (S3 HOOK: validate via control-plane
+        # ValidateToken gRPC). For S2, returns None; S3 replaces with real JWT
+        # validation. Must happen before the cache read below (Step 3) so the
+        # permission check has claims to evaluate.
+        token_claims = await self._claims_for_token(token)
+
+        # Step 2: Split-horizon routing + permission check.
+        # SECURITY: this MUST run before the cache lookup (Step 3). The cache
+        # key is not scoped by identity/visibility (see CacheManager), so an
+        # unauthenticated/unauthorized client could otherwise be served a
+        # split-horizon answer that an authorized client previously warmed —
+        # bypassing zone visibility entirely. Never reorder this after the
+        # cache read.
+        if not self.router.should_serve_zone(name, token_claims, mode):
+            logger.warning(f"refused_zone: {name} mode={mode}")
+            response = {
+                "Status": 5,  # REFUSED
+                "Question": [query],
+                "Answer": [],
+            }
+            MetricsReporter.record_error("refused")
+            return response
+
+        # Step 3: Cache lookup (only reached once the requester is authorized
+        # for this zone).
         cached_result = await self.cache.get(name, record_type)
         if cached_result:
             elapsed_ms = (time.time() - start_time) * 1000
@@ -109,7 +137,7 @@ class ResolvePipeline:
 
         MetricsReporter.record_cache_miss()
 
-        # Step 2: IOC check (S3 HOOK: wire to control-plane CheckIOC gRPC)
+        # Step 4: IOC check (S3 HOOK: wire to control-plane CheckIOC gRPC)
         # For S2, returns False (not blocked); S3 replaces with real gRPC call
         if await self.ioc_check(name):
             logger.warning(f"ioc_blocked: {name}")
@@ -119,21 +147,6 @@ class ResolvePipeline:
                 "Answer": [],
             }
             MetricsReporter.record_ioc_block()
-            return response
-
-        # Step 3: Extract token claims (S3 HOOK: validate via control-plane ValidateToken gRPC)
-        # For S2, returns None; S3 replaces with real JWT validation
-        token_claims = await self._claims_for_token(token)
-
-        # Step 4: Split-horizon routing + permission check
-        if not self.router.should_serve_zone(name, token_claims, mode):
-            logger.warning(f"refused_zone: {name} mode={mode}")
-            response = {
-                "Status": 5,  # REFUSED
-                "Question": [query],
-                "Answer": [],
-            }
-            MetricsReporter.record_error("refused")
             return response
 
         # Step 5: Try custom zones first, then upstream
@@ -148,9 +161,7 @@ class ResolvePipeline:
 
         # Step 6: Cache on success (Status 0)
         if result.get("Status") == 0:
-            await self.cache.set(
-                name, record_type, result, ttl=self.config.cache_ttl_seconds
-            )
+            await self.cache.set(name, record_type, result, ttl=self.config.cache_ttl_seconds)
 
         elapsed_ms = (time.time() - start_time) * 1000
         elapsed_seconds = elapsed_ms / 1000.0
@@ -215,7 +226,6 @@ class ResolvePipeline:
             allowed_zone_ids=result.get("allowed_zone_ids", []),
             role=None,  # Role would be in the token itself; for now, None
         )
-
 
     async def close(self) -> None:
         """Clean up pipeline resources."""
