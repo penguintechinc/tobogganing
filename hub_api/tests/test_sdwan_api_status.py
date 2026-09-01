@@ -1,4 +1,5 @@
 """Tests for SASE API status endpoint."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,20 +13,30 @@ from hub_api.modules.sdwan.orchestrator.cluster_manager import Cluster
 
 
 @pytest.mark.asyncio
-async def test_get_status(app_with_sase: Quart) -> None:
+async def test_get_status_requires_auth(app_with_sase: Quart) -> None:
+    """GET /status with no Authorization header is rejected.
+
+    regression: security-review finding HIGH-B. This endpoint previously had
+    no auth at all and hard-coded a "default" tenant, leaking aggregate
+    cluster/client counts to any unauthenticated caller.
+    """
+    client = app_with_sase.test_client()
+    response = await client.get("/api/v1/sdwan/status")
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_status(app_with_sase: Quart, valid_tenant_token: str) -> None:
     """Test getting service status.
 
     Args:
         app_with_sase: Test app with SASE module.
+        valid_tenant_token: JWT with status:read scope.
     """
     client = app_with_sase.test_client()
 
-    with patch(
-        "hub_api.modules.sdwan.api.status.ClusterManager"
-    ) as mock_cluster_class:
-        with patch(
-            "hub_api.modules.sdwan.api.status.ClientRegistry"
-        ) as mock_client_class:
+    with patch("hub_api.modules.sdwan.api.status.ClusterManager") as mock_cluster_class:
+        with patch("hub_api.modules.sdwan.api.status.ClientRegistry") as mock_client_class:
             # Mock cluster manager
             mock_cluster_mgr = AsyncMock()
             mock_cluster_class.return_value = mock_cluster_mgr
@@ -54,9 +65,7 @@ async def test_get_status(app_with_sase: Quart) -> None:
                 client_count=3,
                 tenant="default",
             )
-            mock_cluster_mgr.get_all_clusters = AsyncMock(
-                return_value=[cluster1, cluster2]
-            )
+            mock_cluster_mgr.get_all_clusters = AsyncMock(return_value=[cluster1, cluster2])
 
             # Mock client registry
             mock_client_registry = AsyncMock()
@@ -94,7 +103,10 @@ async def test_get_status(app_with_sase: Quart) -> None:
                 return_value=[test_client1, test_client2]
             )
 
-            response = await client.get("/api/v1/sdwan/status")
+            response = await client.get(
+                "/api/v1/sdwan/status",
+                headers={"Authorization": f"Bearer {valid_tenant_token}"},
+            )
 
             assert response.status_code == 200
             data = await response.get_json()

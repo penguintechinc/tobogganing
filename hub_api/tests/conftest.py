@@ -1,4 +1,5 @@
 """Shared pytest fixtures for core tests."""
+
 from __future__ import annotations
 
 import asyncio
@@ -145,15 +146,13 @@ def app(mock_db: MagicMock) -> Quart:
     Returns:
         Configured Quart test application.
     """
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
-    from hub_api.app import create_app
     import hub_api.db
+    from hub_api.app import create_app
 
     # Patch init_dal and get_db
-    with patch("hub_api.db.init_dal"), patch.object(
-        hub_api.db, "get_db", return_value=mock_db
-    ):
+    with patch("hub_api.db.init_dal"), patch.object(hub_api.db, "get_db", return_value=mock_db):
         test_app = create_app()
         test_app.config["TESTING"] = True
         test_app.db = mock_db  # type: ignore[attr-defined]
@@ -163,6 +162,7 @@ def app(mock_db: MagicMock) -> Quart:
 
         # Replace the get_db reference in the app module
         import hub_api.app as app_module
+
         app_module.get_db = lambda: mock_db  # type: ignore[assignment]
 
     return test_app
@@ -330,7 +330,7 @@ async def valid_tenant_token(app_with_sase: Quart) -> str:
         "iss": "test-app",
         "aud": "test-app",
         "tenant": "test-tenant",
-        "scope": "clusters:read clients:read",
+        "scope": "clusters:read clients:read status:read wireguard:read wireguard:write",
     }
 
     token = await encode_access_token(claims, provider, ttl_hours=1)
@@ -405,18 +405,21 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
 
     # Enable all wpc feature flags for tests (bypass flag server)
     import shared.licensing.entitlements
+
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith("tobogganing.perftest.cluster.") or flag_key.startswith("tobogganing.perftest.client."):
+        if flag_key.startswith("tobogganing.perftest.cluster.") or flag_key.startswith(
+            "tobogganing.perftest.client."
+        ):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
     # Register WaddlePerf Cluster module via registry (REAL auth, no monkeypatch)
-    from hub_api.modules.perftest_cluster import module as wpc_module
     from hub_api.modules.perftest_client import module as wpcl_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     wpc_contract = wpc_module()
     wpcl_contract = wpcl_module()
@@ -537,6 +540,7 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
 
     # Enable all c2c feature flags for tests (bypass flag server)
     import shared.licensing.entitlements
+
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:

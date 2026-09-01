@@ -7,6 +7,7 @@ including the Professional-tier >5-device gate.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -302,13 +303,53 @@ async def test_enroll_device_success(app_all_perftest_realdal: Quart, real_dal: 
             "hostname": "h",
             "os": "linux",
         },
-        headers={"X-Tenant-ID": "default"},
     )
     assert resp.status_code == 201
     data = await resp.get_json()
     assert data["device"]["serial"] == "SN-NEW"
     assert data["device"]["api_key"]
     assert data["device"]["org_unit_id"] == "ou-enroll"
+
+
+@pytest.mark.asyncio
+async def test_enroll_device_ignores_client_tenant_header(
+    app_all_perftest_realdal: Quart, real_dal: Any
+) -> None:
+    """X-Tenant-ID is ignored — tenant is derived from the validated secret.
+
+    regression: security-review finding HIGH-B (tenant isolation collapse).
+    A secret created under tenant "real-secret-tenant" is presented with a
+    forged X-Tenant-ID for a different tenant. Enrollment must still land
+    the device in the secret's TRUE tenant, never the header's claimed one.
+    """
+    enroll_mgr = EnrollmentManager(real_dal, "real-secret-tenant")
+    _secret_obj, raw_secret = await enroll_mgr.create_secret(
+        org_unit_id="ou-real", expires_at=None, created_by=None
+    )
+
+    client = app_all_perftest_realdal.test_client()
+    resp = await client.post(
+        "/api/v1/perftest_cluster/enrollment/enroll",
+        json={
+            "secret": raw_secret,
+            "name": "spoof-device",
+            "serial": "SN-SPOOF",
+        },
+        headers={"X-Tenant-ID": "attacker-claimed-tenant"},
+    )
+    assert resp.status_code == 201
+    data = await resp.get_json()
+    device_id = data["device"]["id"]
+
+    # The device must be reachable in the secret's real tenant...
+    real_tenant_mgr = DeviceManager(real_dal, "real-secret-tenant")
+    await real_tenant_mgr.initialize()
+    assert await real_tenant_mgr.get_device(device_id) is not None
+
+    # ...and completely invisible to the tenant the client merely claimed.
+    spoofed_tenant_mgr = DeviceManager(real_dal, "attacker-claimed-tenant")
+    await spoofed_tenant_mgr.initialize()
+    assert await spoofed_tenant_mgr.get_device(device_id) is None
 
 
 @pytest.mark.asyncio
@@ -321,11 +362,24 @@ async def test_enroll_device_limit_reached_without_professional(
     the tier-gate branch from database wiring.
     """
     import hub_api.modules.perftest_cluster.api.enrollment as enrollment_api
+    from hub_api.modules.perftest_cluster.services.enrollment_manager import (
+        EnrollmentSecret,
+    )
 
-    mock_enroll_mgr = MagicMock()
-    mock_enroll_mgr.initialize = AsyncMock()
-    mock_enroll_mgr.verify_secret = AsyncMock(return_value="ou-x")
-    monkeypatch.setattr(enrollment_api, "EnrollmentManager", lambda db, tenant: mock_enroll_mgr)
+    stub_secret = EnrollmentSecret(
+        id="secret-1",
+        tenant="limited-tenant",
+        org_unit_id="ou-x",
+        secret_hash="unused",
+        expires_at=None,
+        created_at=datetime.now(timezone.utc),
+        created_by=None,
+    )
+    monkeypatch.setattr(
+        enrollment_api,
+        "verify_secret_any_tenant",
+        AsyncMock(return_value=stub_secret),
+    )
 
     mock_dev_mgr = MagicMock()
     mock_dev_mgr.initialize = AsyncMock()
@@ -337,7 +391,6 @@ async def test_enroll_device_limit_reached_without_professional(
     resp = await client.post(
         "/api/v1/perftest_cluster/enrollment/enroll",
         json={"secret": "raw-secret", "name": "d6", "serial": "SN-6"},
-        headers={"X-Tenant-ID": "limited-tenant"},
     )
     assert resp.status_code == 402
     data = await resp.get_json()
@@ -350,15 +403,25 @@ async def test_enroll_device_limit_bypassed_with_professional(
 ) -> None:
     """With a Professional license, the 5-device cap is bypassed (201)."""
     import hub_api.modules.perftest_cluster.api.enrollment as enrollment_api
-
-    mock_enroll_mgr = MagicMock()
-    mock_enroll_mgr.initialize = AsyncMock()
-    mock_enroll_mgr.verify_secret = AsyncMock(return_value="ou-x")
-    monkeypatch.setattr(enrollment_api, "EnrollmentManager", lambda db, tenant: mock_enroll_mgr)
-
-    from datetime import datetime, timezone
-
     from hub_api.modules.perftest_cluster.services.device_manager import Device
+    from hub_api.modules.perftest_cluster.services.enrollment_manager import (
+        EnrollmentSecret,
+    )
+
+    stub_secret = EnrollmentSecret(
+        id="secret-2",
+        tenant="unlimited-tenant",
+        org_unit_id="ou-x",
+        secret_hash="unused",
+        expires_at=None,
+        created_at=datetime.now(timezone.utc),
+        created_by=None,
+    )
+    monkeypatch.setattr(
+        enrollment_api,
+        "verify_secret_any_tenant",
+        AsyncMock(return_value=stub_secret),
+    )
 
     registered_device = Device(
         id="new-device-id",
@@ -385,7 +448,6 @@ async def test_enroll_device_limit_bypassed_with_professional(
     resp = await client.post(
         "/api/v1/perftest_cluster/enrollment/enroll",
         json={"secret": "raw-secret", "name": "u6", "serial": "USN-6"},
-        headers={"X-Tenant-ID": "unlimited-tenant"},
     )
     assert resp.status_code == 201
     data = await resp.get_json()

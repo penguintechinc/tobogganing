@@ -1,15 +1,17 @@
 """SASE status REST API blueprint."""
+
 from __future__ import annotations
 
-import structlog
 from datetime import datetime, timezone
 from typing import Any
 
-from quart import Blueprint, jsonify
+import structlog
+from quart import Blueprint
 
+from hub_api.auth.middleware import current_claims, require_scope, require_tenant
 from hub_api.db import get_db
-from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
 from hub_api.modules.sdwan.orchestrator.client_registry import ClientRegistry
+from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
 
 logger = structlog.get_logger()
 
@@ -17,17 +19,25 @@ blueprint = Blueprint("sase_status", __name__, url_prefix="/status")
 
 
 @blueprint.route("", methods=["GET"])
+@require_tenant
+@require_scope("status:read")
 async def get_status() -> tuple[dict[str, Any], int]:
     """Get overall SASE service status.
 
-    Returns aggregate metrics for clusters and clients.
+    Returns aggregate metrics for clusters and clients, scoped to the
+    caller's tenant. Requires a valid JWT with status:read scope — this
+    endpoint previously had no auth at all and hard-coded a "default"
+    tenant (security-review finding HIGH-B), leaking cross-tenant cluster
+    and client counts to unauthenticated callers.
 
     Returns:
         JSON response with service status and metrics.
     """
     try:
+        claims = current_claims()
+        tenant_id = claims["tenant"]
+
         db = get_db()
-        tenant_id = "default"  # Phase-0 uses default tenant
 
         cluster_mgr = ClusterManager(db, tenant_id)
         await cluster_mgr.initialize()

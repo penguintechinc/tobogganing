@@ -1,4 +1,5 @@
 """WireGuard key management blueprint for SASE module."""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,7 @@ from typing import Any
 import structlog
 from quart import Blueprint, current_app, request
 
-from hub_api.auth.middleware import current_claims, require_tenant
+from hub_api.auth.middleware import current_claims, require_scope, require_tenant
 from hub_api.core import CertificateManager
 from hub_api.entitlements.gate import require_feature
 from hub_api.modules.sdwan.certs import WireGuardKeyManager
@@ -47,6 +48,7 @@ def _extract_bearer_token(auth_header: str | None) -> str | None:
 
 @blueprint.route("/keys", methods=["POST"])
 @require_tenant
+@require_scope("wireguard:write")
 @require_feature("sase", "wireguard")
 async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
     """Generate WireGuard keys and certificates for authenticated nodes.
@@ -94,12 +96,8 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
         # Get managers from app config
         cluster_manager = current_app.config.get("CLUSTER_MANAGER")
         client_registry = current_app.config.get("CLIENT_REGISTRY")
-        wg_manager: WireGuardKeyManager = current_app.config.get(
-            "WIREGUARD_MANAGER"
-        )
-        pki_manager: CertificateManager = current_app.config.get(
-            "CERT_MANAGER"
-        )
+        wg_manager: WireGuardKeyManager = current_app.config.get("WIREGUARD_MANAGER")
+        pki_manager: CertificateManager = current_app.config.get("CERT_MANAGER")
 
         if not wg_manager or not pki_manager:
             logger.error("wg_manager_or_pki_manager_not_configured")
@@ -115,9 +113,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
             # Authenticate cluster/headend nodes
             if cluster_manager:
                 try:
-                    cluster = await asyncio.to_thread(
-                        cluster_manager.authenticate_cluster, api_key
-                    )
+                    cluster = await asyncio.to_thread(cluster_manager.authenticate_cluster, api_key)
                     authenticated = (
                         cluster is not None
                         and getattr(cluster, "id", None) == node_id
@@ -136,9 +132,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
             # Authenticate client nodes
             if client_registry:
                 try:
-                    client = await asyncio.to_thread(
-                        client_registry.authenticate_client, api_key
-                    )
+                    client = await asyncio.to_thread(client_registry.authenticate_client, api_key)
                     authenticated = (
                         client is not None
                         and getattr(client, "id", None) == node_id
@@ -184,20 +178,16 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
         # Generate X.509 certificate for WireGuard authentication
         try:
             if node_type in ("headend", "kubernetes_node", "raw_compute"):
-                cert_key, cert_pem, ca_cert = (
-                    await pki_manager.generate_headend_certificate(
-                        node_id,
-                        f"{node_type}-{node_id}",
-                        [wg_config["ip_address"]],
-                    )
+                cert_key, cert_pem, ca_cert = await pki_manager.generate_headend_certificate(
+                    node_id,
+                    f"{node_type}-{node_id}",
+                    [wg_config["ip_address"]],
                 )
             else:
-                cert_key, cert_pem, ca_cert = (
-                    await pki_manager.generate_client_certificate(
-                        node_id,
-                        f"{node_type}-{node_id}",
-                        node_type,
-                    )
+                cert_key, cert_pem, ca_cert = await pki_manager.generate_client_certificate(
+                    node_id,
+                    f"{node_type}-{node_id}",
+                    node_type,
                 )
         except Exception as e:
             logger.error(
@@ -255,6 +245,7 @@ async def generate_wireguard_keys() -> tuple[dict[str, Any], int]:
 
 @blueprint.route("/peers", methods=["GET"])
 @require_tenant
+@require_scope("wireguard:read")
 @require_feature("sase", "wireguard")
 async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
     """Get all WireGuard peer configurations.
@@ -279,9 +270,7 @@ async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
         tenant_id = claims["tenant"]
 
         # Get WireGuard manager
-        wg_manager: WireGuardKeyManager = current_app.config.get(
-            "WIREGUARD_MANAGER"
-        )
+        wg_manager: WireGuardKeyManager = current_app.config.get("WIREGUARD_MANAGER")
         if not wg_manager:
             logger.error("wg_manager_not_configured")
             return (
@@ -291,9 +280,7 @@ async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
 
         # Get all WireGuard peers for this tenant
         try:
-            peers = await wg_manager.get_all_wireguard_peers(
-                tenant_id=tenant_id
-            )
+            peers = await wg_manager.get_all_wireguard_peers(tenant_id=tenant_id)
         except Exception as e:
             logger.error(
                 "wireguard_peers_fetch_failed",
@@ -333,6 +320,7 @@ async def get_wireguard_peers() -> tuple[dict[str, Any], int]:
 
 @blueprint.route("/keys/<node_id>", methods=["DELETE"])
 @require_tenant
+@require_scope("wireguard:write")
 @require_feature("sase", "wireguard")
 async def revoke_wireguard_keys(node_id: str) -> tuple[dict[str, Any], int]:
     """Revoke WireGuard keys for a specific node.
@@ -357,9 +345,7 @@ async def revoke_wireguard_keys(node_id: str) -> tuple[dict[str, Any], int]:
         tenant_id = claims["tenant"]
 
         # Get WireGuard manager
-        wg_manager: WireGuardKeyManager = current_app.config.get(
-            "WIREGUARD_MANAGER"
-        )
+        wg_manager: WireGuardKeyManager = current_app.config.get("WIREGUARD_MANAGER")
         if not wg_manager:
             logger.error("wg_manager_not_configured")
             return (
@@ -369,9 +355,7 @@ async def revoke_wireguard_keys(node_id: str) -> tuple[dict[str, Any], int]:
 
         # Revoke WireGuard keys (tenant-scoped)
         try:
-            success = await wg_manager.revoke_wireguard_keys(
-                node_id, tenant_id=tenant_id
-            )
+            success = await wg_manager.revoke_wireguard_keys(node_id, tenant_id=tenant_id)
         except Exception as e:
             logger.error(
                 "wireguard_keys_revocation_failed",
