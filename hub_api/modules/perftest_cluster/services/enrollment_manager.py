@@ -292,10 +292,14 @@ async def verify_secret_any_tenant(db: object, raw_secret: str) -> EnrollmentSec
             )
             return None
 
-        # Check expiration
+        # Check expiration. DB drivers may return a naive datetime even
+        # though it was stored as UTC — normalize before comparing so this
+        # never raises (and silently fail-closed-masks) a real expiry check.
         if secret_obj.expires_at is not None:
-            now = datetime.now(timezone.utc)
-            if secret_obj.expires_at < now:
+            expires_at = secret_obj.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < datetime.now(timezone.utc):
                 logger.warning(
                     "secret_verification_failed_expired",
                     secret_id=secret_obj.id,

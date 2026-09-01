@@ -18,6 +18,7 @@ from penguin_dal import AsyncDB
 from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
 from hub_api.modules.perftest_cluster.services.enrollment_manager import (
     EnrollmentManager,
+    verify_secret_any_tenant,
 )
 from hub_api.modules.perftest_cluster.services.org_unit_manager import OrgUnitManager
 
@@ -230,4 +231,59 @@ async def test_verify_secret_exception_fail_closed() -> None:
 
     mgr = EnrollmentManager(bad_db, "tenant-em-err")
     result = await mgr.verify_secret("whatever")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_verify_secret_any_tenant_unknown_returns_none(real_dal: AsyncDB) -> None:
+    """verify_secret_any_tenant returns None for an unknown raw secret.
+
+    regression: security-review finding HIGH-B.
+    """
+    assert await verify_secret_any_tenant(real_dal, "not-a-real-secret") is None
+
+
+@pytest.mark.asyncio
+async def test_verify_secret_any_tenant_expired_returns_none(real_dal: AsyncDB) -> None:
+    """verify_secret_any_tenant returns None for an expired secret, even
+    though the hash lookup itself is unscoped by tenant.
+
+    regression: security-review finding HIGH-B.
+    """
+    mgr = EnrollmentManager(real_dal, "tenant-any-expired")
+    _secret, raw = await mgr.create_secret(
+        org_unit_id=None,
+        expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+        created_by=None,
+    )
+    assert await verify_secret_any_tenant(real_dal, raw) is None
+
+
+@pytest.mark.asyncio
+async def test_verify_secret_any_tenant_returns_true_tenant(real_dal: AsyncDB) -> None:
+    """verify_secret_any_tenant derives tenant from the secret record itself.
+
+    regression: security-review finding HIGH-B.
+    """
+    mgr = EnrollmentManager(real_dal, "tenant-any-real")
+    _secret, raw = await mgr.create_secret(org_unit_id="ou-any", expires_at=None, created_by=None)
+    result = await verify_secret_any_tenant(real_dal, raw)
+    assert result is not None
+    assert result.tenant == "tenant-any-real"
+    assert result.org_unit_id == "ou-any"
+
+
+@pytest.mark.asyncio
+async def test_verify_secret_any_tenant_exception_fail_closed() -> None:
+    """A query error during verify_secret_any_tenant fails closed (returns None).
+
+    regression: security-review finding HIGH-B.
+    """
+    bad_db = MagicMock()
+    bad_db.device_enrollment_secrets.secret_hash = MagicMock()
+    bad_db.device_enrollment_secrets.secret_hash.__eq__ = MagicMock(
+        side_effect=RuntimeError("boom")
+    )
+
+    result = await verify_secret_any_tenant(bad_db, "whatever")
     assert result is None
