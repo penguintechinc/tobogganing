@@ -1,4 +1,5 @@
 """Enrollment REST API blueprint for WaddlePerf cluster."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -9,9 +10,12 @@ from quart import Blueprint, request
 
 from hub_api.auth.middleware import current_claims, require_scope, require_tenant
 from hub_api.db import get_db
-from hub_api.entitlements.gate import require_feature, _is_licensed_for_tier, TIER_PROFESSIONAL
+from hub_api.entitlements.gate import TIER_PROFESSIONAL, _is_licensed_for_tier, require_feature
 from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
-from hub_api.modules.perftest_cluster.services.enrollment_manager import EnrollmentManager
+from hub_api.modules.perftest_cluster.services.enrollment_manager import (
+    EnrollmentManager,
+    verify_secret_any_tenant,
+)
 
 logger = structlog.get_logger()
 
@@ -232,22 +236,24 @@ async def enroll_device() -> tuple[dict[str, Any], int]:
                 return {"error": f"Missing required field: {field}"}, 400
 
         raw_secret = data.get("secret")
-        tenant_id = request.headers.get("X-Tenant-ID", "default")
 
         db = get_db()
 
-        # Verify secret and get org_unit_id
-        enrollment_manager = EnrollmentManager(db, tenant_id)
-        await enrollment_manager.initialize()
+        # This is a public, unauthenticated bootstrap endpoint — the only
+        # credential available is the enrollment secret itself. The tenant
+        # MUST be derived from that validated secret, never from a
+        # client-supplied header: trusting X-Tenant-ID here would let any
+        # caller assert an arbitrary tenant, collapsing tenant isolation
+        # (security-review finding HIGH-B). Any X-Tenant-ID header sent by
+        # the caller is intentionally ignored.
+        secret_obj = await verify_secret_any_tenant(db, raw_secret)
 
-        org_unit_id = await enrollment_manager.verify_secret(raw_secret)
-
-        if org_unit_id is None:
-            logger.warning(
-                "enrollment_secret_verification_failed",
-                tenant=tenant_id,
-            )
+        if secret_obj is None:
+            logger.warning("enrollment_secret_verification_failed")
             return {"error": "Invalid or expired enrollment secret"}, 401
+
+        tenant_id = secret_obj.tenant
+        org_unit_id = secret_obj.org_unit_id
 
         # Check Professional tier gate for >5 devices
         device_manager = DeviceManager(db, tenant_id)

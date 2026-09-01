@@ -1,13 +1,15 @@
 """Enrollment secret management using penguin-dal."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import secrets
-import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
+
+import structlog
 
 logger = structlog.get_logger()
 
@@ -248,3 +250,75 @@ class EnrollmentManager:
                 tenant=self.tenant_id,
             )
             return None
+
+
+async def verify_secret_any_tenant(db: object, raw_secret: str) -> EnrollmentSecret | None:
+    """Verify an enrollment secret without scoping the lookup by tenant.
+
+    Used exclusively by the public, unauthenticated ``/enroll`` bootstrap
+    endpoint, which has no validated JWT and therefore no trustworthy tenant
+    claim to scope by. The secret hash is looked up on its own (never
+    filtered by a caller-supplied value such as an ``X-Tenant-ID`` header),
+    and the tenant is derived FROM the matched record — never asserted BY
+    the client (security-review finding HIGH-B: tenant isolation collapse).
+
+    Every other ``EnrollmentManager`` method remains tenant-scoped and is
+    only reachable behind ``@require_tenant``/``@require_scope`` for an
+    already-authenticated caller; this function must not be used there.
+
+    Args:
+        db: penguin-dal DAL instance.
+        raw_secret: Unencrypted enrollment secret presented by the device.
+
+    Returns:
+        The matching EnrollmentSecret (carrying its true tenant) if valid
+        and not expired, None otherwise.
+    """
+    try:
+        secret_hash = hashlib.sha256(raw_secret.encode()).hexdigest()
+
+        secret_rowset = await db(db.device_enrollment_secrets.secret_hash == secret_hash).select()
+        secret_obj = secret_rowset.first()
+
+        if not secret_obj:
+            logger.warning("secret_verification_failed_not_found")
+            return None
+
+        # Constant-time comparison
+        if not hmac.compare_digest(secret_obj.secret_hash, secret_hash):
+            logger.warning(
+                "secret_verification_failed_hash_mismatch",
+                secret_id=secret_obj.id,
+            )
+            return None
+
+        # Check expiration
+        if secret_obj.expires_at is not None:
+            now = datetime.now(timezone.utc)
+            if secret_obj.expires_at < now:
+                logger.warning(
+                    "secret_verification_failed_expired",
+                    secret_id=secret_obj.id,
+                    expires_at=secret_obj.expires_at,
+                )
+                return None
+
+        logger.info(
+            "secret_verified",
+            secret_id=secret_obj.id,
+            org_unit_id=secret_obj.org_unit_id,
+            tenant=secret_obj.tenant,
+        )
+
+        return EnrollmentSecret(
+            id=secret_obj.id,
+            tenant=secret_obj.tenant,
+            org_unit_id=secret_obj.org_unit_id,
+            secret_hash=secret_obj.secret_hash,
+            expires_at=secret_obj.expires_at,
+            created_at=secret_obj.created_at,
+            created_by=secret_obj.created_by,
+        )
+    except Exception as e:
+        logger.error("secret_verification_error_fail_closed", error=str(e))
+        return None

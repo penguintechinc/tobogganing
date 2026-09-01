@@ -71,6 +71,9 @@ class RefreshToken(Base):
     token: Column[str] = Column(Text, nullable=False, unique=True, index=True)
     expires_at: Column[datetime] = Column(DateTime, nullable=False)
     created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
+    # NULL = not yet consumed; non-NULL = already rotated once. A second
+    # presentation of a non-NULL token is a replay (security-review HIGH-A).
+    revoked_at: Column[datetime | None] = Column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
         """Return string representation."""

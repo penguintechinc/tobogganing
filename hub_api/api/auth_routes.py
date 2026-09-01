@@ -119,11 +119,13 @@ async def refresh() -> tuple[dict, int]:
             logger.warning("refresh_failed", error=result.error)
             return {"error": "Invalid credentials"}, 401
 
-        # Success
+        # Success — refresh tokens are single-use and rotated on every call
+        # (security-review finding HIGH-A), so the NEW refresh token minted
+        # by AuthService is returned, never the one the caller presented.
         logger.info("refresh_success")
         return {
             "access_token": result.access_token,
-            "refresh_token": refresh_token,  # Return original refresh token
+            "refresh_token": result.refresh_token,
             "expires_in": 3600,
             "token_type": "Bearer",
         }, 200

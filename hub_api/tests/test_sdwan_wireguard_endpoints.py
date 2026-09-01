@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 from quart import Quart
 
 from hub_api.modules.sdwan.api import wireguard as wireguard_module
@@ -430,6 +431,47 @@ async def test_get_peers_generic_exception(
 
 
 # --- DELETE /wireguard/keys/<node_id> (revoke) ------------------------------
+
+
+@pytest_asyncio.fixture
+async def viewer_token(app_wg: Quart) -> str:
+    """JWT with only read-scoped access (no wireguard:write).
+
+    Returns:
+        Encoded JWT token with a read-only scope set.
+    """
+    from hub_api.auth.jwt import encode_access_token
+
+    provider = app_wg.config["KEY_PROVIDER"]
+    claims = {
+        "sub": "viewer-user",
+        "iss": "test-app",
+        "aud": "test-app",
+        "tenant": "test-tenant",
+        "scope": "*:read",
+    }
+    return await encode_access_token(claims, provider, ttl_hours=1)
+
+
+@pytest.mark.asyncio
+async def test_revoke_keys_viewer_token_rejected(
+    app_wg: Quart, viewer_token: str, managers: dict[str, MagicMock]
+) -> None:
+    """A viewer/read-only token cannot DELETE (revoke) WireGuard keys.
+
+    regression: security-review finding MEDIUM-C (wireguard BFLA). Prior to
+    the fix, the /keys/<node_id> DELETE route had no @require_scope at all,
+    so any authenticated user — regardless of role — could revoke any
+    node's keys.
+    """
+    client = app_wg.test_client()
+
+    response = await client.delete(
+        "/api/v1/sdwan/wireguard/keys/node-1",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
