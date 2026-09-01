@@ -41,13 +41,14 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
+    - name: Install uv
+      run: pip install --no-cache-dir uv==0.11.28
+
     - name: Install dependencies
       run: |
         cd hub_api
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install boto3
-        pip install pytest pytest-cov pytest-asyncio
+        uv pip install --system --require-hashes -r requirements.txt
+        uv pip install --system --require-hashes -r requirements-kms.txt
 
     - name: Lint with pylint
       run: |
@@ -623,13 +624,14 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
+    - name: Install uv
+      run: pip install --no-cache-dir uv==0.11.28
+
     - name: Install dependencies
       run: |
         cd hub_api
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install boto3
-        pip install pytest pytest-cov pytest-asyncio
+        uv pip install --system --require-hashes -r requirements.txt
+        uv pip install --system --require-hashes -r requirements-kms.txt
 
     - name: Run cross-module seam integration tests
       env:
