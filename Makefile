@@ -1,7 +1,7 @@
 # Tobogganing Root Makefile
 # Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test test-unit test-integration test-e2e test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint
+.PHONY: help all clean build test test-unit test-integration test-e2e test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint dependencies compile-deps compile-deps-hub-api compile-deps-netsvcs-dns
 
 # Default target
 help: ## Show this help message
@@ -158,9 +158,26 @@ smoke-test: ## Run smoke tests
 	@echo "✅ Smoke tests complete"
 
 # Development helpers
-dependencies: ## Install Python dependencies
+dependencies: ## Install Python dependencies into the active venv (hash-verified via uv; run `uv venv .venv && source .venv/bin/activate` first, or pass VENV_SYSTEM=1 for a system/container install)
 	@echo "📦 Installing dependencies..."
-	@pip install --no-cache-dir -r hub_api/requirements.txt
+	uv pip install $(if $(VENV_SYSTEM),--system,) --require-hashes -r hub_api/requirements.txt
+
+# Dependency compilation (uv pip compile --generate-hashes; org standard, never plain pip-compile)
+compile-deps: compile-deps-hub-api compile-deps-netsvcs-dns ## Regenerate ALL requirements*.txt lock files from their .in sources
+
+compile-deps-hub-api: ## Regenerate hub_api requirements*.txt from .in sources (hash-pinned)
+	@echo "🔒 Compiling hub_api/requirements.txt..."
+	cd hub_api && uv pip compile --generate-hashes --python-version 3.13 requirements.in -o requirements.txt
+	@echo "🔒 Compiling hub_api/requirements-kms.txt..."
+	cd hub_api && uv pip compile --generate-hashes --python-version 3.13 requirements-kms.in -o requirements-kms.txt
+	@echo "🔒 Compiling hub_api/requirements-build.txt (proto build-only; targets py3.12 per requirements-build.in)..."
+	cd hub_api && uv pip compile --generate-hashes --python-version 3.12 requirements-build.in -o requirements-build.txt
+	@echo "✅ hub_api lock files regenerated"
+
+compile-deps-netsvcs-dns: ## Regenerate engines/netsvcs-dns/requirements.txt from .in (owned by netsvcs-dns branch — do not hand-edit output)
+	@echo "🔒 Compiling engines/netsvcs-dns/requirements.txt..."
+	cd engines/netsvcs-dns && uv pip compile --generate-hashes --python-version 3.13 requirements.in -o requirements.txt
+	@echo "✅ engines/netsvcs-dns lock file regenerated"
 
 portal-dev: ## Start portal dev server
 	@echo "🚀 Starting portal dev server..."
