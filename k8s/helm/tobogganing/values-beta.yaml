@@ -12,6 +12,8 @@ hubApi:
     limits:
       memory: "512Mi"
       cpu: "500m"
+  managerUrl: "https://tobogganing.penguintech.cloud/api"
+  corsOrigins: "https://tobogganing.penguintech.cloud"
 
 hubRouter:
   replicas: 1
@@ -22,6 +24,11 @@ hubRouter:
     limits:
       memory: "512Mi"
       cpu: "500m"
+  # hubRouter.sessionSigningKey intentionally left unset — injected via
+  # `--set hubRouter.sessionSigningKey=$SIGNING_KEY` from a CI-managed
+  # secret at deploy time, never committed. See values.yaml
+  # hubRouter.sessionSigningKey comment; templates/hub-router-signing.yaml
+  # fails the render (by design) if this is omitted at deploy time.
 
 hubWebui:
   replicas: 2
@@ -80,6 +87,8 @@ testserver:
     repository: ghcr.io/penguintechinc/tobogganing/testserver
     tag: beta-1710000000  # Replaced by CI/CD with actual build tag
   replicaCount: 1
+  config:
+    allowedOrigins: "https://tobogganing.penguintech.cloud"
   db:
     host: "testserver-mariadb.tobogganing.svc.cluster.local"
   resources:

@@ -12,6 +12,8 @@ hubApi:
     limits:
       memory: "256Mi"
       cpu: "250m"
+  managerUrl: "http://tobogganing.localhost.local/api"
+  corsOrigins: "http://tobogganing.localhost.local"
 
 hubRouter:
   replicas: 1
@@ -22,6 +24,13 @@ hubRouter:
     limits:
       memory: "256Mi"
       cpu: "250m"
+  # Dev-only placeholder, generated once for local alpha use — never
+  # reused in beta/gamma/production. See values.yaml
+  # hubRouter.sessionSigningKey comment. (Low-entropy/human-readable by
+  # design so secret scanners don't misclassify it as a leaked credential
+  # — matches the postgres.password "alpha-dev-password-generated-once"
+  # precedent; still >=32 bytes to satisfy the app's own length check.)
+  sessionSigningKey: "alpha-dev-only-session-signing-key-generated-once-never-reuse-elsewhere"
 
 hubWebui:
   replicas: 1
@@ -96,6 +105,7 @@ testserver:
   config:
     authEnabled: "false"
     maxConcurrentTests: "10"
+    allowedOrigins: "http://tobogganing.localhost.local"
   db:
     host: "testserver-mariadb.tobogganing.svc.cluster.local"
   resources:

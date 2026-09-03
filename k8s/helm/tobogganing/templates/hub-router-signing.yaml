@@ -1,0 +1,25 @@
+# PROXY_SESSION_SIGNING_KEY for hub-router's OAuth2/SAML2 SSO session JWTs
+# (auth.type=oauth2|saml2 only). Follows the postgres.password pattern
+# (see git history: fix(k8s) remove hardcoded postgres password) — a
+# `required`-gated Helm value rendered into a dedicated Secret, never a
+# hardcoded default in a committed values file. Alpha commits a throwaway
+# dev-only value; beta/gamma/production intentionally leave
+# hubRouter.sessionSigningKey unset so this template's `required` fails
+# the render unless the real value is injected via
+# `--set hubRouter.sessionSigningKey=...` (CI-managed secret) at deploy
+# time — see values.yaml hubRouter.sessionSigningKey comment.
+#
+# NOTE: filename avoids the literal substring "secret" — the repo root
+# .gitignore has a blanket `*secret*` rule (line 16) that would silently
+# exclude this file from git entirely.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-router-signing
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-router
+type: Opaque
+stringData:
+  PROXY_SESSION_SIGNING_KEY: {{ required "hubRouter.sessionSigningKey is required (>=32 bytes) — inject via --set/CI secret at deploy time, never commit a real value to a values file" .Values.hubRouter.sessionSigningKey | quote }}

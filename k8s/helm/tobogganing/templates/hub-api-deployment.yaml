@@ -35,6 +35,11 @@ spec:
             - name: grpc
               containerPort: {{ .Values.hubApi.grpcPort }}
               protocol: TCP
+          env:
+            - name: MANAGER_URL
+              value: {{ .Values.hubApi.managerUrl | quote }}
+            - name: CORS_ORIGINS
+              value: {{ .Values.hubApi.corsOrigins | quote }}
           envFrom:
             - configMapRef:
                 name: {{ include "tobogganing.fullname" . }}-config

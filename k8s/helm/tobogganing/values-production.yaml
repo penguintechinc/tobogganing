@@ -13,6 +13,8 @@ hubApi:
     tag: v2.0.0
     # TODO: pin to released digest
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  managerUrl: "https://tobogganing.penguintech.io/api"
+  corsOrigins: "https://tobogganing.penguintech.io"
   resources:
     requests:
       memory: "512Mi"
@@ -28,6 +30,12 @@ hubRouter:
     tag: v2.0.0
     # TODO: pin to released digest
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  # hubRouter.sessionSigningKey intentionally NOT set here — a real value
+  # must never be committed to a production values file (the exact class
+  # of HIGH fixed for postgres.password, see git history). Inject via
+  # `--set hubRouter.sessionSigningKey=$SIGNING_KEY` from a CI-managed
+  # secret at deploy time; templates/hub-router-signing.yaml's `required`
+  # deliberately fails the render if this is omitted.
   resources:
     requests:
       memory: "512Mi"
@@ -107,6 +115,8 @@ testserver:
     # TODO: pin to released digest
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   replicaCount: 3
+  config:
+    allowedOrigins: "https://tobogganing.penguintech.io"
   db:
     host: "CHANGE-ME-managed-mariadb.internal"  # externally managed, HA MariaDB
   resources:
