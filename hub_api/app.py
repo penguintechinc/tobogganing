@@ -7,7 +7,7 @@ import logging
 import os
 
 import sqlalchemy as sa
-from quart import Quart
+from quart import Quart, Response
 from quart_cors import cors
 from quart_schema import QuartSchema
 
@@ -42,6 +42,10 @@ def create_app(config: Config | None = None) -> Quart:
     # Load configuration
     app.config["TESTING"] = False
     app.config["PRODUCT_NAME"] = config.product_name
+
+    # Cap request body size (this is a JSON API; no file uploads). Prevents
+    # unbounded-body memory/DoS on any endpoint that calls request.get_json().
+    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MiB
 
     # Initialize QuartSchema for OpenAPI spec generation (disable auto-mounted routes)
     # We implement custom /openapi.json (auth-gated) and /docs/public (login-only)
@@ -534,6 +538,27 @@ def create_app(config: Config | None = None) -> Quart:
             "security": [{"BearerAuth": []}],
         }
         return full_spec, 200
+
+    # Security headers on every response. This is a JSON API (no HTML
+    # rendering), so the CSP is intentionally maximally restrictive.
+    @app.after_request
+    async def set_security_headers(response: Response) -> Response:
+        """Attach baseline security headers to every response.
+
+        Args:
+            response: The outgoing Quart response.
+
+        Returns:
+            The same response with security headers set.
+        """
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     # Error handlers
     @app.errorhandler(404)
