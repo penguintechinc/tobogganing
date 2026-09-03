@@ -37,7 +37,7 @@ jobs:
     - name: Validate version format
       id: validate
       run: |
-        VERSION=$(cat .version | tr -d '[:space:]')
+        VERSION=$(tr -d '[:space:]' < .version)
         echo "Version: $VERSION"
 
         # Check if version matches vMajor.Minor.Patch or vMajor.Minor.Patch.build
@@ -53,12 +53,12 @@ jobs:
 
         echo "Semantic Version: $SEMVER"
         echo "Build Timestamp: ${BUILD:1}"
-        echo "version=$SEMVER" >> $GITHUB_OUTPUT
-        echo "build=${BUILD:1}" >> $GITHUB_OUTPUT
+        echo "version=$SEMVER" >> "$GITHUB_OUTPUT"
+        echo "build=${BUILD:1}" >> "$GITHUB_OUTPUT"
 
     - name: Log version metadata
       run: |
-        VERSION=$(cat .version | tr -d '[:space:]')
+        VERSION=$(tr -d '[:space:]' < .version)
         echo "::notice::Version Detected: $VERSION"
         echo "Commit: ${{ github.sha }}"
         echo "Branch: ${{ github.ref_name }}"
@@ -72,17 +72,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-    - name: Verify Manager Service (Python 3.13)
+    - name: Verify Hub API Service (Python 3.13)
       run: |
-        echo "Manager Service Version Check"
-        [ -f "manager/app.py" ] && echo "  ✓ Manager app.py found"
-        [ -f "manager/requirements.txt" ] && echo "  ✓ Manager requirements.txt found"
+        echo "Hub API Service Version Check"
+        [ -f "hub_api/app.py" ] && echo "  ✓ Hub API app.py found"
+        [ -f "hub_api/requirements.txt" ] && echo "  ✓ Hub API requirements.txt found"
 
-    - name: Verify Headend Server (Go 1.24)
+    - name: Verify Hub Router Service (Go 1.24)
       run: |
-        echo "Headend Server Version Check"
-        [ -f "headend/go.mod" ] && echo "  ✓ Headend go.mod found"
-        [ -d "headend/proxy" ] && echo "  ✓ Headend proxy package found"
+        echo "Hub Router Service Version Check"
+        [ -f "services/hub-router/go.mod" ] && echo "  ✓ Hub Router go.mod found"
+        [ -d "services/hub-router/proxy" ] && echo "  ✓ Hub Router proxy package found"
 
     - name: Verify Docker Client (Go 1.24)
       run: |
@@ -139,7 +139,7 @@ jobs:
 
     - name: Report security scan summary
       run: |
-        VERSION=$(cat .version | tr -d '[:space:]')
+        VERSION=$(tr -d '[:space:]' < .version)
         echo "Security Scan Results for Version: $VERSION"
         echo "========================================="
 
