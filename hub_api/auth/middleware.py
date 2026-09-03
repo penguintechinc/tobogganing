@@ -3,6 +3,12 @@
 Supports both Bearer/JWT (via @require_scope, @require_tenant) and session cookie
 (via @require_session_user, @require_role, @require_permission) authentication paths.
 Also provides machine-JWT authentication for cluster/headend routes.
+
+The Bearer/JWT path also accepts the access token from an HttpOnly cookie (the
+browser/portal flow set up by api/auth_routes.py's login/refresh/logout) as an
+additional source alongside the Authorization header — never a replacement.
+Cookie-authenticated, state-changing (POST/PUT/PATCH/DELETE) requests must also
+carry a matching X-CSRF-Token header (double-submit CSRF; see csrf_token_valid).
 """
 
 from __future__ import annotations
@@ -10,16 +16,38 @@ from __future__ import annotations
 import functools
 import hmac
 import os
+import secrets
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import structlog
-from quart import current_app, g, jsonify, request, Response
+from quart import Response, current_app, g, jsonify, request
 
 from hub_api.auth.jwt import decode_token
 from hub_api.flags import feature_enabled
 
 logger = structlog.get_logger()
+
+# Browser auth cookie names (set by api/auth_routes.py's login/refresh, cleared
+# by logout) and the double-submit CSRF header name. Distinct from the
+# pre-existing `sasewaddle_session` DB-session cookie (require_session_user
+# below) — this is a separate, JWT-based mechanism for the portal.
+ACCESS_TOKEN_COOKIE = "access_token"  # nosec B105 - cookie name, not a credential value
+REFRESH_TOKEN_COOKIE = "refresh_token"  # nosec B105 - cookie name, not a credential value
+CSRF_TOKEN_COOKIE = "csrf_token"  # nosec B105 - cookie name, not a credential value
+CSRF_HEADER = "X-CSRF-Token"
+
+# access_token/csrf_token cookie lifetime: matches the 1h `expires_in` already
+# returned in the login/refresh JSON body (auth/service.py issues access JWTs
+# with ttl_hours=config.jwt_expiration_hours; default 1h).
+ACCESS_TOKEN_COOKIE_MAX_AGE = 3600
+# refresh_token cookie lifetime: matches the opaque refresh token's DB-stored
+# expiry in auth/service.py::_generate_and_store_refresh_token (30 days). This
+# token is NOT a JWT (no exp claim of its own) — it's looked up in the
+# refresh_tokens table on use.
+REFRESH_TOKEN_COOKIE_MAX_AGE = 30 * 24 * 3600
+
+_CSRF_PROTECTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
 def _scope_satisfied(required: str, granted: set[str]) -> bool:
@@ -80,7 +108,20 @@ def current_claims() -> dict[str, Any] | None:
 async def _validate_and_store_token() -> bool:
     """Validate JWT token and store claims in request context.
 
-    Stores decoded claims in g.claims if token is valid.
+    Stores decoded claims in g.claims if token is valid. Enforces that the
+    token's 'iss'/'aud' claims match this app's PRODUCT_NAME — this is the
+    general user-JWT path (backing @require_tenant/@require_scope/@require_admin),
+    so a machine-JWT minted for a different audience (e.g. aud=="headend",
+    used by _extract_machine_identity for headend/cluster routes) must not be
+    accepted here, even though it shares the same signing key and decoder.
+
+    The token is read from the Authorization header first (bearer path — used
+    by node agents, CLIs, and service-to-service callers; unchanged behavior).
+    If absent, falls back to the `access_token` HttpOnly cookie set by the
+    browser/portal login flow. Also records g.auth_via_cookie so callers can
+    enforce CSRF on cookie-authenticated, state-changing requests
+    (see _csrf_check_required/csrf_token_valid) — bearer-header requests are
+    never CSRF-checked, since a cross-site page cannot forge that header.
 
     Returns:
         True if token valid, False otherwise.
@@ -90,6 +131,13 @@ async def _validate_and_store_token() -> bool:
         return g.claims is not None
 
     token = _extract_token_from_header()
+    auth_via_cookie = False
+    if not token:
+        token = request.cookies.get(ACCESS_TOKEN_COOKIE)
+        auth_via_cookie = token is not None
+
+    g.auth_via_cookie = auth_via_cookie
+
     if not token:
         g.claims = None
         return False
@@ -99,9 +147,41 @@ async def _validate_and_store_token() -> bool:
         g.claims = None
         return False
 
-    claims = decode_token(token, key_provider)
+    expected = current_app.config.get("PRODUCT_NAME", "tobogganing")
+    claims = decode_token(token, key_provider, expected_iss=expected, expected_aud=expected)
     g.claims = claims
     return claims is not None
+
+
+def _csrf_check_required() -> bool:
+    """True if the current request authenticated via cookie and is state-changing.
+
+    Bearer-header requests (node agents, CLIs, service-to-service) are exempt:
+    a malicious cross-site page cannot attach a custom Authorization header to
+    a victim's browser request, so bearer auth is not CSRF-able.
+
+    Returns:
+        True if a CSRF token must be validated for this request.
+    """
+    return bool(getattr(g, "auth_via_cookie", False)) and request.method in _CSRF_PROTECTED_METHODS
+
+
+def csrf_token_valid() -> bool:
+    """Validate the X-CSRF-Token header against the csrf_token cookie.
+
+    Double-submit pattern: the CSRF cookie is deliberately non-HttpOnly so
+    portal JS can read it and echo it back in the header. A cross-site
+    attacker can trigger the cookie to be sent automatically but cannot read
+    its value (same-origin policy) to reproduce it in the header.
+
+    Returns:
+        True if both are present and match (constant-time comparison).
+    """
+    cookie_token = request.cookies.get(CSRF_TOKEN_COOKIE)
+    header_token = request.headers.get(CSRF_HEADER)
+    if not cookie_token or not header_token:
+        return False
+    return hmac.compare_digest(cookie_token, header_token)
 
 
 def require_tenant(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -116,6 +196,7 @@ def require_tenant(func: Callable[..., Any]) -> Callable[..., Any]:
     Returns:
         Decorated function.
     """
+
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         # Validate token and extract claims
@@ -131,6 +212,11 @@ def require_tenant(func: Callable[..., Any]) -> Callable[..., Any]:
         # Verify tenant claim is present
         if "tenant" not in claims:
             return jsonify({"error": "Unauthorized: missing tenant claim"}), 403
+
+        # Cookie-authenticated, state-changing requests must carry a matching
+        # CSRF token (double-submit); bearer-header requests are exempt.
+        if _csrf_check_required() and not csrf_token_valid():
+            return jsonify({"error": "Forbidden: CSRF token missing or invalid"}), 403
 
         # Call the original handler
         return await func(*args, **kwargs)
@@ -187,6 +273,11 @@ def require_scope(*required_scopes: str) -> Callable[[Callable[..., Any]], Calla
             for required_scope in required_scopes:
                 if not _scope_satisfied(required_scope, token_scopes):
                     return jsonify({"error": "Forbidden: insufficient privileges"}), 403
+
+            # Cookie-authenticated, state-changing requests must carry a matching
+            # CSRF token (double-submit); bearer-header requests are exempt.
+            if _csrf_check_required() and not csrf_token_valid():
+                return jsonify({"error": "Forbidden: CSRF token missing or invalid"}), 403
 
             # Call the original handler
             return await func(*args, **kwargs)
@@ -432,13 +523,20 @@ def require_admin(func: Callable[..., Any]) -> Callable[..., Any]:
                 logger.info("admin_access_granted_via_session", user_id=user.get("id"))
                 return await func(*args, **kwargs)
 
-        # Check JWT auth (Bearer token)
+        # Check JWT auth (Bearer token or access_token cookie)
         token_valid = await _validate_and_store_token()
         if token_valid:
             claims = current_claims()
             if claims and "tenant" in claims:
                 token_scopes = set(claims.get("scope", "").split())
                 if _scope_satisfied("*:admin", token_scopes):
+                    # Cookie-authenticated, state-changing requests must carry
+                    # a matching CSRF token; bearer-header requests are exempt.
+                    if _csrf_check_required() and not csrf_token_valid():
+                        return (
+                            jsonify({"error": "Forbidden: CSRF token missing or invalid"}),
+                            403,
+                        )
                     logger.info(
                         "admin_access_granted_via_jwt",
                         user_id=claims.get("sub"),
@@ -482,9 +580,7 @@ def _verify_bootstrap_token(token: str | None) -> bool:
 
 
 # Per-token scope allowlists for legacy tokens (least privilege enforcement)
-HEADEND_TOKEN_SCOPES = frozenset(
-    {"firewall:read", "wireguard:read", "ports:read", "metrics:write"}
-)
+HEADEND_TOKEN_SCOPES = frozenset({"firewall:read", "wireguard:read", "ports:read", "metrics:write"})
 BOOTSTRAP_TOKEN_SCOPES = frozenset({"certs:issue"})
 
 
@@ -539,7 +635,9 @@ async def _extract_machine_identity(
     return claims, None
 
 
-def require_machine_jwt(*required_scopes: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def require_machine_jwt(
+    *required_scopes: str,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to require machine-JWT with specific scopes.
 
     Supports dual-accept: when flag `tobogganing.core.machine_jwt_required` is OFF,
@@ -609,9 +707,7 @@ def require_machine_jwt(*required_scopes: str) -> Callable[[Callable[..., Any]],
                         allowed=list(allowed_scopes),
                     )
                     return (
-                        jsonify(
-                            {"error": "Forbidden: insufficient scope for legacy token"}
-                        ),
+                        jsonify({"error": "Forbidden: insufficient scope for legacy token"}),
                         403,
                     )
 
@@ -632,9 +728,7 @@ def require_machine_jwt(*required_scopes: str) -> Callable[[Callable[..., Any]],
                     scopes=required_scopes,
                 )
                 return (
-                    jsonify(
-                        {"error": "Unauthorized: machine-JWT required"}
-                    ),
+                    jsonify({"error": "Unauthorized: machine-JWT required"}),
                     401,
                 )
 
@@ -688,3 +782,92 @@ def clear_session_cookie(response: Response) -> None:
     )
 
     logger.info("session_cookie_cleared")
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Set browser auth cookies: access token, refresh token, and a fresh CSRF token.
+
+    Called by api/auth_routes.py on successful login/refresh. HttpOnly +
+    Secure (when behind TLS) + SameSite=Strict on the two token cookies — this
+    API is XHR/fetch-only (no cookie-bearing top-level cross-site navigation
+    depends on these), so Strict has no functional cost here and is the
+    strongest available setting. The CSRF cookie is deliberately NOT HttpOnly:
+    the double-submit pattern requires portal JS to read it and echo it back
+    in the X-CSRF-Token header (see csrf_token_valid).
+
+    This is purely additive to the existing Authorization: Bearer flow — it
+    does not change what auth_routes.py returns in the JSON response body.
+
+    Args:
+        response: Quart response object to attach cookies to.
+        access_token: Signed JWT access token (as returned in the JSON body).
+        refresh_token: Opaque refresh token string (as returned in the JSON body).
+    """
+    secure = request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+    response.set_cookie(
+        ACCESS_TOKEN_COOKIE,
+        access_token,
+        max_age=ACCESS_TOKEN_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="Strict",
+        secure=secure,
+        path="/api/v1",
+    )
+    response.set_cookie(
+        REFRESH_TOKEN_COOKIE,
+        refresh_token,
+        max_age=REFRESH_TOKEN_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="Strict",
+        secure=secure,
+        # Scoped tighter than the access token: only auth_bp routes
+        # (refresh-token, logout) ever need to read this cookie, limiting
+        # its exposure surface on every other request.
+        path="/api/v1/auth",
+    )
+    response.set_cookie(
+        CSRF_TOKEN_COOKIE,
+        secrets.token_urlsafe(32),
+        max_age=ACCESS_TOKEN_COOKIE_MAX_AGE,
+        httponly=False,
+        samesite="Strict",
+        secure=secure,
+        path="/api/v1",
+    )
+
+    logger.info("auth_cookies_set", secure=secure)
+
+
+def clear_auth_cookies(response: Response) -> None:
+    """Clear the access/refresh/CSRF auth cookies (called on logout).
+
+    Args:
+        response: Quart response object.
+    """
+    response.set_cookie(
+        ACCESS_TOKEN_COOKIE,
+        "",
+        max_age=0,
+        httponly=True,
+        samesite="Strict",
+        path="/api/v1",
+    )
+    response.set_cookie(
+        REFRESH_TOKEN_COOKIE,
+        "",
+        max_age=0,
+        httponly=True,
+        samesite="Strict",
+        path="/api/v1/auth",
+    )
+    response.set_cookie(
+        CSRF_TOKEN_COOKIE,
+        "",
+        max_age=0,
+        httponly=False,
+        samesite="Strict",
+        path="/api/v1",
+    )
+
+    logger.info("auth_cookies_cleared")

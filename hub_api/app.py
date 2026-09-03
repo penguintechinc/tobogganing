@@ -68,9 +68,14 @@ def create_app(config: Config | None = None) -> Quart:
     # Configure logging
     logging.basicConfig(level=config.log_level)
 
-    # Configure CORS
+    # Configure CORS. allow_credentials=True is required for the browser
+    # cookie-based auth flow (HttpOnly access/refresh/CSRF cookies set by
+    # /api/v1/auth/login and /refresh-token) — the browser will not send or
+    # accept cookies on a cross-origin fetch/XHR without it, and per the CORS
+    # spec this must never be paired with a wildcard origin (cors_origins is
+    # a concrete allowlist, never "*").
     cors_origins = [origin.strip() for origin in config.cors_origins.split(",")]
-    cors(app, allow_origin=cors_origins)
+    cors(app, allow_origin=cors_origins, allow_credentials=True)
 
     # Register core API blueprints
     from hub_api.api.auth_routes import auth_bp

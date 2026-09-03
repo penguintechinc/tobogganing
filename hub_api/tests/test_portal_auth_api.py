@@ -466,3 +466,167 @@ async def test_logout_missing_token(auth_app: Quart) -> None:
     )
 
     assert response.status_code == 400
+
+
+def _extract_set_cookie_names(response: Any) -> dict[str, str]:
+    """Map cookie name -> raw Set-Cookie header value for the given response."""
+    result = {}
+    for raw in response.headers.get_all("Set-Cookie"):
+        name = raw.split("=", 1)[0]
+        result[name] = raw
+    return result
+
+
+async def _create_and_login(
+    client: Any, real_dal: AsyncDB, email: str, password: str = "test_password_123"
+) -> Any:
+    """Create an active user and log in via the real /auth/login endpoint.
+
+    Returns:
+        The raw login Response (cookies land in the client's cookie jar).
+    """
+    await real_dal.users.async_insert(
+        id=str(uuid4()),
+        email=email,
+        username=email.split("@")[0],
+        password_hash=bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(),
+        tenant=str(uuid4()),
+        role="viewer",
+        is_active=True,
+        mfa_enabled=False,
+        mfa_secret=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    return await client.post("/api/v1/auth/login", json={"email": email, "password": password})
+
+
+class TestBrowserCookieAuth:
+    """Login/refresh/logout set/consume/clear HttpOnly cookies (Part 2).
+
+    Exercises the real endpoints end-to-end (real DB via real_dal, real
+    routing via the Quart test client + cookie jar) — not just the middleware
+    unit tests in test_middleware.py.
+    """
+
+    @pytest.mark.asyncio
+    async def test_login_sets_httponly_cookies_and_still_returns_json_body(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """Login sets access_token/refresh_token/csrf_token cookies AND keeps the JSON body.
+
+        The JSON body is unchanged so non-browser callers (mobile, CLI) that
+        never look at cookies keep working exactly as before.
+        """
+        client = auth_app.test_client()
+        response = await _create_and_login(client, real_dal, "cookie-login@example.com")
+
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert "access_token" in data and "refresh_token" in data
+
+        cookies = _extract_set_cookie_names(response)
+        assert set(cookies.keys()) == {"access_token", "refresh_token", "csrf_token"}
+        assert "HttpOnly" in cookies["access_token"]
+        assert "HttpOnly" in cookies["refresh_token"]
+        assert "HttpOnly" not in cookies["csrf_token"]
+        assert data["access_token"] in cookies["access_token"]
+        assert data["refresh_token"] in cookies["refresh_token"]
+
+    @pytest.mark.asyncio
+    async def test_cookie_authenticated_request_succeeds_without_bearer_header(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """After login, a request with NO Authorization header succeeds via the access_token cookie."""
+        client = auth_app.test_client()
+        await _create_and_login(client, real_dal, "cookie-get@example.com")
+
+        # Cookie jar carries the access_token cookie automatically; no
+        # Authorization header is sent at all.
+        response = await client.get("/api/v1/portal/manifest")
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_refresh_via_cookie_only_with_csrf_header_succeeds(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """POST /refresh-token with NO body, relying on the refresh_token cookie + CSRF header."""
+        client = auth_app.test_client()
+        await _create_and_login(client, real_dal, "cookie-refresh@example.com")
+
+        csrf_token = next(c.value for c in client.cookie_jar if c.name == "csrf_token")
+
+        response = await client.post(
+            "/api/v1/auth/refresh-token",
+            headers={"X-CSRF-Token": csrf_token},
+        )
+
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert "access_token" in data and "refresh_token" in data
+        # Cookies are rotated too.
+        cookies = _extract_set_cookie_names(response)
+        assert set(cookies.keys()) == {"access_token", "refresh_token", "csrf_token"}
+
+    @pytest.mark.asyncio
+    async def test_refresh_via_cookie_only_without_csrf_header_rejected(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """POST /refresh-token with NO body and NO X-CSRF-Token header is rejected 403."""
+        client = auth_app.test_client()
+        await _create_and_login(client, real_dal, "cookie-refresh-nocsrf@example.com")
+
+        response = await client.post("/api/v1/auth/refresh-token")
+
+        assert response.status_code == 403
+        data = await response.get_json()
+        assert "CSRF" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_via_body_token_exempt_from_csrf(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """A body-supplied refresh_token (non-browser caller) needs no CSRF header — unchanged behavior."""
+        client = auth_app.test_client()
+        login_response = await _create_and_login(client, real_dal, "body-refresh@example.com")
+        refresh_token = (await login_response.get_json())["refresh_token"]
+
+        # Deliberately do NOT send X-CSRF-Token — body-sourced tokens are exempt.
+        response = await client.post(
+            "/api/v1/auth/refresh-token",
+            json={"refresh_token": refresh_token},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_logout_via_cookie_only_clears_cookies(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """POST /logout with NO body, relying on the refresh_token cookie + CSRF header, clears all cookies."""
+        client = auth_app.test_client()
+        await _create_and_login(client, real_dal, "cookie-logout@example.com")
+
+        csrf_token = next(c.value for c in client.cookie_jar if c.name == "csrf_token")
+
+        response = await client.post(
+            "/api/v1/auth/logout",
+            headers={"X-CSRF-Token": csrf_token},
+        )
+
+        assert response.status_code == 204
+        cookies = _extract_set_cookie_names(response)
+        assert set(cookies.keys()) == {"access_token", "refresh_token", "csrf_token"}
+        for raw in cookies.values():
+            assert "Max-Age=0" in raw
+
+    @pytest.mark.asyncio
+    async def test_logout_via_cookie_only_without_csrf_header_rejected(
+        self, auth_app: Quart, real_dal: AsyncDB
+    ) -> None:
+        """POST /logout with NO body and NO X-CSRF-Token header is rejected 403."""
+        client = auth_app.test_client()
+        await _create_and_login(client, real_dal, "cookie-logout-nocsrf@example.com")
+
+        response = await client.post("/api/v1/auth/logout")
+
+        assert response.status_code == 403
