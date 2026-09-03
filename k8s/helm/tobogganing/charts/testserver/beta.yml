@@ -17,6 +17,7 @@ resources:
 config:
   authEnabled: "true"
   maxConcurrentTests: "50"
+  allowedOrigins: "https://tobogganing.penguintech.cloud"
 
 db:
   host: "testserver-mariadb.tobogganing.svc.cluster.local"
