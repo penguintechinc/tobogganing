@@ -61,6 +61,10 @@ service:
 config:
   authEnabled: "true"
   maxConcurrentTests: "100"
+  # CORS allowlist (comma-separated origins) for TESTSERVER_ALLOWED_ORIGINS.
+  # main.go treats empty/unset as deny-all — no wildcard fallback. Override
+  # per environment to the real portal origin(s) below.
+  allowedOrigins: ""
 
 # MariaDB connection (go-sql-driver/mysql) — see KNOWN GAP note above.
 # DB_PASS is never rendered by this chart: reference a pre-provisioned

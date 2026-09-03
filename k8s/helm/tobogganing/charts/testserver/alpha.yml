@@ -24,6 +24,7 @@ resources:
 config:
   authEnabled: "false"  # No JWT/API-key flow wired for alpha smoke tests yet
   maxConcurrentTests: "10"
+  allowedOrigins: "http://tobogganing.localhost.local"
 
 # Alpha: local dev MariaDB (operator-provisioned — see values.yaml KNOWN
 # GAP note; this chart does not deploy the DB itself).

@@ -20,6 +20,7 @@ resources:
 config:
   authEnabled: "true"
   maxConcurrentTests: "200"
+  allowedOrigins: "https://tobogganing.penguintech.io"
 
 # Production: point at an externally managed MariaDB (HA, backed up,
 # at-rest encryption) — never a self-hosted single pod. Override host to

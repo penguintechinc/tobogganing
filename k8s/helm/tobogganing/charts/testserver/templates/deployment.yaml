@@ -67,6 +67,8 @@ spec:
           value: {{ .Values.config.authEnabled | quote }}
         - name: MAX_CONCURRENT_TESTS
           value: {{ .Values.config.maxConcurrentTests | quote }}
+        - name: TESTSERVER_ALLOWED_ORIGINS
+          value: {{ .Values.config.allowedOrigins | quote }}
         - name: DB_HOST
           value: {{ .Values.db.host | quote }}
         - name: DB_PORT

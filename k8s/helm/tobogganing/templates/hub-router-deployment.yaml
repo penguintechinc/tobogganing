@@ -39,6 +39,12 @@ spec:
             - name: metrics
               containerPort: {{ .Values.hubRouter.ports.metrics }}
               protocol: TCP
+          env:
+            - name: PROXY_SESSION_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tobogganing.fullname" . }}-hub-router-signing
+                  key: PROXY_SESSION_SIGNING_KEY
           envFrom:
             - configMapRef:
                 name: {{ include "tobogganing.fullname" . }}-config
