@@ -687,8 +687,8 @@ class TestListClustersFlat:
         provider = app_with_headend.config["KEY_PROVIDER"]
         claims = {
             "sub": "user-1",
-            "iss": "test",
-            "aud": "test",
+            "iss": "tobogganing",
+            "aud": "tobogganing",
             "tenant": "acme",
             "scope": "clusters:read",
         }
@@ -728,8 +728,8 @@ class TestListClustersFlat:
         provider = app_with_headend.config["KEY_PROVIDER"]
         claims = {
             "sub": "user-1",
-            "iss": "test",
-            "aud": "test",
+            "iss": "tobogganing",
+            "aud": "tobogganing",
             "tenant": "acme",
             "scope": "clusters:read",
         }
@@ -750,8 +750,8 @@ class TestListClustersFlat:
         provider = app_with_headend.config["KEY_PROVIDER"]
         claims = {
             "sub": "user-1",
-            "iss": "test",
-            "aud": "test",
+            "iss": "tobogganing",
+            "aud": "tobogganing",
             "tenant": "acme",
             "scope": "clusters:read",
         }

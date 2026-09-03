@@ -22,6 +22,9 @@ def app_with_key_provider(app: Quart) -> Quart:
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by the valid_token fixture below, so
+    # _validate_and_store_token's aud/iss enforcement accepts it.
+    app.config["PRODUCT_NAME"] = "test-app"
     return app
 
 

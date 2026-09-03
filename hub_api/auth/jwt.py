@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import time
-from typing import Any, Optional
+from typing import Any
 
 import jwt as pyjwt
 
@@ -61,6 +61,9 @@ def decode_token(
     token: str,
     key_provider: KeyProvider,
     algorithms: list[str] | None = None,
+    *,
+    expected_iss: str | None = None,
+    expected_aud: str | None = None,
 ) -> dict[str, Any] | None:
     """
     Decode and validate an RS256 JWT token.
@@ -68,10 +71,23 @@ def decode_token(
     Validates signature, expiration, and presence of required 'tenant' claim.
     Returns None if the token is invalid, expired, or missing the 'tenant' claim.
 
+    aud/iss verification is opt-in via ``expected_iss``/``expected_aud`` and is
+    intentionally NOT performed by default: this decoder is shared across every
+    token type in the app (user JWTs, node/cluster JWTs, and machine JWTs), and
+    those legitimately use different audiences (e.g. user/node tokens use
+    ``aud=="tobogganing"``/``PRODUCT_NAME``, while headend machine-JWTs use
+    ``aud=="headend"``, checked separately by
+    ``auth/middleware.py::_extract_machine_identity``). Callers on a single,
+    known-audience path (e.g. ``auth/middleware.py::_validate_and_store_token``,
+    the general user-JWT path) should pass both to reject tokens minted for a
+    different issuer/audience.
+
     Args:
         token: Encoded JWT token string.
         key_provider: KeyProvider instance for verification.
         algorithms: List of allowed algorithms (default ["RS256"]).
+        expected_iss: If provided, reject tokens whose 'iss' claim doesn't match.
+        expected_aud: If provided, reject tokens whose 'aud' claim doesn't match.
 
     Returns:
         Dictionary of decoded claims if valid, None otherwise.
@@ -93,6 +109,12 @@ def decode_token(
 
         # Verify mandatory tenant claim
         if "tenant" not in claims:
+            return None
+
+        if expected_iss is not None and claims.get("iss") != expected_iss:
+            return None
+
+        if expected_aud is not None and claims.get("aud") != expected_aud:
             return None
 
         return claims

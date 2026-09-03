@@ -5,11 +5,11 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import pytest
 import jwt as pyjwt
+import pytest
 
 from hub_api.auth.jwt import decode_token, encode_access_token
-from hub_api.crypto import generate_rsa_key_pair, InAppKeyProvider
+from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
 
 
 @pytest.mark.asyncio
@@ -240,6 +240,100 @@ class TestJwtDecoding:
 
         assert "kid" in header
         assert header["kid"] == provider.kid
+
+
+class TestJwtDecodingAudIssEnforcement:
+    """Test decode_token's opt-in expected_iss/expected_aud enforcement.
+
+    Default behavior (no expected_iss/expected_aud passed) must stay
+    unchanged — the shared decoder backs multiple token types (user, node,
+    headend machine-JWT) with different audiences, each verified by its own
+    caller (see decode_token's docstring).
+    """
+
+    @pytest.mark.asyncio
+    async def test_decode_token_wrong_aud_rejected_when_expected(self) -> None:
+        """A mismatched aud is rejected when expected_aud is provided."""
+        private_pem, public_pem = generate_rsa_key_pair()
+        provider = InAppKeyProvider(private_pem, public_pem)
+
+        claims = {
+            "sub": "user123",
+            "iss": "tobogganing",
+            "aud": "headend",
+            "tenant": "tenant1",
+        }
+        token = await encode_access_token(claims, provider, ttl_hours=1)
+
+        decoded = decode_token(
+            token, provider, expected_iss="tobogganing", expected_aud="tobogganing"
+        )
+
+        assert decoded is None
+
+    @pytest.mark.asyncio
+    async def test_decode_token_wrong_iss_rejected_when_expected(self) -> None:
+        """A mismatched iss is rejected when expected_iss is provided."""
+        private_pem, public_pem = generate_rsa_key_pair()
+        provider = InAppKeyProvider(private_pem, public_pem)
+
+        claims = {
+            "sub": "user123",
+            "iss": "some-other-issuer",
+            "aud": "tobogganing",
+            "tenant": "tenant1",
+        }
+        token = await encode_access_token(claims, provider, ttl_hours=1)
+
+        decoded = decode_token(
+            token, provider, expected_iss="tobogganing", expected_aud="tobogganing"
+        )
+
+        assert decoded is None
+
+    @pytest.mark.asyncio
+    async def test_decode_token_matching_iss_aud_accepted(self) -> None:
+        """A token whose iss/aud both match is accepted."""
+        private_pem, public_pem = generate_rsa_key_pair()
+        provider = InAppKeyProvider(private_pem, public_pem)
+
+        claims = {
+            "sub": "user123",
+            "iss": "tobogganing",
+            "aud": "tobogganing",
+            "tenant": "tenant1",
+        }
+        token = await encode_access_token(claims, provider, ttl_hours=1)
+
+        decoded = decode_token(
+            token, provider, expected_iss="tobogganing", expected_aud="tobogganing"
+        )
+
+        assert decoded is not None
+        assert decoded["sub"] == "user123"
+
+    @pytest.mark.asyncio
+    async def test_decode_token_different_aud_still_accepted_when_not_checked(self) -> None:
+        """Without expected_iss/expected_aud, aud/iss are not enforced (unchanged default).
+
+        Confirms the machine-JWT (aud='headend') and node-token (aud='tobogganing')
+        call sites that don't pass these kwargs are unaffected by this change.
+        """
+        private_pem, public_pem = generate_rsa_key_pair()
+        provider = InAppKeyProvider(private_pem, public_pem)
+
+        claims = {
+            "sub": "cluster:c1",
+            "iss": "tobogganing",
+            "aud": "headend",
+            "tenant": "tenant1",
+        }
+        token = await encode_access_token(claims, provider, ttl_hours=1)
+
+        decoded = decode_token(token, provider)
+
+        assert decoded is not None
+        assert decoded["aud"] == "headend"
 
 
 class TestJwtRoundTrip:

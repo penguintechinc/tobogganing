@@ -40,6 +40,10 @@ async def app_all_perftest_realdal(real_dal: Any, monkeypatch: Any) -> Quart:
 
     test_app = create_app()
     test_app.config["TESTING"] = True
+    # Matches the "iss"/"aud" used by every token minted in this package's
+    # fixtures (pf_write_token/pf_readonly_token/pf_token_factory below), so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    test_app.config["PRODUCT_NAME"] = "test-app"
 
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)

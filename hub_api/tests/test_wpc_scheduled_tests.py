@@ -1,4 +1,5 @@
 """Tests for WaddlePerf Cluster scheduled server tests API."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -11,9 +12,7 @@ from quart import Quart
 
 
 @pytest_asyncio.fixture
-async def app_with_wpc_st(
-    real_dal: Any, monkeypatch: Any
-) -> Quart:
+async def app_with_wpc_st(real_dal: Any, monkeypatch: Any) -> Quart:
     """Create a test app with WaddlePerf Cluster module and real async database.
 
     This fixture patches get_db to return the real AsyncDB from real_dal,
@@ -26,11 +25,11 @@ async def app_with_wpc_st(
     Returns:
         Quart app with WaddlePerf Cluster module and real database.
     """
+    import hub_api.db
+    from hub_api.app import create_app
     from hub_api.auth.jwt import encode_access_token
     from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
     from hub_api.registry import ModuleContext
-    from hub_api.app import create_app
-    import hub_api.db
 
     # Create a fresh app without mocking db.init_dal
     test_app = create_app()
@@ -40,36 +39,43 @@ async def app_with_wpc_st(
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     test_app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    test_app.config["PRODUCT_NAME"] = "test-app"
 
     # Patch get_db to return the real AsyncDB
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     import hub_api.app as app_module
+
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
 
     # Patch the tests API module to use real DAL too
     import hub_api.modules.perftest_cluster.api.tests as tests_api
+
     monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
 
     # Patch scheduled_tests API module
     import hub_api.modules.perftest_cluster.api.scheduled_tests as st_api
+
     monkeypatch.setattr(st_api, "get_db", lambda: real_dal)
 
     # Enable all wpc feature flags for tests (bypass flag server)
     import shared.licensing.entitlements
+
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith(
-            "tobogganing.perftest.cluster."
-        ) or flag_key.startswith("tobogganing.perftest.client."):
+        if flag_key.startswith("tobogganing.perftest.cluster.") or flag_key.startswith(
+            "tobogganing.perftest.client."
+        ):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
     # Register WaddlePerf Cluster module via registry
-    from hub_api.modules.perftest_cluster import module as wpc_module
     from hub_api.modules.perftest_client import module as wpcl_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     wpc_contract = wpc_module()
     wpcl_contract = wpcl_module()
@@ -418,8 +424,8 @@ async def test_scheduled_tests_job_due_visibility(
 
     # Manually set next_run_at to the past to make it due
     await real_dal(
-        (real_dal.scheduled_jobs.id == job["id"]) &
-        (real_dal.scheduled_jobs.tenant == "test-tenant-job")
+        (real_dal.scheduled_jobs.id == job["id"])
+        & (real_dal.scheduled_jobs.tenant == "test-tenant-job")
     ).update(next_run_at=past)
 
     # Query due jobs
@@ -427,8 +433,7 @@ async def test_scheduled_tests_job_due_visibility(
 
     # Find our job in due jobs
     found = next(
-        (j for j in due
-         if j["id"] == job["id"] and j["tenant"] == "test-tenant-job"),
+        (j for j in due if j["id"] == job["id"] and j["tenant"] == "test-tenant-job"),
         None,
     )
     assert found is not None
@@ -445,9 +450,9 @@ async def test_run_server_test_task_stores_result(
     Args:
         real_dal: Real AsyncDB fixture.
     """
-    from hub_api.modules.perftest_cluster.worker.tasks import _run_server_test_async
-    from hub_api.modules.perftest_cluster.services.test_manager import TestManager
     from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
+    from hub_api.modules.perftest_cluster.services.test_manager import TestManager
+    from hub_api.modules.perftest_cluster.worker.tasks import _run_server_test_async
 
     tenant = "test-tenant-task"
 
@@ -464,12 +469,14 @@ async def test_run_server_test_task_stores_result(
     # Create a fake engine factory that returns a mocked engine
     def fake_engine_factory(device_row: dict[str, Any]):
         mock_engine = MagicMock()
+
         async def mock_run_test(test_type: str, target: str):
             return {
                 "latency_ms": 42.5,
                 "throughput": 100.0,
                 "output": "Test completed successfully",
             }
+
         mock_engine.run_test = mock_run_test
         return mock_engine
 
@@ -510,10 +517,10 @@ async def test_run_server_test_task_engine_error(
     Args:
         real_dal: Real AsyncDB fixture.
     """
-    from hub_api.modules.perftest_cluster.worker.tasks import _run_server_test_async
-    from hub_api.modules.perftest_cluster.services.test_manager import TestManager
     from hub_api.modules.perftest_cluster.services.device_manager import DeviceManager
     from hub_api.modules.perftest_cluster.services.engine_client import EngineError
+    from hub_api.modules.perftest_cluster.services.test_manager import TestManager
+    from hub_api.modules.perftest_cluster.worker.tasks import _run_server_test_async
 
     tenant = "test-tenant-error"
 
@@ -530,8 +537,10 @@ async def test_run_server_test_task_engine_error(
     # Create a fake engine factory that raises an error
     def fake_engine_factory(device_row: dict[str, Any]):
         mock_engine = MagicMock()
+
         async def mock_run_test_error(test_type: str, target: str):
             raise EngineError("Connection refused", status_code=500)
+
         mock_engine.run_test = mock_run_test_error
         return mock_engine
 

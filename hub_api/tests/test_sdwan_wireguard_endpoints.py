@@ -445,8 +445,8 @@ async def viewer_token(app_wg: Quart) -> str:
     provider = app_wg.config["KEY_PROVIDER"]
     claims = {
         "sub": "viewer-user",
-        "iss": "test-app",
-        "aud": "test-app",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
         "tenant": "test-tenant",
         "scope": "*:read",
     }

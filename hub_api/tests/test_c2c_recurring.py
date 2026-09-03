@@ -1,4 +1,5 @@
 """Tests for C2C recurring matrix runs using real penguin-dal."""
+
 from __future__ import annotations
 
 import json
@@ -7,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from quart import Quart
 from penguin_dal import AsyncDB
+from quart import Quart
 
 from hub_api.auth.jwt import encode_access_token
 from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
@@ -24,9 +25,11 @@ async def app_with_c2c_recurring_realdal(
     monkeypatch.setattr("hub_api.db.get_db", get_db_func)
 
     import hub_api.app
+
     monkeypatch.setattr(hub_api.app, "get_db", get_db_func)
 
     import hub_api.modules.perftest_c2c.api.recurring
+
     monkeypatch.setattr(hub_api.modules.perftest_c2c.api.recurring, "get_db", get_db_func)
 
     app_with_c2c.db = real_dal
@@ -61,13 +64,16 @@ async def test_recurring_runs_unlicensed_returns_402(
 
     This is the entitlement-key-trap test: feature flag enabled but no license.
     """
+    import shared.licensing.entitlements
     from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
     from hub_api.registry import ModuleContext
-    import shared.licensing.entitlements
 
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    app.config["PRODUCT_NAME"] = "test-app"
 
     # Flag ON for c2c recurring_runs, but licensing stays at its default (professional → False).
     original_flag_on = shared.licensing.entitlements._flag_on
@@ -129,7 +135,9 @@ async def test_entitlement_key_is_bare_not_prefixed() -> None:
 
     # Check that the prefixed key is NOT registered (regression guard)
     ent_prefixed = registry.entitlement_for("tobogganing.perftest.c2c.recurring_runs")
-    assert ent_prefixed is None, "entitlement_for('tobogganing.perftest.c2c.recurring_runs') must be None"
+    assert (
+        ent_prefixed is None
+    ), "entitlement_for('tobogganing.perftest.c2c.recurring_runs') must be None"
 
 
 # ============================================================================
@@ -144,8 +152,8 @@ async def test_recurring_crud_licensed(
     monkeypatch: Any,
 ) -> None:
     """Flag ON + Licensed → CRUD operations work."""
-    import shared.licensing.entitlements
     import hub_api.entitlements.gate
+    import shared.licensing.entitlements
 
     # Patch feature flag ON
     original_flag_on = shared.licensing.entitlements._flag_on
@@ -215,6 +223,7 @@ async def test_recurring_crud_licensed(
 async def test_start_recurring_run_creates_run(real_dal: AsyncDB) -> None:
     """start_recurring_run task creates a run row via RunManager."""
     from datetime import datetime, timezone
+
     from hub_api.modules.perftest_c2c.worker.tasks import _start_recurring_run
 
     # Create two test endpoints first
@@ -259,8 +268,7 @@ async def test_start_recurring_run_creates_run(real_dal: AsyncDB) -> None:
 
     # Verify the run exists in the database
     rowset = await real_dal(
-        (real_dal.c2c_matrix_runs.id == run_id)
-        & (real_dal.c2c_matrix_runs.tenant == tenant)
+        (real_dal.c2c_matrix_runs.id == run_id) & (real_dal.c2c_matrix_runs.tenant == tenant)
     ).select()
     run_row = rowset.first()
     assert run_row is not None
@@ -275,7 +283,7 @@ async def test_start_recurring_run_handles_error(real_dal: AsyncDB) -> None:
     payload = {"endpoint_ids": ["nonexistent"], "interval_seconds": 300}
 
     # This should not raise, just log
-    result = await _start_recurring_run(
+    await _start_recurring_run(
         job_id="test-job-2",
         tenant="test-tenant",
         module="perftest_c2c",
@@ -303,8 +311,8 @@ async def test_recurring_validation_interval_too_low(
     monkeypatch: Any,
 ) -> None:
     """interval_seconds < 30 → 400."""
-    import shared.licensing.entitlements
     import hub_api.entitlements.gate
+    import shared.licensing.entitlements
 
     original_flag_on = shared.licensing.entitlements._flag_on
 
@@ -340,8 +348,8 @@ async def test_recurring_validation_endpoint_ids_empty_list(
     monkeypatch: Any,
 ) -> None:
     """endpoint_ids as empty list → 400."""
-    import shared.licensing.entitlements
     import hub_api.entitlements.gate
+    import shared.licensing.entitlements
 
     original_flag_on = shared.licensing.entitlements._flag_on
 
@@ -377,8 +385,8 @@ async def test_recurring_validation_endpoint_ids_not_list(
     monkeypatch: Any,
 ) -> None:
     """endpoint_ids not a list → 400."""
-    import shared.licensing.entitlements
     import hub_api.entitlements.gate
+    import shared.licensing.entitlements
 
     original_flag_on = shared.licensing.entitlements._flag_on
 

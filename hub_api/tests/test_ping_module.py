@@ -1,4 +1,5 @@
 """Tests for the ping module."""
+
 from __future__ import annotations
 
 import time
@@ -30,6 +31,9 @@ def app_with_ping(app: Quart, mock_db: MagicMock) -> Quart:
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    app.config["PRODUCT_NAME"] = "test-app"
 
     # Manually apply the registry to ensure routes are mounted
     # This is necessary because before_serving doesn't run in test contexts

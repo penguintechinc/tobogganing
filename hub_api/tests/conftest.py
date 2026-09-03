@@ -297,6 +297,12 @@ def app_with_sase(app: Quart, mock_db: MagicMock) -> Quart:
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Deliberately NOT overriding PRODUCT_NAME here — it stays at the `app`
+    # fixture's default ("tobogganing"), matching the majority of this
+    # fixture's consumers (test_sase_api_crypto.py, test_headend_policy_routes.py,
+    # test_sase_swg_api_routes.py all mint literal iss/aud="tobogganing"
+    # tokens against this same app). valid_tenant_token/valid_write_token
+    # below use "tobogganing" too, for consistency.
 
     # Register SASE module via registry (combines module prefix + blueprint prefix)
     from hub_api.modules.sase import module as sase_module
@@ -327,8 +333,8 @@ async def valid_tenant_token(app_with_sase: Quart) -> str:
 
     claims = {
         "sub": "test-user",
-        "iss": "test-app",
-        "aud": "test-app",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
         "tenant": "test-tenant",
         "scope": "clusters:read clients:read status:read wireguard:read wireguard:write",
     }
@@ -353,8 +359,8 @@ async def valid_write_token(app_with_sase: Quart) -> str:
 
     claims = {
         "sub": "test-user",
-        "iss": "test-app",
-        "aud": "test-app",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
         "tenant": "test-tenant",
         "scope": "*:*",
     }
@@ -402,6 +408,9 @@ def app_with_wpc(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by wpc_*_token fixtures below, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    app.config["PRODUCT_NAME"] = "test-app"
 
     # Enable all wpc feature flags for tests (bypass flag server)
     import shared.licensing.entitlements
@@ -537,6 +546,9 @@ def app_with_c2c(app: Quart, mock_db: MagicMock, monkeypatch: Any) -> Quart:
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by c2c_*_token fixtures below, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    app.config["PRODUCT_NAME"] = "test-app"
 
     # Enable all c2c feature flags for tests (bypass flag server)
     import shared.licensing.entitlements
