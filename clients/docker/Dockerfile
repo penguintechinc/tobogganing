@@ -54,8 +54,13 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
     CMD ["/bin/sh", "-c", "/app/scripts/health-check.sh || exit 1"]
 
 # Expose WireGuard port (though typically this client initiates connections)
+# Create non-root user for runtime
+RUN addgroup -S appuser && adduser -S -G appuser appuser &&\
+    chown -R appuser:appuser /app
 EXPOSE 51820/udp
 
 # Set working directory and entrypoint
 WORKDIR /app
+# hadolint ignore=DL3066
+USER appuser
 ENTRYPOINT ["/app/entrypoint.sh"]

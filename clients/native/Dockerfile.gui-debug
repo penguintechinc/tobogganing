@@ -44,3 +44,7 @@ RUN echo "=== Checking go env ===" && \
     CGO_ENABLED=1 go build -v ./internal/gui || true && \
     echo "=== Trying to build with verbose output ===" && \
     CGO_ENABLED=1 go build -x -v ./cmd/gui 2>&1 || true
+# Create non-root user for runtime
+RUN useradd -m -u 1000 appuser
+# hadolint ignore=DL3066
+USER appuser

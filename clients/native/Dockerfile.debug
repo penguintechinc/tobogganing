@@ -20,3 +20,5 @@ RUN echo "=== File structure ===" && \
     head -20 go.mod && \
     echo "=== Go version ===" && \
     go version
+# hadolint ignore=DL3066
+USER appuser
