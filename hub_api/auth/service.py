@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 from dataclasses import dataclass
@@ -27,6 +28,15 @@ ROLE_SCOPES: dict[str, list[str]] = {
     "maintainer": ["*:read", "*:write"],
     "viewer": ["*:read"],
 }
+
+# Precomputed at import time (not per-request) so an unknown-email login
+# still pays the same bcrypt cost as a real password check — otherwise
+# response time leaks whether an email exists (timing-based user
+# enumeration). The plaintext compared here is fixed/unused; only the hash's
+# work factor (bcrypt.gensalt() default, matching real user hashes) matters.
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(
+    b"dummy-password-for-constant-time-comparison", bcrypt.gensalt()
+).decode("utf-8")
 
 
 @dataclass(slots=True)
@@ -89,14 +99,19 @@ class AuthService:
             # Query user by email
             rowset = await self.db(self.db.users.email == email).select()
             user = rowset.first()
-            if not user:
-                return AuthResult(success=False, error="Invalid email or password")
 
-            # Verify password
-            if not bcrypt.checkpw(
+            # Always run bcrypt.checkpw at the same cost, even when the
+            # email doesn't exist — comparing against a precomputed dummy
+            # hash for unknown users prevents timing-based user enumeration
+            # (an unknown email must take as long as a wrong password).
+            password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
+            password_valid = await asyncio.to_thread(
+                bcrypt.checkpw,
                 password.encode("utf-8"),
-                user.password_hash.encode("utf-8"),
-            ):
+                password_hash.encode("utf-8"),
+            )
+
+            if not user or not password_valid:
                 return AuthResult(success=False, error="Invalid email or password")
 
             # Check if user is active
