@@ -1566,9 +1566,11 @@ func TestSpeedTestUploadHandler_ContentType(t *testing.T) {
 	if rr.Header().Get("Content-Type") != "application/json" {
 		t.Errorf("expected Content-Type=application/json, got %q", rr.Header().Get("Content-Type"))
 	}
-	// Verify CORS header is set
-	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("expected Access-Control-Allow-Origin header to be set")
+	// CORS is applied by corsMiddleware (config-driven allowlist) in
+	// cmd/testserver/main.go, not by the handler directly — calling the
+	// handler in isolation here must never set a wildcard origin.
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Error("handler must not set Access-Control-Allow-Origin: * directly")
 	}
 }
 
@@ -1603,12 +1605,17 @@ func TestSpeedTestDownloadHandler_AllHeaders(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
-	// Verify all headers are set
-	headers := []string{"Content-Type", "Content-Length", "Cache-Control", "Pragma", "Access-Control-Allow-Origin", "Access-Control-Expose-Headers"}
+	// Verify all headers the handler itself is responsible for are set.
+	// Access-Control-Allow-Origin is intentionally excluded — it's applied
+	// by corsMiddleware in cmd/testserver/main.go, not the handler.
+	headers := []string{"Content-Type", "Content-Length", "Cache-Control", "Pragma", "Access-Control-Expose-Headers"}
 	for _, header := range headers {
 		if rr.Header().Get(header) == "" {
 			t.Errorf("expected %s header to be set", header)
 		}
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Error("handler must not set Access-Control-Allow-Origin: * directly")
 	}
 }
 
@@ -1742,7 +1749,7 @@ func TestSpeedTestUploadHandler_IOError(t *testing.T) {
 func TestSpeedTestDownloadHandler_WriterError(t *testing.T) {
 	h := newHandlers()
 	req := httptest.NewRequest(http.MethodGet, "/speedtest/download?size=1", nil)
-	
+
 	// Use a custom response writer that fails after headers
 	failWriter := &failingWriter{}
 	h.SpeedTestDownloadHandler(failWriter, req)
