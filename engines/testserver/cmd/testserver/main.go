@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -36,7 +37,14 @@ func main() {
 	port := getEnv("PORT", "8080")
 	maxConcurrent := getEnv("MAX_CONCURRENT_TESTS", "100")
 
-	log.Printf("Config: db_type=%s, auth_enabled=%v, max_concurrent=%s", dbConfig.Type, authEnabled, maxConcurrent)
+	// CORS is config-driven — no wildcard fallback. Unset/empty means the
+	// allowlist is empty, so corsMiddleware denies every cross-origin
+	// request (no Access-Control-Allow-Origin header at all) rather than
+	// defaulting to "*".
+	allowedOrigins := parseAllowedOrigins(getEnv("TESTSERVER_ALLOWED_ORIGINS", ""))
+	corsMW := newCORSMiddleware(allowedOrigins)
+
+	log.Printf("Config: db_type=%s, auth_enabled=%v, max_concurrent=%s, allowed_origins=%d", dbConfig.Type, authEnabled, maxConcurrent, len(allowedOrigins))
 
 	// The backing store starts degraded so /health and every DB-independent
 	// endpoint serve immediately — connectDB dials (with database.New()'s
@@ -64,7 +72,7 @@ func main() {
 
 	// SpeedTest endpoints (no auth required for public speedtest functionality)
 	speedtest := router.PathPrefix("/speedtest").Subrouter()
-	speedtest.Use(corsMiddleware)
+	speedtest.Use(corsMW)
 	speedtest.HandleFunc("/download", testHandlers.SpeedTestDownloadHandler).Methods("GET")
 	speedtest.HandleFunc("/upload", testHandlers.SpeedTestUploadHandler).Methods("POST", "OPTIONS")
 	speedtest.HandleFunc("/ping", testHandlers.SpeedTestPingHandler).Methods("GET")
@@ -74,7 +82,7 @@ func main() {
 	// API routes (with auth)
 	api := router.PathPrefix("/api/v1").Subrouter()
 	api.Use(authenticator.Middleware)
-	api.Use(corsMiddleware)
+	api.Use(corsMW)
 	api.Use(requestSizeLimitMiddleware)
 
 	api.HandleFunc("/test/http", testHandlers.HTTPTestHandler).Methods("POST")
@@ -179,19 +187,46 @@ func connectDB(cfg database.Config, store *switchableStore) {
 	log.Println("✓ database connected — auth and result storage now active")
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Device-Serial, X-Device-Hostname, X-Device-OS, X-Device-OS-Version")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
+// parseAllowedOrigins splits a comma-separated origin list (e.g. the
+// TESTSERVER_ALLOWED_ORIGINS env var) into a lookup set, trimming
+// whitespace and dropping empty entries. An unset/empty input yields an
+// empty set — newCORSMiddleware treats that as deny-all, never a wildcard.
+func parseAllowedOrigins(raw string) map[string]bool {
+	origins := make(map[string]bool)
+	for _, o := range strings.Split(raw, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origins[o] = true
 		}
+	}
+	return origins
+}
 
-		next.ServeHTTP(w, r)
-	})
+// newCORSMiddleware returns middleware that echoes back Access-Control-*
+// headers only for an Origin present in allowedOrigins. Any other origin
+// (including no allowlist configured at all) gets no CORS allow header —
+// deny by default, never "*". This must never be paired with
+// Access-Control-Allow-Credentials: an allowlisted-origin echo plus
+// credentials is safe, but a wildcard plus credentials is not, so we
+// simply never set the credentials header here.
+func newCORSMiddleware(allowedOrigins map[string]bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && allowedOrigins[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Device-Serial, X-Device-Hostname, X-Device-OS, X-Device-OS-Version")
+			}
+
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // requestSizeLimitMiddleware limits request body size to prevent DoS

@@ -32,7 +32,8 @@ func (h *TestHandlers) SpeedTestDownloadHandler(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", sizeBytes))
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Access-Control-Allow-Origin is set by corsMiddleware (config-driven
+	// allowlist) in cmd/testserver/main.go — never hardcode "*" here.
 	w.Header().Set("Access-Control-Expose-Headers", "Content-Length")
 
 	// Generate and stream random data
@@ -89,7 +90,6 @@ func (h *TestHandlers) SpeedTestUploadHandler(w http.ResponseWriter, r *http.Req
 
 	// Return success with stats
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":         true,
 		"bytes_received":  bytesReceived,
@@ -103,7 +103,6 @@ func (h *TestHandlers) SpeedTestPingHandler(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"pong":      true,
@@ -114,7 +113,6 @@ func (h *TestHandlers) SpeedTestPingHandler(w http.ResponseWriter, r *http.Reque
 // SpeedTestInfoHandler returns server capabilities and configuration
 func (h *TestHandlers) SpeedTestInfoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"name":                  "WaddlePerf SpeedTest",
@@ -157,7 +155,6 @@ func (h *TestHandlers) SpeedTestResultHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": "Speedtest result saved successfully",

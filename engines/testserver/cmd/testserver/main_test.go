@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -85,5 +87,105 @@ func TestConnectDB_NeverPanicsOnUnreachableHost(t *testing.T) {
 
 	if db := store.db.Load(); db != nil {
 		t.Error("expected store to remain unavailable after a failed connect")
+	}
+}
+
+// TestParseAllowedOrigins covers the TESTSERVER_ALLOWED_ORIGINS parsing
+// used to build the CORS allowlist: comma-separated, whitespace-trimmed,
+// empty entries dropped, and an empty/unset input yielding an empty set
+// (deny-all — never a wildcard).
+func TestParseAllowedOrigins(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{"empty", "", nil},
+		{"single", "https://a.example.com", []string{"https://a.example.com"}},
+		{"multiple", "https://a.example.com,https://b.example.com", []string{"https://a.example.com", "https://b.example.com"}},
+		{"whitespace and blanks trimmed", " https://a.example.com , , https://b.example.com ", []string{"https://a.example.com", "https://b.example.com"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseAllowedOrigins(tt.raw)
+			if len(got) != len(tt.want) {
+				t.Fatalf("parseAllowedOrigins(%q) = %v, want %v", tt.raw, got, tt.want)
+			}
+			for _, o := range tt.want {
+				if !got[o] {
+					t.Errorf("parseAllowedOrigins(%q) missing origin %q, got %v", tt.raw, o, got)
+				}
+			}
+		})
+	}
+}
+
+// TestCORSMiddleware_AllowlistedOriginEchoed is the regression test for the
+// wildcard-CORS finding: a request from a configured origin must get that
+// exact origin echoed back on Access-Control-Allow-Origin (never "*"), and
+// Access-Control-Allow-Credentials must never be set alongside it.
+func TestCORSMiddleware_AllowlistedOriginEchoed(t *testing.T) {
+	mw := newCORSMiddleware(parseAllowedOrigins("https://allowed.example.com"))
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/speedtest/info", nil)
+	req.Header.Set("Origin", "https://allowed.example.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://allowed.example.com" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://allowed.example.com")
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("Access-Control-Allow-Credentials = %q, want unset (never paired with an origin allowlist)", got)
+	}
+}
+
+// TestCORSMiddleware_NonAllowlistedOriginGetsNoWildcard is the primary
+// regression test for the wildcard-CORS finding: an origin absent from the
+// allowlist must never receive "*", and must not get an
+// Access-Control-Allow-Origin header at all — deny by default.
+func TestCORSMiddleware_NonAllowlistedOriginGetsNoWildcard(t *testing.T) {
+	mw := newCORSMiddleware(parseAllowedOrigins("https://allowed.example.com"))
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/speedtest/info", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	got := rec.Header().Get("Access-Control-Allow-Origin")
+	if got == "*" {
+		t.Fatal("Access-Control-Allow-Origin = \"*\", wildcard must never be emitted")
+	}
+	if got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset for a non-allowlisted origin", got)
+	}
+}
+
+// TestCORSMiddleware_EmptyAllowlistDeniesAll covers the deny-by-default
+// fallback: with TESTSERVER_ALLOWED_ORIGINS unset (empty allowlist), no
+// origin gets a CORS allow header — never a wildcard fallback.
+func TestCORSMiddleware_EmptyAllowlistDeniesAll(t *testing.T) {
+	mw := newCORSMiddleware(parseAllowedOrigins(""))
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/speedtest/info", nil)
+	req.Header.Set("Origin", "https://anything.example.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset with an empty allowlist", got)
 	}
 }
