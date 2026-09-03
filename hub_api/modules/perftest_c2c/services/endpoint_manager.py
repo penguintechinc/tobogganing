@@ -1,13 +1,15 @@
 """Cluster-to-cluster endpoint management using penguin-dal."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import secrets
-import structlog
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+
+import structlog
 
 logger = structlog.get_logger()
 
@@ -192,15 +194,12 @@ class EndpointManager:
             "name": endpoint.name,
             "engine_url": endpoint.engine_url,
             "target": endpoint.target,
-            "api_key_hash": endpoint.api_key_hash,
             "enabled": endpoint.enabled,
             "visibility": endpoint.visibility,
             "provider": endpoint.provider,
             "health_status": endpoint.health_status,
             "last_health_check": (
-                endpoint.last_health_check.isoformat()
-                if endpoint.last_health_check
-                else None
+                endpoint.last_health_check.isoformat() if endpoint.last_health_check else None
             ),
             "created_at": endpoint.created_at.isoformat() if endpoint.created_at else None,
             "updated_at": endpoint.updated_at.isoformat() if endpoint.updated_at else None,
@@ -270,9 +269,7 @@ class EndpointManager:
         own_rowset = await self.db(self.db.c2c_endpoints.tenant == tenant).select()
 
         # Get all public endpoints from any tenant
-        public_rowset = await self.db(
-            self.db.c2c_endpoints.visibility == "public"
-        ).select()
+        public_rowset = await self.db(self.db.c2c_endpoints.visibility == "public").select()
 
         # Combine and aggregate by region
         endpoints = list(own_rowset) if own_rowset else []
@@ -338,9 +335,7 @@ class EndpointManager:
                 & (self.db.c2c_endpoints.region == region)
             ).select()
         else:
-            public_rowset = await self.db(
-                self.db.c2c_endpoints.visibility == "public"
-            ).select()
+            public_rowset = await self.db(self.db.c2c_endpoints.visibility == "public").select()
 
         result = []
 
@@ -353,11 +348,11 @@ class EndpointManager:
         if public_rowset:
             for ep in public_rowset:
                 if ep.tenant != tenant:  # Foreign
-                    # Redact sensitive fields
+                    # Redact sensitive fields (api_key_hash is never included
+                    # in the projection; see _endpoint_to_dict)
                     redacted = self._endpoint_to_dict(ep)
                     del redacted["engine_url"]
                     del redacted["target"]
-                    del redacted["api_key_hash"]
                     result.append(redacted)
 
         return result
@@ -393,9 +388,7 @@ class EndpointManager:
         return True
 
 
-async def authenticate_node_global(
-    db: Any, api_key: str
-) -> tuple[dict[str, object], str] | None:
+async def authenticate_node_global(db: Any, api_key: str) -> tuple[dict[str, object], str] | None:
     """Authenticate a node globally by API key without trusting tenant.
 
     Searches across all tenants, validates the key hash with constant-time
@@ -455,15 +448,12 @@ async def authenticate_node_global(
             "name": endpoint.name,
             "engine_url": endpoint.engine_url,
             "target": endpoint.target,
-            "api_key_hash": endpoint.api_key_hash,
             "enabled": endpoint.enabled,
             "visibility": endpoint.visibility,
             "provider": endpoint.provider,
             "health_status": endpoint.health_status,
             "last_health_check": (
-                endpoint.last_health_check.isoformat()
-                if endpoint.last_health_check
-                else None
+                endpoint.last_health_check.isoformat() if endpoint.last_health_check else None
             ),
             "created_at": endpoint.created_at.isoformat() if endpoint.created_at else None,
             "updated_at": endpoint.updated_at.isoformat() if endpoint.updated_at else None,

@@ -1,4 +1,5 @@
 """Tests for SASE API cluster endpoints."""
+
 from __future__ import annotations
 
 import os
@@ -36,9 +37,7 @@ async def test_register_cluster_without_token(app_with_sase: Quart) -> None:
 
 
 @pytest.mark.asyncio
-async def test_register_cluster_with_token(
-    app_with_sase: Quart, bootstrap_token: str
-) -> None:
+async def test_register_cluster_with_token(app_with_sase: Quart, bootstrap_token: str) -> None:
     """Test cluster registration with valid bootstrap token.
 
     Args:
@@ -49,12 +48,9 @@ async def test_register_cluster_with_token(
     os.environ["ENROLLMENT_BOOTSTRAP_TOKEN"] = bootstrap_token
 
     client = app_with_sase.test_client()
-    mock_db = app_with_sase.db
 
     # Mock the cluster manager
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
 
@@ -114,9 +110,7 @@ async def test_list_clusters_without_token(app_with_sase: Quart) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_clusters_with_token(
-    app_with_sase: Quart, valid_tenant_token: str
-) -> None:
+async def test_list_clusters_with_token(app_with_sase: Quart, valid_tenant_token: str) -> None:
     """Test list clusters with valid JWT token and enabled flag.
 
     Args:
@@ -159,9 +153,7 @@ async def test_list_clusters_with_token(
 
 
 @pytest.mark.asyncio
-async def test_list_clusters_flag_disabled(
-    app_with_sase: Quart, valid_tenant_token: str
-) -> None:
+async def test_list_clusters_flag_disabled(app_with_sase: Quart, valid_tenant_token: str) -> None:
     """Test list clusters returns 402 when flag disabled.
 
     Args:
@@ -205,7 +197,7 @@ async def test_list_clusters_tenant_isolation(
         with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
             mock_flag.return_value = True
 
-            response = await client.get(
+            await client.get(
                 "/api/v1/sdwan/clusters",
                 headers={"Authorization": f"Bearer {valid_tenant_token}"},
             )
@@ -237,9 +229,7 @@ async def test_cluster_heartbeat_without_token(app_with_sase: Quart) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cluster_heartbeat_with_token(
-    app_with_sase: Quart
-) -> None:
+async def test_cluster_heartbeat_with_token(app_with_sase: Quart) -> None:
     """Test cluster heartbeat with valid per-cluster API key.
 
     Regression test: heartbeat must use per-cluster key, not shared bootstrap token.
@@ -250,9 +240,7 @@ async def test_cluster_heartbeat_with_token(
     client = app_with_sase.test_client()
     api_key = "test-cluster-api-key"
 
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
         mock_mgr.initialize = AsyncMock()
@@ -297,9 +285,7 @@ async def test_cluster_heartbeat_with_invalid_key(app_with_sase: Quart) -> None:
     client = app_with_sase.test_client()
     api_key = "invalid-key"
 
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
         mock_mgr.initialize = AsyncMock()
@@ -330,9 +316,7 @@ async def test_cluster_heartbeat_cluster_id_mismatch(app_with_sase: Quart) -> No
     client = app_with_sase.test_client()
     api_key = "cluster-a-key"
 
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
         mock_mgr.initialize = AsyncMock()
@@ -374,9 +358,7 @@ async def test_get_headend_config_with_invalid_key(app_with_sase: Quart) -> None
     client = app_with_sase.test_client()
     api_key = "invalid-key"
 
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
         mock_mgr.initialize = AsyncMock()
@@ -406,9 +388,7 @@ async def test_get_headend_config_cluster_id_mismatch(app_with_sase: Quart) -> N
     client = app_with_sase.test_client()
     api_key = "tenant-a-cluster-key"
 
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
         mock_mgr.initialize = AsyncMock()
@@ -438,18 +418,20 @@ async def test_get_headend_config_cluster_id_mismatch(app_with_sase: Quart) -> N
 
 
 @pytest.mark.asyncio
-async def test_get_headend_config_with_valid_key(app_with_sase: Quart) -> None:
+async def test_get_headend_config_with_valid_key(
+    app_with_sase: Quart, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test getting headend config with valid per-cluster API key.
 
     Args:
         app_with_sase: Test app with SASE module.
+        monkeypatch: pytest fixture for env var patching.
     """
+    monkeypatch.setenv("MANAGER_URL", "https://manager.penguintech.cloud")
     client = app_with_sase.test_client()
     api_key = "test-cluster-key"
 
-    with patch(
-        "hub_api.modules.sdwan.api.clusters.ClusterManager"
-    ) as mock_manager_class:
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
         mock_mgr = AsyncMock()
         mock_manager_class.return_value = mock_mgr
         mock_mgr.initialize = AsyncMock()
@@ -479,3 +461,93 @@ async def test_get_headend_config_with_valid_key(app_with_sase: Quart) -> None:
         assert "wireguard" in data["config"]
         # Verify authenticate_cluster was called (per-cluster auth)
         mock_mgr.authenticate_cluster.assert_called_once_with(api_key)
+
+
+@pytest.mark.asyncio
+async def test_get_headend_config_manager_url_ignores_host_header(
+    app_with_sase: Quart, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """manager_url comes from MANAGER_URL env, never the request Host header.
+
+    Regression: host-header trust — an attacker-controlled Host header on
+    this API-key-authenticated enrollment endpoint must not be able to
+    redirect a cluster's JWT-validation callbacks to an arbitrary host.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+        monkeypatch: pytest fixture for env var patching.
+    """
+    monkeypatch.setenv("MANAGER_URL", "https://manager.penguintech.cloud")
+    client = app_with_sase.test_client()
+    api_key = "test-cluster-key"
+
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
+        mock_mgr = AsyncMock()
+        mock_manager_class.return_value = mock_mgr
+        mock_mgr.initialize = AsyncMock()
+
+        cluster = Cluster(
+            id="cluster-1",
+            name="test-cluster",
+            region="us-east-1",
+            datacenter="dc1",
+            headend_url="https://headend.example.com",
+            status="active",
+            last_heartbeat=datetime.now(timezone.utc),
+            client_count=0,
+            tenant="test-tenant",
+        )
+        mock_mgr.authenticate_cluster = AsyncMock(return_value=cluster)
+
+        response = await client.get(
+            "/api/v1/sdwan/clusters/cluster-1/headend-config",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Host": "attacker.evil.example.com",
+            },
+        )
+
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["config"]["auth"]["manager_url"] == "https://manager.penguintech.cloud"
+        assert "attacker.evil.example.com" not in data["config"]["auth"]["manager_url"]
+
+
+@pytest.mark.asyncio
+async def test_get_headend_config_fails_closed_without_manager_url(
+    app_with_sase: Quart, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing MANAGER_URL config fails closed (500), never falls back to the Host header.
+
+    Args:
+        app_with_sase: Test app with SASE module.
+        monkeypatch: pytest fixture for env var patching.
+    """
+    monkeypatch.delenv("MANAGER_URL", raising=False)
+    client = app_with_sase.test_client()
+    api_key = "test-cluster-key"
+
+    with patch("hub_api.modules.sdwan.api.clusters.ClusterManager") as mock_manager_class:
+        mock_mgr = AsyncMock()
+        mock_manager_class.return_value = mock_mgr
+        mock_mgr.initialize = AsyncMock()
+
+        cluster = Cluster(
+            id="cluster-1",
+            name="test-cluster",
+            region="us-east-1",
+            datacenter="dc1",
+            headend_url="https://headend.example.com",
+            status="active",
+            last_heartbeat=datetime.now(timezone.utc),
+            client_count=0,
+            tenant="test-tenant",
+        )
+        mock_mgr.authenticate_cluster = AsyncMock(return_value=cluster)
+
+        response = await client.get(
+            "/api/v1/sdwan/clusters/cluster-1/headend-config",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+
+        assert response.status_code == 500

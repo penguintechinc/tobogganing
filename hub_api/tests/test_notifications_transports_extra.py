@@ -18,6 +18,20 @@ import pytest
 from hub_api.notifications.transports import EmailTransport, TransportError, WebhookTransport
 
 
+@pytest.fixture(autouse=True)
+def _mock_safe_webhook_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every webhook hostname to a safe public IP (8.8.8.8).
+
+    Keeps WebhookTransport's SSRF guard (real DNS resolution via
+    assert_safe_feed_url) out of these unit tests. SSRF guard behavior
+    itself is covered by test_notifications_transports_ssrf.py.
+    """
+    monkeypatch.setattr(
+        "hub_api.modules.threatintel.feeds.url_safety._resolve_addresses_sync",
+        lambda host: ["8.8.8.8"],
+    )
+
+
 class TestTransportError:
     """Tests for TransportError.__str__."""
 

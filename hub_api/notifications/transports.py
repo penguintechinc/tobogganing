@@ -1,4 +1,5 @@
 """Notification delivery transports (email, webhook)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,11 +10,13 @@ import os
 import smtplib
 from dataclasses import dataclass
 from datetime import datetime
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import httpx
 import structlog
+
+from hub_api.modules.threatintel.feeds.url_safety import UnsafeFeedURLError, assert_safe_feed_url
 
 log = structlog.get_logger(__name__)
 
@@ -113,7 +116,10 @@ class WebhookTransport:
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create async HTTP client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
+            # SSRF hardening: never auto-follow redirects. A malicious or
+            # compromised webhook target could redirect to an internal
+            # address after the resolved-address check in send() passes.
+            self._client = httpx.AsyncClient(timeout=self.timeout, follow_redirects=False)
         return self._client
 
     async def send(self, url: str, secret: str, subject: str, body: str) -> None:
@@ -131,6 +137,17 @@ class WebhookTransport:
         if not url.startswith("https://"):
             raise TransportError("Webhook URL must use https")
 
+        # SSRF guard: resolve the host and reject loopback/link-local/
+        # private/reserved addresses before making the request — the same
+        # resolved-address guard used for threatintel feed source URLs.
+        # Re-checked on every send() call since DNS can rebind between
+        # channel creation and delivery time.
+        try:
+            await assert_safe_feed_url(url)
+        except UnsafeFeedURLError as e:
+            log.error("webhook_unsafe_url", url=url, error=str(e))
+            raise TransportError("Webhook URL is not allowed", details=str(e)) from e
+
         try:
             client = await self._get_client()
 
@@ -146,11 +163,14 @@ class WebhookTransport:
             json_body = json.dumps(payload, separators=(",", ":"))
 
             # Compute HMAC-SHA256 signature
-            signature = "sha256=" + hmac.new(
-                secret.encode(),
-                json_body.encode(),
-                hashlib.sha256,
-            ).hexdigest()
+            signature = (
+                "sha256="
+                + hmac.new(
+                    secret.encode(),
+                    json_body.encode(),
+                    hashlib.sha256,
+                ).hexdigest()
+            )
 
             # Send POST request
             headers = {

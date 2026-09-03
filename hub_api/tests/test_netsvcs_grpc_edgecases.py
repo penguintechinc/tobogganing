@@ -1104,3 +1104,137 @@ async def test_create_grpc_server_insecure_success(
 
     assert server is not None
     await server.stop(grace=None)
+
+
+# --- create_grpc_server: reflection gating + resource limits (H4) ------------
+
+
+@pytest.mark.asyncio
+async def test_create_grpc_server_reflection_disabled_by_default(
+    mock_db: AsyncMock,
+    mock_cache: AsyncMock,
+    mock_key_provider: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reflection is NOT enabled unless NETSVCS_GRPC_REFLECTION_ENABLED=1."""
+    from hub_api.modules.netsvcs.grpc.server import create_grpc_server
+
+    monkeypatch.delenv("NETSVCS_GRPC_REFLECTION_ENABLED", raising=False)
+    monkeypatch.setenv("NETSVCS_GRPC_INSECURE", "1")
+
+    with patch("grpc_reflection.v1alpha.reflection.enable_server_reflection") as mock_reflect:
+        server = await create_grpc_server(
+            db=mock_db,
+            cache=mock_cache,
+            key_provider=mock_key_provider,
+            port=50995,
+            use_tls=False,
+        )
+
+    mock_reflect.assert_not_called()
+    await server.stop(grace=None)
+
+
+@pytest.mark.asyncio
+async def test_create_grpc_server_reflection_enabled_when_opted_in(
+    mock_db: AsyncMock, mock_cache: AsyncMock, mock_key_provider: Mock
+) -> None:
+    """Reflection IS enabled when NETSVCS_GRPC_REFLECTION_ENABLED=1 (dev-only opt-in)."""
+    from hub_api.modules.netsvcs.grpc.server import create_grpc_server
+
+    with (
+        patch.dict(
+            os.environ,
+            {"NETSVCS_GRPC_INSECURE": "1", "NETSVCS_GRPC_REFLECTION_ENABLED": "1"},
+            clear=False,
+        ),
+        patch("grpc_reflection.v1alpha.reflection.enable_server_reflection") as mock_reflect,
+    ):
+        server = await create_grpc_server(
+            db=mock_db,
+            cache=mock_cache,
+            key_provider=mock_key_provider,
+            port=50994,
+            use_tls=False,
+        )
+
+    mock_reflect.assert_called_once()
+    await server.stop(grace=None)
+
+
+@pytest.mark.asyncio
+async def test_create_grpc_server_applies_default_message_and_concurrency_limits(
+    mock_db: AsyncMock,
+    mock_cache: AsyncMock,
+    mock_key_provider: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """create_grpc_server() sets bounded message size + max concurrent RPCs by default."""
+    from hub_api.modules.netsvcs.grpc.server import create_grpc_server
+
+    real_server_factory = grpc.aio.server
+    captured: dict[str, object] = {}
+
+    def fake_server_factory(*args: object, **kwargs: object) -> object:
+        captured["kwargs"] = kwargs
+        return real_server_factory(*args, **kwargs)
+
+    monkeypatch.delenv("NETSVCS_GRPC_MAX_MESSAGE_BYTES", raising=False)
+    monkeypatch.delenv("NETSVCS_GRPC_MAX_CONCURRENT_RPCS", raising=False)
+    monkeypatch.setenv("NETSVCS_GRPC_INSECURE", "1")
+
+    with patch("grpc.aio.server", side_effect=fake_server_factory):
+        server = await create_grpc_server(
+            db=mock_db,
+            cache=mock_cache,
+            key_provider=mock_key_provider,
+            port=50993,
+            use_tls=False,
+        )
+
+    assert captured["kwargs"]["maximum_concurrent_rpcs"] == 100
+    options = dict(captured["kwargs"]["options"])
+    assert options["grpc.max_send_message_length"] == 4 * 1024 * 1024
+    assert options["grpc.max_receive_message_length"] == 4 * 1024 * 1024
+    await server.stop(grace=None)
+
+
+@pytest.mark.asyncio
+async def test_create_grpc_server_message_and_concurrency_limits_configurable(
+    mock_db: AsyncMock, mock_cache: AsyncMock, mock_key_provider: Mock
+) -> None:
+    """Message size and concurrency limits are overridable via env vars."""
+    from hub_api.modules.netsvcs.grpc.server import create_grpc_server
+
+    real_server_factory = grpc.aio.server
+    captured: dict[str, object] = {}
+
+    def fake_server_factory(*args: object, **kwargs: object) -> object:
+        captured["kwargs"] = kwargs
+        return real_server_factory(*args, **kwargs)
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "NETSVCS_GRPC_INSECURE": "1",
+                "NETSVCS_GRPC_MAX_MESSAGE_BYTES": "1048576",
+                "NETSVCS_GRPC_MAX_CONCURRENT_RPCS": "10",
+            },
+            clear=False,
+        ),
+        patch("grpc.aio.server", side_effect=fake_server_factory),
+    ):
+        server = await create_grpc_server(
+            db=mock_db,
+            cache=mock_cache,
+            key_provider=mock_key_provider,
+            port=50992,
+            use_tls=False,
+        )
+
+    assert captured["kwargs"]["maximum_concurrent_rpcs"] == 10
+    options = dict(captured["kwargs"]["options"])
+    assert options["grpc.max_send_message_length"] == 1048576
+    assert options["grpc.max_receive_message_length"] == 1048576
+    await server.stop(grace=None)

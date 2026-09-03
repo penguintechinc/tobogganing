@@ -1,31 +1,37 @@
 """gRPC manager service for DNS resolver fleet coordination."""
+
 from __future__ import annotations
 
 import asyncio
-import grpc
 import hmac
 import os
-import structlog
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
-from proto.netsvcs.v1 import manager_pb2, manager_pb2_grpc
-from hub_api.auth.jwt import encode_access_token, decode_token
+import grpc
+import structlog
+
+from hub_api.auth.jwt import decode_token, encode_access_token
 from hub_api.auth.machine_claims import build_machine_claims
 from hub_api.flags import feature_enabled
 from hub_api.modules.netsvcs.ioc import IOCChecker
 from hub_api.modules.netsvcs.managers.config_service import (
     ConfigService,
-    DNSRecordDTO,
-    DNSZoneDTO,
     DNSServerConfigDTO,
 )
 from hub_api.modules.netsvcs.managers.server_manager import ServerManager
+from proto.netsvcs.v1 import manager_pb2, manager_pb2_grpc
 
 logger = structlog.get_logger()
 
 # Enrollment tenant for the resolver fleet
 ENROLLMENT_TENANT = "tobogganing.netsvcs.dns"
+
+# gRPC server hardening defaults (H4: unconditional reflection + no
+# resource limits let any caller enumerate the full service surface and
+# send unbounded-size/unbounded-concurrency requests).
+_DEFAULT_GRPC_MAX_MESSAGE_BYTES = 4 * 1024 * 1024  # 4 MiB
+_DEFAULT_GRPC_MAX_CONCURRENT_RPCS = 100
 
 
 def _extract_bearer_token_from_metadata(context: grpc.aio.ServicerContext) -> str | None:
@@ -398,7 +404,12 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
 
         except Exception as e:
             # Only catches logic errors in minting, not auth failures
-            logger.error("refresh_token_minting_error", error=str(e), server_id=request.server_id, exc_info=True)
+            logger.error(
+                "refresh_token_minting_error",
+                error=str(e),
+                server_id=request.server_id,
+                exc_info=True,
+            )
             await context.abort(grpc.StatusCode.INTERNAL, "internal error")
 
         # ===== CACHE PERSISTENCE PHASE (separate from minting, fail-closed on cache failure) =====
@@ -655,7 +666,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             # Look up the resolver token in the database
             rowset = await self.db(
                 (self.db.dns_resolver_tokens.token == request.token)
-                & (self.db.dns_resolver_tokens.active == True)
+                & (self.db.dns_resolver_tokens.active == True)  # noqa: E712
             ).select()
             token_row = rowset.first()
 
@@ -684,9 +695,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
             zone_ids = [zone.id for zone in config_dto.zones]
 
             # Update last_used timestamp
-            await self.db(
-                self.db.dns_resolver_tokens.id == token_row.id
-            ).update(
+            await self.db(self.db.dns_resolver_tokens.id == token_row.id).update(
                 last_used=now,
             )
 
@@ -843,16 +852,31 @@ async def create_grpc_server(
     Returns:
         Configured gRPC server instance (call server.start() to run)
     """
+    # Resource limits: bound message size and in-flight RPC concurrency so
+    # a single caller can't exhaust memory/threads with oversized payloads
+    # or an unbounded number of simultaneous requests.
+    max_message_bytes = int(
+        os.environ.get("NETSVCS_GRPC_MAX_MESSAGE_BYTES", str(_DEFAULT_GRPC_MAX_MESSAGE_BYTES))
+    )
+    maximum_concurrent_rpcs = int(
+        os.environ.get("NETSVCS_GRPC_MAX_CONCURRENT_RPCS", str(_DEFAULT_GRPC_MAX_CONCURRENT_RPCS))
+    )
+
     # Create async server
-    server = grpc.aio.server()
+    server = grpc.aio.server(
+        options=[
+            ("grpc.max_send_message_length", max_message_bytes),
+            ("grpc.max_receive_message_length", max_message_bytes),
+        ],
+        maximum_concurrent_rpcs=maximum_concurrent_rpcs,
+    )
 
     # Add servicer
     servicer = ManagerServicer(db=db, cache=cache, key_provider=key_provider)
     manager_pb2_grpc.add_ManagerServiceServicer_to_server(servicer, server)
 
-    # Add health and reflection services
+    # Add health service (always on — used by orchestrators/load balancers)
     from grpc_health.v1 import health, health_pb2, health_pb2_grpc
-    from grpc_reflection.v1alpha import reflection
 
     health_servicer = health.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
@@ -863,12 +887,22 @@ async def create_grpc_server(
         health_pb2.HealthCheckResponse.SERVING,
     )
 
-    # Add reflection for debugging
-    SERVICE_NAMES = [
-        manager_pb2.DESCRIPTOR.services_by_name["ManagerService"].full_name,
-        reflection.SERVICE_NAME,
-    ]
-    reflection.enable_server_reflection(SERVICE_NAMES, server)
+    # Reflection (H4): dev-only. It exposes the entire service/method/message
+    # surface to anyone who can reach the port — never enable it in prod.
+    # Explicit opt-in, off by default, mirroring NETSVCS_GRPC_INSECURE's
+    # fail-closed pattern below.
+    if os.environ.get("NETSVCS_GRPC_REFLECTION_ENABLED") == "1":
+        from grpc_reflection.v1alpha import reflection
+
+        SERVICE_NAMES = [
+            manager_pb2.DESCRIPTOR.services_by_name["ManagerService"].full_name,
+            reflection.SERVICE_NAME,
+        ]
+        reflection.enable_server_reflection(SERVICE_NAMES, server)
+        logger.warning(
+            "grpc_reflection_enabled",
+            reason="NETSVCS_GRPC_REFLECTION_ENABLED=1; dev-only, exposes full service surface",
+        )
 
     # Bind to port with TLS or insecure based on configuration
     if use_tls:

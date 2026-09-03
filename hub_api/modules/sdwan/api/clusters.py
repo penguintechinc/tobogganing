@@ -1,17 +1,16 @@
 """SASE clusters REST API blueprint."""
+
 from __future__ import annotations
 
-import asyncio
 import hmac
 import os
-import secrets
-import structlog
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from quart import Blueprint, current_app, jsonify, request
+import structlog
+from quart import Blueprint, current_app, request
 
 from hub_api.auth.middleware import current_claims, require_scope, require_tenant
 from hub_api.db import get_db
@@ -31,6 +30,28 @@ class ClusterRegistrationRequest:
     region: str
     datacenter: str
     headend_url: str
+
+
+def _manager_url() -> str:
+    """Resolve this hub_api instance's externally-reachable base URL.
+
+    Deliberately NOT derived from the request's Host header — that header
+    is attacker-controllable, and enrolled clusters use this value to
+    reach back to the manager for JWT validation. Trusting the Host header
+    here would let a caller redirect a cluster's auth callbacks to an
+    arbitrary host on this API-key-authenticated endpoint.
+
+    Returns:
+        The configured base URL with no trailing slash.
+
+    Raises:
+        RuntimeError: If MANAGER_URL is not configured — fails closed
+            rather than falling back to a client-supplied value.
+    """
+    manager_url = os.environ.get("MANAGER_URL", "").strip()
+    if not manager_url:
+        raise RuntimeError("MANAGER_URL is not configured")
+    return manager_url.rstrip("/")
 
 
 def _verify_bootstrap_token(token: str | None) -> bool:
@@ -333,7 +354,7 @@ async def get_headend_config(cluster_id: str) -> tuple[dict[str, Any], int]:
             "key_file": "/certs/headend.key",
             "auth": {
                 "type": "jwt",
-                "manager_url": request.url_root.rstrip("/"),
+                "manager_url": _manager_url(),
             },
             "wireguard": {
                 "interface": "wg0",
