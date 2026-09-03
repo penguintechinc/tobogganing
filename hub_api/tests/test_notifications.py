@@ -1,4 +1,5 @@
 """Tests for hub_api.notifications channels, transports, and delivery."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,20 @@ from penguin_dal import AsyncDB
 from hub_api.notifications.channels import ChannelManager
 from hub_api.notifications.service import NotificationService
 from hub_api.notifications.transports import EmailTransport, TransportError, WebhookTransport
+
+
+@pytest.fixture(autouse=True)
+def _mock_safe_webhook_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every webhook hostname to a safe public IP (8.8.8.8).
+
+    Keeps WebhookTransport's SSRF guard (real DNS resolution via
+    assert_safe_feed_url) out of these unit tests. SSRF guard behavior
+    itself is covered by test_notifications_transports_ssrf.py.
+    """
+    monkeypatch.setattr(
+        "hub_api.modules.threatintel.feeds.url_safety._resolve_addresses_sync",
+        lambda host: ["8.8.8.8"],
+    )
 
 
 @pytest.mark.asyncio
@@ -43,7 +58,9 @@ class TestChannelManager:
         assert result["kind"] == "webhook"
         assert result["config"]["url"] == "https://example.com/webhook"
         # Secret should be redacted in response
-        assert "secret" not in result["config"] or result["config"].get("secret", "").startswith("****")
+        assert "secret" not in result["config"] or result["config"].get("secret", "").startswith(
+            "****"
+        )
 
     async def test_create_channel_webhook_non_https_rejected(self, real_dal: AsyncDB) -> None:
         """Reject webhook with non-https URL."""
@@ -216,7 +233,8 @@ class TestNotificationService:
     async def test_notify_cross_tenant_channel_skipped(self, real_dal: AsyncDB) -> None:
         """Notify silently skips cross-tenant channel IDs (no delivery row)."""
         manager = ChannelManager(real_dal)
-        ch_a = await manager.create_channel("tenant-a", "Ch", "email", {"to": ["a@example.com"]})
+        # ch_a exists only to prove tenant-a's own channels aren't touched.
+        _ch_a = await manager.create_channel("tenant-a", "Ch", "email", {"to": ["a@example.com"]})
         ch_b = await manager.create_channel("tenant-b", "Ch", "email", {"to": ["b@example.com"]})
 
         fake_email = AsyncMock(spec=EmailTransport)
@@ -237,8 +255,9 @@ class TestNotificationService:
     async def test_notify_no_channels_specified_uses_all_enabled(self, real_dal: AsyncDB) -> None:
         """Notify with channel_ids=None uses all enabled channels for tenant."""
         manager = ChannelManager(real_dal)
-        ch_a = await manager.create_channel("tenant-a", "Ch-A", "email", {"to": ["a@example.com"]})
-        ch_b = await manager.create_channel("tenant-a", "Ch-B", "email", {"to": ["b@example.com"]})
+        # ch_a/ch_b exist only to be picked up by the "all enabled" default.
+        _ch_a = await manager.create_channel("tenant-a", "Ch-A", "email", {"to": ["a@example.com"]})
+        _ch_b = await manager.create_channel("tenant-a", "Ch-B", "email", {"to": ["b@example.com"]})
         ch_c = await manager.create_channel("tenant-a", "Ch-C", "email", {"to": ["c@example.com"]})
 
         # Disable ch_c
@@ -275,8 +294,8 @@ class TestWebhookTransport:
 
     async def test_webhook_signature_hmac_sha256(self) -> None:
         """Webhook signature is HMAC-SHA256 over raw body."""
-        import hmac
         import hashlib
+        import hmac
 
         # Create a fake HTTP client
         mock_client = AsyncMock()
