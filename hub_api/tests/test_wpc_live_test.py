@@ -608,9 +608,13 @@ class TestWebSocketCookieAuth:
             app.config["KEY_PROVIDER"],
         )
 
+    # Default CORS_ORIGINS (hub_api/config/__init__.py) when the env var is
+    # unset — the same allowlist app.py's quart_cors.cors(...) uses for REST.
+    ALLOWED_ORIGIN = "http://localhost:3000"
+
     @pytest.mark.asyncio
     async def test_validate_websocket_auth_accepts_cookie_token(self, app_with_wpc) -> None:
-        """A valid access_token cookie (no bearer header) authenticates the ws."""
+        """A valid access_token cookie + allowlisted Origin authenticates the ws."""
         from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
         from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
@@ -620,7 +624,10 @@ class TestWebSocketCookieAuth:
         async with app_with_wpc.test_request_context(
             self.WS_PATH,
             method="GET",
-            headers={"Cookie": f"{ACCESS_TOKEN_COOKIE}={token}"},
+            headers={
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}={token}",
+                "Origin": self.ALLOWED_ORIGIN,
+            },
         ):
             tenant, claims = await _validate_websocket_auth()
         assert tenant == "tenant-ws-cookie"
@@ -628,7 +635,7 @@ class TestWebSocketCookieAuth:
 
     @pytest.mark.asyncio
     async def test_validate_websocket_auth_rejects_invalid_cookie_token(self, app_with_wpc) -> None:
-        """Garbage token in the access_token cookie is rejected."""
+        """Garbage token in the access_token cookie is rejected (allowlisted Origin present)."""
         from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
         from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
@@ -637,7 +644,10 @@ class TestWebSocketCookieAuth:
         async with app_with_wpc.test_request_context(
             self.WS_PATH,
             method="GET",
-            headers={"Cookie": f"{ACCESS_TOKEN_COOKIE}=not-a-jwt"},
+            headers={
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}=not-a-jwt",
+                "Origin": self.ALLOWED_ORIGIN,
+            },
         ):
             tenant, claims = await _validate_websocket_auth()
         assert tenant is None
@@ -680,6 +690,79 @@ class TestWebSocketCookieAuth:
             tenant, claims = await _validate_websocket_auth()
         assert tenant == "tenant-ws-cookie"
         assert claims is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_bearer_header_ignores_origin(self, app_with_wpc) -> None:
+        """Regression: CSWSH fix — bearer-header auth must NOT require Origin.
+
+        A browser can't set a custom Authorization header cross-origin, so the
+        bearer path is exempt from the Origin allowlist added for the cookie
+        path. A missing/disallowed Origin must not break service clients.
+        """
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        bearer_token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {bearer_token}",
+                "Origin": "https://evil.example.com",
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant == "tenant-ws-cookie"
+        assert claims is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_cookie_with_missing_origin(
+        self, app_with_wpc
+    ) -> None:
+        """Regression: CSWSH fix — cookie-sourced token with no Origin header is rejected.
+
+        A malicious cross-origin page can trigger the browser to attach the
+        access_token cookie automatically; requiring an allowlisted Origin
+        (defense-in-depth on top of SameSite=Strict) is what closes the gap.
+        """
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={"Cookie": f"{ACCESS_TOKEN_COOKIE}={token}"},
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_cookie_with_disallowed_origin(
+        self, app_with_wpc
+    ) -> None:
+        """Regression: CSWSH fix — cookie-sourced token from a non-allowlisted Origin is rejected."""
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}={token}",
+                "Origin": "https://evil.example.com",
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
 
 
 class TestLiveTestRateLimiting:
