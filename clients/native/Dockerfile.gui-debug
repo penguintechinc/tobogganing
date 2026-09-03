@@ -35,6 +35,7 @@ RUN echo "=== Downloading modules ===" && \
 # Copy source
 COPY . .
 
+# shellcheck disable=SC2015
 # Try to debug the build step by step
 RUN echo "=== Checking go env ===" && \
     go env && \
