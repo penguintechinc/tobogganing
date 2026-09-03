@@ -119,9 +119,8 @@ type MirrorConfig struct {
 
 // ProxyConfig contains proxy behavior settings
 type ProxyConfig struct {
-	SkipTLSVerify bool `json:"skip_tls_verify"`
-	Timeout       int  `json:"timeout_seconds"`
-	MaxIdleConns  int  `json:"max_idle_conns"`
+	Timeout      int `json:"timeout_seconds"`
+	MaxIdleConns int `json:"max_idle_conns"`
 }
 
 // NewManager creates a new configuration manager with machine-JWT authentication.
