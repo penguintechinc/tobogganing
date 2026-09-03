@@ -19,13 +19,24 @@ global:
 ## Hub API Service
 hubApi:
   image:
-    repository: tobogganing/hub-api
+    repository: ghcr.io/penguintechinc/tobogganing/hub-api
     tag: latest
     digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 2
   port: 8080
   grpcPort: 50051
+  ## Externally-reachable base URL enrolled SD-WAN clusters call back to
+  ## for JWT validation — fail-closed (hub_api/modules/sdwan/api/clusters.py
+  ## _manager_url() raises RuntimeError, surfaced as a 500, if unset;
+  ## deliberately not derived from the request Host header). Override per
+  ## environment to that environment's ingress URL + /api below.
+  managerUrl: ""
+  ## REST CORS allow-list + live-test WebSocket Origin allowlist
+  ## (comma-separated). hub_api/config/__init__.py defaults to
+  ## http://localhost:3000 if unset; override per environment to the real
+  ## portal origin(s) below.
+  corsOrigins: "http://localhost:3000"
   resources:
     requests:
       memory: "256Mi"
@@ -59,7 +70,7 @@ hubApi:
 ## Hub Router Service
 hubRouter:
   image:
-    repository: tobogganing/hub-router
+    repository: ghcr.io/penguintechinc/tobogganing/hub-router
     tag: latest
     digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
@@ -106,11 +117,23 @@ hubRouter:
       value: "1"
     - name: net.ipv4.conf.all.src_valid_mark
       value: "1"
+  ## Session-signing secret for hub-router's own OAuth2/SAML2 SSO session
+  ## JWTs — only consumed when auth.type=oauth2|saml2 (default auth.type
+  ## is "jwt", which does not need this). Fail-closed:
+  ## services/hub-router/proxy/bootstrap.go refuses to start SSO without
+  ## it; must be >=32 bytes (proxy/auth/provider.go
+  ## minSessionSigningKeyBytes). Rendered into a Secret by
+  ## templates/hub-router-signing.yaml, gated with `required` — NEVER commit
+  ## a real value to a values file. Alpha gets a throwaway dev-only value
+  ## (values-alpha.yaml); beta/gamma/production leave this unset and inject
+  ## via `--set hubRouter.sessionSigningKey=...` from a CI-managed secret
+  ## at deploy time — omitting it fails the Helm render on purpose.
+  sessionSigningKey: ""
 
 ## Hub WebUI Service
 hubWebui:
   image:
-    repository: tobogganing/hub-webui
+    repository: ghcr.io/penguintechinc/tobogganing/hub-webui
     tag: latest
     digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
