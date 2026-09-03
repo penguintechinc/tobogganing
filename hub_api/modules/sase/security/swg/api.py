@@ -1,22 +1,22 @@
 """API endpoints for SASE SWG domain categorization and lookup."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+import structlog
 from quart import Blueprint, jsonify, request
 
 from hub_api.auth.middleware import (
+    current_claims,
+    require_machine_jwt,
     require_scope,
     require_tenant,
-    require_machine_jwt,
-    current_claims,
 )
 from hub_api.entitlements.gate import require_feature
+from hub_api.modules.sase.security.swg.lookup import SwgLookup
 
-from hub_api.modules.sase.security.enforcement import EnforcementAction
-from hub_api.modules.sase.security.swg.lookup import SwgLookup, build_radix
-from hub_api.modules.sase.security.swg.policy import CategoryPolicyManager
-from hub_api.modules.sase.security.swg.ingest import CategoryIngestManager
+logger = structlog.get_logger()
 
 blueprint = Blueprint("sase_swg", __name__, url_prefix="/swg")
 
@@ -80,7 +80,11 @@ async def lookup_domain() -> tuple[dict, int]:
         user_id = claims.get("sub")  # subject from JWT
         # Extract group_ids from claims if present
         group_ids_from_claims = claims.get("groups")
-        group_ids = tuple(group_ids_from_claims) if isinstance(group_ids_from_claims, (list, tuple)) else None
+        group_ids = (
+            tuple(group_ids_from_claims)
+            if isinstance(group_ids_from_claims, (list, tuple))
+            else None
+        )
 
         result = await lookup_engine.lookup(
             domain, tenant=tenant, user_id=user_id, group_ids=group_ids
@@ -98,7 +102,8 @@ async def lookup_domain() -> tuple[dict, int]:
         return jsonify(dto), 200
 
     except Exception as e:
-        return jsonify({"error": f"Lookup failed: {str(e)}"}), 500
+        logger.error("swg_lookup_failed", domain=domain, error=str(e), exc_info=True)
+        return jsonify({"error": "Domain lookup failed"}), 500
 
 
 @blueprint.route("/radix", methods=["GET"])
@@ -130,16 +135,19 @@ async def get_radix_artifact() -> tuple[dict, int]:
         encoded = base64.b64encode(artifact).decode("utf-8")
 
         return (
-            jsonify({
-                "artifact": encoded,
-                "version": "1.0",
-                "encoding": "base64",
-            }),
+            jsonify(
+                {
+                    "artifact": encoded,
+                    "version": "1.0",
+                    "encoding": "base64",
+                }
+            ),
             200,
         )
 
     except Exception as e:
-        return jsonify({"error": f"Failed to generate radix artifact: {str(e)}"}), 500
+        logger.error("swg_radix_artifact_failed", error=str(e), exc_info=True)
+        return jsonify({"error": "Failed to generate radix artifact"}), 500
 
 
 @blueprint.route("/categories", methods=["POST"])
@@ -171,9 +179,7 @@ async def upsert_category() -> tuple[dict, int]:
 
         if not domain or not category:
             return (
-                jsonify({
-                    "error": "Missing required fields: domain, category"
-                }),
+                jsonify({"error": "Missing required fields: domain, category"}),
                 400,
             )
 
@@ -203,7 +209,8 @@ async def upsert_category() -> tuple[dict, int]:
         return jsonify({"status": "success", "domain": domain, "category": category}), 200
 
     except Exception as e:
-        return jsonify({"error": f"Upsert failed: {str(e)}"}), 500
+        logger.error("swg_category_upsert_failed", error=str(e), exc_info=True)
+        return jsonify({"error": "Category upsert failed"}), 500
 
 
 @blueprint.route("/policy", methods=["GET"])
@@ -248,7 +255,8 @@ async def get_policies() -> tuple[dict, int]:
         return jsonify({"policies": policies_list}), 200
 
     except Exception as e:
-        return jsonify({"error": f"Failed to fetch policies: {str(e)}"}), 500
+        logger.error("swg_policy_fetch_failed", error=str(e), exc_info=True)
+        return jsonify({"error": "Failed to fetch policies"}), 500
 
 
 @blueprint.route("/policy", methods=["PUT"])
@@ -284,9 +292,7 @@ async def set_policy() -> tuple[dict, int]:
 
         if not scope or not category or not action:
             return (
-                jsonify({
-                    "error": "Missing required fields: scope, category, action"
-                }),
+                jsonify({"error": "Missing required fields: scope, category, action"}),
                 400,
             )
 
@@ -314,15 +320,18 @@ async def set_policy() -> tuple[dict, int]:
         await policy_mgr.set_policy(tenant, scope, scope_id, category, action)
 
         return (
-            jsonify({
-                "status": "success",
-                "tenant": tenant,
-                "scope": scope,
-                "category": category,
-                "action": action,
-            }),
+            jsonify(
+                {
+                    "status": "success",
+                    "tenant": tenant,
+                    "scope": scope,
+                    "category": category,
+                    "action": action,
+                }
+            ),
             200,
         )
 
     except Exception as e:
-        return jsonify({"error": f"Set policy failed: {str(e)}"}), 500
+        logger.error("swg_policy_set_failed", error=str(e), exc_info=True)
+        return jsonify({"error": "Failed to set policy"}), 500

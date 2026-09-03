@@ -199,7 +199,12 @@ class TestLookupDomain:
 
     @pytest.mark.asyncio
     async def test_lookup_exception_500(self, app_with_sase: Quart, swg_read_token: str) -> None:
-        """An exception from the lookup engine returns 500 with the error message."""
+        """An exception from the lookup engine returns 500 with a generic message.
+
+        Regression: error-detail leakage — the raw exception string (which
+        can carry internal paths, DSNs, stack detail) must never reach the
+        client; it's logged server-side instead.
+        """
         lookup_engine = AsyncMock()
         lookup_engine.lookup.side_effect = RuntimeError("engine exploded")
         app_with_sase.config["SWG_LOOKUP"] = lookup_engine
@@ -213,7 +218,8 @@ class TestLookupDomain:
 
         assert response.status_code == 500
         data = await response.get_json()
-        assert "engine exploded" in data["error"]
+        assert data["error"] == "Domain lookup failed"
+        assert "engine exploded" not in data["error"]
 
 
 class TestGetRadixArtifact:
@@ -256,7 +262,10 @@ class TestGetRadixArtifact:
     async def test_radix_serialize_exception_500(
         self, app_with_sase: Quart, machine_jwt_swg_read: str
     ) -> None:
-        """An exception during serialize() returns 500."""
+        """An exception during serialize() returns 500 with a generic message.
+
+        Regression: error-detail leakage.
+        """
         radix = MagicMock()
         radix.serialize.side_effect = RuntimeError("serialize failed")
         app_with_sase.config["SWG_RADIX"] = radix
@@ -267,6 +276,9 @@ class TestGetRadixArtifact:
             headers={"Authorization": f"Bearer {machine_jwt_swg_read}"},
         )
         assert response.status_code == 500
+        data = await response.get_json()
+        assert data["error"] == "Failed to generate radix artifact"
+        assert "serialize failed" not in data["error"]
 
     @pytest.mark.asyncio
     async def test_radix_requires_machine_jwt_401(self, app_with_sase: Quart) -> None:
@@ -347,7 +359,10 @@ class TestUpsertCategory:
 
     @pytest.mark.asyncio
     async def test_upsert_exception_500(self, app_with_sase: Quart, swg_write_token: str) -> None:
-        """An exception from the ingest manager returns 500."""
+        """An exception from the ingest manager returns 500 with a generic message.
+
+        Regression: error-detail leakage.
+        """
         ingest_mgr = AsyncMock()
         ingest_mgr.upsert_custom.side_effect = RuntimeError("insert failed")
         app_with_sase.config["SWG_INGEST_MANAGER"] = ingest_mgr
@@ -359,6 +374,9 @@ class TestUpsertCategory:
             json={"domain": "example.com", "category": "news"},
         )
         assert response.status_code == 500
+        data = await response.get_json()
+        assert data["error"] == "Category upsert failed"
+        assert "insert failed" not in data["error"]
 
 
 class TestGetPolicies:
@@ -414,7 +432,10 @@ class TestGetPolicies:
     async def test_get_policies_exception_500(
         self, app_with_sase: Quart, swg_read_token: str
     ) -> None:
-        """An exception from the policy manager returns 500."""
+        """An exception from the policy manager returns 500 with a generic message.
+
+        Regression: error-detail leakage.
+        """
         policy_mgr = AsyncMock()
         policy_mgr.get_policies.side_effect = RuntimeError("db down")
         app_with_sase.config["SWG_POLICY_MANAGER"] = policy_mgr
@@ -425,6 +446,9 @@ class TestGetPolicies:
             headers={"Authorization": f"Bearer {swg_read_token}"},
         )
         assert response.status_code == 500
+        data = await response.get_json()
+        assert data["error"] == "Failed to fetch policies"
+        assert "db down" not in data["error"]
 
 
 class TestSetPolicy:
@@ -512,7 +536,10 @@ class TestSetPolicy:
     async def test_set_policy_exception_500(
         self, app_with_sase: Quart, swg_write_token: str
     ) -> None:
-        """An exception from the policy manager returns 500."""
+        """An exception from the policy manager returns 500 with a generic message.
+
+        Regression: error-detail leakage.
+        """
         policy_mgr = AsyncMock()
         policy_mgr.set_policy.side_effect = RuntimeError("write failed")
         app_with_sase.config["SWG_POLICY_MANAGER"] = policy_mgr
@@ -524,3 +551,6 @@ class TestSetPolicy:
             json={"scope": "tenant", "category": "gambling", "action": "block"},
         )
         assert response.status_code == 500
+        data = await response.get_json()
+        assert data["error"] == "Failed to set policy"
+        assert "write failed" not in data["error"]
