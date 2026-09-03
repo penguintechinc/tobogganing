@@ -83,35 +83,35 @@ jobs:
             goos: darwin
             goarch: arm64
             enabled: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'macos' }}
-    
+
     steps:
     - name: Skip if platform not selected
       if: ${{ matrix.enabled == 'false' }}
       run: echo "Skipping ${{ matrix.goos }}-${{ matrix.goarch }} build" && exit 0
-    
+
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       if: ${{ matrix.enabled != 'false' }}
-    
+
     - name: Set up Go
       if: ${{ matrix.enabled != 'false' }}
       uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4  # v4
       with:
         go-version: ${{ env.GO_VERSION }}
-    
+
     - name: Read version from .version file
       if: ${{ matrix.enabled != 'false' }}
       id: version
       shell: bash
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
         # Add build type suffix for non-production builds
         if [[ "${{ github.event.inputs.build_type }}" != "production" ]]; then
           VERSION="${VERSION}-${{ github.event.inputs.build_type }}"
         fi
-        echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
-    
+        echo "full_version=${VERSION}" >> "$GITHUB_OUTPUT"
+
     - name: Cache Go modules
       if: ${{ matrix.enabled != 'false' }}
       uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
@@ -120,19 +120,19 @@ jobs:
         key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-client-
-    
+
     - name: Install dependencies
       if: ${{ matrix.enabled != 'false' }}
       run: |
         cd clients/native
         go mod download
-    
+
     - name: Set build configuration
       if: ${{ matrix.enabled != 'false' }}
       shell: bash
       run: |
         cd clients/native
-        
+
         # Set API endpoint based on build type
         case "${{ github.event.inputs.build_type }}" in
           "production")
@@ -145,18 +145,18 @@ jobs:
             API_ENDPOINT="https://api-dev.tobogganing.com"
             ;;
         esac
-        
+
         # Create build configuration
         cat > internal/config/build_config.go << EOF
         package config
-        
+
         const (
             BuildType   = "${{ github.event.inputs.build_type }}"
             APIEndpoint = "${API_ENDPOINT}"
             Version     = "${{ steps.version.outputs.full_version }}"
         )
         EOF
-    
+
     - name: Build native client
       if: ${{ matrix.enabled != 'false' }}
       env:
@@ -166,111 +166,49 @@ jobs:
       shell: bash
       run: |
         cd clients/native
-        
+
         if [ "${{ runner.os }}" = "Windows" ]; then
           BUILD_TIME=$(powershell -Command "Get-Date -UFormat '%Y-%m-%d_%H:%M:%S'")
         else
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
         fi
-        
+
         VERSION="${{ steps.version.outputs.full_version }}"
         GIT_COMMIT="${{ github.sha }}"
-        
+
         mkdir -p build
-        
+
         # Set binary name and extension
         BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
-        
+
         # Build with optimizations
         go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
           -o build/${BINARY_NAME} ./cmd/headless
-        
+
         echo "Built: ${BINARY_NAME}"
         ls -la build/
-    
+
     - name: Test binary
       if: ${{ matrix.enabled != 'false' && matrix.goos == runner.os }}
       shell: bash
       run: |
         cd clients/native/build
-        BINARY=$(ls tobogganing-client-* | head -1)
+        BINARY=$(find . -maxdepth 1 -name 'tobogganing-client-*' -print -quit)
         if [[ "${{ matrix.goos }}" == "windows" ]]; then
-          ./${BINARY} --version
+          ./"${BINARY}" --version
         else
-          ./${BINARY} --version
+          ./"${BINARY}" --version
         fi
-    
+
     - name: Upload artifacts
       if: ${{ matrix.enabled != 'false' && github.event.inputs.upload_artifacts == 'true' }}
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: go-client-${{ matrix.goos }}-${{ matrix.goarch }}
         path: clients/native/build/*
-        retention-days: ${{ github.event.inputs.build_type == 'production' && '90' || '30' }}
-
-  # Build Go headend proxy
-  build-headend-proxy:
-    if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4  # v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-    
-    - name: Read version from .version file
-      id: version
-      run: |
-        VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        
-        if [[ "${{ github.event.inputs.build_type }}" != "production" ]]; then
-          VERSION="${VERSION}-${{ github.event.inputs.build_type }}"
-        fi
-        echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
-    
-    - name: Cache Go modules
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-headend-${{ hashFiles('headend/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-headend-
-    
-    - name: Build headend proxy
-      run: |
-        cd headend
-        go mod download
-        
-        VERSION="${{ steps.version.outputs.full_version }}"
-        BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-        GIT_COMMIT="${{ github.sha }}"
-        
-        mkdir -p build
-        
-        # Build for multiple platforms
-        for GOOS in linux darwin; do
-          for GOARCH in amd64 arm64; do
-            echo "Building headend-proxy for ${GOOS}/${GOARCH}"
-            env GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=0 \
-              go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-              -o build/headend-proxy-${GOOS}-${GOARCH}-${VERSION} ./proxy
-          done
-        done
-        
-        ls -la build/
-    
-    - name: Upload headend proxy artifacts
-      if: ${{ github.event.inputs.upload_artifacts == 'true' }}
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
-      with:
-        name: headend-proxy-builds
-        path: headend/build/*
         retention-days: ${{ github.event.inputs.build_type == 'production' && '90' || '30' }}
 
   # Trigger mobile builds
@@ -282,10 +220,10 @@ jobs:
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
       with:
         script: |
-          const platforms = '${{ github.event.inputs.platforms }}' === 'all' ? 'all' : 
-                           ['android', 'ios'].includes('${{ github.event.inputs.platforms }}') ? 
+          const platforms = '${{ github.event.inputs.platforms }}' === 'all' ? 'all' :
+                           ['android', 'ios'].includes('${{ github.event.inputs.platforms }}') ?
                            '${{ github.event.inputs.platforms }}' : 'all';
-          
+
           await github.rest.actions.createWorkflowDispatch({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -307,79 +245,47 @@ jobs:
       packages: write
     strategy:
       matrix:
-        component: [manager, headend, client]
+        component: [client]  # manager/headend now build as containers via docker-build.yml/release.yml
     steps:
     - name: Checkout repository
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+
     - name: Read version from .version file
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-        
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
         if [[ "${{ github.event.inputs.build_type }}" != "production" ]]; then
           VERSION="${VERSION}-${{ github.event.inputs.build_type }}"
         fi
-        echo "full_version=${VERSION}" >> $GITHUB_OUTPUT
-    
+        echo "full_version=${VERSION}" >> "$GITHUB_OUTPUT"
+
     - name: Set up QEMU
       uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
-    
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-    
+
     - name: Log in to Container Registry
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    
+
     - name: Generate Docker tags
       id: meta
       run: |
         VERSION="${{ steps.version.outputs.full_version }}"
         TAGS="${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:${VERSION}"
-        
+
         if [[ "${{ github.event.inputs.build_type }}" == "production" ]]; then
           TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}/tobogganing-${{ matrix.component }}:latest"
         fi
-        
-        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-    
-    - name: Build and push Docker image - Manager
-      if: matrix.component == 'manager'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./manager
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.version.outputs.full_version }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
-          BUILD_TYPE=${{ github.event.inputs.build_type }}
-    
-    - name: Build and push Docker image - Headend
-      if: matrix.component == 'headend'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./headend
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.version.outputs.full_version }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
-          BUILD_TYPE=${{ github.event.inputs.build_type }}
-    
+
+        echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
     - name: Build and push Docker image - Client
       if: matrix.component == 'client'
       uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
@@ -402,29 +308,29 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+
     - name: Set up Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
         cache-dependency-path: website/package.json
-    
+
     - name: Read version from .version file
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-    
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
     - name: Install dependencies
       run: |
         cd website
         npm ci
-    
+
     - name: Set build environment
       run: |
         cd website
-        
+
         case "${{ github.event.inputs.build_type }}" in
           "production")
             echo "NEXT_PUBLIC_API_URL=https://api.tobogganing.com" > .env.production
@@ -439,14 +345,14 @@ jobs:
             echo "NEXT_PUBLIC_MANAGER_URL=https://manager-dev.tobogganing.com" >> .env.development
             ;;
         esac
-        
+
         echo "NEXT_PUBLIC_VERSION=${{ steps.version.outputs.version }}" >> .env.${{ github.event.inputs.build_type }}
-    
+
     - name: Build website
       run: |
         cd website
         npm run build
-    
+
     - name: Upload website build
       if: ${{ github.event.inputs.upload_artifacts == 'true' }}
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -458,19 +364,19 @@ jobs:
   # Create draft release
   create-draft-release:
     if: ${{ github.event.inputs.create_draft_release == 'true' && github.event.inputs.build_type == 'production' }}
-    needs: [build-go-clients, build-headend-proxy, build-docker-images]
+    needs: [build-go-clients, build-docker-images]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-    
+
     - name: Read version from .version file
       id: version
       run: |
         VERSION=$(cat .version)
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-    
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
     - name: Download all Go client artifacts
       if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
@@ -478,19 +384,11 @@ jobs:
         pattern: go-client-*
         path: ./artifacts
         merge-multiple: true
-    
-    - name: Download headend proxy artifacts
-      if: ${{ github.event.inputs.components == 'all' || github.event.inputs.components == 'go-clients' }}
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-      with:
-        name: headend-proxy-builds
-        path: ./artifacts/headend
-    
+
     - name: Create release packages
       run: |
         mkdir -p release-packages
-        VERSION="${{ steps.version.outputs.version }}"
-        
+
         # Package Go clients
         if [ -d "artifacts" ]; then
           for file in artifacts/tobogganing-client-*; do
@@ -504,22 +402,12 @@ jobs:
             fi
           done
         fi
-        
-        # Package headend binaries
-        if [ -d "artifacts/headend" ]; then
-          for file in artifacts/headend/headend-proxy-*; do
-            if [ -f "$file" ]; then
-              basename=$(basename "$file")
-              tar -czf "release-packages/${basename}.tar.gz" -C "$(dirname "$file")" "$(basename "$file")"
-            fi
-          done
-        fi
-        
+
         # Create checksums
         cd release-packages
-        sha256sum * > checksums.txt
+        sha256sum -- * > checksums.txt
         cd ..
-    
+
     - name: Create draft release
       uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
       with:
@@ -527,28 +415,26 @@ jobs:
         name: "Tobogganing v${{ steps.version.outputs.version }} (Draft)"
         body: |
           ## Manual Build Release - v${{ steps.version.outputs.version }}
-          
+
           This is a draft release created from manual build workflow.
-          
+
           **Components Built:**
           - Components: ${{ github.event.inputs.components }}
           - Build Type: ${{ github.event.inputs.build_type }}
           - Platforms: ${{ github.event.inputs.platforms }}
-          
+
           **Build Information:**
           - Commit: ${{ github.sha }}
           - Workflow Run: ${{ github.run_id }}
           - Triggered by: ${{ github.actor }}
-          
+
           ## Downloads
-          
+
           See attached artifacts for compiled binaries and packages.
-          
+
           ## Docker Images
-          
+
           Docker images are available at:
-          - `ghcr.io/${{ github.repository }}/tobogganing-manager:${{ steps.version.outputs.version }}`
-          - `ghcr.io/${{ github.repository }}/tobogganing-headend:${{ steps.version.outputs.version }}`
           - `ghcr.io/${{ github.repository }}/tobogganing-client:${{ steps.version.outputs.version }}`
         files: |
           release-packages/*
@@ -558,24 +444,25 @@ jobs:
   # Summary job
   build-summary:
     if: always()
-    needs: [build-go-clients, build-headend-proxy, trigger-mobile-builds, build-docker-images, build-website, create-draft-release]
+    needs: [build-go-clients, trigger-mobile-builds, build-docker-images, build-website, create-draft-release]
     runs-on: ubuntu-24.04
     steps:
     - name: Build Summary
       run: |
-        echo "## Manual Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Configuration:**" >> $GITHUB_STEP_SUMMARY
-        echo "- Components: ${{ github.event.inputs.components }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Build Type: ${{ github.event.inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Platforms: ${{ github.event.inputs.platforms }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Upload Artifacts: ${{ github.event.inputs.upload_artifacts }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Create Draft Release: ${{ github.event.inputs.create_draft_release }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Results:**" >> $GITHUB_STEP_SUMMARY
-        echo "- Go Clients: ${{ needs.build-go-clients.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Headend Proxy: ${{ needs.build-headend-proxy.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Mobile Apps: ${{ needs.trigger-mobile-builds.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Docker Images: ${{ needs.build-docker-images.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Website: ${{ needs.build-website.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Draft Release: ${{ needs.create-draft-release.result }}" >> $GITHUB_STEP_SUMMARY
+        {
+          echo "## Manual Build Summary"
+          echo ""
+          echo "**Configuration:**"
+          echo "- Components: ${{ github.event.inputs.components }}"
+          echo "- Build Type: ${{ github.event.inputs.build_type }}"
+          echo "- Platforms: ${{ github.event.inputs.platforms }}"
+          echo "- Upload Artifacts: ${{ github.event.inputs.upload_artifacts }}"
+          echo "- Create Draft Release: ${{ github.event.inputs.create_draft_release }}"
+          echo ""
+          echo "**Results:**"
+          echo "- Go Clients: ${{ needs.build-go-clients.result }}"
+          echo "- Mobile Apps: ${{ needs.trigger-mobile-builds.result }}"
+          echo "- Docker Images: ${{ needs.build-docker-images.result }}"
+          echo "- Website: ${{ needs.build-website.result }}"
+          echo "- Draft Release: ${{ needs.create-draft-release.result }}"
+        } >> "$GITHUB_STEP_SUMMARY"
