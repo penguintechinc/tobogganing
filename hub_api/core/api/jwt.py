@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
+import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from quart import Blueprint, request, current_app
+from quart import Blueprint, current_app, request
 
 from hub_api.auth.jwt import decode_token, encode_access_token
 from hub_api.auth.machine_claims import build_machine_claims
 from hub_api.auth.middleware import current_claims, require_scope, require_tenant
+from hub_api.auth.refresh import is_jti_revoked
+from hub_api.cache.client import CacheClient, CacheUnavailable
 from hub_api.crypto.keys import KeyProvider
 from hub_api.entitlements.gate import require_feature
 
@@ -19,8 +22,18 @@ logger = structlog.get_logger()
 
 blueprint = Blueprint("core_jwt", __name__, url_prefix="/api/v1/jwt")
 
-# In-memory revocation list (Phase-2 placeholder; will move to DB in Phase-3)
-_REVOKED_TOKENS: set[str] = set()
+# Expected issuer/audience for the node/cluster JWTs issued by this blueprint
+# (see generate_jwt_token). decode_token() intentionally skips aud verification
+# (pyjwt verify_aud=False) because other machine-JWT flows in this app use a
+# different audience (e.g. aud="headend", checked separately by
+# auth/middleware.py's _extract_machine_identity). Tokens presented to this
+# blueprint's /validate and /refresh endpoints are explicitly checked against
+# these values so a token minted for a different issuer/audience is rejected.
+EXPECTED_ISS = "tobogganing"
+EXPECTED_AUD = "tobogganing"
+
+# TTL ceiling for cache-backed revocation entries (2 days > max refresh TTL).
+_REVOCATION_TTL_SECONDS = 60 * 60 * 24 * 2
 
 
 def _extract_bearer_token(auth_header: str | None) -> str | None:
@@ -38,6 +51,134 @@ def _extract_bearer_token(auth_header: str | None) -> str | None:
         return None
     token = auth_header[7:].strip()
     return token or None
+
+
+def _decode_and_verify(token: str, key_provider: KeyProvider) -> dict[str, Any] | None:
+    """Decode a JWT and enforce aud/iss match this blueprint's expected values.
+
+    Args:
+        token: Encoded JWT string.
+        key_provider: KeyProvider for signature verification.
+
+    Returns:
+        Decoded claims dict if the signature/expiry are valid and aud/iss
+        both match EXPECTED_AUD/EXPECTED_ISS, else None.
+    """
+    claims = decode_token(token, key_provider)
+    if not claims:
+        return None
+    if claims.get("iss") != EXPECTED_ISS or claims.get("aud") != EXPECTED_AUD:
+        logger.warning(
+            "jwt_aud_iss_mismatch",
+            iss=claims.get("iss"),
+            aud=claims.get("aud"),
+        )
+        return None
+    return claims
+
+
+async def _is_revoked(claims: dict[str, Any], cache: CacheClient | None) -> bool:
+    """Check whether a token's jti or subject has been revoked via the shared cache.
+
+    Fails open (returns False) if no cache is configured or the cache backend
+    is unavailable, matching the fail-open policy of auth.refresh.is_jti_revoked
+    (a cache blip must never hard-block valid tokens).
+
+    Args:
+        claims: Decoded JWT claims.
+        cache: Shared cache client, or None if not configured.
+
+    Returns:
+        True if the token's jti was individually revoked, or its subject was
+        revoked (via /jwt/revoke) after this token was issued.
+    """
+    if cache is None:
+        return False
+
+    jti = claims.get("jti")
+    if jti and await is_jti_revoked(jti, cache):
+        return True
+
+    sub = claims.get("sub") or ""
+    node_id = sub.split(":", 1)[1] if ":" in sub else sub
+    if not node_id:
+        return False
+
+    try:
+        revoked_at = await cache.get("auth", "revoked_subject", node_id)
+    except Exception as e:
+        logger.warning("subject_revocation_check_error", error=str(e))
+        return False
+
+    if not revoked_at:
+        return False
+
+    try:
+        # <=: a token issued in the same wall-clock second as the revocation
+        # is treated as revoked too (fail closed on second-granularity ties)
+        # rather than risking a just-issued token slipping through.
+        return int(claims.get("iat", 0)) <= int(revoked_at)
+    except (TypeError, ValueError):
+        return False
+
+
+async def _revoke_jti(jti: str | None, cache: CacheClient | None, exp: int | None = None) -> None:
+    """Durably revoke a single JWT by jti in the shared cache.
+
+    Best-effort: logs and swallows cache errors so a cache blip never blocks
+    a refresh-rotation flow. Replaces the old in-process ``_REVOKED_TOKENS``
+    set, which was useless across pods/restarts.
+
+    Args:
+        jti: JWT ID to revoke; no-op if falsy.
+        cache: Shared cache client, or None if not configured (no-op).
+        exp: Original token's exp claim, used to bound the denylist entry's
+            TTL to the token's remaining natural lifetime.
+    """
+    if cache is None or not jti:
+        return
+    now = int(time.time())
+    ttl = max(int(exp) - now, 60) if exp else _REVOCATION_TTL_SECONDS
+    try:
+        await cache.set("auth", "revoked_jti", jti, value="1", ttl_seconds=ttl)
+    except CacheUnavailable as e:
+        logger.error("jti_revocation_cache_unavailable", jti=jti, error=str(e))
+
+
+async def _revoke_subject(node_id: str, cache: CacheClient | None) -> None:
+    """Mark all tokens for a node/subject issued before now as revoked.
+
+    Stores a revocation timestamp keyed by node_id in the shared cache;
+    ``_is_revoked`` rejects any presented token whose ``iat`` predates this
+    timestamp. Best-effort: logs and swallows cache errors rather than
+    failing the revoke request (durable revocation degrades gracefully to
+    "not currently enforceable" rather than a 5xx).
+
+    Args:
+        node_id: Node ID to revoke (matches the id portion of the sub claim).
+        cache: Shared cache client, or None if not configured — logged as a
+            revocation-store limitation since nothing durable is recorded.
+    """
+    if not node_id:
+        return
+    if cache is None:
+        logger.warning(
+            "subject_revocation_cache_not_configured",
+            node_id=node_id,
+            detail="CACHE not configured; revocation could not be persisted",
+        )
+        return
+    now = int(time.time())
+    try:
+        await cache.set(
+            "auth",
+            "revoked_subject",
+            node_id,
+            value=str(now),
+            ttl_seconds=_REVOCATION_TTL_SECONDS,
+        )
+    except CacheUnavailable as e:
+        logger.error("subject_revocation_cache_unavailable", node_id=node_id, error=str(e))
 
 
 @blueprint.route("/token", methods=["POST"])
@@ -91,9 +232,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         permissions = []
         metadata: dict[str, Any] = {}
         tenant_id = "default"  # Phase-2 default; will use node metadata in Phase-3
-        authenticated_principal: Any = (
-            None  # Track authenticated principal for sub claim
-        )
+        authenticated_principal: Any = None  # Track authenticated principal for sub claim
 
         if node_type in ("kubernetes_node", "raw_compute"):
             # Authenticate cluster/headend nodes
@@ -105,9 +244,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
                         authenticated_principal = cluster
                         permissions = ["headend", "proxy", "wireguard"]
                         metadata = {
-                            "cluster_id": (
-                                cluster.id if hasattr(cluster, "id") else str(cluster)
-                            ),
+                            "cluster_id": (cluster.id if hasattr(cluster, "id") else str(cluster)),
                             "region": getattr(cluster, "region", "unknown"),
                             "datacenter": getattr(cluster, "datacenter", "unknown"),
                         }
@@ -131,9 +268,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
                         authenticated_principal = client
                         permissions = ["connect", "tunnel", "route"]
                         metadata = {
-                            "client_id": (
-                                client.id if hasattr(client, "id") else str(client)
-                            ),
+                            "client_id": (client.id if hasattr(client, "id") else str(client)),
                             "client_type": getattr(client, "type", "unknown"),
                             "cluster_id": getattr(client, "cluster_id", "unknown"),
                         }
@@ -165,7 +300,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         )  # Fall back to node_id if no id attr
 
         # Build machine JWT claims (includes jti, scope, tenant)
-        claims = build_machine_claims(
+        claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator, not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -189,7 +324,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
             )
 
         # Generate refresh token (24 hours) — rebuild from machine_claims with refresh type
-        refresh_claims = build_machine_claims(
+        refresh_claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator, not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -202,9 +337,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         refresh_claims["permissions"] = " ".join(permissions)
         refresh_claims["metadata"] = metadata
         try:
-            refresh_token = await encode_access_token(
-                refresh_claims, key_provider, ttl_hours=24
-            )
+            refresh_token = await encode_access_token(refresh_claims, key_provider, ttl_hours=24)
         except ValueError as e:
             logger.error("refresh_token_encoding_failed", error=str(e))
             return (
@@ -277,8 +410,9 @@ async def refresh_jwt_token() -> tuple[dict[str, Any], int]:
                 500,
             )
 
-        # Decode and validate refresh token
-        claims = decode_token(refresh_token, key_provider)
+        # Decode and validate refresh token (aud/iss must match this
+        # blueprint's issuer/audience — see _decode_and_verify)
+        claims = _decode_and_verify(refresh_token, key_provider)
         if not claims:
             logger.warning("refresh_token_invalid_or_expired")
             return (
@@ -294,12 +428,36 @@ async def refresh_jwt_token() -> tuple[dict[str, Any], int]:
                 401,
             )
 
-        # Generate new access token with same claims
-        access_claims = {k: v for k, v in claims.items() if k != "token_type"}
+        cache = current_app.config.get("CACHE")
+
+        # Reject if this jti was already rotated/revoked, or the subject was
+        # revoked (via /jwt/revoke) after this token was issued.
+        if await _is_revoked(claims, cache):
+            logger.warning("refresh_token_revoked", node_id=claims.get("sub"))
+            return (
+                {"error": "Invalid or expired refresh token"},
+                401,
+            )
+
+        # Rotate: mint a brand-new access token AND a brand-new refresh
+        # token, each with a fresh jti — never reuse the presented
+        # refresh token's jti (single-use rotation).
+        base_claims = {
+            k: v for k, v in claims.items() if k not in ("token_type", "jti", "iat", "exp")
+        }
+        new_access_claims = {**base_claims, "jti": uuid.uuid4().hex}
+        new_refresh_claims = {
+            **base_claims,
+            "jti": uuid.uuid4().hex,
+            "token_type": "refresh",
+        }
 
         try:
             new_access_token = await encode_access_token(
-                access_claims, key_provider, ttl_hours=1
+                new_access_claims, key_provider, ttl_hours=1
+            )
+            new_refresh_token = await encode_access_token(
+                new_refresh_claims, key_provider, ttl_hours=24
             )
         except ValueError as e:
             logger.error("access_token_encoding_failed", error=str(e))
@@ -307,6 +465,10 @@ async def refresh_jwt_token() -> tuple[dict[str, Any], int]:
                 {"error": "Failed to generate token"},
                 500,
             )
+
+        # Durably revoke the presented (now-superseded) refresh token's jti
+        # so it cannot be replayed, even across pods/restarts.
+        await _revoke_jti(claims.get("jti"), cache, exp=claims.get("exp"))
 
         logger.info(
             "jwt_token_refreshed",
@@ -316,6 +478,7 @@ async def refresh_jwt_token() -> tuple[dict[str, Any], int]:
         return (
             {
                 "access_token": new_access_token,
+                "refresh_token": new_refresh_token,
                 "expires_in": 3600,
                 "token_type": "Bearer",
                 "meta": {
@@ -372,8 +535,8 @@ async def validate_jwt_token() -> tuple[dict[str, Any], int]:
                 500,
             )
 
-        # Validate token
-        claims = decode_token(token, key_provider)
+        # Validate token (aud/iss must match this blueprint's issuer/audience)
+        claims = _decode_and_verify(token, key_provider)
 
         if not claims:
             logger.warning("jwt_validation_failed_invalid_or_expired")
@@ -382,10 +545,11 @@ async def validate_jwt_token() -> tuple[dict[str, Any], int]:
                 401,
             )
 
-        # Check if token has been revoked (Phase-2 in-memory check)
-        token_jti = claims.get("jti", token[:32])
-        if token_jti in _REVOKED_TOKENS:
-            logger.warning("jwt_validation_failed_revoked", jti=token_jti)
+        # Check if token has been revoked — durable, cache-backed check
+        # (shared across pods/restarts; replaces the old in-process set).
+        cache = current_app.config.get("CACHE")
+        if await _is_revoked(claims, cache):
+            logger.warning("jwt_validation_failed_revoked", jti=claims.get("jti"))
             return (
                 {"error": "Token has been revoked"},
                 401,
@@ -471,7 +635,7 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
                 if cluster:
                     node_tenant = cluster.tenant
             except Exception:
-                pass
+                logger.debug("node_tenant_lookup_failed", node_id=node_id, exc_info=True)
 
         if not node_tenant and client_registry:
             try:
@@ -479,7 +643,7 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
                 if client:
                     node_tenant = client.tenant
             except Exception:
-                pass
+                logger.debug("node_tenant_lookup_failed", node_id=node_id, exc_info=True)
 
         # Cross-tenant revoke attempt → 403
         if node_tenant and node_tenant != caller_tenant:
@@ -493,6 +657,12 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
                 {"error": "Forbidden: cannot revoke tokens outside your tenant"},
                 403,
             )
+
+        # Durably persist the revocation via the shared cache so it is
+        # enforced by _is_revoked() across pods/restarts, not just this
+        # process. Best-effort: never fails the request on a cache blip.
+        cache = current_app.config.get("CACHE")
+        await _revoke_subject(node_id, cache)
 
         logger.info(
             "jwt_tokens_revoked_for_node",

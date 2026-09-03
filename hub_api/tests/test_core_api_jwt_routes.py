@@ -328,9 +328,7 @@ async def test_validate_success(app_with_jwt: Quart) -> None:
 
 @pytest.mark.asyncio
 async def test_validate_revoked_token(app_with_jwt: Quart) -> None:
-    """POST /jwt/validate with a jti present in the in-memory revocation set returns 401."""
-    import hub_api.core.api.jwt as jwt_module
-
+    """POST /jwt/validate with a jti present in the cache-backed revocation set returns 401."""
     provider = app_with_jwt.config["KEY_PROVIDER"]
     claims = {
         "sub": "cluster:c1",
@@ -341,19 +339,18 @@ async def test_validate_revoked_token(app_with_jwt: Quart) -> None:
     }
     token = await encode_access_token(claims, provider, ttl_hours=1)
 
-    jwt_module._REVOKED_TOKENS.add("revoked-jti-1")
-    try:
-        client = app_with_jwt.test_client()
-        with _flag_on():
-            resp = await client.post(
-                "/api/v1/jwt/validate",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-        assert resp.status_code == 401
-        data = await resp.get_json()
-        assert data["error"] == "Token has been revoked"
-    finally:
-        jwt_module._REVOKED_TOKENS.discard("revoked-jti-1")
+    cache = app_with_jwt.config["CACHE"]
+    await cache.set("auth", "revoked_jti", "revoked-jti-1", value="1", ttl_seconds=3600)
+
+    client = app_with_jwt.test_client()
+    with _flag_on():
+        resp = await client.post(
+            "/api/v1/jwt/validate",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 401
+    data = await resp.get_json()
+    assert data["error"] == "Token has been revoked"
 
 
 @pytest.mark.asyncio
