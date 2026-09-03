@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Shell } from './Shell';
 import { AuthProvider } from '../context/AuthContext';
+import { cacheClaims, CSRF_COOKIE_NAME } from '../api/authStorage';
 
 jest.mock('../hooks/useManifest', () => ({
   useManifest: () => ({
@@ -50,10 +51,21 @@ const renderShell = () => {
 describe('Shell', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    sessionStorage.setItem(
-      'access_token',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6Im1haW50YWluZXIiLCJ0ZW5hbnQiOiJ0ZXN0LXRlbmFudCIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjo5OTk5OTk5OTk5fQ.mock'
-    );
+    // No client-readable access token anymore - hydrate via the csrf_token
+    // cookie + cached claims, same as AuthProvider does on a real reload.
+    document.cookie = `${CSRF_COOKIE_NAME}=test-csrf; path=/`;
+    cacheClaims({
+      sub: '1234567890',
+      email: 'test@example.com',
+      role: 'maintainer',
+      tenant: 'test-tenant',
+      iat: 1516239022,
+      exp: 9999999999,
+    });
+  });
+
+  afterEach(() => {
+    document.cookie = `${CSRF_COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
   });
 
   it('renders sidebar branding on desktop', async () => {

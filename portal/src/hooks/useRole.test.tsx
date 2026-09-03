@@ -1,7 +1,12 @@
 import { renderHook } from '@testing-library/react';
 import { useRole } from './useRole';
 import { AuthProvider } from '../context/AuthContext';
+import { cacheClaims, CSRF_COOKIE_NAME } from '../api/authStorage';
 import React, { ReactNode } from 'react';
+
+function clearSessionCookie(): void {
+  document.cookie = `${CSRF_COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
 
 const createWrapper = () => {
   const Wrapper = ({ children }: { children: ReactNode }) => (
@@ -14,6 +19,11 @@ const createWrapper = () => {
 describe('useRole', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    clearSessionCookie();
+  });
+
+  afterEach(() => {
+    clearSessionCookie();
   });
 
   it('returns viewer role when no user logged in', () => {
@@ -26,10 +36,17 @@ describe('useRole', () => {
   });
 
   it('returns true for canWrite when role is not viewer', () => {
-    sessionStorage.setItem(
-      'access_token',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6Im1haW50YWluZXIiLCJ0ZW5hbnQiOiJ0MSIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjo5OTk5OTk5OTk5fQ.mock'
-    );
+    // No client-readable access token anymore - hydrate via the csrf_token
+    // cookie + cached claims, same as AuthProvider does on a real reload.
+    document.cookie = `${CSRF_COOKIE_NAME}=test-csrf; path=/`;
+    cacheClaims({
+      sub: '1234567890',
+      email: 'test@example.com',
+      role: 'maintainer',
+      tenant: 't1',
+      iat: 1516239022,
+      exp: 9999999999,
+    });
 
     const { result } = renderHook(() => useRole(), {
       wrapper: createWrapper(),
@@ -40,10 +57,15 @@ describe('useRole', () => {
   });
 
   it('returns admin role with write access', () => {
-    sessionStorage.setItem(
-      'access_token',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6ImFkbWluIiwidGVuYW50IjoidDEiLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6OTk5OTk5OTk5OX0.mock'
-    );
+    document.cookie = `${CSRF_COOKIE_NAME}=test-csrf; path=/`;
+    cacheClaims({
+      sub: '1234567890',
+      email: 'test@example.com',
+      role: 'admin',
+      tenant: 't1',
+      iat: 1516239022,
+      exp: 9999999999,
+    });
 
     const { result } = renderHook(() => useRole(), {
       wrapper: createWrapper(),

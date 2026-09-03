@@ -1,29 +1,36 @@
 import axios, { AxiosInstance } from 'axios';
+import { CSRF_COOKIE_NAME, clearCachedClaims, getCookie } from './authStorage';
 
-interface TokenPair {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  token_type: string;
-}
+const STATE_CHANGING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
-let refreshPromise: Promise<TokenPair> | null = null;
+let refreshPromise: Promise<void> | null = null;
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,
+  // The server authenticates browser requests via HttpOnly access_token/
+  // refresh_token cookies - never a stored token - so every request must
+  // carry credentials for the cookie to be sent/accepted cross-origin.
+  withCredentials: true,
 });
 
-// Request interceptor: inject Bearer token
+// Request interceptor: double-submit CSRF. On state-changing requests
+// (POST/PUT/PATCH/DELETE) that authenticate via cookie, echo the readable
+// csrf_token cookie back as a header; the server rejects a mismatch. GET/HEAD
+// never carry it - they don't need it and it would be a no-op if they did.
 apiClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const method = (config.method ?? 'get').toLowerCase();
+  if (STATE_CHANGING_METHODS.has(method)) {
+    const csrfToken = getCookie(CSRF_COOKIE_NAME);
+    if (csrfToken) {
+      config.headers[CSRF_HEADER_NAME] = csrfToken;
+    }
   }
   return config;
 });
 
-// Response interceptor: handle 401 with single-flight refresh
+// Response interceptor: handle 401 with single-flight cookie refresh
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -39,37 +46,22 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      const refreshToken = sessionStorage.getItem('refresh_token');
-
-      if (!refreshToken) {
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
 
       try {
-        // Single-flight: queue behind one refresh promise
+        // Single-flight: queue behind one refresh promise. No body needed -
+        // the server reads the refresh_token cookie itself; the CSRF header
+        // for this POST is attached by the request interceptor above.
         if (!refreshPromise) {
-          refreshPromise = (async () => {
-            const res = await apiClient.post<TokenPair>('/auth/refresh-token', {
-              refresh_token: refreshToken,
-            });
-            return res.data;
-          })();
+          refreshPromise = apiClient.post('/auth/refresh-token').then(() => undefined);
         }
 
-        const tokens = await refreshPromise;
-        const { access_token, refresh_token: newRefreshToken } = tokens;
+        await refreshPromise;
 
-        sessionStorage.setItem('access_token', access_token);
-        sessionStorage.setItem('refresh_token', newRefreshToken);
-
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        // Retry original request - the rotated cookies ride along automatically.
         return apiClient(originalRequest);
       } catch (refreshError) {
         console.log('[apiClient] Refresh failed, redirecting to login');
-        sessionStorage.removeItem('access_token');
-        sessionStorage.removeItem('refresh_token');
+        clearCachedClaims();
         window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {

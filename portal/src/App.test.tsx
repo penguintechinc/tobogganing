@@ -52,11 +52,8 @@ describe('App', () => {
   });
 
   it('renders dashboard when authenticated', async () => {
-    sessionStorage.setItem(
-      'access_token',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6InZpZXdlciIsInRlbmFudCI6InQxIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjk5OTk5OTk5OTl9.mock'
-    );
-
+    // getStoredClaims is mocked directly below - no client-readable token
+    // involved (access_token is an HttpOnly cookie the server manages).
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const authApi = require('./api/auth');
     authApi.getStoredClaims.mockReturnValue({

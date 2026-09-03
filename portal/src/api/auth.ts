@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { cacheClaims, clearCachedClaims, readCachedClaims, type Claims } from './authStorage';
 
 interface LoginResponse {
   access_token?: string;
@@ -8,14 +9,7 @@ interface LoginResponse {
   mfa_required?: boolean;
 }
 
-interface Claims {
-  sub: string;
-  email: string;
-  role: string;
-  tenant: string;
-  iat: number;
-  exp: number;
-}
+export type { Claims };
 
 export async function login(
   email: string,
@@ -35,11 +29,13 @@ export async function login(
       return { mfaRequired: true };
     }
 
-    if (response.data.access_token && response.data.refresh_token) {
-      sessionStorage.setItem('access_token', response.data.access_token);
-      sessionStorage.setItem('refresh_token', response.data.refresh_token);
-
+    // The server sets the access_token/refresh_token/csrf_token cookies
+    // itself (this call carries credentials via apiClient) - the JSON body
+    // still echoes access_token only so we can decode display claims once,
+    // immediately, without ever persisting the token itself.
+    if (response.data.access_token) {
       const claims = parseJwt(response.data.access_token);
+      cacheClaims(claims);
       console.log(`[auth] Login success { tenant: "${claims.tenant}" }`);
       return { mfaRequired: false, claims };
     }
@@ -53,17 +49,15 @@ export async function login(
 
 export async function logout(): Promise<void> {
   console.log('[auth] Logout');
-  const refreshToken = sessionStorage.getItem('refresh_token');
 
   try {
-    if (refreshToken) {
-      await apiClient.post('/auth/logout', { refresh_token: refreshToken });
-    }
+    // No body needed - the server reads the refresh_token cookie and clears
+    // all three auth cookies regardless of outcome.
+    await apiClient.post('/auth/logout');
   } catch (error) {
-    console.log('[auth] Logout API call failed, clearing tokens locally');
+    console.log('[auth] Logout API call failed, clearing local state anyway');
   } finally {
-    sessionStorage.removeItem('access_token');
-    sessionStorage.removeItem('refresh_token');
+    clearCachedClaims();
   }
 }
 
@@ -93,11 +87,14 @@ export function parseJwt(token: string): Claims {
   return { ...payload, email, role } as unknown as Claims;
 }
 
-export function getStoredToken(): string | null {
-  return sessionStorage.getItem('access_token');
-}
-
+/**
+ * Synchronous auth-state hydration for app start / page reload. There is no
+ * client-readable access token anymore (HttpOnly), so this reads the cached
+ * claims from the last login/refresh - self-invalidating against the
+ * readable csrf_token cookie so a stale per-tab cache never survives a
+ * server-side logout. This is a UI hint only; every API call is still
+ * authorized server-side from the cookie on each request.
+ */
 export function getStoredClaims(): Claims | null {
-  const token = getStoredToken();
-  return token ? parseJwt(token) : null;
+  return readCachedClaims();
 }
