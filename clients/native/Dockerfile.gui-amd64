@@ -1,10 +1,11 @@
 # Docker build for SASEWaddle GUI client (AMD64)
 # Optimized for native AMD64 builds with all GUI dependencies
 
-FROM golang:1.23-bullseye AS gui-builder-amd64
+FROM golang:1.23-bullseye@sha256:161b8513c09cbfa4c174fd32e46eddc5eddf487a43958b9cf8b07d628e9e0f85 AS gui-builder-amd64
 
 # Install GUI development dependencies for AMD64
-RUN apt-get update && apt-get install -y \
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
     libx11-dev \
@@ -41,15 +42,17 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
     ./cmd/gui
 
 # Test stage - verify the binary was built
-FROM ubuntu:20.04 AS test
-RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
+FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214 AS test
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends file && rm -rf /var/lib/apt/lists/*
 COPY --from=gui-builder-amd64 /src/sasewaddle-client-gui /tmp/
 RUN file /tmp/sasewaddle-client-gui && \
     ls -la /tmp/sasewaddle-client-gui
 
 # Final stage - minimal runtime image
-FROM ubuntu:20.04
-RUN apt-get update && apt-get install -y \
+FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libayatana-appindicator3-1 \
     libgtk-3-0 \
     libgl1-mesa-glx \

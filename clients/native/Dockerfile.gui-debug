@@ -1,9 +1,12 @@
 # Debug GUI build step by step
 
-FROM golang:1.23-bullseye AS gui-debug
+FROM golang:1.23-bullseye@sha256:161b8513c09cbfa4c174fd32e46eddc5eddf487a43958b9cf8b07d628e9e0f85 AS gui-debug
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Install GUI development dependencies
-RUN apt-get update && apt-get install -y \
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
     libx11-dev \
