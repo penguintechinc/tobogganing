@@ -1,4 +1,5 @@
 """Test AutoPerf tiered monitoring policies, cycle task, and API."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -19,12 +20,12 @@ async def autoperf_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
     of full flag keys); everything else is flag-off — so the flag-off 402
     paths are exercised against the real gate, not a blanket bypass.
     """
+    import hub_api.app as app_module
+    import hub_api.db
+    import shared.licensing.entitlements
     from hub_api.app import create_app
     from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
     from hub_api.registry import ModuleContext
-    import hub_api.db
-    import hub_api.app as app_module
-    import shared.licensing.entitlements
 
     test_app = create_app()
     test_app.config["TESTING"] = True
@@ -32,6 +33,9 @@ async def autoperf_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     test_app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    test_app.config["PRODUCT_NAME"] = "test-app"
 
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
@@ -239,9 +243,7 @@ class TestAutoPerfCycleTask:
     """Test AutoPerf cycle task logic with real DAL."""
 
     @pytest.mark.asyncio
-    async def test_autoperf_cycle_breach_escalates_and_retunes(
-        self, real_dal: AsyncDB
-    ) -> None:
+    async def test_autoperf_cycle_breach_escalates_and_retunes(self, real_dal: AsyncDB) -> None:
         """Breach path: cycle detects alert_events, escalates tier, retunes interval."""
         from hub_api.modules.perftest_cluster.worker.tasks import _autoperf_cycle_async
 
@@ -290,7 +292,6 @@ class TestAutoPerfCycleTask:
 
         # Fake engine factory that does nothing
         async def fake_engine(device):
-
             class FakeEngine:
                 async def run_test(self, test_type, target):
                     return {"latency_ms": 10, "throughput": 100, "output": "ok"}
@@ -352,7 +353,6 @@ class TestAutoPerfCycleTask:
 
         # Fake engine factory
         async def fake_engine(device):
-
             class FakeEngine:
                 async def run_test(self, test_type, target):
                     return {"latency_ms": 10, "throughput": 100, "output": "ok"}
@@ -396,8 +396,8 @@ class TestAutoPerfCycleTask:
         self, real_dal: AsyncDB
     ) -> None:
         """Engine failure: test result marked failed, cycle still calls record_cycle."""
-        from hub_api.modules.perftest_cluster.worker.tasks import _autoperf_cycle_async
         from hub_api.modules.perftest_cluster.services.engine_client import EngineError
+        from hub_api.modules.perftest_cluster.worker.tasks import _autoperf_cycle_async
 
         tenant = str(uuid4())
         device_id = str(uuid4())
@@ -414,7 +414,6 @@ class TestAutoPerfCycleTask:
 
         # Fake engine factory that raises an error
         async def failing_engine(device):
-
             class FailingEngine:
                 async def run_test(self, test_type, target):
                     raise EngineError("Network unreachable")

@@ -24,8 +24,8 @@ async def test_manifest_unexpected_exception_returns_403(
 
     claims = {
         "sub": "u1",
-        "iss": "test",
-        "aud": "test",
+        "iss": "tobogganing",
+        "aud": "tobogganing",
         "tenant": "t1",
         "role": "admin",
     }

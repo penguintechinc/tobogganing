@@ -16,6 +16,7 @@ import structlog
 from quart import Blueprint, current_app, request, websocket
 
 from hub_api.auth.middleware import (
+    ACCESS_TOKEN_COOKIE,
     _scope_satisfied,
     current_claims,
     require_scope,
@@ -63,6 +64,34 @@ def _token_from_subprotocol() -> str:
     return ""
 
 
+def _cookie_origin_allowed() -> bool:
+    """Check the handshake ``Origin`` header against the CORS allowlist.
+
+    WebSocket handshakes are not protected by CORS preflight or the
+    double-submit CSRF check used on REST — a malicious cross-origin page can
+    still trigger a browser to open a WS to us with the ``access_token``
+    cookie auto-attached (Cross-Site WebSocket Hijacking). This is the
+    required server-side defense-in-depth for the cookie-auth path (the
+    bearer-header and subprotocol paths can't be set by a browser
+    cross-origin, so they don't need it): reject unless ``Origin`` is present
+    and matches the same allowlist the REST CORS layer uses
+    (``config.cors_origins`` — see ``app.py``'s ``quart_cors.cors(...)``
+    setup), so there is one source of truth for trusted portal origins.
+    Missing/empty allowlist or missing Origin header both fail closed.
+
+    Returns:
+        True if the handshake Origin is present and allowlisted.
+    """
+    origin = request.headers.get("Origin", "")
+    if not origin:
+        return False
+
+    config_obj = getattr(current_app, "config_obj", None)
+    cors_origins = getattr(config_obj, "cors_origins", "") if config_obj else ""
+    allowed = {o.strip() for o in cors_origins.split(",") if o.strip()}
+    return origin in allowed
+
+
 @dataclass(slots=True)
 class StreamMessage:
     """WebSocket message structure for streaming test progress."""
@@ -78,11 +107,19 @@ class StreamMessage:
 async def _validate_websocket_auth() -> tuple[str | None, str | None]:
     """Validate WebSocket connection via JWT.
 
-    Accepts the token from the Authorization header (service clients) or,
-    when the header is absent, from the ``Sec-WebSocket-Protocol`` handshake
-    header (browser clients — see :func:`_token_from_subprotocol`). The token
-    is never read from the URL query string, so it cannot leak into access
-    logs or browser history.
+    Accepts the token from, in order: the Authorization header (service
+    clients), the ``Sec-WebSocket-Protocol`` handshake header (legacy browser
+    clients — see :func:`_token_from_subprotocol`), or the ``access_token``
+    HttpOnly cookie set by the portal login flow (current browser clients,
+    which no longer send a bearer token or subprotocol — see
+    ``auth/middleware.py::_validate_and_store_token``, the same cookie
+    fallback used by the REST auth path). The token is never read from the
+    URL query string, so it cannot leak into access logs or browser history.
+
+    The cookie path additionally requires an allowlisted ``Origin`` header
+    (see :func:`_cookie_origin_allowed`) — a Cross-Site WebSocket Hijacking
+    defense, since the cookie auto-attaches on any same-site handshake and WS
+    upgrades get neither CORS preflight nor double-submit CSRF protection.
 
     Returns:
         Tuple of (tenant, claims) if valid, (None, None) otherwise.
@@ -92,6 +129,23 @@ async def _validate_websocket_auth() -> tuple[str | None, str | None]:
         token = auth_header[7:]
     else:
         token = _token_from_subprotocol()
+        if not token:
+            cookie_token = request.cookies.get(ACCESS_TOKEN_COOKIE, "")
+            if cookie_token:
+                # Cross-Site WebSocket Hijacking defense: the access_token
+                # cookie auto-attaches on any same-site request regardless of
+                # which page opened the WS, and WS handshakes get neither CORS
+                # preflight nor our double-submit CSRF header check. Require
+                # an allowlisted Origin before trusting a cookie-sourced
+                # token; bearer/subprotocol tokens below skip this since a
+                # browser can't set either cross-origin.
+                if not _cookie_origin_allowed():
+                    logger.warning(
+                        "websocket_auth_failed_origin_not_allowed",
+                        origin=request.headers.get("Origin", ""),
+                    )
+                    return None, None
+                token = cookie_token
         if not token:
             logger.warning("websocket_auth_failed_missing_bearer")
             return None, None

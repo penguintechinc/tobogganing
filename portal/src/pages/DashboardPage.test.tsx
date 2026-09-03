@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { DashboardPage } from './DashboardPage';
 import { AuthProvider } from '../context/AuthContext';
+import { cacheClaims, CSRF_COOKIE_NAME } from '../api/authStorage';
 
 jest.mock('../hooks/useManifest');
 
@@ -32,11 +33,23 @@ const renderDashboard = () => {
 describe('DashboardPage', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    sessionStorage.setItem(
-      'access_token',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6InZpZXdlciIsInRlbmFudCI6InQxIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjk5OTk5OTk5OTl9.mock'
-    );
+    // Simulate an authenticated session: a csrf_token cookie (server-set,
+    // readable) plus the cached claims AuthProvider hydrates from - there is
+    // no client-readable access token anymore (HttpOnly cookie).
+    document.cookie = `${CSRF_COOKIE_NAME}=test-csrf; path=/`;
+    cacheClaims({
+      sub: '1234567890',
+      email: 'test@example.com',
+      role: 'viewer',
+      tenant: 't1',
+      iat: 1516239022,
+      exp: 9999999999,
+    });
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    document.cookie = `${CSRF_COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
   });
 
   it('renders welcome message', () => {

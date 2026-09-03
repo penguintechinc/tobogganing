@@ -17,7 +17,6 @@ describe('useLiveTest', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    sessionStorage.clear();
     mockWs = {
       send: jest.fn(),
       close: jest.fn(),
@@ -25,7 +24,6 @@ describe('useLiveTest', () => {
 
     (global.WebSocket as unknown as jest.Mock) = jest.fn(() => mockWs);
     mockApiClient.default.post = jest.fn().mockResolvedValue({});
-    sessionStorage.setItem('access_token', 'test-token-123');
   });
 
   afterEach(() => {
@@ -40,7 +38,7 @@ describe('useLiveTest', () => {
     expect(result.current.series).toEqual([]);
   });
 
-  it('connects with token in the subprotocol header, never the URL', async () => {
+  it('connects with no client-side credential - the HttpOnly access_token cookie rides the handshake automatically', async () => {
     const { result } = renderHook(() => useLiveTest());
 
     await act(async () => {
@@ -57,13 +55,13 @@ describe('useLiveTest', () => {
 
     const call = (global.WebSocket as unknown as jest.Mock).mock.calls[0];
     const wsUrl = call?.[0] as string;
-    const subprotocols = call?.[1] as string[];
+    const subprotocols = call?.[1] as string[] | undefined;
     // URL carries no credential
     expect(wsUrl).toContain('/api/v1/perftest_cluster/live-test/stream');
     expect(wsUrl).not.toContain('token');
-    expect(wsUrl).not.toContain('test-token-123');
-    // Token rides in the Sec-WebSocket-Protocol handshake header
-    expect(subprotocols).toEqual(['tobogganing-bearer', 'test-token-123']);
+    // No subprotocol handshake - there is no client-readable token to send;
+    // the browser attaches the HttpOnly cookie to the same-origin upgrade.
+    expect(subprotocols).toBeUndefined();
   });
 
   it('posts to /live-test/run on start', async () => {
@@ -409,9 +407,7 @@ describe('useLiveTest', () => {
     expect(mockWs.close).toHaveBeenCalled();
   });
 
-  it('sets error status when no access token', async () => {
-    sessionStorage.clear();
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+  it('connects regardless of any client-side storage state (no token gate)', async () => {
     const { result } = renderHook(() => useLiveTest());
 
     await act(async () => {
@@ -422,8 +418,8 @@ describe('useLiveTest', () => {
       });
     });
 
-    expect(result.current.status).toBe('error');
-    consoleErrorSpy.mockRestore();
+    expect(global.WebSocket).toHaveBeenCalled();
+    expect(result.current.status).toBe('connecting');
   });
 
   it('handles start error gracefully', async () => {
@@ -440,26 +436,6 @@ describe('useLiveTest', () => {
       });
     });
 
-    expect(result.current.status).toBe('error');
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('handles connectWebSocket when no token available', async () => {
-    sessionStorage.clear();
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    const { result } = renderHook(() => useLiveTest());
-
-    // Manually call connectWebSocket by using start
-    await act(async () => {
-      result.current.start({
-        device_id: 'device-1',
-        test_type: 'http',
-        target: 'example.com',
-      });
-    });
-
-    // Check that error status is set because no token
     expect(result.current.status).toBe('error');
     consoleErrorSpy.mockRestore();
   });

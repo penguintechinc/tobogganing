@@ -82,11 +82,9 @@ const renderSidebar = () => {
 describe('Sidebar', () => {
   beforeEach(() => {
     mockUseManifest.mockReturnValue(mockManifestData);
+    // useAuth is mocked directly above; AuthProvider's own hydration (which
+    // no longer reads a stored token - see api/authStorage.ts) is unused.
     sessionStorage.clear();
-    sessionStorage.setItem(
-      'access_token',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ0ZXN0dXNlckBleGFtcGxlLmNvbSIsInJvbGUiOiJtYWludGFpbmVyIiwidGVuYW50IjoidDEiLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6OTk5OTk5OTk5OX0.mock'
-    );
   });
 
   it('displays sidebar branding', async () => {

@@ -25,6 +25,9 @@ async def auto_checkins_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     test_app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    test_app.config["PRODUCT_NAME"] = "test-app"
 
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)

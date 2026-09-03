@@ -64,12 +64,19 @@ async def test_login_unexpected_exception_returns_401(auth_client: Quart) -> Non
 
 @pytest.mark.asyncio
 async def test_refresh_missing_body_returns_400(auth_client: Quart) -> None:
-    """POST /auth/refresh-token with no JSON body returns 400."""
+    """POST /auth/refresh-token with no JSON body and no refresh_token cookie returns 400.
+
+    Since the browser-cookie fallback was added (auth/middleware.py cookie
+    auth), a missing/malformed body no longer short-circuits to a generic
+    "Missing request body" — the handler also checks the refresh_token
+    cookie, so the accurate error once both sources are empty is
+    "Missing refresh_token".
+    """
     client = auth_client.test_client()
     resp = await client.post("/api/v1/auth/refresh-token", data="not json")
     assert resp.status_code == 400
     data = await resp.get_json()
-    assert data["error"] == "Missing request body"
+    assert data["error"] == "Missing refresh_token"
 
 
 @pytest.mark.asyncio
@@ -85,12 +92,16 @@ async def test_refresh_unexpected_exception_returns_401(auth_client: Quart) -> N
 
 @pytest.mark.asyncio
 async def test_logout_missing_body_returns_400(auth_client: Quart) -> None:
-    """POST /auth/logout with no JSON body returns 400."""
+    """POST /auth/logout with no JSON body and no refresh_token cookie returns 400.
+
+    See test_refresh_missing_body_returns_400 for why the error message
+    changed from "Missing request body" to "Missing refresh_token".
+    """
     client = auth_client.test_client()
     resp = await client.post("/api/v1/auth/logout", data="not json")
     assert resp.status_code == 400
     data = await resp.get_json()
-    assert data["error"] == "Missing request body"
+    assert data["error"] == "Missing refresh_token"
 
 
 @pytest.mark.asyncio

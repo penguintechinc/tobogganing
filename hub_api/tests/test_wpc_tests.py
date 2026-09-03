@@ -1,4 +1,5 @@
 """Tests for WaddlePerf Cluster performance test API endpoints."""
+
 from __future__ import annotations
 
 import hashlib
@@ -12,8 +13,8 @@ from quart import Quart
 
 from hub_api.modules.perftest_cluster.services.test_manager import PerfTestResult
 
-
 # Use canonical fixtures from conftest.py (flags auto-enabled there)
+
 
 @pytest.fixture
 def app_with_wpc_tests(app_with_wpc: Quart) -> Quart:
@@ -55,9 +56,7 @@ def tests_write_token(wpc_write_token: str) -> str:
 
 
 @pytest_asyncio.fixture
-async def app_with_wpc_realdb(
-    real_dal: Any, monkeypatch: Any
-) -> Quart:
+async def app_with_wpc_realdb(real_dal: Any, monkeypatch: Any) -> Quart:
     """Create a test app with WaddlePerf Cluster module and real async database.
 
     This fixture patches get_db to return the real AsyncDB from real_dal,
@@ -70,15 +69,18 @@ async def app_with_wpc_realdb(
     Returns:
         Quart app with WaddlePerf Cluster module and real database.
     """
+    import hub_api.db
+    from hub_api.app import create_app
     from hub_api.auth.jwt import encode_access_token
     from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
     from hub_api.registry import ModuleContext
-    from hub_api.app import create_app
-    import hub_api.db
 
     # Create a fresh app without mocking db.init_dal
     test_app = create_app()
     test_app.config["TESTING"] = True
+    # Matches the "iss"/"aud" used by wpc_write_token_realdb below, so
+    # _validate_and_store_token's aud/iss enforcement accepts it.
+    test_app.config["PRODUCT_NAME"] = "test-app"
 
     # Set up key provider for token generation in tests
     private_pem, public_pem = generate_rsa_key_pair()
@@ -88,28 +90,31 @@ async def app_with_wpc_realdb(
     # Patch get_db to return the real AsyncDB
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     import hub_api.app as app_module
+
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
 
     # Patch the tests API module to use real DAL too
     import hub_api.modules.perftest_cluster.api.tests as tests_api
+
     monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
 
     # Enable all wpc feature flags for tests (bypass flag server)
     import shared.licensing.entitlements
+
     original_flag_on = shared.licensing.entitlements._flag_on
 
     def mock_flag_on(flag_key: str, distinct_id: str = "system") -> bool:
-        if flag_key.startswith(
-            "tobogganing.perftest.cluster."
-        ) or flag_key.startswith("tobogganing.perftest.client."):
+        if flag_key.startswith("tobogganing.perftest.cluster.") or flag_key.startswith(
+            "tobogganing.perftest.client."
+        ):
             return True
         return original_flag_on(flag_key, distinct_id)
 
     monkeypatch.setattr(shared.licensing.entitlements, "_flag_on", mock_flag_on)
 
     # Register WaddlePerf Cluster module via registry
-    from hub_api.modules.perftest_cluster import module as wpc_module
     from hub_api.modules.perftest_client import module as wpcl_module
+    from hub_api.modules.perftest_cluster import module as wpc_module
 
     wpc_contract = wpc_module()
     wpcl_contract = wpcl_module()
@@ -158,11 +163,10 @@ async def test_create_test_success(
     """Test successful test creation with JWT auth."""
     client = app_with_wpc_tests.test_client()
 
-    with patch(
-        "hub_api.modules.perftest_cluster.api.tests.get_db"
-    ) as mock_get_db, patch(
-        "hub_api.modules.perftest_cluster.api.tests.TestManager"
-    ) as mock_manager_class:
+    with (
+        patch("hub_api.modules.perftest_cluster.api.tests.get_db") as mock_get_db,
+        patch("hub_api.modules.perftest_cluster.api.tests.TestManager") as mock_manager_class,
+    ):
         mock_get_db.return_value = MagicMock()
 
         mock_mgr = AsyncMock()
@@ -196,11 +200,10 @@ async def test_list_tests_success(
     """Test listing tests with JWT auth."""
     client = app_with_wpc_tests.test_client()
 
-    with patch(
-        "hub_api.modules.perftest_cluster.api.tests.get_db"
-    ) as mock_get_db, patch(
-        "hub_api.modules.perftest_cluster.api.tests.TestManager"
-    ) as mock_manager_class:
+    with (
+        patch("hub_api.modules.perftest_cluster.api.tests.get_db") as mock_get_db,
+        patch("hub_api.modules.perftest_cluster.api.tests.TestManager") as mock_manager_class,
+    ):
         mock_get_db.return_value = MagicMock()
 
         mock_mgr = AsyncMock()
@@ -230,11 +233,10 @@ async def test_get_test_success(
     """Test retrieving a single test with JWT auth."""
     client = app_with_wpc_tests.test_client()
 
-    with patch(
-        "hub_api.modules.perftest_cluster.api.tests.get_db"
-    ) as mock_get_db, patch(
-        "hub_api.modules.perftest_cluster.api.tests.TestManager"
-    ) as mock_manager_class:
+    with (
+        patch("hub_api.modules.perftest_cluster.api.tests.get_db") as mock_get_db,
+        patch("hub_api.modules.perftest_cluster.api.tests.TestManager") as mock_manager_class,
+    ):
         mock_get_db.return_value = MagicMock()
 
         mock_mgr = AsyncMock()
@@ -276,9 +278,7 @@ async def test_record_result_invalid_token(app_with_wpc_tests: Quart) -> None:
     client = app_with_wpc_tests.test_client()
     mock_db = MagicMock()
 
-    with patch(
-        "hub_api.modules.perftest_cluster.api.tests.get_db", return_value=mock_db
-    ):
+    with patch("hub_api.modules.perftest_cluster.api.tests.get_db", return_value=mock_db):
         # Mock invalid key lookup
         mock_db.device_api_keys.select = MagicMock(return_value=None)
 
@@ -300,9 +300,7 @@ async def test_record_result_revoked_token(app_with_wpc_tests: Quart) -> None:
     api_key = "test-api-key"
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
-    with patch(
-        "hub_api.modules.perftest_cluster.api.tests.get_db", return_value=mock_db
-    ):
+    with patch("hub_api.modules.perftest_cluster.api.tests.get_db", return_value=mock_db):
         # Mock revoked key
         mock_key = MagicMock()
         mock_key.api_key_hash = api_key_hash
@@ -322,9 +320,7 @@ async def test_record_result_revoked_token(app_with_wpc_tests: Quart) -> None:
 
 
 @pytest.mark.asyncio
-async def test_record_result_success(
-    app_with_wpc_realdb: Quart, real_dal: Any
-) -> None:
+async def test_record_result_success(app_with_wpc_realdb: Quart, real_dal: Any) -> None:
     """Test successful result recording with device API key authentication (real DAL).
 
     regression: Ensures device API key authentication works end-to-end with
@@ -507,7 +503,7 @@ async def test_record_result_idor_device_cross_access(
 
     # Verify test was not modified (check in DB)
     rows = await real_dal(real_dal.perf_test_results.id == test_id).select()
-    test_record = rows.first() if hasattr(rows, 'first') else rows[0] if rows else None
+    test_record = rows.first() if hasattr(rows, "first") else rows[0] if rows else None
     assert test_record is not None
     assert test_record.status == "pending"  # Still pending, not modified
     assert test_record.device_id == device_a_id  # Still belongs to A

@@ -4,6 +4,7 @@ Note: WebSocket tests are limited due to Quart test client constraints.
 Full WebSocket functionality should be tested via integration tests.
 HTTP endpoint tests cover the synchronous test execution path.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,6 +24,7 @@ def make_mock_row(data: dict) -> MagicMock:
 
 
 # Use canonical app_with_wpc fixture from conftest.py
+
 
 @pytest.fixture
 def valid_wpc_token(wpc_write_token: str) -> str:
@@ -84,13 +86,14 @@ class TestLiveTestHTTP:
 
         Regression: gh-401 — live-test endpoints must require tests:write scope.
         """
-        with patch(
-            "hub_api.entitlements.gate.feature_enabled", return_value=True
-        ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-        ) as mock_dm_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-        ) as mock_engine_class:
+        with (
+            patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+            patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+            patch("hub_api.modules.perftest_cluster.api.live_test.DeviceManager") as mock_dm_class,
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class,
+        ):
             # Mock DeviceManager
             mock_dm = AsyncMock()
             device_row = make_mock_row(
@@ -100,9 +103,7 @@ class TestLiveTestHTTP:
             mock_dm_class.return_value = mock_dm
 
             mock_engine = AsyncMock()
-            mock_engine.run_test = AsyncMock(
-                return_value={"status": "success", "latency_ms": 50.0}
-            )
+            mock_engine.run_test = AsyncMock(return_value={"status": "success", "latency_ms": 50.0})
             mock_engine_class.return_value = mock_engine
 
             client = app_with_wpc.test_client()
@@ -124,9 +125,7 @@ class TestLiveTestHTTP:
             assert "insufficient" in data["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_run_test_sync_requires_feature_flag(
-        self, app_with_wpc, valid_wpc_token
-    ) -> None:
+    async def test_run_test_sync_requires_feature_flag(self, app_with_wpc, valid_wpc_token) -> None:
         """Test that feature flag is checked before execution."""
         with patch("hub_api.entitlements.gate.feature_enabled", return_value=False):
             client = app_with_wpc.test_client()
@@ -145,18 +144,16 @@ class TestLiveTestHTTP:
             assert response.status_code == 402
 
     @pytest.mark.asyncio
-    async def test_run_test_sync_happy_path(
-        self, app_with_wpc, valid_wpc_token
-    ) -> None:
+    async def test_run_test_sync_happy_path(self, app_with_wpc, valid_wpc_token) -> None:
         """Test synchronous test execution via HTTP POST."""
-        with patch(
-            "hub_api.entitlements.gate.feature_enabled", return_value=True
-        ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-        ) as mock_dm_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-        ) as mock_engine_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.TestManager"
+        with (
+            patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+            patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+            patch("hub_api.modules.perftest_cluster.api.live_test.DeviceManager") as mock_dm_class,
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class,
+            patch("hub_api.modules.perftest_cluster.api.live_test.TestManager"),
         ):
             # Mock DeviceManager
             mock_dm = AsyncMock()
@@ -167,9 +164,7 @@ class TestLiveTestHTTP:
             mock_dm_class.return_value = mock_dm
 
             mock_engine = AsyncMock()
-            mock_engine.run_test = AsyncMock(
-                return_value={"status": "success", "latency_ms": 50.0}
-            )
+            mock_engine.run_test = AsyncMock(return_value={"status": "success", "latency_ms": 50.0})
             mock_engine_class.return_value = mock_engine
 
             mock_manager = AsyncMock()
@@ -194,10 +189,9 @@ class TestLiveTestHTTP:
 
             from hub_api.modules.perftest_cluster.api.live_test import TestManager as TM
 
-            with patch.object(
-                TM, "create_test", mock_manager.create_test
-            ), patch.object(
-                TM, "record_result", mock_manager.record_result
+            with (
+                patch.object(TM, "create_test", mock_manager.create_test),
+                patch.object(TM, "record_result", mock_manager.record_result),
             ):
                 client = app_with_wpc.test_client()
                 headers = {"Authorization": f"Bearer {valid_wpc_token}"}
@@ -219,13 +213,12 @@ class TestLiveTestHTTP:
                 assert data["data"]["latency_ms"] == 50.0
 
     @pytest.mark.asyncio
-    async def test_run_test_sync_missing_fields(
-        self, app_with_wpc, valid_wpc_token
-    ) -> None:
+    async def test_run_test_sync_missing_fields(self, app_with_wpc, valid_wpc_token) -> None:
         """Test that missing required fields return 400."""
-        with patch(
-            "hub_api.entitlements.gate.feature_enabled", return_value=True
-        ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True):
+        with (
+            patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+            patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+        ):
             client = app_with_wpc.test_client()
             headers = {"Authorization": f"Bearer {valid_wpc_token}"}
 
@@ -244,19 +237,18 @@ class TestLiveTestHTTP:
             assert "required" in data["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_run_test_sync_engine_error(
-        self, app_with_wpc, valid_wpc_token
-    ) -> None:
+    async def test_run_test_sync_engine_error(self, app_with_wpc, valid_wpc_token) -> None:
         """Test that engine errors return 503."""
         from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
-        with patch(
-            "hub_api.entitlements.gate.feature_enabled", return_value=True
-        ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-        ) as mock_dm_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-        ) as mock_engine_class:
+        with (
+            patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+            patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+            patch("hub_api.modules.perftest_cluster.api.live_test.DeviceManager") as mock_dm_class,
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class,
+        ):
             # Mock DeviceManager
             mock_dm = AsyncMock()
             device_row = make_mock_row(
@@ -289,19 +281,18 @@ class TestLiveTestHTTP:
             assert "failed" in data["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_run_test_sync_invalid_test_type(
-        self, app_with_wpc, valid_wpc_token
-    ) -> None:
+    async def test_run_test_sync_invalid_test_type(self, app_with_wpc, valid_wpc_token) -> None:
         """Test that invalid test_type is rejected by engine."""
         from hub_api.modules.perftest_cluster.services.engine_client import EngineError
 
-        with patch(
-            "hub_api.entitlements.gate.feature_enabled", return_value=True
-        ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-        ) as mock_dm_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-        ) as mock_engine_class:
+        with (
+            patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+            patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+            patch("hub_api.modules.perftest_cluster.api.live_test.DeviceManager") as mock_dm_class,
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class,
+        ):
             # Mock DeviceManager
             mock_dm = AsyncMock()
             device_row = make_mock_row(
@@ -311,9 +302,7 @@ class TestLiveTestHTTP:
             mock_dm_class.return_value = mock_dm
 
             mock_engine = AsyncMock()
-            mock_engine.run_test = AsyncMock(
-                side_effect=EngineError("Invalid test_type: badtest")
-            )
+            mock_engine.run_test = AsyncMock(side_effect=EngineError("Invalid test_type: badtest"))
             mock_engine_class.return_value = mock_engine
 
             client = app_with_wpc.test_client()
@@ -339,22 +328,21 @@ class TestLiveTestHTTP:
 
         Ensures device ownership is verified before executing test.
         """
-        with patch(
-            "hub_api.entitlements.gate.feature_enabled", return_value=True
-        ), patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True), patch(
-            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-        ) as mock_dm_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-        ) as mock_engine_class:
+        with (
+            patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+            patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+            patch("hub_api.modules.perftest_cluster.api.live_test.DeviceManager") as mock_dm_class,
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class,
+        ):
             # Mock DeviceManager to return None for unknown device
             mock_dm = AsyncMock()
             mock_dm.get_device = AsyncMock(return_value=None)
             mock_dm_class.return_value = mock_dm
 
             mock_engine = AsyncMock()
-            mock_engine.run_test = AsyncMock(
-                return_value={"status": "success", "latency_ms": 50.0}
-            )
+            mock_engine.run_test = AsyncMock(return_value={"status": "success", "latency_ms": 50.0})
             mock_engine_class.return_value = mock_engine
 
             client = app_with_wpc.test_client()
@@ -377,25 +365,25 @@ class TestLiveTestHTTP:
             mock_engine.run_test.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_stream_unknown_device_rejected(
-        self, app_with_wpc, valid_wpc_token
-    ) -> None:
+    async def test_stream_unknown_device_rejected(self, app_with_wpc, valid_wpc_token) -> None:
         """Regression: WS /stream with unknown device sends error frame, no test recorded.
 
         Ensures device ownership is verified before recording test results.
         """
-        with patch(
-            "hub_api.modules.perftest_cluster.api.live_test._check_feature_flag",
-            return_value=True,
-        ), patch(
-            "hub_api.modules.perftest_cluster.api.live_test._validate_websocket_auth"
-        ) as mock_auth, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-        ) as mock_dm_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-        ) as mock_engine_class, patch(
-            "hub_api.modules.perftest_cluster.api.live_test.TestManager"
-        ) as mock_tm_class:
+        with (
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test._check_feature_flag",
+                return_value=True,
+            ),
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test._validate_websocket_auth"
+            ) as mock_auth,
+            patch("hub_api.modules.perftest_cluster.api.live_test.DeviceManager") as mock_dm_class,
+            patch(
+                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+            ) as mock_engine_class,
+            patch("hub_api.modules.perftest_cluster.api.live_test.TestManager") as mock_tm_class,
+        ):
             # Mock auth to return valid tenant/claims
             mock_auth.return_value = ("test-tenant", {"tenant": "test-tenant"})
 
@@ -482,9 +470,7 @@ class TestWebSocketSubprotocolAuth:
         )
 
     @pytest.mark.asyncio
-    async def test_validate_websocket_auth_accepts_subprotocol_token(
-        self, app_with_wpc
-    ) -> None:
+    async def test_validate_websocket_auth_accepts_subprotocol_token(self, app_with_wpc) -> None:
         """A valid JWT offered as the second subprotocol authenticates the ws."""
         from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
@@ -519,9 +505,7 @@ class TestWebSocketSubprotocolAuth:
         assert claims is None
 
     @pytest.mark.asyncio
-    async def test_validate_websocket_auth_ignores_url_query_token(
-        self, app_with_wpc
-    ) -> None:
+    async def test_validate_websocket_auth_ignores_url_query_token(self, app_with_wpc) -> None:
         """Regression: a token in ?token= is NOT accepted — URL path is closed.
 
         Prevents the credential-in-URL leak; only the header path authenticates.
@@ -558,9 +542,7 @@ class TestWebSocketSubprotocolAuth:
         assert claims is None
 
     @pytest.mark.asyncio
-    async def test_validate_websocket_auth_missing_both_rejected(
-        self, app_with_wpc
-    ) -> None:
+    async def test_validate_websocket_auth_missing_both_rejected(self, app_with_wpc) -> None:
         """No header and no subprotocol → rejected."""
         from hub_api.modules.perftest_cluster.api.live_test import (
             _validate_websocket_auth,
@@ -583,8 +565,8 @@ class TestWebSocketSubprotocolAuth:
         A read-only token should be rejected with close code 1008.
         """
         from hub_api.modules.perftest_cluster.api.live_test import (
-            _validate_websocket_auth,
             _check_feature_flag,
+            _validate_websocket_auth,
         )
 
         async with app_with_wpc.test_request_context(
@@ -600,6 +582,187 @@ class TestWebSocketSubprotocolAuth:
             scope = claims.get("scope", "")
             assert "tests:write" not in scope
             assert "*:*" not in scope
+
+
+class TestWebSocketCookieAuth:
+    """The portal SPA authenticates via the HttpOnly ``access_token`` cookie —
+    no bearer header, no subprotocol. The WS handshake must accept that cookie
+    as a fallback, same as the REST auth path
+    (auth/middleware.py::_validate_and_store_token).
+    """
+
+    WS_PATH = "/api/v1/perftest_cluster/live-test/stream"
+
+    async def _make_token(self, app) -> str:
+        """Mint a valid access token for tenant-ws-cookie."""
+        from hub_api.auth.jwt import encode_access_token
+
+        return await encode_access_token(
+            {
+                "sub": "u1",
+                "iss": "test-app",
+                "aud": "test-app",
+                "tenant": "tenant-ws-cookie",
+                "scope": "*:*",
+            },
+            app.config["KEY_PROVIDER"],
+        )
+
+    # Default CORS_ORIGINS (hub_api/config/__init__.py) when the env var is
+    # unset — the same allowlist app.py's quart_cors.cors(...) uses for REST.
+    ALLOWED_ORIGIN = "http://localhost:3000"
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_accepts_cookie_token(self, app_with_wpc) -> None:
+        """A valid access_token cookie + allowlisted Origin authenticates the ws."""
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}={token}",
+                "Origin": self.ALLOWED_ORIGIN,
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant == "tenant-ws-cookie"
+        assert claims is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_invalid_cookie_token(self, app_with_wpc) -> None:
+        """Garbage token in the access_token cookie is rejected (allowlisted Origin present)."""
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}=not-a-jwt",
+                "Origin": self.ALLOWED_ORIGIN,
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_missing_cookie(self, app_with_wpc) -> None:
+        """No bearer header, no subprotocol, no cookie → rejected."""
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_bearer_header_wins_over_cookie(
+        self, app_with_wpc
+    ) -> None:
+        """Bearer header still takes priority when both header and cookie present."""
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        bearer_token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {bearer_token}",
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}=not-a-jwt",
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant == "tenant-ws-cookie"
+        assert claims is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_bearer_header_ignores_origin(self, app_with_wpc) -> None:
+        """Regression: CSWSH fix — bearer-header auth must NOT require Origin.
+
+        A browser can't set a custom Authorization header cross-origin, so the
+        bearer path is exempt from the Origin allowlist added for the cookie
+        path. A missing/disallowed Origin must not break service clients.
+        """
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        bearer_token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {bearer_token}",
+                "Origin": "https://evil.example.com",
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant == "tenant-ws-cookie"
+        assert claims is not None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_cookie_with_missing_origin(
+        self, app_with_wpc
+    ) -> None:
+        """Regression: CSWSH fix — cookie-sourced token with no Origin header is rejected.
+
+        A malicious cross-origin page can trigger the browser to attach the
+        access_token cookie automatically; requiring an allowlisted Origin
+        (defense-in-depth on top of SameSite=Strict) is what closes the gap.
+        """
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={"Cookie": f"{ACCESS_TOKEN_COOKIE}={token}"},
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
+
+    @pytest.mark.asyncio
+    async def test_validate_websocket_auth_rejects_cookie_with_disallowed_origin(
+        self, app_with_wpc
+    ) -> None:
+        """Regression: CSWSH fix — cookie-sourced token from a non-allowlisted Origin is rejected."""
+        from hub_api.auth.middleware import ACCESS_TOKEN_COOKIE
+        from hub_api.modules.perftest_cluster.api.live_test import (
+            _validate_websocket_auth,
+        )
+
+        token = await self._make_token(app_with_wpc)
+        async with app_with_wpc.test_request_context(
+            self.WS_PATH,
+            method="GET",
+            headers={
+                "Cookie": f"{ACCESS_TOKEN_COOKIE}={token}",
+                "Origin": "https://evil.example.com",
+            },
+        ):
+            tenant, claims = await _validate_websocket_auth()
+        assert tenant is None
+        assert claims is None
 
 
 class TestLiveTestRateLimiting:
@@ -693,16 +856,16 @@ class TestLiveTestRateLimiting:
         lt_module._rate_limiter = tight_limiter
 
         try:
-            with patch(
-                "hub_api.entitlements.gate.feature_enabled", return_value=True
-            ), patch(
-                "hub_api.entitlements.gate._is_licensed_for_tier", return_value=True
-            ), patch(
-                "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
-            ) as mock_dm_class, patch(
-                "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
-            ) as mock_engine_class, patch(
-                "hub_api.modules.perftest_cluster.api.live_test.TestManager"
+            with (
+                patch("hub_api.entitlements.gate.feature_enabled", return_value=True),
+                patch("hub_api.entitlements.gate._is_licensed_for_tier", return_value=True),
+                patch(
+                    "hub_api.modules.perftest_cluster.api.live_test.DeviceManager"
+                ) as mock_dm_class,
+                patch(
+                    "hub_api.modules.perftest_cluster.api.live_test.EngineClient"
+                ) as mock_engine_class,
+                patch("hub_api.modules.perftest_cluster.api.live_test.TestManager"),
             ):
                 # Mock DeviceManager
                 mock_dm = AsyncMock()

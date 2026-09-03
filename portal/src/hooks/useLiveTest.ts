@@ -45,24 +45,24 @@ export function useLiveTest(): LiveTestHookState {
   };
 
   const connectWebSocket = () => {
-    const token = sessionStorage.getItem('access_token');
-    if (!token) {
-      console.error('[useLiveTest] No access token found');
-      setStatus('error');
-      return;
-    }
-
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/v1/perftest_cluster/live-test/stream`;
 
     console.log('[useLiveTest] Connecting to WebSocket');
     setStatus('connecting');
 
-    // Pass the JWT via the Sec-WebSocket-Protocol handshake header (the only
-    // header a browser can set on a WebSocket) rather than the URL, so it
-    // never lands in access/proxy logs or browser history. The server reads
-    // the token from the subprotocol following the auth sentinel.
-    const ws = new WebSocket(wsUrl, ['tobogganing-bearer', token]);
+    // No token to hand the server anymore - access_token is an HttpOnly
+    // cookie, unreadable from JS. Same-origin WebSocket handshakes send
+    // cookies automatically, same as XHR/fetch, so no client-side auth step
+    // is needed here.
+    // NOTE (backend follow-up, out of scope for this change): the server's
+    // _validate_websocket_auth (hub_api/modules/perftest_cluster/api/
+    // live_test.py) only reads Authorization header or the
+    // Sec-WebSocket-Protocol bearer subprotocol - it has no cookie fallback
+    // yet (unlike the REST middleware's cookie fallback added alongside
+    // this migration), so this connection will be rejected until that
+    // route gains the same cookie-based auth path.
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('[useLiveTest] WebSocket connected');

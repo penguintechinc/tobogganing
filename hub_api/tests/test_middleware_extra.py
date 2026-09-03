@@ -38,6 +38,12 @@ def app_with_auth() -> Quart:
     """Quart app with a real key provider, no DAL/CACHE configured."""
     app = Quart(__name__)
     app.config["TESTING"] = True
+    # Matches the "iss"/"aud" used by this file's *user*-JWT token fixtures
+    # (iss="test"/aud="test"), so _validate_and_store_token's aud/iss
+    # enforcement accepts them. Machine-JWT fixtures below intentionally use
+    # aud="headend"/"wrong-audience" and are unaffected — they go through
+    # _extract_machine_identity, which checks aud=="headend" itself.
+    app.config["PRODUCT_NAME"] = "test"
     private_pem, public_pem = generate_rsa_key_pair()
     app.config["KEY_PROVIDER"] = InAppKeyProvider(private_pem, public_pem)
     return app

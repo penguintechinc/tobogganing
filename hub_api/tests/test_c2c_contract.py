@@ -5,6 +5,7 @@ through the registry (a key-format mismatch would silently downgrade the
 gate to community), blueprints mount under the module base path, the
 module is autodiscovered, and the tier gate returns 402 when unlicensed.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -14,7 +15,6 @@ from quart import Quart
 
 from hub_api.entitlements.gate import tier_of
 from hub_api.modules.perftest_c2c import module as c2c_module
-
 
 C2C_FEATURES = ["endpoints", "runs", "matrix"]
 
@@ -74,14 +74,17 @@ async def test_unlicensed_professional_request_returns_402(
     This exercises the real entitlement path (not the flag-off path), proving
     the paid gate actually fires when the entitlement resolves to professional.
     """
-    from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
-    from hub_api.auth.jwt import encode_access_token
-    from hub_api.registry import ModuleContext
     import shared.licensing.entitlements
+    from hub_api.auth.jwt import encode_access_token
+    from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
+    from hub_api.registry import ModuleContext
 
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    app.config["PRODUCT_NAME"] = "test-app"
 
     # Flag ON for c2c, but licensing stays at its default (professional → False).
     original_flag_on = shared.licensing.entitlements._flag_on

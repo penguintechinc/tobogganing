@@ -3,15 +3,23 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 import { AuthProvider } from '../context/AuthContext';
+import { cacheClaims, CSRF_COOKIE_NAME } from '../api/authStorage';
 
 const TestComponent = () => <div>Protected Content</div>;
 
-const testToken =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjk5OTk5OTk5OTksImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInJvbGUiOiJ2aWV3ZXIiLCJ0ZW5hbnQiOiJ0ZXN0In0.mock';
-
 const renderProtectedRoute = (isAuthenticated: boolean = false) => {
   if (isAuthenticated) {
-    sessionStorage.setItem('access_token', testToken);
+    // Simulate an authenticated session via the csrf_token cookie + cached
+    // claims - there is no client-readable access token anymore (HttpOnly).
+    document.cookie = `${CSRF_COOKIE_NAME}=test-csrf; path=/`;
+    cacheClaims({
+      sub: '1234567890',
+      email: 'test@example.com',
+      role: 'viewer',
+      tenant: 'test',
+      iat: 1516239022,
+      exp: 9999999999,
+    });
   }
 
   render(
@@ -36,6 +44,7 @@ const renderProtectedRoute = (isAuthenticated: boolean = false) => {
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    document.cookie = `${CSRF_COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
   });
 
   it('redirects to login when not authenticated', async () => {

@@ -1,4 +1,5 @@
 """Test alert rules, evaluation, and API."""
+
 from __future__ import annotations
 
 import json
@@ -124,16 +125,12 @@ class TestAlertRuleCRUD:
         )
 
         # Get rules for tenant A
-        rules_a = await real_dal(
-            real_dal.alert_rules.tenant == tenant_a
-        ).select()
+        rules_a = await real_dal(real_dal.alert_rules.tenant == tenant_a).select()
         assert len(rules_a) == 1
         assert rules_a.first()["name"] == "Rule A"
 
         # Get rules for tenant B
-        rules_b = await real_dal(
-            real_dal.alert_rules.tenant == tenant_b
-        ).select()
+        rules_b = await real_dal(real_dal.alert_rules.tenant == tenant_b).select()
         assert len(rules_b) == 1
         assert rules_b.first()["name"] == "Rule B"
 
@@ -176,9 +173,7 @@ class TestAlertEvaluation:
     """Test alert rule evaluation on ingest."""
 
     @pytest.mark.asyncio
-    async def test_breach_fires_event(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_breach_fires_event(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test that a breached rule fires an event."""
         tenant = str(uuid4())
         channel_id = str(uuid4())
@@ -230,12 +225,10 @@ class TestAlertEvaluation:
         ).select()
         assert len(events) == 1
         assert events.first()["observed_value"] == 150.0
-        assert events.first()["notified"] == True  # Should be marked notified
+        assert events.first()["notified"]  # Should be marked notified
 
     @pytest.mark.asyncio
-    async def test_no_breach_no_event(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_no_breach_no_event(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test that a non-breached rule does not fire an event."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -276,9 +269,7 @@ class TestAlertEvaluation:
         assert len(events) == 0
 
     @pytest.mark.asyncio
-    async def test_dedup_within_window(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_dedup_within_window(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test that dedup prevents firing within window."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -326,9 +317,7 @@ class TestAlertEvaluation:
         assert events_fired == 0
 
     @pytest.mark.asyncio
-    async def test_device_filter(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_device_filter(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test that device filter works correctly."""
         tenant = str(uuid4())
         device_a = str(uuid4())
@@ -376,9 +365,7 @@ class TestAlertEvaluation:
         assert events_fired == 1
 
     @pytest.mark.asyncio
-    async def test_test_type_filter(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_test_type_filter(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test that test_type filter works correctly."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -424,9 +411,7 @@ class TestAlertEvaluation:
         assert events_fired == 1
 
     @pytest.mark.asyncio
-    async def test_evaluator_exception_does_not_break_ingest(
-        self, real_dal: AsyncDB
-    ) -> None:
+    async def test_evaluator_exception_does_not_break_ingest(self, real_dal: AsyncDB) -> None:
         """Test that evaluator exceptions don't break ingest."""
         from hub_api.notifications.service import NotificationService
 
@@ -463,9 +448,7 @@ class TestAlertComparators:
     """Test all comparator operators."""
 
     @pytest.mark.asyncio
-    async def test_gt_comparator(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_gt_comparator(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test gt (greater than) comparator."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -486,12 +469,22 @@ class TestAlertComparators:
         )
 
         # 101 > 100 (breach)
-        assert await evaluator.evaluate_result(tenant, {"device_id": str(uuid4()), "test_type": "ping", "latency_ms": 101.0, "throughput": None, "status": "completed"}) == 1
+        assert (
+            await evaluator.evaluate_result(
+                tenant,
+                {
+                    "device_id": str(uuid4()),
+                    "test_type": "ping",
+                    "latency_ms": 101.0,
+                    "throughput": None,
+                    "status": "completed",
+                },
+            )
+            == 1
+        )
 
     @pytest.mark.asyncio
-    async def test_gte_comparator(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_gte_comparator(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test gte (greater than or equal) comparator."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -512,12 +505,22 @@ class TestAlertComparators:
         )
 
         # 100 >= 100 (breach)
-        assert await evaluator.evaluate_result(tenant, {"device_id": str(uuid4()), "test_type": "ping", "latency_ms": 100.0, "throughput": None, "status": "completed"}) == 1
+        assert (
+            await evaluator.evaluate_result(
+                tenant,
+                {
+                    "device_id": str(uuid4()),
+                    "test_type": "ping",
+                    "latency_ms": 100.0,
+                    "throughput": None,
+                    "status": "completed",
+                },
+            )
+            == 1
+        )
 
     @pytest.mark.asyncio
-    async def test_lt_comparator(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_lt_comparator(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test lt (less than) comparator."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -538,12 +541,22 @@ class TestAlertComparators:
         )
 
         # 49 < 50 (breach)
-        assert await evaluator.evaluate_result(tenant, {"device_id": str(uuid4()), "test_type": "ping", "latency_ms": None, "throughput": 49.0, "status": "completed"}) == 1
+        assert (
+            await evaluator.evaluate_result(
+                tenant,
+                {
+                    "device_id": str(uuid4()),
+                    "test_type": "ping",
+                    "latency_ms": None,
+                    "throughput": 49.0,
+                    "status": "completed",
+                },
+            )
+            == 1
+        )
 
     @pytest.mark.asyncio
-    async def test_lte_comparator(
-        self, real_dal: AsyncDB, evaluator: AlertEvaluator
-    ) -> None:
+    async def test_lte_comparator(self, real_dal: AsyncDB, evaluator: AlertEvaluator) -> None:
         """Test lte (less than or equal) comparator."""
         tenant = str(uuid4())
         rule_id = str(uuid4())
@@ -564,7 +577,19 @@ class TestAlertComparators:
         )
 
         # 50 <= 50 (breach)
-        assert await evaluator.evaluate_result(tenant, {"device_id": str(uuid4()), "test_type": "ping", "latency_ms": None, "throughput": 50.0, "status": "completed"}) == 1
+        assert (
+            await evaluator.evaluate_result(
+                tenant,
+                {
+                    "device_id": str(uuid4()),
+                    "test_type": "ping",
+                    "latency_ms": None,
+                    "throughput": 50.0,
+                    "status": "completed",
+                },
+            )
+            == 1
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -580,12 +605,12 @@ async def alerts_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
     of full flag keys); everything else is flag-off — so the flag-off 402
     paths are exercised against the real gate, not a blanket bypass.
     """
+    import hub_api.app as app_module
+    import hub_api.db
+    import shared.licensing.entitlements
     from hub_api.app import create_app
     from hub_api.crypto import InAppKeyProvider, generate_rsa_key_pair
     from hub_api.registry import ModuleContext
-    import hub_api.db
-    import hub_api.app as app_module
-    import shared.licensing.entitlements
 
     test_app = create_app()
     test_app.config["TESTING"] = True
@@ -593,11 +618,15 @@ async def alerts_app(real_dal: AsyncDB, monkeypatch: pytest.MonkeyPatch):
     private_pem, public_pem = generate_rsa_key_pair()
     provider = InAppKeyProvider(private_pem, public_pem)
     test_app.config["KEY_PROVIDER"] = provider
+    # Matches the "iss"/"aud" used by this file's token fixtures, so
+    # _validate_and_store_token's aud/iss enforcement accepts them.
+    test_app.config["PRODUCT_NAME"] = "test-app"
 
     monkeypatch.setattr(hub_api.db, "get_db", lambda: real_dal)
     monkeypatch.setattr(app_module, "get_db", lambda: real_dal)
     import hub_api.modules.perftest_cluster.api.alerts as alerts_api
     import hub_api.modules.perftest_cluster.api.tests as tests_api
+
     monkeypatch.setattr(alerts_api, "get_db", lambda: real_dal)
     monkeypatch.setattr(tests_api, "get_db", lambda: real_dal)
 
