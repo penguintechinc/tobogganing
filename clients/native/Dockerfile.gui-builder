@@ -1,9 +1,10 @@
 # Multi-stage Docker build for SASEWaddle GUI client
 # This provides a consistent build environment with all GUI dependencies
 
-FROM golang:1.23-alpine AS gui-builder
+FROM golang:1.23-alpine@sha256:383395b794dffa5b53012a212365d40c8e37109a626ca30d6151c8348d380b5f AS gui-builder
 
 # Install GUI development dependencies for Linux
+# hadolint ignore=DL3018
 RUN apk add --no-cache \
     gcc \
     musl-dev \
@@ -38,9 +39,12 @@ RUN CGO_ENABLED=1 go build \
     -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
     -o sasewaddle-client-gui \
     ./cmd/gui
+# hadolint ignore=DL3059
+RUN chmod 0755 /src/sasewaddle-client-gui
 
 # Test stage - verify the binary was built
-FROM alpine:3.19 AS test
+FROM alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1 AS test
+# hadolint ignore=DL3018
 RUN apk add --no-cache file
 COPY --from=gui-builder /src/sasewaddle-client-gui /tmp/
 RUN file /tmp/sasewaddle-client-gui && \
@@ -48,4 +52,5 @@ RUN file /tmp/sasewaddle-client-gui && \
 
 # Final stage - extract the binary
 FROM scratch
+USER 1000:1000
 COPY --from=gui-builder /src/sasewaddle-client-gui /sasewaddle-client-gui

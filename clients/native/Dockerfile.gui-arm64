@@ -1,11 +1,12 @@
 # Docker build for SASEWaddle GUI client (ARM64)
 # Optimized for ARM64 builds with cross-compilation toolchain
 
-FROM golang:1.23-bullseye AS gui-builder-arm64
+FROM golang:1.23-bullseye@sha256:161b8513c09cbfa4c174fd32e46eddc5eddf487a43958b9cf8b07d628e9e0f85 AS gui-builder-arm64
 
 # Add ARM64 architecture and install cross-compilation tools
+# hadolint ignore=DL3008
 RUN dpkg --add-architecture arm64 && \
-    apt-get update && apt-get install -y \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc-aarch64-linux-gnu \
     libc6-dev-arm64-cross \
     pkg-config \
@@ -13,7 +14,8 @@ RUN dpkg --add-architecture arm64 && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ARM64 GUI development dependencies
-RUN apt-get update && apt-get install -y \
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-dev:arm64 \
     libxcursor-dev:arm64 \
     libxrandr-dev:arm64 \
@@ -52,18 +54,24 @@ RUN go build \
     ./cmd/gui
 
 # Test stage - verify the binary was built (use ARM64 base)
-FROM arm64v8/ubuntu:20.04 AS test
-RUN apt-get update && apt-get install -y file && rm -rf /var/lib/apt/lists/*
+FROM arm64v8/ubuntu:20.04@sha256:722ea796ac2d57eeb3627c58a582fc1acc58be51faf815e1bce1682ae5c092f7 AS test
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends file && rm -rf /var/lib/apt/lists/*
 COPY --from=gui-builder-arm64 /src/sasewaddle-client-gui /tmp/
 RUN file /tmp/sasewaddle-client-gui && \
     ls -la /tmp/sasewaddle-client-gui
 
 # Final stage - minimal runtime image (ARM64)
-FROM arm64v8/ubuntu:20.04
-RUN apt-get update && apt-get install -y \
+FROM arm64v8/ubuntu:20.04@sha256:722ea796ac2d57eeb3627c58a582fc1acc58be51faf815e1bce1682ae5c092f7
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libayatana-appindicator3-1 \
     libgtk-3-0 \
     libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=gui-builder-arm64 /src/sasewaddle-client-gui /usr/local/bin/sasewaddle-client-gui
+# hadolint ignore=DL3066
+USER appuser
 ENTRYPOINT ["/usr/local/bin/sasewaddle-client-gui"]
