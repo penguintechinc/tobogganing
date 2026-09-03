@@ -300,7 +300,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         )  # Fall back to node_id if no id attr
 
         # Build machine JWT claims (includes jti, scope, tenant)
-        claims = build_machine_claims(
+        claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator, not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -324,7 +324,7 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
             )
 
         # Generate refresh token (24 hours) — rebuild from machine_claims with refresh type
-        refresh_claims = build_machine_claims(
+        refresh_claims = build_machine_claims(  # nosec B106 - token_type is a JWT claim discriminator, not a credential
             sub_id=principal_id,
             node_type=node_type,
             tenant=tenant_id,
@@ -635,7 +635,7 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
                 if cluster:
                     node_tenant = cluster.tenant
             except Exception:
-                pass
+                logger.debug("node_tenant_lookup_failed", node_id=node_id, exc_info=True)
 
         if not node_tenant and client_registry:
             try:
@@ -643,7 +643,7 @@ async def revoke_jwt_token() -> tuple[dict[str, Any], int]:
                 if client:
                     node_tenant = client.tenant
             except Exception:
-                pass
+                logger.debug("node_tenant_lookup_failed", node_id=node_id, exc_info=True)
 
         # Cross-tenant revoke attempt → 403
         if node_tenant and node_tenant != caller_tenant:
