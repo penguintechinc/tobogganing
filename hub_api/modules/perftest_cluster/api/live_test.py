@@ -16,6 +16,7 @@ import structlog
 from quart import Blueprint, current_app, request, websocket
 
 from hub_api.auth.middleware import (
+    ACCESS_TOKEN_COOKIE,
     _scope_satisfied,
     current_claims,
     require_scope,
@@ -78,11 +79,14 @@ class StreamMessage:
 async def _validate_websocket_auth() -> tuple[str | None, str | None]:
     """Validate WebSocket connection via JWT.
 
-    Accepts the token from the Authorization header (service clients) or,
-    when the header is absent, from the ``Sec-WebSocket-Protocol`` handshake
-    header (browser clients — see :func:`_token_from_subprotocol`). The token
-    is never read from the URL query string, so it cannot leak into access
-    logs or browser history.
+    Accepts the token from, in order: the Authorization header (service
+    clients), the ``Sec-WebSocket-Protocol`` handshake header (legacy browser
+    clients — see :func:`_token_from_subprotocol`), or the ``access_token``
+    HttpOnly cookie set by the portal login flow (current browser clients,
+    which no longer send a bearer token or subprotocol — see
+    ``auth/middleware.py::_validate_and_store_token``, the same cookie
+    fallback used by the REST auth path). The token is never read from the
+    URL query string, so it cannot leak into access logs or browser history.
 
     Returns:
         Tuple of (tenant, claims) if valid, (None, None) otherwise.
@@ -92,6 +96,8 @@ async def _validate_websocket_auth() -> tuple[str | None, str | None]:
         token = auth_header[7:]
     else:
         token = _token_from_subprotocol()
+        if not token:
+            token = request.cookies.get(ACCESS_TOKEN_COOKIE, "")
         if not token:
             logger.warning("websocket_auth_failed_missing_bearer")
             return None, None
