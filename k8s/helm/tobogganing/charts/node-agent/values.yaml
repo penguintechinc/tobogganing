@@ -30,7 +30,7 @@ nodeAgent:
   controlPlaneUrl: "https://hub-api.tobogganing.svc:8443"
 
   # Path to the machine JWT file (should be provided via secret volume mount)
-  machineJwtPath: "/etc/node-agent/machine.pem"
+  machineJwtPath: "/etc/node-agent-jwt/machine.pem"
 
   # Runtime features (gated by PostHog flags at agent startup)
   features:

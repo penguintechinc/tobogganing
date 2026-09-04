@@ -106,8 +106,13 @@ testserver:
     authEnabled: "false"
     maxConcurrentTests: "10"
     allowedOrigins: "http://tobogganing.localhost.local"
+  ## SQLite in-memory (mirrors charts/testserver/alpha.yml) — no
+  ## operator-provisioned MariaDB in the local microk8s cluster, and no
+  ## password/Secret required (templates/db-credentials.yaml + DB_PASS
+  ## env both skip when db.type == "sqlite").
   db:
-    host: "testserver-mariadb.tobogganing.svc.cluster.local"
+    type: "sqlite"
+    name: ""
   resources:
     requests:
       cpu: 100m
