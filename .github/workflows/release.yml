@@ -4,8 +4,8 @@ name: Release
 # (types: [released]) — never on bare tag push and never on `published`
 # (which also fires for pre-releases and would defeat the prod gate).
 # Builds + pushes multi-arch images for every service the umbrella Helm
-# chart (k8s/helm/tobogganing/values.yaml) actually deploys, plus the
-# customer-facing docker client, to ghcr.io/penguintechinc/tobogganing/<service>.
+# chart (k8s/helm/tobogganing/values.yaml) actually deploys,
+# to ghcr.io/penguintechinc/tobogganing/<service>.
 
 on:
   release:
@@ -76,8 +76,6 @@ jobs:
             context: ./agents/node-agent
           - service: testserver
             context: ./engines/testserver
-          - service: client
-            context: ./clients/docker
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
@@ -137,7 +135,6 @@ jobs:
           - netsvcs-dns
           - node-agent
           - testserver
-          - client
     steps:
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3

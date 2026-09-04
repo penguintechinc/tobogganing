@@ -84,17 +84,6 @@ jobs:
         [ -f "services/hub-router/go.mod" ] && echo "  ✓ Hub Router go.mod found"
         [ -d "services/hub-router/proxy" ] && echo "  ✓ Hub Router proxy package found"
 
-    - name: Verify Docker Client (Go 1.24)
-      run: |
-        echo "Docker Client Version Check"
-        [ -f "clients/docker/Dockerfile" ] && echo "  ✓ Docker Client Dockerfile found"
-
-    - name: Verify Native Clients (Go 1.24)
-      run: |
-        echo "Native Clients Version Check"
-        [ -f "clients/native/go.mod" ] && echo "  ✓ Native Client go.mod found"
-        [ -d "clients/native/cmd" ] && echo "  ✓ Native Client cmd directory found"
-
     - name: Verify K8s CNI Plugin (Go 1.24)
       run: |
         echo "K8s CNI Plugin Version Check"
@@ -134,7 +123,7 @@ jobs:
     - name: Run gosec (Go)
       uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
       with:
-        args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router ./clients/native ./k8s-cni'
+        args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router ./k8s-cni'
       continue-on-error: true
 
     - name: Report security scan summary

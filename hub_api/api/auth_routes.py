@@ -160,8 +160,8 @@ async def refresh() -> tuple[Response, int]:
     machine handler for every request. Moved to /refresh-token so both
     user and machine refresh flows are independently reachable. The
     machine path is documented in docs/architecture/headend-machine-jwt-contract.md
-    and consumed by live Go clients (services/hub-router, clients/native),
-    so it keeps its original path instead.
+    and consumed by live machine clients (services/hub-router (Go),
+    agents/node-agent (Rust)), so it keeps its original path instead.
     """
     try:
         data = await request.get_json(silent=True) or {}

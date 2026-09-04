@@ -4,8 +4,8 @@ name: Docker Build and Push
 # branches, on version tags, and on PRs targeting main (build-only gate for
 # the release→main promotion — images are not pushed on pull_request
 # events). Builds every service the umbrella Helm chart
-# (k8s/helm/tobogganing/values.yaml) actually deploys, plus the
-# customer-facing docker client, to ghcr.io/penguintechinc/tobogganing/<service>.
+# (k8s/helm/tobogganing/values.yaml) actually deploys,
+# to ghcr.io/penguintechinc/tobogganing/<service>.
 
 on:
   push:
@@ -47,8 +47,6 @@ jobs:
             context: ./agents/node-agent
           - service: testserver
             context: ./engines/testserver
-          - service: client
-            context: ./clients/docker
 
     steps:
       - name: Checkout code

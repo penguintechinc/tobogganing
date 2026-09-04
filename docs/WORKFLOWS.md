@@ -4,17 +4,15 @@ Complete documentation for Tobogganing's multi-component CI/CD pipeline with `.W
 
 ## Project Overview
 
-Tobogganing is a comprehensive SASE/Zero Trust solution with 8+ containerized components:
+Tobogganing is a comprehensive SASE/Zero Trust solution with containerized server-side components — end-user clients now live in the separate `penguin` project:
 
 **Core Components**:
 1. **Manager** (Python 3.12) - Orchestration and API
 2. **Headend** (Go 1.23) - WireGuard termination
-3. **Docker Client** (Go 1.23) - Containerized client
-4. **Native Clients** (Go 1.23) - Cross-platform GUI/headless
-5. **K8s CNI Plugin** (Go 1.23) - Kubernetes networking
-6. **Frontend Website** (Node.js 18) - Marketing site
-7. **Documentation Site** (MkDocs) - Technical docs
-8. **Deployment Configs** (K8s/Helm) - Infrastructure
+3. **K8s CNI Plugin** (Go 1.23) - Kubernetes networking
+4. **Frontend Website** (Node.js 18) - Marketing site
+5. **Documentation Site** (MkDocs) - Technical docs
+6. **Deployment Configs** (K8s/Helm) - Infrastructure
 
 ## Workflow Architecture
 
@@ -25,10 +23,6 @@ Tobogganing is a comprehensive SASE/Zero Trust solution with 8+ containerized co
 | CI/CD Pipeline | `.github/workflows/ci.yml` | Push/PR | All component testing and security |
 | Version Monitoring | `.github/workflows/version-monitor.yml` | .version changes | Version validation and consistency |
 | Version Release | `.github/workflows/version-release.yml` | .version push main | Automated release creation |
-| Mobile Builds | `.github/workflows/mobile-builds.yml` | Manual | iOS/Android native builds |
-| GUI Build | `.github/workflows/gui-build.yml` | Manual | Desktop GUI binary builds |
-| Go Build | `.github/workflows/go-build.yml` | Manual | Go binaries for all platforms |
-| Manual Builds | `.github/workflows/manual-builds.yml` | Manual | On-demand container builds |
 | Push | `.github/workflows/push.yml` | Push main | Docker registry push |
 | Release | `.github/workflows/release.yml` | GitHub release | Release artifact publishing |
 | Cron | `.github/workflows/cron.yml` | Daily 2 AM UTC | Scheduled maintenance |
@@ -49,8 +43,6 @@ Tobogganing is a comprehensive SASE/Zero Trust solution with 8+ containerized co
 **Component Verification**:
 - Manager: `manager/app.py`, `requirements.txt`
 - Headend: `headend/go.mod`, `proxy/` package
-- Docker Client: `clients/docker/Dockerfile`
-- Native Clients: `clients/native/go.mod`, `cmd/` directory
 - K8s CNI: `k8s-cni/go.mod`, `cmd/tobogganing-cni/`
 - Frontend: `website/package.json`, `src/` directory
 
@@ -73,87 +65,23 @@ Tobogganing is a comprehensive SASE/Zero Trust solution with 8+ containerized co
    - go test with race detector
    - Coverage upload to Codecov
 
-3. **test-client** (Go 1.23)
-   - System dependency installation
-   - GUI dependencies (libayatana-appindicator, libgtk-3, webkit2gtk)
-   - golangci-lint with nogui build tag
-   - go test with nogui tag
-   - Coverage upload to Codecov
-
-4. **security-scan**
+3. **security-scan**
    - bandit: Python code analysis (manager/)
-   - gosec: Go security (headend, native, K8s CNI)
+   - gosec: Go security (headend, K8s CNI)
    - Trivy: Filesystem vulnerability scan
    - GitHub Security tab integration
 
-5. **build-images** (Parallel Docker builds)
+4. **build-images** (Parallel Docker builds)
    - Manager (Python container)
    - Headend (Go container)
-   - Docker Client (Go container)
    - Multi-arch: linux/amd64, linux/arm64
    - Docker layer caching
 
-6. **build-native-client** (Cross-platform binaries)
-   - Linux amd64/arm64
-   - Windows amd64/arm64
-   - macOS amd64/arm64
-   - Binary artifact uploads
-
-7. **create-release** (Release packaging)
-   - Aggregates native client artifacts
-   - Creates release packages
-   - Packages for Windows (ZIP), Unix (tar.gz)
-
-8. **integration-test**
+5. **integration-test**
    - Multi-component interaction
    - Docker Compose test environment
    - Health endpoint validation
    - Connectivity verification
-
-## Component-Specific Workflows
-
-### Native Client Builds (go-build.yml)
-
-**Platforms**:
-- Linux: amd64, arm64
-- macOS: amd64, arm64 (Universal binary)
-- Windows: amd64, arm64
-
-**Build Process**:
-- go build with version injection via ldflags
-- CGO_ENABLED=0 for static binaries
-- Build optimization flags
-- Binary signing (optional)
-
-### GUI Client Builds (gui-build.yml)
-
-**Architecture**:
-- Go with Fyne framework
-- System tray integration
-- Conditional compilation with build tags
-- Docker-based ARM builds
-
-**Build Targets**:
-- macOS Universal binary (Intel + Apple Silicon)
-- Linux x86_64 and ARM64
-- Windows x86_64 and ARM64
-
-**Dependencies**:
-- libayatana-appindicator3-dev
-- libgtk-3-dev
-- libgl1-mesa-dev
-- libwebkit2gtk-4.1-dev
-
-### Mobile Builds (mobile-builds.yml)
-
-**Platforms**:
-- iOS (iPhone, iPad)
-- Android
-
-**Tools**:
-- Go iOS bindings
-- Android NDK integration
-- Cross-compilation setup
 
 ## Security Scanning Standards
 
@@ -176,11 +104,11 @@ Covers:
 
 ### Go Security (gosec)
 
-**Scope**: headend/, clients/native/, k8s-cni/
+**Scope**: headend/, k8s-cni/
 
 **Detection**:
 ```bash
-gosec -no-fail -fmt json ./headend ./clients/native ./k8s-cni
+gosec -no-fail -fmt json ./headend ./k8s-cni
 ```
 
 Covers:
@@ -217,13 +145,6 @@ Covers:
 - Race detector enabled
 - WireGuard mock tests
 - Proxy function tests
-- Coverage: 80%+ target
-
-**Native Client (Go)**:
-- Go testing with nogui tag
-- CLI argument validation
-- Configuration parsing
-- Error handling
 - Coverage: 80%+ target
 
 **K8s CNI (Go)**:
@@ -266,7 +187,6 @@ Validates all container builds:
 **Parallel Strategy**:
 - Manager image: linux/amd64, linux/arm64
 - Headend image: linux/amd64, linux/arm64
-- Docker Client: linux/amd64, linux/arm64
 
 **Optimization**:
 - Docker Buildx with QEMU
@@ -315,13 +235,6 @@ TRAFFIC_MIRROR_ENABLED: false
 SYSLOG_ENABLED: false
 ```
 
-**Native Client**:
-```bash
-MANAGER_URL: https://manager.example.com
-API_KEY: test-key
-LOG_LEVEL: info
-```
-
 ## Release Process
 
 ### Version File Updates
@@ -355,8 +268,6 @@ LOG_LEVEL: info
 **Produced by workflows**:
 - Manager Docker image
 - Headend Docker image
-- Docker Client image
-- Native binaries (all platforms)
 - Release notes (Markdown)
 - Checksums (SHA256)
 
@@ -404,13 +315,11 @@ npm audit fix
 - Unit tests run simultaneously
 - Docker builds run in parallel
 - Security scans independent of tests
-- Cross-platform binaries built parallel
 
 ### Build Time Targets
 
 - CI pipeline: <15 minutes total
 - Docker builds: <5 minutes per image
-- Native client builds: <3 minutes per platform
 - Full workflow with artifacts: <20 minutes
 
 ## Local Development Workflow
@@ -433,15 +342,6 @@ cd headend
 go mod download
 golangci-lint run
 go test -v -race ./...
-gosec ./...
-```
-
-**Native Client (Go)**:
-```bash
-cd clients/native
-go mod download
-golangci-lint run
-go test -v -tags=nogui -race ./...
 gosec ./...
 ```
 
@@ -474,11 +374,6 @@ npm run lint && npm run format && npm run typecheck && npm test
 - Verify Go 1.23 compatibility
 - Check go.mod for correct versions
 - Ensure all imports resolve
-
-**Native Client GUI build fails**:
-- Check for correct Fyne version
-- Verify system GUI dependencies
-- Check CGO settings
 
 ### Test Failures
 
@@ -520,8 +415,6 @@ For comprehensive information:
 ## References
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Go Build Tags](https://golang.org/pkg/go/build/)
-- [Fyne Framework](https://fyne.io/)
 - [Docker Buildx](https://docs.docker.com/buildx/working-with-buildx/)
 - [QEMU Docker Support](https://github.com/tonistiigi/binfmt)
 - [WireGuard Protocol](https://www.wireguard.com/)

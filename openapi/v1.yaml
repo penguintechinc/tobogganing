@@ -488,9 +488,9 @@ paths:
 
         machine path is documented in docs/architecture/headend-machine-jwt-contract.md
 
-        and consumed by live Go clients (services/hub-router, clients/native),
+        and consumed by live machine clients (services/hub-router (Go),
 
-        so it keeps its original path instead.'
+        agents/node-agent (Rust)), so it keeps its original path instead.'
       operationId: post_refresh
       parameters: []
       responses: {}
