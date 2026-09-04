@@ -118,8 +118,7 @@ spec:
               mountPath: /etc/node-agent/
               readOnly: true
             - name: machine-jwt
-              mountPath: /etc/node-agent/machine.pem
-              subPath: machine.pem
+              mountPath: /etc/node-agent-jwt/
               readOnly: true
             - name: runtime
               mountPath: /run/node-agent/
