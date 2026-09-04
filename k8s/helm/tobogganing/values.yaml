@@ -242,12 +242,41 @@ serviceAccount:
   annotations: {}
 
 ## Config
+## Non-secret application config for hub-api/hub-router/hub-webui, rendered
+## into the shared `<fullname>-config` ConfigMap (templates/settings.yaml)
+## and consumed via `envFrom.configMapRef` — see hub_api/config/__init__.py
+## for the full env var contract. MANAGER_URL/CORS_ORIGINS are sourced from
+## hubApi.managerUrl/hubApi.corsOrigins above (single source, not repeated
+## here); HUB_ROUTER_COUNT is sourced from hubRouter.replicas.
 config:
+  env: "development"
   logLevel: info
+  dbType: "sqlite"
+  dbHost: "localhost"
+  dbPort: 5432
+  dbName: "tobogganing"
+  dbUser: "tobogganing"
+  dbPoolSize: 10
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+  productName: "tobogganing"
+  ## Legacy/informational — not consumed by any template yet.
   hubApiUrl: "http://hub-api:8080"
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
-  dbType: "sqlite"
+
+## Secrets consumed via `envFrom.secretRef` into the shared
+## `<fullname>-secrets` Secret (templates/credentials.yaml). NEVER commit a
+## real value here — alpha gets a throwaway dev-only placeholder
+## (values-alpha.yaml, gitleaks-clean); beta/gamma/production leave these
+## unset so the `required` gate in templates/credentials.yaml fails the
+## render unless injected via `--set secrets.*=...` from a CI-managed
+## secret at deploy time. Mirrors hubRouter.sessionSigningKey /
+## templates/hub-router-signing.yaml.
+secrets:
+  dbPass: ""
+  licenseKey: ""
+  posthogKey: ""
 
 ## ---------------------------------------------------------------------
 ## netsvcs-dns + node-agent (squawk -> netsvcs merge, P5-C)
