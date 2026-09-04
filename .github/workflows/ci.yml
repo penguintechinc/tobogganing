@@ -12,7 +12,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME_HUB_API: ${{ github.repository }}/hub-api
   IMAGE_NAME_HUB_ROUTER: ${{ github.repository }}/hub-router
-  IMAGE_NAME_CLIENT: ${{ github.repository }}/client
   GO_VERSION: '1.24'
   PYTHON_VERSION: '3.13'
   NODE_VERSION: '18'
@@ -118,68 +117,6 @@ jobs:
         file: ./services/hub-router/coverage.out
         flags: headend
         name: headend-coverage
-
-  # Test Native Client (Go)
-  test-client:
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        go-version: [1.24]
-
-    steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-
-    - name: Set up Go ${{ matrix.go-version }}
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4  # v4
-      with:
-        go-version: ${{ matrix.go-version }}
-
-    - name: Cache Go modules
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-client-
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        # Install GUI dependencies with fallbacks for different Ubuntu versions
-        sudo apt-get install -y \
-          libayatana-appindicator3-dev \
-          libgtk-3-dev \
-          pkg-config \
-          build-essential || true
-
-        # Try newer webkit first, fallback to older version
-        sudo apt-get install -y libwebkit2gtk-4.1-dev || \
-        sudo apt-get install -y libwebkit2gtk-4.0-dev || \
-        echo "Warning: webkit2gtk not available, GUI features may be limited"
-
-    - name: Install dependencies
-      run: |
-        cd clients/native
-        go mod download
-
-    - name: Lint with golangci-lint
-      uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
-      with:
-        version: latest
-        working-directory: clients/native
-        args: --build-tags=nogui --timeout=5m --out-format=colored-line-number
-
-    - name: Test with go test
-      run: |
-        cd clients/native
-        go test -tags=nogui -v -race -coverprofile=coverage.out ./... || exit 0
-
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
-      with:
-        file: ./clients/native/coverage.out
-        flags: client
-        name: client-coverage
 
   # Test Node Agent (Rust)
   test-node-agent:
@@ -324,7 +261,7 @@ jobs:
     - name: Run gosec (Go security scanner)
       uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
       with:
-        args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router ./clients/native ./k8s-cni'
+        args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router ./k8s-cni'
       continue-on-error: true
 
     - name: Run Trivy filesystem scanning
@@ -345,7 +282,7 @@ jobs:
 
   # Build and push Docker images
   build-images:
-    needs: [test-manager, test-headend, test-client, security-scan]
+    needs: [test-manager, test-headend, security-scan]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -353,7 +290,7 @@ jobs:
 
     strategy:
       matrix:
-        component: [manager, headend, client]
+        component: [manager, headend]
 
     steps:
     - name: Checkout repository
@@ -427,149 +364,6 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           BUILD_TIME=${{ github.run_id }}
           GIT_COMMIT=${{ github.sha }}
-
-    - name: Build and push Docker image - Client
-      if: matrix.component == 'client'
-      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
-      with:
-        context: ./clients/docker
-        platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.meta.outputs.tags }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.version.outputs.version }}
-          BUILD_TIME=${{ github.run_id }}
-          GIT_COMMIT=${{ github.sha }}
-
-  # Build native client binaries
-  build-native-client:
-    needs: [test-client]
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            goos: linux
-            goarch: amd64
-            binary_suffix: ""
-          - runner: ubuntu-24.04
-            goos: linux
-            goarch: arm64
-            binary_suffix: ""
-          - runner: windows-latest
-            goos: windows
-            goarch: amd64
-            binary_suffix: ".exe"
-          - runner: macos-latest
-            goos: darwin
-            goarch: amd64
-            binary_suffix: ""
-          - runner: macos-latest
-            goos: darwin
-            goarch: arm64
-            binary_suffix: ""
-
-    steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-
-    - name: Read version from .version file
-      id: version
-      shell: bash
-      run: |
-        VERSION=$(cat .version)
-        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-    - name: Set up Go
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4  # v4
-      with:
-        go-version: 1.24
-
-    - name: Cache Go modules
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-client-${{ hashFiles('clients/native/go.sum') }}
-
-    - name: Install dependencies
-      run: |
-        cd clients/native
-        go mod download
-
-    - name: Build binary
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-        CGO_ENABLED: 0
-      shell: bash
-      run: |
-        cd clients/native
-        VERSION="${{ steps.version.outputs.version }}"
-        if [ "${{ runner.os }}" = "Windows" ]; then
-          BUILD_TIME=$(powershell -Command "Get-Date -UFormat '%Y-%m-%d_%H:%M:%S'")
-        else
-          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-        fi
-        GIT_COMMIT="${{ github.sha }}"
-
-        mkdir -p build
-
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}-pr${{ github.event.number }}${{ matrix.binary_suffix }}"
-        else
-          BINARY_NAME="tobogganing-client-${{ matrix.goos }}-${{ matrix.goarch }}-${VERSION}${{ matrix.binary_suffix }}"
-        fi
-
-        go build -ldflags="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT} -w -s" \
-          -o build/${BINARY_NAME} ./cmd/headless
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5  # v3
-      with:
-        name: native-client-${{ matrix.goos }}-${{ matrix.goarch }}
-        path: clients/native/build/*
-        retention-days: 7
-
-  # Create release (only on tags)
-  create-release:
-    if: github.event_name == 'release'
-    needs: [build-images, build-native-client]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-
-    steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a  # v3
-      with:
-        path: ./artifacts
-
-    - name: Create release packages
-      run: |
-        mkdir -p release-packages
-
-        # Package native clients
-        for dir in artifacts/native-client-*; do
-          if [ -d "$dir" ]; then
-            platform=$(basename "$dir" | sed 's/native-client-//')
-
-            if [[ "$platform" == *"windows"* ]]; then
-              cd "$dir" && zip -r "../../release-packages/tobogganing-client-${platform}.zip" . && cd -
-            else
-              cd "$dir" && tar -czf "../../release-packages/tobogganing-client-${platform}.tar.gz" . && cd -
-            fi
-          fi
-        done
-
-    - name: Upload release assets
-      uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
-      with:
-        files: release-packages/*
-        generate_release_notes: true
-        prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
 
   # Security scanning (post-release artifact scan)
   # NOTE: pre-existing duplicate of the `security-scan` job above (line ~298) — renamed
