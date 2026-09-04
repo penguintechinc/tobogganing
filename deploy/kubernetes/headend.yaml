@@ -72,11 +72,14 @@ spec:
         - name: dev-net-tun
           mountPath: /dev/net/tun
         securityContext:
+          # ROOT EXCEPTION (approved): WireGuard needs NET_ADMIN for tunnel setup.
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
-            add:
-            - NET_ADMIN
-            - SYS_MODULE
-          privileged: true  # Required for WireGuard
+            drop: [ALL]
+            add: [NET_ADMIN]
         resources:
           requests:
             memory: "256Mi"

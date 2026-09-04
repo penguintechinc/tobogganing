@@ -1,0 +1,55 @@
+# Production dependencies
+quart==0.20.0
+quart-cors==0.7.0
+quart-schema==0.19.0
+hypercorn==0.17.3
+penguin-dal[quart]>=0.1.0
+SQLAlchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+asyncpg==0.30.0
+aiomysql==0.3.0
+PyJWT==2.13.0
+bcrypt==4.2.1
+pyotp==2.9.0
+qrcode==8.0
+posthog==3.7.0
+penguin-aaa>=0.1.0
+penguin-licensing>=0.1.0
+python-dotenv==1.2.3
+structlog==24.4.0
+stix2==3.0.2
+defusedxml==0.7.1
+beautifulsoup4==4.12.3
+scikit-learn==1.5.2
+numpy==2.2.3
+scipy==1.14.1
+joblib==1.4.2
+celery==5.4.0
+markdown==3.10.2
+bleach==6.4.0
+grpcio==1.83.0
+grpcio-health-checking==1.62.0
+grpcio-reflection==1.62.0
+# protobuf pinned to the highest patched 4.25.x release: gencode in proto/**/*_pb2.py is
+# "Protobuf Python Version: 4.25.1" and requirements-kms.in independently resolves protobuf
+# 7.x for boto3/google-cloud-kms (separate lock file, not installed together) — bumping this
+# pin to 5.x/6.x would require regenerating the committed _pb2 stubs. 4.25.9 clears
+# PYSEC-2026-1806; PYSEC-2026-1805 has no fix in the 4.x line (needs 5.29.6+/6.33.5+) and is
+# left as a flagged residual pending a coordinated stub regen.
+protobuf==4.25.9
+# cryptography, h2: transitive-only (via authlib/joserfc/penguin-aaa and hypercorn
+# respectively) — pinned here directly so `uv pip compile` resolves the CVE-patched versions
+# instead of whatever the transitive resolver would otherwise pick.
+cryptography>=50.0.0
+h2>=4.4.1
+redis==5.0.1
+aiohttp==3.14.3
+dnspython==2.6.1
+greenlet==3.1.1
+PyYAML==6.0.2
+
+# Test dependencies
+pytest==9.0.3
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0

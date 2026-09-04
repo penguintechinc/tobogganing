@@ -3,15 +3,40 @@
 
 namespace: tobogganing
 
+## Shared image defaults, auto-injected by Helm into every sub-chart as
+## `.Values.global.*` (netsvcs-dns/node-agent/SASE tools). Per-service
+## `image.repository`/`image.tag` remain authoritative and always take
+## precedence — `global.image.pullPolicy` is the only field actually
+## consumed as a fallback today (see hub-api/hub-router/hub-webui/
+## node-agent/netsvcs-dns templates); registry/tag are declared here for
+## documentation/future consolidation, not yet wired as overrides.
+global:
+  image:
+    registry: ghcr.io/penguintechinc/tobogganing
+    tag: ""
+    pullPolicy: IfNotPresent
+
 ## Hub API Service
 hubApi:
   image:
-    repository: tobogganing/hub-api
+    repository: ghcr.io/penguintechinc/tobogganing/hub-api
     tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 2
   port: 8080
   grpcPort: 50051
+  ## Externally-reachable base URL enrolled SD-WAN clusters call back to
+  ## for JWT validation — fail-closed (hub_api/modules/sdwan/api/clusters.py
+  ## _manager_url() raises RuntimeError, surfaced as a 500, if unset;
+  ## deliberately not derived from the request Host header). Override per
+  ## environment to that environment's ingress URL + /api below.
+  managerUrl: ""
+  ## REST CORS allow-list + live-test WebSocket Origin allowlist
+  ## (comma-separated). hub_api/config/__init__.py defaults to
+  ## http://localhost:3000 if unset; override per environment to the real
+  ## portal origin(s) below.
+  corsOrigins: "http://localhost:3000"
   resources:
     requests:
       memory: "256Mi"
@@ -27,7 +52,7 @@ hubApi:
   probes:
     liveness:
       httpGet:
-        path: /healthz
+        path: /health
         port: 8080
       initialDelaySeconds: 15
       periodSeconds: 20
@@ -35,7 +60,7 @@ hubApi:
       failureThreshold: 3
     readiness:
       httpGet:
-        path: /healthz
+        path: /ready
         port: 8080
       initialDelaySeconds: 5
       periodSeconds: 10
@@ -45,8 +70,9 @@ hubApi:
 ## Hub Router Service
 hubRouter:
   image:
-    repository: tobogganing/hub-router
+    repository: ghcr.io/penguintechinc/tobogganing/hub-router
     tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 1
   ports:
@@ -91,12 +117,25 @@ hubRouter:
       value: "1"
     - name: net.ipv4.conf.all.src_valid_mark
       value: "1"
+  ## Session-signing secret for hub-router's own OAuth2/SAML2 SSO session
+  ## JWTs — only consumed when auth.type=oauth2|saml2 (default auth.type
+  ## is "jwt", which does not need this). Fail-closed:
+  ## services/hub-router/proxy/bootstrap.go refuses to start SSO without
+  ## it; must be >=32 bytes (proxy/auth/provider.go
+  ## minSessionSigningKeyBytes). Rendered into a Secret by
+  ## templates/hub-router-signing.yaml, gated with `required` — NEVER commit
+  ## a real value to a values file. Alpha gets a throwaway dev-only value
+  ## (values-alpha.yaml); beta/gamma/production leave this unset and inject
+  ## via `--set hubRouter.sessionSigningKey=...` from a CI-managed secret
+  ## at deploy time — omitting it fails the Helm render on purpose.
+  sessionSigningKey: ""
 
 ## Hub WebUI Service
 hubWebui:
   image:
-    repository: tobogganing/hub-webui
+    repository: ghcr.io/penguintechinc/tobogganing/hub-webui
     tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
     pullPolicy: IfNotPresent
   replicas: 2
   port: 80
@@ -203,9 +242,215 @@ serviceAccount:
   annotations: {}
 
 ## Config
+## Non-secret application config for hub-api/hub-router/hub-webui, rendered
+## into the shared `<fullname>-config` ConfigMap (templates/settings.yaml)
+## and consumed via `envFrom.configMapRef` — see hub_api/config/__init__.py
+## for the full env var contract. MANAGER_URL/CORS_ORIGINS are sourced from
+## hubApi.managerUrl/hubApi.corsOrigins above (single source, not repeated
+## here); HUB_ROUTER_COUNT is sourced from hubRouter.replicas.
 config:
+  env: "development"
   logLevel: info
+  dbType: "sqlite"
+  dbHost: "localhost"
+  dbPort: 5432
+  dbName: "tobogganing"
+  dbUser: "tobogganing"
+  dbPoolSize: 10
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+  productName: "tobogganing"
+  ## Legacy/informational — not consumed by any template yet.
   hubApiUrl: "http://hub-api:8080"
   hubRouterMetricsUrl: "http://hub-router:9090"
   redisUrl: "redis://redis:6379"
-  dbType: "sqlite"
+
+## Secrets consumed via `envFrom.secretRef` into the shared
+## `<fullname>-secrets` Secret (templates/credentials.yaml). NEVER commit a
+## real value here — alpha gets a throwaway dev-only placeholder
+## (values-alpha.yaml, gitleaks-clean); beta/gamma/production leave these
+## unset so the `required` gate in templates/credentials.yaml fails the
+## render unless injected via `--set secrets.*=...` from a CI-managed
+## secret at deploy time. Mirrors hubRouter.sessionSigningKey /
+## templates/hub-router-signing.yaml.
+secrets:
+  dbPass: ""
+  licenseKey: ""
+  posthogKey: ""
+
+## ---------------------------------------------------------------------
+## netsvcs-dns + node-agent (squawk -> netsvcs merge, P5-C)
+## ---------------------------------------------------------------------
+## Core sub-charts, ON by default — relocated from
+## engines/netsvcs-dns/k8s/helm and k8s/helm/node-agent (see Chart.yaml).
+## Overrides here are merged into each sub-chart's own values.yaml/
+## values-<env>.yaml defaults via standard Helm dependency value passing
+## (parent `netsvcs-dns:`/`node-agent:` key -> sub-chart root). See
+## charts/netsvcs-dns/values.yaml and charts/node-agent/values.yaml for
+## the full field set (env, probes, securityContext, etc.) not repeated
+## here.
+
+## DNS resolver fleet-node (DoH/DoT) DaemonSet — talks to hub-api over
+## gRPC :50051 for CheckIOC lookups and config-sync (see
+## templates/networkpolicy.yaml allow-netsvcs-grpc rules).
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
+    tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
+
+## Unified Rust DaemonSet (SASE connectivity + netsvcs-edge DNS/DHCP/NTP)
+## — control-plane calls to hub-api over gRPC :50051 (see
+## templates/networkpolicy.yaml allow-netsvcs-grpc rules). Keeps its own
+## NET_ADMIN/NET_BIND_SERVICE root exception and :53 binding — see
+## charts/node-agent/values.yaml nodeAgent.securityContext.
+node-agent:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/node-agent
+    tag: beta-1724152800
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
+
+## WaddlePerf testserver Go engine (data-plane target for
+## hub_api/modules/perftest_cluster — http/tcp/udp/icmp/traceroute +
+## speedtest/throughput tests). Default ON: without it, intra-cluster perf
+## tests have no engine to hit. See charts/testserver/values.yaml for the
+## full field set and KNOWN GAP notes (no bundled MariaDB — must be
+## provisioned separately; ping/traceroute binaries missing from the
+## Dockerfile runtime image affect ICMP/traceroute test types only).
+testserver:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/testserver
+    tag: latest
+    digest: ""  # Set (sha256:...) for production — see values-production.yaml
+
+## ---------------------------------------------------------------------
+## Optional out-of-band analysis tools (SASE Slice D adapters)
+## ---------------------------------------------------------------------
+## Suricata, Zeek, Arkime, Strelka, and CAPE ship as OFF-BY-DEFAULT Helm
+## sub-charts (see Chart.yaml `dependencies:` + `charts/<tool>/`). The
+## baseline product deploys without any of them.
+##
+## Enabling a tool here (`<tool>.enabled: true`) only deploys its pod +
+## Service. To actually turn on detection you must ALSO:
+##   1. Enable the community-tier flag `tobogganing.sase.adapters`
+##      (hub_api sase module contract — Entitlement("sase.adapters",
+##      "community"), default OFF).
+##   2. Configure hub-api's adapter poller to reach the tool via the
+##      {SOURCE}_ENABLED / {SOURCE}_ENDPOINT / {SOURCE}_LOG_PATH env vars
+##      read by hub_api/modules/sase/security/adapters/config.py
+##      (source = suricata|zeek|strelka|cape|arkime), pointed at the
+##      endpoint/logPath values configured below for each tool.
+## See k8s/helm/tobogganing/charts/README.md for the full
+## mirror -> tool -> adapter -> blocklist flow and known integration gaps.
+
+## Suricata IDS — the one tool hub-router's Go mirror already wires a raw
+## TCP feed to (mirror.suricata_host/mirror.suricata_port, default port
+## 9999 — services/hub-router/proxy/bootstrap.go).
+suricata:
+  enabled: false
+  image:
+    repository: jasonish/suricata
+    tag: "7.0.7"
+    digest: "sha256:b76d6bc42a572757d01b9289f1da250c6414ae69183505f694f75cd14025129f"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  mirror:
+    port: 9999
+  eve:
+    logPath: /var/log/suricata/eve.json
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## Zeek network security monitor — log-based in this deployment (no live
+## mirror wiring yet; only Suricata has that today). Establishes the
+## deployable pattern for when a traffic source is added.
+zeek:
+  enabled: false
+  image:
+    repository: zeek/zeek
+    tag: "6.2.1"
+    digest: "sha256:825d7f338cb539fa0e937cab5a68a4859e696cdc851dc06428a3961e6bb16014"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  notice:
+    logPath: /usr/local/zeek/logs/current/notice.log
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## Arkime full-packet-capture/session viewer. No maintained public image
+## with verifiable provenance was found for this tool (checked Docker Hub
+## + GHCR) — the sub-chart ships as a stub with NO default image; set
+## arkime.image.* before enabling. See charts/arkime/values.yaml.
+arkime:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  viewer:
+    port: 8005
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## Strelka file-scanning/YARA pipeline (Target's target/strelka-frontend —
+## the gRPC-facing component a poller submits scans to).
+strelka:
+  enabled: false
+  image:
+    repository: target/strelka-frontend
+    tag: "1.0.1"
+    digest: "sha256:5a713323733240c2028a49e01a008d35aeb955239b75e11d8cb86300369ab524"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  frontend:
+    port: 57314
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+## CAPE sandbox. No safe generic container image exists upstream — CAPE's
+## architecture requires a hypervisor (VirtualBox/KVM) to detonate
+## samples, which is out of scope for a single stub pod. Ships with NO
+## default image; set cape.image.* (and provision the sandbox hosts
+## separately) before enabling. See charts/cape/values.yaml.
+cape:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  api:
+    port: 8000
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"

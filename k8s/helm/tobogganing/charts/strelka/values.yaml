@@ -1,0 +1,53 @@
+## Strelka file-scanning/YARA pipeline (Target's open-source strelka-
+## frontend — the gRPC-facing component a scan-submitting client talks
+## to) — out-of-band analysis tool for SASE Slice D adapters. Deployed
+## OFF by default (parent Chart.yaml: condition strelka.enabled).
+enabled: false
+
+image:
+  repository: target/strelka-frontend
+  tag: "1.0.1"
+  digest: "sha256:5a713323733240c2028a49e01a008d35aeb955239b75e11d8cb86300369ab524"
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+## gRPC port the StrelkaAdapter poller submits scans to
+## (hub_api/modules/sase/security/adapters/config.py: STRELKA_ENDPOINT).
+## 57314 matches Strelka's published docker-compose.yml frontend port —
+## confirm against your Strelka deployment before relying on it in prod.
+frontend:
+  port: 57314
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  liveness:
+    tcpSocket:
+      port: 57314
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    tcpSocket:
+      port: 57314
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3

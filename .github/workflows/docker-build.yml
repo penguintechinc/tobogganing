@@ -1,5 +1,12 @@
 name: Docker Build and Push
 
+# Beta/CI image-build pipeline. Fires on push to main/develop/version
+# branches, on version tags, and on PRs targeting main (build-only gate for
+# the release→main promotion — images are not pushed on pull_request
+# events). Builds every service the umbrella Helm chart
+# (k8s/helm/tobogganing/values.yaml) actually deploys,
+# to ghcr.io/penguintechinc/tobogganing/<service>.
+
 on:
   push:
     branches:
@@ -15,149 +22,69 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository_owner }}/tobogganing
+  IMAGE_NAMESPACE: ${{ github.repository }}
 
 jobs:
-  build-manager:
-    name: Build Manager Docker Image
+  build-and-push:
+    name: Build ${{ matrix.service }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-manager
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-      
-      - name: Build and push Manager Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./manager
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: hub-api
+            context: ./hub_api
+          - service: hub-router
+            context: ./services/hub-router
+          - service: hub-webui
+            context: ./portal
+          - service: netsvcs-dns
+            context: ./engines/netsvcs-dns
+          - service: node-agent
+            context: ./agents/node-agent
+          - service: testserver
+            context: ./engines/testserver
 
-  build-headend:
-    name: Build Headend Docker Image
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-headend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-      
-      - name: Build and push Headend Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./headend
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-  build-docker-client:
-    name: Build Docker Client Image
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-client
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-      
-      - name: Build and push Docker Client image
-        uses: docker/build-push-action@v5
+
+      - name: Build and push ${{ matrix.service }} image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
-          context: ./clients/docker
+          context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=docker-build-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=docker-build-${{ matrix.service }}

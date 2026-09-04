@@ -17,9 +17,6 @@ spec:
       labels:
         {{- include "tobogganing.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: hub-router
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "tobogganing.serviceAccountName" . }}
       hostNetwork: {{ .Values.hubRouter.hostNetwork }}
@@ -30,8 +27,8 @@ spec:
       {{- end }}
       containers:
         - name: hub-router
-          image: "{{ .Values.hubRouter.image.repository }}:{{ .Values.hubRouter.image.tag }}"
-          imagePullPolicy: {{ .Values.hubRouter.image.pullPolicy }}
+          image: "{{ .Values.hubRouter.image.repository }}:{{ .Values.hubRouter.image.tag }}{{ if .Values.hubRouter.image.digest }}@{{ .Values.hubRouter.image.digest }}{{ end }}"
+          imagePullPolicy: {{ .Values.hubRouter.image.pullPolicy | default .Values.global.image.pullPolicy }}
           ports:
             - name: wireguard
               containerPort: {{ .Values.hubRouter.ports.wireguard }}
@@ -42,6 +39,12 @@ spec:
             - name: metrics
               containerPort: {{ .Values.hubRouter.ports.metrics }}
               protocol: TCP
+          env:
+            - name: PROXY_SESSION_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tobogganing.fullname" . }}-hub-router-signing
+                  key: PROXY_SESSION_SIGNING_KEY
           envFrom:
             - configMapRef:
                 name: {{ include "tobogganing.fullname" . }}-config

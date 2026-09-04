@@ -1,0 +1,42 @@
+# Non-secret application config shared across hub-api / hub-router /
+# hub-webui via `envFrom.configMapRef` (see hub-api-deployment.yaml,
+# hub-router-deployment.yaml, hub-webui-deployment.yaml) — the deploy
+# blocker this template fixes: those Deployments already referenced a
+# `{{ include "tobogganing.fullname" . }}-config` ConfigMap that never
+# existed, so pods hit CreateContainerConfigError. Keys mirror the env
+# var contract in hub_api/config/__init__.py exactly.
+#
+# MANAGER_URL/CORS_ORIGINS are sourced from hubApi.managerUrl/
+# hubApi.corsOrigins (already the per-env override point — see
+# values-alpha/beta/gamma/production.yaml) rather than duplicated under
+# `config:` — single source, no second value that can drift.
+# HUB_ROUTER_COUNT is sourced directly from hubRouter.replicas for the
+# same reason.
+#
+# NOTE: filename is `settings.yaml`, NOT `config.yaml` — the repo root
+# .gitignore has a blanket `*config*.yaml` rule (line 35, "Configuration
+# files with sensitive data") that would silently exclude a
+# `templates/config.yaml` from git entirely (same class of trap as
+# `*secret*` documented in hub-router-signing.yaml / credentials.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-config
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+data:
+  ENV: {{ .Values.config.env | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  DB_TYPE: {{ .Values.config.dbType | quote }}
+  DB_HOST: {{ .Values.config.dbHost | quote }}
+  DB_PORT: {{ .Values.config.dbPort | quote }}
+  DB_NAME: {{ .Values.config.dbName | quote }}
+  DB_USER: {{ .Values.config.dbUser | quote }}
+  DB_POOL_SIZE: {{ .Values.config.dbPoolSize | quote }}
+  JWT_EXPIRATION_HOURS: {{ .Values.config.jwtExpirationHours | quote }}
+  HUB_ROUTER_COUNT: {{ .Values.hubRouter.replicas | quote }}
+  POSTHOG_HOST: {{ .Values.config.posthogHost | quote }}
+  PRODUCT_NAME: {{ .Values.config.productName | quote }}
+  CORS_ORIGINS: {{ .Values.hubApi.corsOrigins | quote }}
+  MANAGER_URL: {{ .Values.hubApi.managerUrl | quote }}

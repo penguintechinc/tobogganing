@@ -1,7 +1,7 @@
 ## Tobogganing - Alpha Environment Overrides
 ## Minimal resources for development/testing
 
-namespace: tobogganing-alpha
+namespace: tobogganing
 
 hubApi:
   replicas: 1
@@ -12,6 +12,8 @@ hubApi:
     limits:
       memory: "256Mi"
       cpu: "250m"
+  managerUrl: "http://tobogganing.localhost.local/api"
+  corsOrigins: "http://tobogganing.localhost.local"
 
 hubRouter:
   replicas: 1
@@ -22,6 +24,13 @@ hubRouter:
     limits:
       memory: "256Mi"
       cpu: "250m"
+  # Dev-only placeholder, generated once for local alpha use — never
+  # reused in beta/gamma/production. See values.yaml
+  # hubRouter.sessionSigningKey comment. (Low-entropy/human-readable by
+  # design so secret scanners don't misclassify it as a leaked credential
+  # — matches the postgres.password "alpha-dev-password-generated-once"
+  # precedent; still >=32 bytes to satisfy the app's own length check.)
+  sessionSigningKey: "alpha-dev-only-session-signing-key-generated-once-never-reuse-elsewhere"
 
 hubWebui:
   replicas: 1
@@ -44,6 +53,74 @@ redis:
   storage:
     size: 512Mi
 
+## netsvcs-dns: local registry, NodePort exposure (mirrors
+## charts/netsvcs-dns/alpha.yml for standalone parity)
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: localhost:32000/netsvcs-dns
+    tag: alpha-latest
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    ports:
+      doh:
+        nodePort: 30080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+## node-agent: local registry (mirrors charts/node-agent/values-alpha.yaml)
+node-agent:
+  enabled: true
+  image:
+    repository: localhost:32000/tobogganing/node-agent
+    tag: alpha-latest
+    pullPolicy: IfNotPresent
+  nodeAgent:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+## testserver: local registry, NodePort exposure (mirrors
+## charts/testserver/alpha.yml for standalone parity)
+testserver:
+  enabled: true
+  image:
+    repository: localhost:32000/tobogganing/testserver
+    tag: alpha-latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: NodePort
+    nodePort: 30081
+  config:
+    authEnabled: "false"
+    maxConcurrentTests: "10"
+    allowedOrigins: "http://tobogganing.localhost.local"
+  ## SQLite in-memory (mirrors charts/testserver/alpha.yml) — no
+  ## operator-provisioned MariaDB in the local microk8s cluster, and no
+  ## password/Secret required (templates/db-credentials.yaml + DB_PASS
+  ## env both skip when db.type == "sqlite").
+  db:
+    type: "sqlite"
+    name: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 autoscaling:
   enabled: false
 
@@ -51,7 +128,22 @@ monitoring:
   enabled: false
 
 config:
+  env: "alpha"
   logLevel: debug
+  dbType: "sqlite"
+  dbPoolSize: 2
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+
+# Dev-only placeholders, generated once for local alpha use — never reused
+# in beta/gamma/production. See values.yaml secrets.* comment. Low-entropy/
+# human-readable by design so secret scanners don't misclassify these as
+# leaked credentials (matches the hubRouter.sessionSigningKey precedent
+# above and the postgres.password precedent it follows).
+secrets:
+  dbPass: "alpha-dev-only-db-password-generated-once-never-reuse-elsewhere"
+  licenseKey: "alpha-dev-only-license-key-generated-once-never-reuse-elsewhere"
+  posthogKey: "alpha-dev-only-posthog-key-generated-once-never-reuse-elsewhere"
 
 ## Ingress
 ingress:

@@ -1,0 +1,4 @@
+# Belt-and-suspenders: CARGO_TARGET_DIR points outside the repo, but guard
+# against a local override still landing a target/ dir under this workspace.
+/target
+**/target

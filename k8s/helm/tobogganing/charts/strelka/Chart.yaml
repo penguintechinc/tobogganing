@@ -1,0 +1,6 @@
+apiVersion: v2
+name: strelka
+description: Optional out-of-band Strelka file-scanning/YARA pipeline for Tobogganing SASE (Slice D adapter) — off by default
+type: application
+version: 0.1.0
+appVersion: "1.0.1"

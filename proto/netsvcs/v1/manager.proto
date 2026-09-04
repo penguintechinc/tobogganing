@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package netsvcs.manager.v1;
+
+option go_package = "github.com/penguintechinc/tobogganing/proto/netsvcs/v1;netsvcsv1";
+
+service ManagerService {
+  // Server registration and token management
+  rpc RegisterServer(RegisterServerRequest) returns (RegisterServerResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // Configuration retrieval
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc StreamConfigUpdates(StreamConfigUpdatesRequest) returns (stream ConfigUpdate);
+
+  // Node health and metrics
+  rpc SendHeartbeat(SendHeartbeatRequest) returns (SendHeartbeatResponse);
+
+  // Token and IOC validation (high-frequency operations)
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc CheckIOC(CheckIOCRequest) returns (CheckIOCResponse);
+}
+
+// Server Registration
+message RegisterServerRequest {
+  string api_version = 1;
+  string hostname = 2;
+  string version = 3;
+}
+
+message RegisterServerResponse {
+  string jwt = 1;
+  string server_id = 2;
+  ServerConfig config = 3;
+  int32 config_version = 4;
+  string refresh_token = 5;
+}
+
+// Token Refresh
+message RefreshTokenRequest {
+  string api_version = 1;
+  string server_id = 2;
+}
+
+message RefreshTokenResponse {
+  string jwt = 1;
+}
+
+// Configuration
+message ServerConfig {
+  repeated DNSZone zones = 1;
+  CacheSettings cache_settings = 2;
+  map<string, string> settings = 3;
+  bool ioc_filtering = 4;
+}
+
+message DNSZone {
+  string id = 1;
+  string name = 2;
+  string visibility = 3;  // public, internal, restricted, private
+  repeated DNSRecord records = 4;
+}
+
+message DNSRecord {
+  string name = 1;
+  string type = 2;        // A, AAAA, CNAME, MX, TXT, NS, SOA, PTR, SRV
+  string value = 3;
+  int32 ttl = 4;
+  int32 priority = 5;
+  int32 weight = 6;
+  int32 port = 7;
+}
+
+message CacheSettings {
+  int32 ttl = 1;
+  bool enabled = 2;
+  int32 max_entries = 3;
+}
+
+// Configuration retrieval
+message GetConfigRequest {
+  string api_version = 1;
+  string server_id = 2;
+}
+
+message GetConfigResponse {
+  ServerConfig config = 1;
+  int32 version = 2;
+}
+
+// Configuration streaming
+message StreamConfigUpdatesRequest {
+  string api_version = 1;
+  string server_id = 2;
+}
+
+message ConfigUpdate {
+  ServerConfig config = 1;
+  int32 version = 2;
+  string update_type = 3;  // full, incremental
+}
+
+// Heartbeat
+message SendHeartbeatRequest {
+  string api_version = 1;
+  string server_id = 2;
+  int64 timestamp = 3;
+  ServerMetrics metrics = 4;
+}
+
+message SendHeartbeatResponse {
+  int32 config_version = 1;
+  bool should_sync = 2;
+}
+
+message ServerMetrics {
+  int64 queries_total = 1;
+  int64 cache_hits = 2;
+  int64 errors = 3;
+  double avg_response_ms = 4;
+  map<string, int64> queries_by_type = 5;
+}
+
+// Token validation
+message ValidateTokenRequest {
+  string api_version = 1;
+  string token = 2;
+  string domain = 3;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  string reason = 2;
+  repeated string allowed_zone_ids = 3;
+}
+
+// IOC (Indicator of Compromise) checking
+message CheckIOCRequest {
+  string api_version = 1;
+  string domain = 2;
+  string ip = 3;
+}
+
+message CheckIOCResponse {
+  bool blocked = 1;
+  string reason = 2;
+  string feed_source = 3;
+  string severity = 4;
+}

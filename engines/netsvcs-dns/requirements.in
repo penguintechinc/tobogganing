@@ -1,0 +1,33 @@
+# DNS resolver service — core dependencies
+quart==0.20.0
+hypercorn==0.17.3
+grpcio==1.66.2
+grpcio-tools==1.66.2
+# grpcio-tools 1.66.2 caps protobuf<6.0dev,>=5.26.1 — 5.29.6 is the highest 5.x release and
+# clears both PYSEC-2026-1806 (needs 5.29.5+) and PYSEC-2026-1805 (needs 5.29.6+).
+protobuf==5.29.6
+
+# Async DNS resolution
+dnspython==2.6.1
+
+# Caching (redis/valkey async client)
+redis==5.0.1
+
+# Metrics
+prometheus-client==0.20.0
+
+# Logging
+structlog==24.4.0
+python-dotenv==1.2.3
+
+# Penguin libraries
+penguin-utils>=0.1.0
+
+# Testing
+pytest==9.0.3
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+fakeredis==2.20.0
+
+# Security scanning (dev)
+bandit==1.7.6

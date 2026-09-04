@@ -1,0 +1,64 @@
+## Suricata IDS/IPS — out-of-band analysis tool for SASE Slice D adapters.
+## Deployed OFF by default (parent Chart.yaml: condition suricata.enabled).
+## These are standalone-render defaults; when installed as part of the
+## umbrella tobogganing chart, the parent values.yaml `suricata:` block
+## overrides them (standard Helm subchart value passing).
+enabled: false
+
+image:
+  repository: jasonish/suricata
+  tag: "7.0.7"
+  digest: "sha256:b76d6bc42a572757d01b9289f1da250c6414ae69183505f694f75cd14025129f"
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+## TCP port hub-router's mirror manager dials (mirror.suricata_host /
+## mirror.suricata_port in services/hub-router/proxy/bootstrap.go,
+## default 9999) to push mirrored packet copies out-of-band.
+mirror:
+  port: 9999
+
+## Path the SuricataAdapter poller tails for EVE JSON
+## (hub_api/modules/sase/security/adapters/config.py: SURICATA_LOG_PATH).
+## Pod-local emptyDir by default — reading it from hub-api requires a
+## shared volume (e.g. an RWX PVC) mounted into both pods, which this
+## chart does not provision. See ../README.md.
+eve:
+  logPath: /var/log/suricata/eve.json
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+securityContext:
+  ## ROOT EXCEPTION (approved): Suricata needs NET_ADMIN + NET_RAW to open
+  ## raw/AF_PACKET sockets for packet capture off mirrored traffic.
+  ## Mirrors the existing hubRouter exception in the parent chart's
+  ## values.yaml — see devops-containers.md "Rootless Containers"
+  ## exception process.
+  runAsNonRoot: false
+  runAsUser: 0
+  allowPrivilegeEscalation: true
+  capabilities:
+    add:
+      - NET_ADMIN
+      - NET_RAW
+
+probes:
+  liveness:
+    command: ["sh", "-c", "pgrep -x suricata"]
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    command: ["sh", "-c", "pgrep -x suricata"]
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
