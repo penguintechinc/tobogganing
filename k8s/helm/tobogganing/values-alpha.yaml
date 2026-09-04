@@ -123,7 +123,22 @@ monitoring:
   enabled: false
 
 config:
+  env: "alpha"
   logLevel: debug
+  dbType: "sqlite"
+  dbPoolSize: 2
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+
+# Dev-only placeholders, generated once for local alpha use — never reused
+# in beta/gamma/production. See values.yaml secrets.* comment. Low-entropy/
+# human-readable by design so secret scanners don't misclassify these as
+# leaked credentials (matches the hubRouter.sessionSigningKey precedent
+# above and the postgres.password precedent it follows).
+secrets:
+  dbPass: "alpha-dev-only-db-password-generated-once-never-reuse-elsewhere"
+  licenseKey: "alpha-dev-only-license-key-generated-once-never-reuse-elsewhere"
+  posthogKey: "alpha-dev-only-posthog-key-generated-once-never-reuse-elsewhere"
 
 ## Ingress
 ingress:

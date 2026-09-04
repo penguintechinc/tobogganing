@@ -103,7 +103,22 @@ autoscaling:
   enabled: false
 
 config:
+  env: "beta"
   logLevel: info
+  dbType: "postgresql"
+  dbHost: "tobogganing-postgres.tobogganing.svc.cluster.local"
+  dbPort: 5432
+  dbName: "tobogganing"
+  dbUser: "hub_api"
+  dbPoolSize: 5
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+
+# secrets.dbPass / secrets.licenseKey / secrets.posthogKey intentionally
+# left unset — injected via `--set secrets.*=...` from a CI-managed secret
+# at deploy time, never committed. See values.yaml secrets.* comment;
+# templates/credentials.yaml's `required` fails the render (by design) if
+# any of these are omitted at deploy time.
 
 ## Ingress
 ingress:

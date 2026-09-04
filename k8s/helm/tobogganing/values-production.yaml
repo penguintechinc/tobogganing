@@ -157,4 +157,20 @@ monitoring:
     scrapeInterval: 15s
 
 config:
+  env: "production"
   logLevel: warn
+  dbType: "postgresql"
+  dbHost: "CHANGE-ME-managed-postgres.internal"  # externally managed, HA PostgreSQL
+  dbPort: 5432
+  dbName: "tobogganing"
+  dbUser: "hub_api"
+  dbPoolSize: 20
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+
+# secrets.dbPass / secrets.licenseKey / secrets.posthogKey intentionally
+# NOT set here — a real value must never be committed to a production
+# values file (same class of HIGH fixed for postgres.password, see git
+# history). Inject via `--set secrets.*=...` from a CI-managed secret at
+# deploy time; templates/credentials.yaml's `required` deliberately fails
+# the render if any are omitted.
