@@ -49,12 +49,9 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
-#### Go Environment (Headend & Clients)
+#### Go Environment (Headend)
 ```bash
 cd headend
-go mod download
-
-cd ../clients/native
 go mod download
 ```
 
@@ -75,7 +72,7 @@ docker-compose -f docker-compose.dev.yml up -d
 
 ### 1. 📋 Create an Issue
 - 🐛 For **bug reports**, use the bug report template
-- 💡 For **feature requests**, use the feature request template  
+- 💡 For **feature requests**, use the feature request template
 - 📚 For **documentation**, create a documentation issue
 
 ### 2. 🌿 Create a Branch
@@ -119,15 +116,15 @@ async def generate_certificate(
     validity_days: int = 365
 ) -> Dict[str, Any]:
     """Generate X.509 certificate for node authentication.
-    
+
     Args:
         node_id: Unique node identifier
         node_type: Type of node (client/headend)
         validity_days: Certificate validity period
-        
+
     Returns:
         Certificate data with private key
-        
+
     Raises:
         CertificateError: If generation fails
     """
@@ -157,7 +154,7 @@ func (a *Authenticator) AuthenticateClient(
 
 ### 🟢 TypeScript (Website)
 - 📏 Follow **TypeScript best practices**
-- ⚛️ Use **React Hooks** patterns  
+- ⚛️ Use **React Hooks** patterns
 - ♿ Write **accessible** components
 - 🎨 Use **Tailwind CSS** for styling
 - 📚 Document **component props**
@@ -179,10 +176,6 @@ pytest tests/ -v --cov=.
 
 # 🐹 Go tests (Headend)
 cd headend
-go test -v -race ./...
-
-# 🐹 Go tests (Clients)  
-cd clients/native
 go test -v -race ./...
 
 # 🟢 Website tests

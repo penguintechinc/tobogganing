@@ -94,9 +94,9 @@ test-portal: ## Run portal tests (if npm available)
 	fi
 
 test-go: ## Run Go service tests (if go.mod available)
-	@if [ -f clients/native/go.mod ] || [ -f services/hub-router/go.mod ] || [ -f engines/testserver/go.mod ]; then \
+	@if [ -f services/hub-router/go.mod ] || [ -f engines/testserver/go.mod ]; then \
 		echo "🧪 Testing Go services..."; \
-		for mod in clients/native services/hub-router engines/testserver; do \
+		for mod in services/hub-router engines/testserver; do \
 			if [ -f $$mod/go.mod ]; then \
 				echo "  Testing $$mod..."; \
 				(cd $$mod && go test -v -race ./... || true); \
@@ -138,7 +138,7 @@ lint-portal: ## Lint portal code (if npm available)
 lint-go: ## Lint Go services (if golangci-lint available)
 	@if command -v golangci-lint &> /dev/null; then \
 		echo "🔍 Linting Go services..."; \
-		for mod in clients/native services/hub-router engines/testserver; do \
+		for mod in services/hub-router engines/testserver; do \
 			if [ -f $$mod/go.mod ]; then \
 				echo "  Linting $$mod..."; \
 				(cd $$mod && golangci-lint run || true); \
