@@ -35,11 +35,10 @@ spec:
             - name: grpc
               containerPort: {{ .Values.hubApi.grpcPort }}
               protocol: TCP
-          env:
-            - name: MANAGER_URL
-              value: {{ .Values.hubApi.managerUrl | quote }}
-            - name: CORS_ORIGINS
-              value: {{ .Values.hubApi.corsOrigins | quote }}
+          # MANAGER_URL/CORS_ORIGINS come from the shared ConfigMap
+          # below (templates/settings.yaml, sourced from
+          # hubApi.managerUrl/hubApi.corsOrigins) — no explicit env:
+          # here to avoid two sources of truth for the same key.
           envFrom:
             - configMapRef:
                 name: {{ include "tobogganing.fullname" . }}-config
