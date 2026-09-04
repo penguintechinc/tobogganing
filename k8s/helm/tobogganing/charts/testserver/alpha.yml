@@ -26,15 +26,18 @@ config:
   maxConcurrentTests: "10"
   allowedOrigins: "http://tobogganing.localhost.local"
 
-# Alpha: local dev MariaDB (operator-provisioned — see values.yaml KNOWN
-# GAP note; this chart does not deploy the DB itself).
+# Alpha: SQLite, in-memory (dev-tier only — database.go AutoMigrates its
+# own schema). No operator-provisioned MariaDB exists in the local
+# microk8s cluster (see values.yaml KNOWN GAP note), and this chart does
+# not deploy one itself, so alpha does not attempt to reach one. SQLite
+# needs no password: templates/db-credentials.yaml and the DB_PASS env var
+# in templates/deployment.yaml are both skipped when db.type == "sqlite".
+# db.name empty => in-memory (file::memory:?cache=shared) — no PVC/volume
+# needed, consistent with readOnlyRootFilesystem: true and no state mount
+# in this chart.
 db:
-  host: "testserver-mariadb.tobogganing.svc.cluster.local"
-  port: "3306"
-  user: "waddleperf"
-  name: "waddleperf"
-  passwordSecretName: "testserver-db-credentials"
-  passwordSecretKey: "password"
+  type: "sqlite"
+  name: ""
 
 autoscaling:
   enabled: false

@@ -66,15 +66,30 @@ config:
   # per environment to the real portal origin(s) below.
   allowedOrigins: ""
 
-# MariaDB connection (go-sql-driver/mysql) — see KNOWN GAP note above.
-# DB_PASS is never rendered by this chart: reference a pre-provisioned
-# Secret (Vault/Sealed Secrets/External Secrets Operator), matching the
-# netsvcs-dns-bootstrap pattern in charts/netsvcs-dns.
+# DB connection — MySQL/MariaDB is the default dialect (matches the
+# `testserver-mariadb`/3306 host below; go-sql-driver/mysql via GORM), see
+# KNOWN GAP note above. `type` also accepts "postgresql" or "sqlite"
+# (engines/testserver/internal/database/database.go DB_TYPE). SQLite is
+# dev-tier only (in-memory when db.name is empty) and needs no password —
+# alpha overrides db.type to "sqlite" for exactly this reason (no
+# operator-provisioned MariaDB exists in the local microk8s cluster).
+#
+# db.password backs the Secret rendered by templates/db-credentials.yaml
+# (mirrors the umbrella templates/credentials.yaml / hub-router-signing.yaml
+# `required`-gated pattern). Alpha commits a throwaway dev-only value only
+# when db.type != sqlite; beta/gamma/production intentionally leave it
+# unset so `required` fails the render unless injected via
+# `--set db.password=...` (CI-managed secret) at deploy time. When
+# db.type == "sqlite" the Secret template — and the DB_PASS env var in
+# templates/deployment.yaml — are both skipped entirely, so no password is
+# required at all.
 db:
+  type: "mysql"
   host: "testserver-mariadb"
   port: "3306"
   user: "waddleperf"
   name: "waddleperf"
+  password: ""
   passwordSecretName: "testserver-db-credentials"
   passwordSecretKey: "password"
 
