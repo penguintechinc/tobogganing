@@ -16,7 +16,8 @@ spec:
         {{- toYaml .Values.labels | nindent 8 }}
     spec:
       securityContext:
-        {{- toYaml .Values.securityContext | nindent 8 }}
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
       serviceAccountName: netsvcs-dns
       {{- if .Values.affinity }}
       affinity:
@@ -30,6 +31,11 @@ spec:
       - name: resolver
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ end }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | default .Values.global.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+          readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+          capabilities:
+            {{- toYaml .Values.securityContext.capabilities | nindent 12 }}
         ports:
         - name: http-doh
           containerPort: 8080
