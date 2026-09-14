@@ -177,13 +177,12 @@ spec:
         - name: state
           emptyDir:
             sizeLimit: 1Gi
-
-      # Update strategy: rolling update with max surge of 1 (one extra pod during update)
-      updateStrategy:
-        type: RollingUpdate
-        rollingUpdate:
-          maxUnavailable: 0
-          maxSurge: 1
+  # Update strategy: rolling update with max surge of 1 (one extra pod during update)
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
 
 ---
 apiVersion: v1

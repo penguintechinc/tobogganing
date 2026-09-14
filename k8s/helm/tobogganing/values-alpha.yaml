@@ -100,8 +100,10 @@ testserver:
     pullPolicy: IfNotPresent
   replicaCount: 1
   service:
-    type: NodePort
-    nodePort: 30081
+    # ClusterIP: testserver is an internal probe target addressed as testserver:8080
+    # by the perftest control plane — no external NodePort needed (a fixed nodePort
+    # collides with other services on the shared local node, e.g. 30081 already allocated).
+    type: ClusterIP
   config:
     authEnabled: "false"
     maxConcurrentTests: "10"
