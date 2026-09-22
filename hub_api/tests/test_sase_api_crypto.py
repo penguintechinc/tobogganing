@@ -1,9 +1,10 @@
 """Tests for SASE API crypto endpoints (certificates, JWT, WireGuard)."""
+
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -41,7 +42,10 @@ def wg_manager() -> WireGuardKeyManager:
 
 @pytest.fixture
 def app_with_sase(
-    app: Quart, mock_db: MagicMock, cert_manager: CertificateManager, wg_manager: WireGuardKeyManager
+    app: Quart,
+    mock_db: MagicMock,
+    cert_manager: CertificateManager,
+    wg_manager: WireGuardKeyManager,
 ) -> Quart:
     """Create a test app with SASE module registered.
 
@@ -195,8 +199,17 @@ async def test_certificate_generation_client_success(
     """
     client = app_with_sase.test_client()
 
-    with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
+    with (
+        patch("hub_api.entitlements.gate.feature_enabled") as mock_flag,
+        # regression: cross-tenant cert issuance (security-audit 2026-09-21)
+        # generate_certificate now binds the requested id to a registered
+        # node in the caller's tenant via ClientRegistry.get_client.
+        patch("hub_api.core.api.certs.ClientRegistry") as mock_client_cls,
+    ):
         mock_flag.return_value = True
+        mock_client_cls.return_value.get_client = AsyncMock(
+            return_value=MagicMock(id="client-1", tenant="default", cluster_id="cluster-1")
+        )
 
         response = await client.post(
             "/api/v1/certs/certificates",
@@ -232,8 +245,19 @@ async def test_certificate_generation_headend_success(
     """
     client = app_with_sase.test_client()
 
-    with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
+    with (
+        patch("hub_api.entitlements.gate.feature_enabled") as mock_flag,
+        # regression: cross-tenant cert issuance (security-audit 2026-09-21)
+        # generate_certificate now binds the requested id to a registered
+        # cluster in the caller's tenant via ClusterManager.get_cluster.
+        patch("hub_api.core.api.certs.ClusterManager") as mock_cluster_cls,
+    ):
         mock_flag.return_value = True
+        mock_cluster_cls.return_value.get_cluster = AsyncMock(
+            return_value=MagicMock(
+                id="headend-1", tenant="default", headend_url="https://headend-1.example.com"
+            )
+        )
 
         response = await client.post(
             "/api/v1/certs/certificates",
@@ -241,6 +265,9 @@ async def test_certificate_generation_headend_success(
                 "type": "headend",
                 "id": "headend-1",
                 "name": "test-headend",
+                # regression: cross-tenant cert issuance via SAN (security-audit
+                # 2026-09-22) — this body SAN must be ignored; the fixture's
+                # generate_headend_certificate is asserted below.
                 "san_names": ["headend-1.example.com", "headend-1.local"],
             },
             headers={"Authorization": f"Bearer {enrollment_token}"},
@@ -283,9 +310,7 @@ async def test_certificate_generation_invalid_type(
 
 
 @pytest.mark.asyncio
-async def test_certificate_generation_flag_off(
-    app_with_sase: Quart, enrollment_token: str
-) -> None:
+async def test_certificate_generation_flag_off(app_with_sase: Quart, enrollment_token: str) -> None:
     """Test certificate generation returns 402 when flag is off.
 
     Args:
@@ -606,9 +631,7 @@ async def test_wireguard_keys_generation_cluster_success(
     mock_cluster.id = "cluster-1"
     mock_cluster.tenant = "test-tenant"
 
-    with patch(
-        "hub_api.modules.sdwan.api.wireguard.asyncio.to_thread"
-    ) as mock_to_thread:
+    with patch("hub_api.modules.sdwan.api.wireguard.asyncio.to_thread") as mock_to_thread:
         mock_to_thread.return_value = mock_cluster
 
         with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
@@ -648,12 +671,8 @@ async def test_wireguard_peers_list(
     client = app_with_sase.test_client()
 
     # Generate some peers first (for the test-tenant)
-    await wg_manager.generate_wireguard_keys(
-        "node-1", "client_docker", tenant_id="test-tenant"
-    )
-    await wg_manager.generate_wireguard_keys(
-        "node-2", "client_native", tenant_id="test-tenant"
-    )
+    await wg_manager.generate_wireguard_keys("node-1", "client_docker", tenant_id="test-tenant")
+    await wg_manager.generate_wireguard_keys("node-2", "client_native", tenant_id="test-tenant")
 
     with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
@@ -688,9 +707,7 @@ async def test_wireguard_keys_revocation_success(
     client = app_with_sase.test_client()
 
     # Generate keys first (for test-tenant)
-    await wg_manager.generate_wireguard_keys(
-        "node-1", "client_docker", tenant_id="test-tenant"
-    )
+    await wg_manager.generate_wireguard_keys("node-1", "client_docker", tenant_id="test-tenant")
 
     with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
@@ -802,12 +819,8 @@ async def test_wireguard_peers_tenant_isolation(
     client = app_with_sase.test_client()
 
     # Generate peers for both tenants
-    await wg_manager.generate_wireguard_keys(
-        "node-1", "client_docker", tenant_id="test-tenant"
-    )
-    await wg_manager.generate_wireguard_keys(
-        "node-2", "client_native", tenant_id="other-tenant"
-    )
+    await wg_manager.generate_wireguard_keys("node-1", "client_docker", tenant_id="test-tenant")
+    await wg_manager.generate_wireguard_keys("node-2", "client_native", tenant_id="other-tenant")
 
     with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
@@ -851,9 +864,7 @@ async def test_wireguard_revoke_cross_tenant_isolation(
     client = app_with_sase.test_client()
 
     # Generate peer for test-tenant
-    await wg_manager.generate_wireguard_keys(
-        "node-1", "client_docker", tenant_id="test-tenant"
-    )
+    await wg_manager.generate_wireguard_keys("node-1", "client_docker", tenant_id="test-tenant")
 
     with patch("hub_api.entitlements.gate.feature_enabled") as mock_flag:
         mock_flag.return_value = True
