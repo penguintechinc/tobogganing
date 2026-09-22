@@ -5,6 +5,14 @@ firewall rules and port configurations. They are NOT part of the module system
 and run at the app level to bypass tenant/module prefixing.
 
 Auth: Bearer token validated against HEADEND_API_TOKEN environment variable.
+
+/auth/token, /auth/refresh, /auth/validate are pre-auth or machine-auth
+(the caller has no JWT yet, or presents only an opaque refresh token/the
+JWT being validated) and are rate limited per client IP, plus per hashed
+api_key for /auth/token, to defend against credential-guessing brute force
+(security-audit 2026-09-21, Dim 3 A04/A07). The raw api_key is never
+logged or stored -- only its SHA-256 hash is used as the rate-limit bucket
+key.
 """
 
 from __future__ import annotations
@@ -12,7 +20,7 @@ from __future__ import annotations
 import hmac
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 import structlog
 from quart import Blueprint, current_app, g, request
@@ -31,6 +39,12 @@ from hub_api.db import get_db
 from hub_api.modules.sdwan.firewall.access_control import AccessControlManager
 from hub_api.modules.sdwan.network.port_manager import PortConfigManager
 from hub_api.modules.sdwan.orchestrator.cluster_manager import ClusterManager
+from hub_api.security.rate_limit import (
+    SlidingWindowRateLimiter,
+    hash_identifier,
+    ip_key,
+    rate_limited,
+)
 
 logger = structlog.get_logger()
 
@@ -38,6 +52,43 @@ logger = structlog.get_logger()
 # This keeps headend endpoints at EXACT flat paths
 # (e.g., /api/v1/firewall/rules, NOT /api/v1/sase/firewall/rules)
 headend_bp = Blueprint("headend", __name__, url_prefix="")
+
+# Env-configurable, always-on rate limits for the machine-auth endpoints
+# below (never PostHog-gated -- baseline security control, not a feature).
+_MACHINE_TOKEN_MAX = int(os.getenv("RATE_LIMIT_MACHINE_TOKEN_MAX", "20"))
+_MACHINE_TOKEN_WINDOW_SECS = int(os.getenv("RATE_LIMIT_MACHINE_TOKEN_WINDOW_SECS", "60"))
+_MACHINE_REFRESH_MAX = int(os.getenv("RATE_LIMIT_MACHINE_REFRESH_MAX", "30"))
+_MACHINE_REFRESH_WINDOW_SECS = int(os.getenv("RATE_LIMIT_MACHINE_REFRESH_WINDOW_SECS", "60"))
+_MACHINE_VALIDATE_MAX = int(os.getenv("RATE_LIMIT_MACHINE_VALIDATE_MAX", "60"))
+_MACHINE_VALIDATE_WINDOW_SECS = int(os.getenv("RATE_LIMIT_MACHINE_VALIDATE_WINDOW_SECS", "60"))
+
+_machine_token_ip_limiter = SlidingWindowRateLimiter(
+    _MACHINE_TOKEN_MAX, _MACHINE_TOKEN_WINDOW_SECS, "machine_token_ip"
+)
+_machine_token_key_limiter = SlidingWindowRateLimiter(
+    _MACHINE_TOKEN_MAX, _MACHINE_TOKEN_WINDOW_SECS, "machine_token_key"
+)
+_machine_refresh_ip_limiter = SlidingWindowRateLimiter(
+    _MACHINE_REFRESH_MAX, _MACHINE_REFRESH_WINDOW_SECS, "machine_refresh_ip"
+)
+_machine_validate_ip_limiter = SlidingWindowRateLimiter(
+    _MACHINE_VALIDATE_MAX, _MACHINE_VALIDATE_WINDOW_SECS, "machine_validate_ip"
+)
+
+
+async def _machine_token_api_key_key() -> Optional[str]:
+    """Per-api_key rate-limit bucket key for /auth/token: SHA-256(api_key).
+
+    Never logs or stores the raw api_key (security.md Token & Secret
+    Hygiene) -- only its hash is used to scope the bucket.
+    """
+    data = await request.get_json(silent=True)
+    if not data:
+        return None
+    api_key = data.get("api_key")
+    if not api_key or not isinstance(api_key, str):
+        return None
+    return hash_identifier(api_key)
 
 
 def _verify_headend_token(token: str | None) -> bool:
@@ -288,6 +339,11 @@ async def get_auth_public_key() -> tuple[dict[str, Any], int]:
 
 
 @headend_bp.route("/auth/token", methods=["POST"])
+@rate_limited(
+    (_machine_token_ip_limiter, ip_key),
+    (_machine_token_key_limiter, _machine_token_api_key_key),
+    event="machine_auth_token",
+)
 async def issue_auth_token() -> tuple[dict[str, Any], int]:
     """Issue JWT token for an authenticated cluster/client node.
 
@@ -491,6 +547,7 @@ async def issue_auth_token() -> tuple[dict[str, Any], int]:
 
 
 @headend_bp.route("/auth/refresh", methods=["POST"])
+@rate_limited((_machine_refresh_ip_limiter, ip_key), event="machine_auth_refresh")
 async def refresh_auth_token() -> tuple[dict[str, Any], int]:
     """Refresh JWT access token using refresh token with rotation.
 
@@ -665,6 +722,7 @@ async def list_clusters_flat() -> tuple[dict[str, Any], int]:
 
 
 @headend_bp.route("/auth/validate", methods=["POST"])
+@rate_limited((_machine_validate_ip_limiter, ip_key), event="machine_auth_validate")
 async def validate_auth_token() -> tuple[dict[str, Any], int]:
     """Validate a JWT token and return its payload.
 
