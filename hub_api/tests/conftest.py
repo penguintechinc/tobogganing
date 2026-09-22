@@ -636,3 +636,40 @@ async def c2c_readonly_token(app_with_c2c: Quart) -> str:
 
     token = await encode_access_token(claims, provider, ttl_hours=1)
     return token
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_rate_limiters() -> None:
+    """Reset the auth-credential rate limiters' in-memory counters before
+    every test.
+
+    hub_api/api/auth_routes.py, hub_api/api/headend_routes.py, and
+    hub_api/modules/perftest_cluster/api/enrollment.py each hold
+    module-level SlidingWindowRateLimiter singletons (correct for
+    production -- one limiter instance must persist across requests for
+    the whole process). Left un-reset, unrelated pre-existing tests that
+    call these endpoints repeatedly across the test session -- always from
+    the same test-client IP ("<local>") absent an explicit
+    X-Forwarded-For -- would accumulate state across test functions and
+    start tripping spurious 429s unrelated to what they're testing
+    (regression: no auth rate-limiting, security-audit 2026-09-21).
+    Resetting here gives every test a clean bucket; tests that
+    specifically exercise rate limiting build up state within their own
+    function body, which this fixture does not interfere with.
+    """
+    from hub_api.api import auth_routes, headend_routes
+    from hub_api.modules.perftest_cluster.api import enrollment
+
+    for limiter in (
+        auth_routes._login_ip_limiter,
+        auth_routes._login_acct_limiter,
+        auth_routes._refresh_ip_limiter,
+        auth_routes._logout_ip_limiter,
+        headend_routes._machine_token_ip_limiter,
+        headend_routes._machine_token_key_limiter,
+        headend_routes._machine_refresh_ip_limiter,
+        headend_routes._machine_validate_ip_limiter,
+        enrollment._enroll_ip_limiter,
+        enrollment._enroll_secret_limiter,
+    ):
+        limiter._fallback_counters.clear()

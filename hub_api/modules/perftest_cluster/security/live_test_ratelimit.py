@@ -2,16 +2,28 @@
 
 Reuses Redis sliding window counter from SASE module core logic.
 Per-tenant rate limiting with configurable limits.
+
+The actual ZSET/fallback counting logic now lives in
+hub_api/security/rate_limit.py (sliding_window_redis_check /
+sliding_window_fallback_check), shared with the auth-credential rate
+limiting (login/refresh/enrollment/machine-auth -- security-audit
+2026-09-21). This class keeps its original public/private API (is_allowed,
+_check_rule_redis, _check_rule_fallback, redis_client, _fallback_counters)
+unchanged for its existing call sites and tests.
 """
 
 from __future__ import annotations
 
 import asyncio
-import time
 from collections import defaultdict, deque
 
 import redis
 import structlog
+
+from hub_api.security.rate_limit import (
+    sliding_window_fallback_check,
+    sliding_window_redis_check,
+)
 
 logger = structlog.get_logger()
 
@@ -47,9 +59,7 @@ class LiveTestRateLimiter:
         # Fallback in-memory counters (deque per key)
         self._fallback_counters: dict[str, deque[float]] = defaultdict(deque)
 
-    async def is_allowed(
-        self, tenant_id: str, connection_id: str = ""
-    ) -> tuple[bool, int]:
+    async def is_allowed(self, tenant_id: str, connection_id: str = "") -> tuple[bool, int]:
         """Check if a test is allowed for the tenant.
 
         Reuses SASE's Redis sliding window counter logic:
@@ -107,8 +117,10 @@ class LiveTestRateLimiter:
     def _check_rule_redis(self, key: str) -> tuple[bool, int]:
         """Check rate limit using Redis sliding window (SASE pattern).
 
-        Uses ZSET with timestamp as both member and score for sliding window.
-        Lazy-init Redis client with short timeouts on first call.
+        Uses a ZSET sliding window; counting logic delegates to the shared
+        hub_api.security.rate_limit.sliding_window_redis_check so both
+        LiveTestRateLimiter and the newer auth-endpoint limiters stay in
+        sync. Lazy-inits the Redis client with short timeouts on first call.
         """
         # Lazy-init Redis client with short socket+connect timeouts
         if self.redis_client is None:
@@ -122,57 +134,17 @@ class LiveTestRateLimiter:
                 health_check_interval=0,  # Disable health checks
             )
 
-        try:
-            now = int(time.time())
-            window_start = now - self.window_seconds
-
-            # Sliding window: remove old entries, count current, add new
-            pipeline = self.redis_client.pipeline()
-            # Remove old entries outside window
-            pipeline.zremrangebyscore(key, 0, window_start)
-            # Count entries in window
-            pipeline.zcard(key)
-            # Keep key alive
-            pipeline.expire(key, self.window_seconds)
-            results = pipeline.execute()
-
-            current_count = results[1]
-
-            if current_count >= self.max_tests:
-                # Rate limited; calculate retry_after
-                oldest_entry = self.redis_client.zrange(key, 0, 0, withscores=True)
-                if oldest_entry:
-                    oldest_time = int(oldest_entry[0][1])  # type: ignore[index]
-                    retry_after = self.window_seconds - (now - oldest_time)
-                    return False, max(retry_after, 1)
-                return False, self.window_seconds
-
-            # Allow; add current timestamp with timestamp as score
-            self.redis_client.zadd(key, {str(now): now})
-            return True, 0
-
-        except Exception as e:
-            logger.error("redis_rate_limit_error", error=str(e))
-            raise
+        return sliding_window_redis_check(
+            self.redis_client, key, self.max_tests, self.window_seconds
+        )
 
     def _check_rule_fallback(self, key: str) -> tuple[bool, int]:
         """Fallback in-memory sliding window (same logic as Redis version).
 
         Used when Redis unavailable. Per-process only (not distributed).
+        Delegates to the shared hub_api.security.rate_limit.
+        sliding_window_fallback_check.
         """
-        now = time.time()
-
-        # Clean old entries
-        counter = self._fallback_counters[key]
-        while counter and counter[0] < now - self.window_seconds:
-            counter.popleft()
-
-        if len(counter) >= self.max_tests:
-            if counter:
-                retry_after = self.window_seconds - (now - counter[0])
-                return False, max(int(retry_after), 1)
-            return False, self.window_seconds
-
-        # Add current timestamp
-        counter.append(now)
-        return True, 0
+        return sliding_window_fallback_check(
+            self._fallback_counters, key, self.max_tests, self.window_seconds
+        )

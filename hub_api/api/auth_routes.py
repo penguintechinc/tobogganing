@@ -11,11 +11,19 @@ the refresh token is sourced from the cookie, the request must also carry a
 matching X-CSRF-Token header (double-submit CSRF) — a body-supplied refresh
 token (non-browser callers) is exempt, mirroring the bearer-header exemption
 in auth/middleware.py.
+
+All three routes are rate limited (security-audit 2026-09-21, Dim 3
+A04/A07 -- none of these credential endpoints had brute-force protection).
+login also rate-limits per submitted account, independent of the IP bucket,
+so a distributed spray against one account is still caught; the 429
+response shape is identical regardless of which bucket tripped so it never
+leaks account existence.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import os
+from typing import Any, Optional
 
 import structlog
 from quart import Blueprint, Response, current_app, jsonify, request
@@ -28,10 +36,50 @@ from hub_api.auth.middleware import (
 )
 from hub_api.auth.service import AuthService
 from hub_api.db import get_db
+from hub_api.security.rate_limit import (
+    SlidingWindowRateLimiter,
+    hash_identifier,
+    ip_key,
+    rate_limited,
+)
 
 logger = structlog.get_logger()
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
+
+# Env-configurable, always-on (never PostHog-gated -- this is a baseline
+# security control, not a product feature). Conservative defaults: login is
+# the highest-value brute-force target, refresh/logout are lighter since
+# they require an already-issued (opaque) refresh token to attempt.
+_LOGIN_MAX = int(os.getenv("RATE_LIMIT_LOGIN_MAX", "10"))
+_LOGIN_WINDOW_SECS = int(os.getenv("RATE_LIMIT_LOGIN_WINDOW_SECS", "60"))
+_REFRESH_MAX = int(os.getenv("RATE_LIMIT_REFRESH_MAX", "30"))
+_REFRESH_WINDOW_SECS = int(os.getenv("RATE_LIMIT_REFRESH_WINDOW_SECS", "60"))
+_LOGOUT_MAX = int(os.getenv("RATE_LIMIT_LOGOUT_MAX", "60"))
+_LOGOUT_WINDOW_SECS = int(os.getenv("RATE_LIMIT_LOGOUT_WINDOW_SECS", "60"))
+
+_login_ip_limiter = SlidingWindowRateLimiter(_LOGIN_MAX, _LOGIN_WINDOW_SECS, "auth_login_ip")
+_login_acct_limiter = SlidingWindowRateLimiter(_LOGIN_MAX, _LOGIN_WINDOW_SECS, "auth_login_acct")
+_refresh_ip_limiter = SlidingWindowRateLimiter(
+    _REFRESH_MAX, _REFRESH_WINDOW_SECS, "auth_refresh_ip"
+)
+_logout_ip_limiter = SlidingWindowRateLimiter(_LOGOUT_MAX, _LOGOUT_WINDOW_SECS, "auth_logout_ip")
+
+
+async def _login_account_key() -> Optional[str]:
+    """Per-account rate-limit bucket key for login: SHA-256(lowercased email).
+
+    Independent of whether the account exists, so checking this bucket
+    never itself reveals account existence -- only the ip bucket key_func
+    (hub_api.security.rate_limit.ip_key) is skip-able (returns None) when
+    absent; this one only skips on a missing/malformed body, which the
+    route handler's own validation also rejects (400) uniformly.
+    """
+    data = await request.get_json(silent=True)
+    if not data:
+        return None
+    email = (data.get("email") or "").strip().lower()
+    return hash_identifier(email) if email else None
 
 
 def _refresh_token_from_request(data: dict[str, Any]) -> tuple[str, bool]:
@@ -60,6 +108,11 @@ def _mask_email(email: str) -> str:
 
 
 @auth_bp.route("/login", methods=["POST"])
+@rate_limited(
+    (_login_ip_limiter, ip_key),
+    (_login_acct_limiter, _login_account_key),
+    event="auth_login",
+)
 async def login() -> tuple[Response, int]:
     """Authenticate user by email and password.
 
@@ -133,6 +186,7 @@ async def login() -> tuple[Response, int]:
 
 
 @auth_bp.route("/refresh-token", methods=["POST"])
+@rate_limited((_refresh_ip_limiter, ip_key), event="auth_refresh_token")
 async def refresh() -> tuple[Response, int]:
     """Refresh an access token using a refresh token.
 
@@ -213,6 +267,7 @@ async def refresh() -> tuple[Response, int]:
 
 
 @auth_bp.route("/logout", methods=["POST"])
+@rate_limited((_logout_ip_limiter, ip_key), event="auth_logout")
 async def logout() -> tuple[Response, int]:
     """Logout user by revoking refresh token.
 

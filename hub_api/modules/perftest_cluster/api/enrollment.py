@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 import structlog
 from quart import Blueprint, request
@@ -16,10 +17,42 @@ from hub_api.modules.perftest_cluster.services.enrollment_manager import (
     EnrollmentManager,
     verify_secret_any_tenant,
 )
+from hub_api.security.rate_limit import (
+    SlidingWindowRateLimiter,
+    hash_identifier,
+    ip_key,
+    rate_limited,
+)
 
 logger = structlog.get_logger()
 
 blueprint = Blueprint("wpc_enrollment", __name__, url_prefix="/enrollment")
+
+# Env-configurable, always-on rate limit for the public /enroll bootstrap
+# endpoint (never PostHog-gated -- baseline security control, not a
+# feature). Modest ceiling: legitimate enrollment is a rare, deliberate
+# per-device action, unlike login/token refresh.
+_ENROLL_MAX = int(os.getenv("RATE_LIMIT_ENROLL_MAX", "5"))
+_ENROLL_WINDOW_SECS = int(os.getenv("RATE_LIMIT_ENROLL_WINDOW_SECS", "60"))
+
+_enroll_ip_limiter = SlidingWindowRateLimiter(_ENROLL_MAX, _ENROLL_WINDOW_SECS, "enroll_ip")
+_enroll_secret_limiter = SlidingWindowRateLimiter(_ENROLL_MAX, _ENROLL_WINDOW_SECS, "enroll_secret")
+
+
+async def _enroll_secret_key() -> Optional[str]:
+    """Per-secret rate-limit bucket key for /enroll: SHA-256(enrollment secret).
+
+    Never logs or stores the raw secret -- only its hash scopes the bucket,
+    so guessing a specific secret is throttled independent of the caller's
+    IP (distributed guessing attempts still converge on this bucket).
+    """
+    data = await request.get_json(silent=True)
+    if not data:
+        return None
+    secret = data.get("secret")
+    if not secret or not isinstance(secret, str):
+        return None
+    return hash_identifier(secret)
 
 
 @blueprint.route("/secrets", methods=["GET"])
@@ -206,6 +239,11 @@ async def delete_secret(secret_id: str) -> tuple[dict[str, Any], int]:
 
 
 @blueprint.route("/enroll", methods=["POST"])
+@rate_limited(
+    (_enroll_ip_limiter, ip_key),
+    (_enroll_secret_limiter, _enroll_secret_key),
+    event="enrollment_enroll",
+)
 @require_feature("perftest.cluster", "enrollment")
 async def enroll_device() -> tuple[dict[str, Any], int]:
     """Enroll a device using a secret.
