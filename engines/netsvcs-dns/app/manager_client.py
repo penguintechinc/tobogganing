@@ -87,6 +87,7 @@ class ManagerClient:
         # 0700: the dir holds credential cache; enforce even if it pre-exists.
         self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
+            # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions -- 0o700 is intentional owner-only for a credential cache dir; the rule's 0o644 suggestion is less secure
             os.chmod(self.cache_dir, 0o700)
         except OSError:
             pass

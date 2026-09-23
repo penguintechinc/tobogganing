@@ -86,6 +86,26 @@ repos:
         additional_dependencies: ["bandit[toml]"]
         stages: [pre-push]
 
+  # SAST — semgrep, run fully isolated via uvx (see scripts/hooks/run-semgrep.sh).
+  # NOTE: the official `repo: https://github.com/semgrep/semgrep` pre-commit
+  # hook was tried first but is unusable here — cloning that repo triggers
+  # `git submodule update --init --recursive` over SSH for its OCaml-engine
+  # build submodules (e.g. git@github.com:tarides/tree-sitter-gosu.git),
+  # which fails without an SSH key registered to GitHub. `uvx` sidesteps this
+  # entirely: it resolves the prebuilt semgrep wheel from PyPI into its own
+  # ephemeral, cached venv, so semgrep's pinned opentelemetry-sdk (~=1.37.0)
+  # never collides with hub_api's newer one. Running semgrep from a shared
+  # host env instead crashes on import (`cannot import name 'LogData'`) —
+  # see 2026-09-21 security audit.
+  - repo: local
+    hooks:
+      - id: semgrep
+        name: semgrep SAST (isolated via uvx)
+        entry: scripts/hooks/run-semgrep.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
   # ── IaC / K8s misconfig (pre-push) ─────────────────────────────────────────
   # NOTE: checkov omitted — its rustworkx dependency has no prebuilt wheel here
   # and requires a Rust compiler to build (fails in this env + CI). Add IaC

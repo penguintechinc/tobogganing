@@ -25,10 +25,10 @@ type HTTPTestResult struct {
 	Target         string  `json:"target"`
 	Protocol       string  `json:"protocol"`
 	StatusCode     int     `json:"status_code"`
-	LatencyMS      float64 `json:"latency_ms"`      // Average latency
-	MinLatencyMS   float64 `json:"min_latency_ms"`  // Minimum latency
-	MaxLatencyMS   float64 `json:"max_latency_ms"`  // Maximum latency
-	JitterMS       float64 `json:"jitter_ms"`       // Average jitter
+	LatencyMS      float64 `json:"latency_ms"`     // Average latency
+	MinLatencyMS   float64 `json:"min_latency_ms"` // Minimum latency
+	MaxLatencyMS   float64 `json:"max_latency_ms"` // Maximum latency
+	JitterMS       float64 `json:"jitter_ms"`      // Average jitter
 	TTFBMS         float64 `json:"ttfb_ms"`
 	TotalTimeMS    float64 `json:"total_time_ms"`
 	Success        bool    `json:"success"`
@@ -76,6 +76,7 @@ func TestHTTP(req HTTPTestRequest) (*HTTPTestResult, error) {
 		client = &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
+				// nosemgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion -- diagnostic probe of arbitrary caller-supplied targets (req.Target); forcing MinVersion would break testing of targets on older TLS
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 			},
 		}
@@ -83,6 +84,7 @@ func TestHTTP(req HTTPTestRequest) (*HTTPTestResult, error) {
 		client = &http.Client{
 			Timeout: timeout,
 			Transport: &http2.Transport{
+				// nosemgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion -- diagnostic probe of arbitrary caller-supplied targets (req.Target); forcing MinVersion would break testing of targets on older TLS
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 			},
 		}
