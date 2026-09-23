@@ -1,7 +1,7 @@
 # Tobogganing Root Makefile
 # Provides convenient commands for building, testing, and deploying Tobogganing services
 
-.PHONY: help all clean build test test-unit test-integration test-e2e test-portal test-go test-cov lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint dependencies compile-deps compile-deps-hub-api compile-deps-netsvcs-dns
+.PHONY: help all clean build test test-unit test-integration test-e2e test-portal test-go test-cov test-security lint lint-python lint-portal lint-go smoke-test docker-build docker-push proto openapi openapi-lint dependencies compile-deps compile-deps-hub-api compile-deps-netsvcs-dns
 
 # Default target
 help: ## Show this help message
@@ -134,6 +134,9 @@ lint-portal: ## Lint portal code (if npm available)
 	else \
 		echo "⏭️  Portal lint skipped (no package.json)"; \
 	fi
+
+test-security: ## Run Python SAST (semgrep), fully isolated via uvx — never touches hub_api's venv/opentelemetry-sdk
+	@scripts/hooks/run-semgrep.sh
 
 lint-go: ## Lint Go services (if golangci-lint available)
 	@if command -v golangci-lint &> /dev/null; then \

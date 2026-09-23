@@ -40,6 +40,7 @@ def create_app(config: Config | None = None) -> Quart:
     app = Quart(__name__)
 
     # Load configuration
+    # nosemgrep: python.flask.security.audit.hardcoded-config.avoid_hardcoded_config_TESTING -- value is explicitly False (safe prod default); rule can't see the value
     app.config["TESTING"] = False
     app.config["PRODUCT_NAME"] = config.product_name
 

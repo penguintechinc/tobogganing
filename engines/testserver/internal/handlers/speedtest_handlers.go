@@ -55,6 +55,7 @@ func (h *TestHandlers) SpeedTestDownloadHandler(w http.ResponseWriter, r *http.R
 		}
 
 		// Write to response
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- streams random binary bandwidth-test bytes, not HTML/user input
 		if _, err := w.Write(buffer[:chunkSize]); err != nil {
 			// Client disconnected
 			return
