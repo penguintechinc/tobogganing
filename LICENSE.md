@@ -1,31 +1,9 @@
-GNU AFFERO GENERAL PUBLIC LICENSE Version 3, 19 November 2007
+## Additional Exception/Condition
 
- Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
- Everyone is permitted to copy and distribute verbatim copies
- of this license document, but changing it is not allowed.
-
-# Preamble
-
-EXCEPTIONS AND ADDITIONAL TERMS (PREFACE TO AGPLv3):
-
-The following exceptions and additional terms apply to this software, and take precedence over the AGPLv3 where they conflict:
-
-1. **Internal-Only Use:**
-  - Commercial entities may use this software only for their own internal operations.
-  - Private individuals may use this software for personal, non-commercial purposes.
-  - Use of this software as a service for third parties, or as part of a product or service offered to others, is not permitted without a separate commercial license from the code owners.
-
-2. **No Bundling or Resale:**
-  - This software may **not** be bundled, incorporated, or distributed as part of another application, product, or service.
-  - Resale, sublicensing, or redistribution of this software, in whole or in part, is strictly prohibited without an explicit license from the code owners.
-
-3. **Obtaining a Commercial License:**
-  - To use this software beyond the above limitations, including for SaaS, resale, or as part of another product, you must obtain a commercial license from the owners. Contact the maintainers for details.
-
-4. **Other Terms:**
-  - All other terms of the AGPLv3 license apply unless they conflict with the above restrictions.
-
-Copyright (c) PenguinTech Inc. All rights reserved.
+Repacking this software for commercial use is not permitted without an explicit commercial license granted by the software owner. Commercial use includes, but is not limited to, reselling, bundling, or offering the software as a service.
+This product may not be sold or used outside of internal corporate or individual non-commercial use, except by the owners of this repository, unless a license is purchased.
+The AGPL-3.0 license applies for internal or non-commercial individual user use cases.
+This ensures funding to maintain the project continues and ensures fair use. Contact the project maintainers for licensing options.
 
 ### Contributor Employer Exception (GPL-2.0 Grant)
 
@@ -43,31 +21,38 @@ Notwithstanding the above restrictions, companies and organizations that employ 
 
 This exception is designed to reward and encourage contributions to the project by providing lasting fair use rights to the employers of those who actively contribute to the project's development.
 
----
+# GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.
+
+# Preamble
 
 The GNU Affero General Public License is a free, copyleft license for
 software and other kinds of works, specifically designed to ensure
 cooperation with the community in the case of network server software.
 
-  The licenses for most software and other practical works are designed
+The licenses for most software and other practical works are designed
 to take away your freedom to share and change the works.  By contrast,
 our General Public Licenses are intended to guarantee your freedom to
 share and change all versions of a program--to make sure it remains free
 software for all its users.
 
-  When we speak of free software, we are referring to freedom, not
+When we speak of free software, we are referring to freedom, not
 price.  Our General Public Licenses are designed to make sure that you
 have the freedom to distribute copies of free software (and charge for
 them if you wish), that you receive source code or can get it if you
 want it, that you can change the software or use pieces of it in new
 free programs, and that you know you can do these things.
 
-  Developers that use our General Public Licenses protect your rights
+Developers that use our General Public Licenses protect your rights
 with two steps: (1) assert copyright on the software, and (2) offer
 you this License which gives you legal permission to copy, distribute
 and/or modify the software.
 
-  A secondary benefit of defending all users' freedom is that
+A secondary benefit of defending all users' freedom is that
 improvements made in alternate versions of the program, if they
 receive widespread use, become available for other developers to
 incorporate.  Many developers of free software are heartened and
@@ -697,3 +682,5 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
+
+
