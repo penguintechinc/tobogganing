@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
@@ -256,8 +257,8 @@ func loadTLSCredentials(opts *ClientOptions) (credentials.TransportCredentials, 
 }
 
 // keepaliveClientParams returns keepalive parameters for the client.
-func keepaliveClientParams(opts *ClientOptions) grpc.KeepaliveParams {
-	return grpc.KeepaliveParams{
+func keepaliveClientParams(opts *ClientOptions) keepalive.ClientParameters {
+	return keepalive.ClientParameters{
 		Time:                opts.KeepaliveTime,
 		Timeout:             opts.KeepaliveTimeout,
 		PermitWithoutStream: true,

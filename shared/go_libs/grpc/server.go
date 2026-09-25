@@ -2,7 +2,6 @@
 package grpc
 
 import (
-	"context"
 	"log"
 	"net"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -176,8 +176,8 @@ func StartServerWithGracefulShutdown(server *grpc.Server, opts *ServerOptions) e
 }
 
 // keepaliveServerParams returns keepalive parameters for the server.
-func keepaliveServerParams(opts *ServerOptions) grpc.KeepaliveParams {
-	return grpc.KeepaliveParams{
+func keepaliveServerParams(opts *ServerOptions) keepalive.ServerParameters {
+	return keepalive.ServerParameters{
 		Time:    opts.KeepaliveTime,
 		Timeout: opts.KeepaliveTimeout,
 	}
