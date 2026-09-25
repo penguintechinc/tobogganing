@@ -4,6 +4,33 @@ All notable changes to Tobogganing will be documented in this file. New releases
 
 ---
 
+## 📦 v1.2.0 - "Module Integration & Security Hardening" (TBD - Release Branch Accumulation)
+
+### 🎯 Major Features
+
+**Module Merges**
+- ✅ **WaddlePerf Integration** - Performance monitoring module merged into core
+- ✅ **Squawk DNS Integration** - Authoritative DNS module merged into network services
+
+**Security Hardening**
+- 🔒 **Cross-Tenant Cert-Issuance Fix** - Corrected certificate validation boundary between tenants
+- 🛡️ **Auth Rate-Limiting** - Added request rate limiting to authentication endpoints
+- 🔍 **Semgrep SAST Gate** - Security static analysis as hard requirement in CI/CD pipeline
+- 🐳 **CI Image-Build Fix** - Corrected container build process in GitHub Actions
+- 📊 **Hub API OpenTelemetry** - Full observability (logs + traces + metrics) for hub-api service
+
+### 📝 Documentation Updates
+
+- ✅ Corrected compliance posture documentation (removed unsubstantiated certifications)
+- ✅ Added honest GDPR/HIPAA/PCI DSS status ("designed toward" vs "certified")
+- ✅ Documented known compliance gaps and roadmap
+
+### 🔧 Release Notes
+
+This is a release-branch accumulation for v1.2.0. Final tagged release TBD pending promotion to `main`.
+
+---
+
 ## 🔧 v1.1.4 - "Build System Enhancement" (2025-08-22)
 
 ### 🎯 Major Improvements
@@ -110,7 +137,7 @@ docker buildx build --platform linux/arm64,linux/amd64 \
 # GUI client via Docker (recommended)
 docker build -f Dockerfile.gui-ubuntu -t gui-builder .
 
-# Test GUI package compilation  
+# Test GUI package compilation
 go build -v ./internal/gui
 
 # Lint verification (matches CI/CD)
@@ -182,7 +209,7 @@ golangci-lint run --timeout=10m
 ### 📚 Documentation Updates
 
 - 📖 **Comprehensive API Documentation** - Complete REST API reference with examples
-- 🏗️ **Updated Architecture Guide** - Enhanced with all new components and features  
+- 🏗️ **Updated Architecture Guide** - Enhanced with all new components and features
 - 🚀 **Improved Quick Start** - Step-by-step setup with all new services
 - ✨ **Feature Documentation** - Detailed guides for all enterprise features
 
@@ -205,7 +232,7 @@ golangci-lint run --timeout=10m
   - Affected: Native client through Fyne GUI dependency chain
   - Impact: Prevents potential DoS attacks via malformed image files
 
-- 🔐 **CVE golang.org/x/oauth2** (HIGH) - Fixed improper validation of syntactic correctness in OAuth2 library  
+- 🔐 **CVE golang.org/x/oauth2** (HIGH) - Fixed improper validation of syntactic correctness in OAuth2 library
   - Updated `golang.org/x/oauth2` from v0.15.0 to v0.27.0
   - Affected: Both headend proxy and native client
   - Impact: Prevents authorization bypass vulnerabilities
@@ -244,7 +271,7 @@ golangci-lint run --timeout=10m
 **Dependencies Updated**
 ```
 golang.org/x/image: v0.11.0 → v0.18.0
-golang.org/x/oauth2: v0.15.0 → v0.27.0  
+golang.org/x/oauth2: v0.15.0 → v0.27.0
 golang.org/x/crypto: v0.31.0 → v0.37.0
 golang.org/x/net: v0.21.0 → v0.39.0
 golang.org/x/sync: v0.10.0 → v0.13.0
@@ -268,7 +295,7 @@ golang.org/x/text: v0.21.0 → v0.24.0
 
 **Tested Components**
 - ✅ Headend proxy builds and runs successfully
-- ✅ Native client headless version builds successfully  
+- ✅ Native client headless version builds successfully
 - ✅ Website builds and deploys to production
 - ✅ Docker containers build with updated dependencies
 - ✅ All critical security vulnerabilities resolved
@@ -278,7 +305,7 @@ golang.org/x/text: v0.21.0 → v0.24.0
 # Headend proxy
 cd headend && go build -o headend-proxy ./proxy
 
-# Native client (headless)  
+# Native client (headless)
 cd clients/native && go build -o tobogganing-client-headless ./build-headless.go
 
 # Website
@@ -502,7 +529,7 @@ cd website && npm install && npm run build
 ### 📊 Project Statistics
 
 - **📁 Total Files**: 150+ across all components
-- **💻 Lines of Code**: 25,000+ 
+- **💻 Lines of Code**: 25,000+
 - **🏗️ Components**: 3 core services + website + infrastructure
 - **🌍 Platforms**: 6 supported deployment targets
 - **🔧 Languages**: Python, Go, TypeScript, YAML
