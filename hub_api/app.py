@@ -7,6 +7,7 @@ import logging
 import os
 
 import sqlalchemy as sa
+from penguintechinc_utils.logging import configure_logging, configure_logging_from_env, get_logger
 from quart import Quart, Response
 from quart_cors import cors
 from quart_schema import QuartSchema
@@ -19,8 +20,9 @@ from hub_api.crypto.selection import build_data_key_provider, build_signing_prov
 from hub_api.db import get_db, init_dal
 from hub_api.registry import ModuleContext, ModuleRegistry
 from hub_api.registry.contract import Entitlement
+from hub_api.telemetry import init_metrics, init_otel, instrument_sqlalchemy_engine
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def create_app(config: Config | None = None) -> Quart:
@@ -66,8 +68,18 @@ def create_app(config: Config | None = None) -> Quart:
         },
     )
 
-    # Configure logging
-    logging.basicConfig(level=config.log_level)
+    # Configure structured, auto-sanitizing logging via penguin-utils. Routes
+    # every structlog call site (existing and new) through the shared
+    # processor chain -- PII/secret redaction, ISO timestamps, JSON in
+    # non-dev envs -- instead of the forbidden hand-rolled
+    # logging.basicConfig(). configure_logging_from_env() additionally wires
+    # any CloudWatch/GCP/Kafka log sinks declared via env vars.
+    log_level = getattr(logging, config.log_level.upper(), logging.INFO)
+    configure_logging(
+        level=log_level,
+        json_output=config.env != "dev",
+        sinks=configure_logging_from_env(),
+    )
 
     # Configure CORS. allow_credentials=True is required for the browser
     # cookie-based auth flow (HttpOnly access/refresh/CSRF cookies set by
@@ -77,6 +89,13 @@ def create_app(config: Config | None = None) -> Quart:
     # a concrete allowlist, never "*").
     cors_origins = [origin.strip() for origin in config.cors_origins.split(",")]
     cors(app, allow_origin=cors_origins, allow_credentials=True)
+
+    # Telemetry: Prometheus /metrics (always on) + OTLP traces/metrics/logs
+    # (env-gated, no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset). Must run
+    # before blueprint registration so every route's request/response is
+    # covered by the before/after_request hooks.
+    init_metrics(app)
+    init_otel(app, config)
 
     # Register core API blueprints
     from hub_api.api.auth_routes import auth_bp
@@ -165,6 +184,9 @@ def create_app(config: Config | None = None) -> Quart:
             # Apply registry to app with the module context
             ctx = ModuleContext(config=config, db=db, key_provider=app.config.get("KEY_PROVIDER"))
             registry.apply_to(app, ctx)
+
+            # DB query spans (no-op when OTel is disabled; never fatal)
+            instrument_sqlalchemy_engine(app, db.engine)
 
             # Initialize the global encryptor from the selected data key provider
             try:
