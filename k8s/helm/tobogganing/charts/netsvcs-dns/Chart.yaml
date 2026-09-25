@@ -1,0 +1,14 @@
+apiVersion: v2
+name: netsvcs-dns
+description: DNS resolver fleet-node service for netsvcs control plane
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - dns
+  - resolver
+  - netsvcs
+  - squawk
+maintainers:
+  - name: PenguinTech
+    email: dev@penguintech.io

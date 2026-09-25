@@ -1,0 +1,77 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zeek.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zeek.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "zeek.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zeek.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      containers:
+        - name: zeek
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}@{{ .Values.image.digest }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              drop:
+                {{- toYaml .Values.securityContext.capabilities.drop | nindent 16 }}
+          ports:
+            - name: zeek-mgmt
+              containerPort: {{ .Values.mgmt.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                {{- toYaml .Values.probes.liveness.command | nindent 16 }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                {{- toYaml .Values.probes.readiness.command | nindent 16 }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: zeek-logs
+              mountPath: /usr/local/zeek/logs
+      volumes:
+        - name: zeek-logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zeek.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zeek.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: zeek-mgmt
+      port: {{ .Values.mgmt.port }}
+      targetPort: zeek-mgmt
+      protocol: TCP
+  selector:
+    {{- include "zeek.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -6,7 +6,6 @@
 - [🐳 Docker Deployment](#-docker-deployment)
 - [☁️ Kubernetes Deployment](#️-kubernetes-deployment)
 - [🏗️ Terraform Infrastructure](#️-terraform-infrastructure)
-- [📱 Mobile App Usage](#-mobile-app-usage)
 - [💾 Storage & Persistence](#-storage--persistence)
 - [⚙️ Configuration](#️-configuration)
 - [🔧 Advanced Usage](#-advanced-usage)
@@ -44,9 +43,6 @@ python -m manager.main
 # Install and start headend
 cd headend
 ./build/headend
-
-# Install native client
-./clients/native/tobogganing-client init --manager-url http://localhost:8000
 ```
 
 ---
@@ -203,52 +199,6 @@ terraform apply -var-file="multi-cloud.tfvars"
 
 ---
 
-## 📱 Mobile App Usage
-
-### Android Development
-
-```bash
-# Set up Android Studio environment
-./scripts/setup-android-studio.sh
-
-# Build and deploy mobile app
-./scripts/deploy-mobile.sh
-
-# Start Android emulator
-./scripts/setup-android-studio.sh --start-emulator
-
-# Open project in Android Studio
-~/open-tobogganing-mobile.sh
-```
-
-### Mobile App Installation
-
-```bash
-# Install APK to device
-adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-
-# Check device connection
-adb devices
-
-# View app logs
-adb logcat | grep Tobogganing
-```
-
-### Mobile App Configuration
-
-The mobile app requires the following configuration:
-
-```json
-{
-  "manager_url": "https://manager.example.com:8000",
-  "api_key": "your-api-key",
-  "auto_connect": true,
-  "biometric_auth": true
-}
-```
-
----
-
 ## 💾 Storage & Persistence
 
 ### Required Volumes for Persistence
@@ -282,14 +232,14 @@ volumes:
 volumes:
   # Backup storage
   - tobogganing-backups:/app/backups
-  
+
   # Custom certificates
   - custom-ca-certs:/etc/ssl/certs
-  
+
   # Monitoring data
   - prometheus-data:/prometheus
   - grafana-data:/var/lib/grafana
-  
+
   # Traffic mirror data
   - traffic-mirror-logs:/var/log/traffic
 ```
@@ -434,7 +384,7 @@ python -m manager.main \
 # Region 1: US East
 docker-compose -f docker-compose.us-east.yml up -d
 
-# Region 2: EU West  
+# Region 2: EU West
 docker-compose -f docker-compose.eu-west.yml up -d
 
 # Configure cross-region sync
@@ -452,7 +402,7 @@ services:
       replicas: 3
       placement:
         max_replicas_per_node: 1
-  
+
   headend:
     deploy:
       replicas: 2

@@ -1,20 +1,38 @@
-"""
-gRPC server helpers with health checks and graceful shutdown.
-"""
+"""gRPC server helpers with health checks and graceful shutdown."""
 
 from __future__ import annotations
 
 import logging
+import os
 import signal
 from concurrent import futures
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any
 
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
 
 logger = logging.getLogger(__name__)
+
+_DEV_ENV_VALUES = {"dev", "development", "local"}
+_TRUTHY_VALUES = {"1", "true", "yes", "on"}
+
+
+def _default_enable_reflection() -> bool:
+    """Reflection defaults on only for local/dev; off everywhere else.
+
+    Reflection exposes the full RPC/service surface for introspection — a
+    convenience for local debugging, but a discovery aid for an attacker in
+    staging/prod. Fails closed: `GRPC_ENABLE_REFLECTION` wins if set
+    (either direction); otherwise the default is derived from `ENV`, and
+    any value other than dev/development/local — including unset — disables
+    it.
+    """
+    override = os.getenv("GRPC_ENABLE_REFLECTION")
+    if override is not None:
+        return override.strip().lower() in _TRUTHY_VALUES
+    return os.getenv("ENV", "production").strip().lower() in _DEV_ENV_VALUES
 
 
 @dataclass(slots=True, frozen=True)
@@ -23,7 +41,7 @@ class ServerOptions:
 
     max_workers: int = 10
     max_concurrent_rpcs: int = 100
-    enable_reflection: bool = True
+    enable_reflection: bool = field(default_factory=_default_enable_reflection)
     enable_health_check: bool = True
     port: int = 50051
     max_connection_idle_ms: int = 300000  # 5 minutes
@@ -33,11 +51,10 @@ class ServerOptions:
 
 
 def create_server(
-    interceptors: Optional[list[grpc.ServerInterceptor]] = None,
-    options: Optional[ServerOptions] = None,
+    interceptors: list[grpc.ServerInterceptor] | None = None,
+    options: ServerOptions | None = None,
 ) -> grpc.Server:
-    """
-    Create a gRPC server with standard configuration.
+    """Create a gRPC server with standard configuration.
 
     Args:
         interceptors: List of server interceptors for auth, logging, etc.
@@ -53,6 +70,7 @@ def create_server(
         >>> # Add servicers
         >>> server.add_insecure_port('[::]:50051')
         >>> server.start()
+
     """
     if options is None:
         options = ServerOptions()
@@ -100,8 +118,7 @@ def create_server(
 
 
 def register_health_check(server: grpc.Server) -> health.HealthServicer:
-    """
-    Register health check service on the server.
+    """Register health check service on the server.
 
     Args:
         server: gRPC server instance
@@ -112,6 +129,7 @@ def register_health_check(server: grpc.Server) -> health.HealthServicer:
     Example:
         >>> health_servicer = register_health_check(server)
         >>> health_servicer.set("myservice", health_pb2.HealthCheckResponse.SERVING)
+
     """
     health_servicer = health.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
@@ -138,8 +156,7 @@ def start_server_with_graceful_shutdown(
     port: int = 50051,
     grace_period: float = 30.0,
 ) -> None:
-    """
-    Start server and handle graceful shutdown on SIGTERM/SIGINT.
+    """Start server and handle graceful shutdown on SIGTERM/SIGINT.
 
     Args:
         server: gRPC server instance
@@ -150,6 +167,7 @@ def start_server_with_graceful_shutdown(
         >>> server = create_server()
         >>> # Add your servicers
         >>> start_server_with_graceful_shutdown(server, port=50051)
+
     """
     server.add_insecure_port(f"[::]:{port}")
     server.start()

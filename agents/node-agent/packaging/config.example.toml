@@ -1,0 +1,48 @@
+# Example configuration for node-agent
+# Copy this file to /etc/node-agent/config.toml and update values for your deployment
+# Configuration layering (increasing precedence):
+#   1. Built-in defaults
+#   2. TOML file (path specified via --config)
+#   3. Environment variables prefixed with NODE_AGENT_ (use __ for nested keys)
+#
+# Example env vars:
+#   NODE_AGENT_MODE=daemonset
+#   NODE_AGENT_CONTROL_PLANE_URL=https://hub-api.tobogganing.svc:8443
+#   NODE_AGENT_MACHINE_JWT_PATH=/etc/node-agent/machine.pem
+#   NODE_AGENT_FEATURES__CONNECTIVITY=true
+#   NODE_AGENT_FEATURES__NETSVCS_EDGE=true
+
+# Deployment mode: "daemonset" or "edge"
+# - daemonset: runs in Kubernetes DaemonSet, uses gRPC transport to hub_api
+# - edge: runs on bare-metal / standalone node, uses REST transport
+mode = "edge"
+
+# Control plane URL (hub_api endpoint)
+# For Kubernetes DaemonSet:
+#   control_plane_url = "https://hub-api.tobogganing.svc:8443"
+# For bare-metal edge:
+#   control_plane_url = "https://hub-api.penguintech.cloud"
+control_plane_url = "https://hub-api.penguintech.cloud"
+
+# Path to the machine JWT file (private key for enrollment/authentication)
+# File should be owned by the node-agent user with permissions 0600
+# The key is read once at startup; if the file is updated, restart the agent
+machine_jwt_path = "/etc/node-agent/machine.pem"
+
+# Runtime feature toggles (independent of compile-time Cargo features)
+# These can be toggled at runtime without recompilation; gated by PostHog flags
+[features]
+# Enable SASE connectivity module (WireGuard tunnel, enrollment, heartbeat)
+connectivity = true
+
+# Enable netsvcs-edge module (local :53 DNS forwarder, DHCP client, NTP client)
+netsvcs_edge = true
+
+# Heartbeat interval in seconds
+# The agent sends periodic heartbeats + metrics to the control plane
+# Recommended: 30s for bare-metal, 60s for Kubernetes
+heartbeat_interval_secs = 30
+
+# Request timeout in seconds
+# Applied to all HTTP/gRPC calls to the control plane
+request_timeout_secs = 10

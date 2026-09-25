@@ -71,11 +71,11 @@ SASEWaddle implements multiple security layers:
 - Secure deployment configurations
 - Network segmentation support
 
-### Monitoring & Auditing
-- Comprehensive audit logging
+### Monitoring & Observability
+- OpenTelemetry logging and tracing
 - Real-time security monitoring
 - Authentication event tracking
-- Failed access attempt detection
+- Failed access attempt detection (application-level)
 
 ## Security Best Practices
 
@@ -101,16 +101,16 @@ SASEWaddle implements multiple security layers:
 3. **Dependency Scanning**: Monitor for vulnerable dependencies
 4. **Security Testing**: Include security tests in CI/CD pipeline
 
-## Compliance
+## Compliance Posture
 
-SASEWaddle supports compliance with various security frameworks:
+SASEWaddle is designed with security controls that align with industry frameworks, though formal certifications have not been completed. Known compliance status:
 
-- SOC 2 Type II
-- ISO 27001
-- NIST Cybersecurity Framework
-- HIPAA (Healthcare)
-- PCI DSS (Payment processing)
-- GDPR (Data protection)
+- **SOC 2 Type II**: Not certified (in scope for future certification)
+- **ISO 27001**: Not certified (designed toward alignment)
+- **NIST Cybersecurity Framework**: Aligned with core functions
+- **HIPAA**: Not applicable (no Protected Health Information handled)
+- **PCI DSS**: Not applicable (no payment card data processed)
+- **GDPR**: Partial support (data protection controls in place; see `docs/COMPLIANCE.md` for known gaps including data subject access requests)
 
 ## Security Architecture
 

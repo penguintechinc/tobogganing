@@ -1,0 +1,6 @@
+extends: spectral:oas
+
+rules:
+  info-contact: warn
+  info-license: warn
+  operation-description: warn

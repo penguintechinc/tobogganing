@@ -1,0 +1,31 @@
+# Beta environment overrides
+
+image:
+  tag: beta-1710000000  # Replace with CI-built beta tag
+  repository: ghcr.io/penguintechinc/tobogganing/testserver
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+config:
+  authEnabled: "true"
+  maxConcurrentTests: "50"
+  allowedOrigins: "https://tobogganing.penguintech.cloud"
+
+db:
+  host: "testserver-mariadb.tobogganing.svc.cluster.local"
+  port: "3306"
+  user: "waddleperf"
+  name: "waddleperf"
+  passwordSecretName: "testserver-db-credentials"
+  passwordSecretKey: "password"
+
+autoscaling:
+  enabled: false

@@ -1,3 +1,12 @@
+{{- /*
+  hub-router does not yet emit wireguard_* or xdp_* metrics (no WireGuard
+  peer/traffic or XDP packet instrumentation exists in services/hub-router
+  today) — those panels were removed rather than shipped pointing at
+  nonexistent series. hub-router DOES emit http_requests_total{path,method,
+  status} (services/hub-router/proxy/middleware/metrics.go), which backs the
+  "Hub Router - Request Rate" panel below. Re-add WireGuard/XDP panels once
+  that instrumentation lands.
+*/}}
 {{- if and .Values.monitoring.enabled .Values.monitoring.grafana.enabled }}
 apiVersion: v1
 kind: ConfigMap
@@ -46,39 +55,13 @@ data:
           ]
         },
         {
-          "title": "Hub Router - Active WireGuard Peers",
-          "type": "stat",
-          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
-          "targets": [
-            {
-              "expr": "wireguard_peers_active",
-              "legendFormat": "Active Peers"
-            }
-          ]
-        },
-        {
-          "title": "Hub Router - Traffic Throughput",
+          "title": "Hub Router - Request Rate",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 6, "y": 8 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
           "targets": [
             {
-              "expr": "rate(wireguard_bytes_transmitted_total[5m])",
-              "legendFormat": "TX"
-            },
-            {
-              "expr": "rate(wireguard_bytes_received_total[5m])",
-              "legendFormat": "RX"
-            }
-          ]
-        },
-        {
-          "title": "Hub Router - XDP Packets Processed",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
-          "targets": [
-            {
-              "expr": "rate(xdp_packets_processed_total[5m])",
-              "legendFormat": "{{`{{action}}`}}"
+              "expr": "rate(http_requests_total{job=\"hub-router\"}[5m])",
+              "legendFormat": "{{`{{method}}`}} {{`{{status}}`}}"
             }
           ]
         },

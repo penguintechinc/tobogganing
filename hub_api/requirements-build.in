@@ -1,0 +1,5 @@
+# build-only (make proto); NOT installed at runtime/CI-test; has no cp313 wheel —
+# regenerating stubs needs a protobuf-4.25-compatible env (e.g. Python 3.12),
+# the committed stubs stay frozen otherwise.
+
+grpcio-tools==1.62.0

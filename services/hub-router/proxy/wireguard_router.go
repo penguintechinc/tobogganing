@@ -1,5 +1,5 @@
 // Package proxy provides WireGuard-aware routing for authenticated traffic.
-// 
+//
 // The WireGuard router handles two traffic patterns:
 // 1. Client → Headend → Internet (external destinations)
 // 2. Client → Headend → Other WireGuard Clients (peer-to-peer)
@@ -18,9 +18,9 @@ import (
 
 // WireGuardRouter handles routing decisions for authenticated traffic
 type WireGuardRouter struct {
-	wgNetwork     *net.IPNet  // WireGuard network CIDR (e.g., 10.200.0.0/16)
-	wgInterface   string      // WireGuard interface name (e.g., wg0)
-	headendIP     net.IP      // Headend's IP in WireGuard network
+	wgNetwork   *net.IPNet // WireGuard network CIDR (e.g., 10.200.0.0/16)
+	wgInterface string     // WireGuard interface name (e.g., wg0)
+	headendIP   net.IP     // Headend's IP in WireGuard network
 }
 
 // NewWireGuardRouter creates a new WireGuard-aware router
@@ -47,12 +47,12 @@ func NewWireGuardRouter(wgInterface string, wgNetwork string, headendIP string) 
 // RouteTraffic determines how to route authenticated traffic
 func (wr *WireGuardRouter) RouteTraffic(targetHost string, sourceConn net.Conn) error {
 	targetIP := net.ParseIP(targetHost)
-	
+
 	// Check if target is a WireGuard peer
 	if targetIP != nil && wr.wgNetwork.Contains(targetIP) {
 		return wr.routeToPeer(targetHost, sourceConn)
 	}
-	
+
 	// Route to internet via normal proxy
 	return wr.routeToInternet(targetHost, sourceConn)
 }
@@ -148,7 +148,7 @@ func (wr *WireGuardRouter) dialPeer(targetIP string) (net.Conn, error) {
 func (wr *WireGuardRouter) markTrafficAuthenticated(conn net.Conn) error {
 	// This would use SO_MARK socket option to mark packets with mark 100
 	// which corresponds to our iptables rule for authenticated traffic
-	
+
 	// For TCP connections, we can use the file descriptor
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		// Get the file descriptor
@@ -165,9 +165,9 @@ func (wr *WireGuardRouter) markTrafficAuthenticated(conn net.Conn) error {
 		// Use iptables to mark packets from this connection
 		// This is a simplified approach - in production, would use netlink sockets
 		sourceAddr := conn.RemoteAddr().String()
-		cmd := exec.Command("iptables", "-t", "mangle", "-A", "OUTPUT", 
+		cmd := exec.Command("iptables", "-t", "mangle", "-A", "OUTPUT",
 			"-s", sourceAddr, "-j", "MARK", "--set-mark", "100")
-		
+
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to mark traffic: %w", err)
 		}
@@ -179,7 +179,7 @@ func (wr *WireGuardRouter) markTrafficAuthenticated(conn net.Conn) error {
 // proxyData copies data bidirectionally between connections
 func (wr *WireGuardRouter) proxyData(src, dst net.Conn, direction string) {
 	buffer := make([]byte, 32768)
-	
+
 	for {
 		n, err := src.Read(buffer)
 		if err != nil {
@@ -221,13 +221,13 @@ func (wr *WireGuardRouter) GetWireGuardPeers() ([]string, error) {
 
 	var peers []string
 	lines := strings.Split(string(output), "\n")
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		// Parse peer line format: "publickey	allowed-ips"
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {

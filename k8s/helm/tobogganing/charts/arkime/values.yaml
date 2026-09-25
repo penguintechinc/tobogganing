@@ -1,0 +1,62 @@
+## Arkime full-packet-capture/session viewer — out-of-band analysis tool
+## for SASE Slice D adapters. Deployed OFF by default (parent Chart.yaml:
+## condition arkime.enabled).
+##
+## No maintained public container image with verifiable provenance was
+## found for this tool at authoring time (checked Docker Hub org
+## `itsarkime` and ghcr.io/arkime/arkime — neither resolved). Per
+## PenguinTech supply-chain policy, this sub-chart ships as a stub with NO
+## default image rather than pinning an unverified third-party build.
+## Set image.repository/tag/digest to your own vetted, SHA256-pinned
+## Arkime build before setting enabled: true — the Deployment template
+## fails the render otherwise.
+enabled: false
+
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+## Arkime viewer's well-known default web UI port. The ArkimeAdapter
+## poller (hub_api/modules/sase/security/adapters/config.py:
+## ARKIME_ENDPOINT) reads session flags/tags from this endpoint.
+viewer:
+  port: 8005
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: 8005
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /
+      port: 8005
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3

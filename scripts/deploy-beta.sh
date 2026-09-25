@@ -8,7 +8,8 @@
 #
 # Options:
 #   --tag TAG               Image tag to deploy (default: latest)
-#   --service SERVICE       Deploy specific service only (hub-api|hub-router|hub-webui|redis)
+#   --service SERVICE       Deploy specific service only
+#                            (hub-api|hub-router|hub-webui|netsvcs-dns|node-agent)
 #   --skip-build            Skip Docker build, use existing images
 #   --dry-run               Show what would be deployed without applying changes
 #   --rollback              Rollback to previous deployment
@@ -34,8 +35,10 @@ readonly BLUE='\033[0;34m'
 readonly NC='\033[0m' # No Color
 
 # Script configuration
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
+readonly PROJECT_ROOT
 readonly RELEASE_NAME="${RELEASE_NAME:-tobogganing}"
 readonly NAMESPACE="${NAMESPACE:-tobogganing}"
 readonly IMAGE_REGISTRY="${IMAGE_REGISTRY:-registry-dal2.penguintech.io}"
@@ -45,7 +48,13 @@ readonly CHART_PATH="${PROJECT_ROOT}/k8s/helm/tobogganing"
 readonly MANIFESTS_PATH="${PROJECT_ROOT}/k8s/manifests"
 
 # Service configuration
-declare -a SERVICES=("hub-api" "hub-router" "hub-webui" "redis")
+#
+# "redis" was previously listed here but has no Dockerfile in this repo
+# (off-the-shelf image, configured via Helm values only) — dropped from
+# the custom-build loop. netsvcs-dns + node-agent added as squawk P5-C
+# umbrella sub-charts (k8s/helm/tobogganing/charts/); they deploy as part
+# of the single umbrella Helm release, not standalone.
+declare -a SERVICES=("hub-api" "hub-router" "hub-webui" "netsvcs-dns" "node-agent")
 declare TAG="latest"
 declare SERVICE_FILTER=""
 declare SKIP_BUILD=false
@@ -121,10 +130,25 @@ check_prerequisites() {
 # Docker image build and push
 # =============================================================================
 
+# Maps a service name to its source directory (relative to PROJECT_ROOT).
+# Not every service lives under services/ — bash 3.2 compatible (no
+# `declare -A`), so a case statement stands in for an associative array.
+service_source_dir() {
+  case "$1" in
+    hub-api) echo "hub_api" ;;
+    hub-router) echo "services/hub-router" ;;
+    hub-webui) echo "portal" ;;
+    netsvcs-dns) echo "engines/netsvcs-dns" ;;
+    node-agent) echo "agents/node-agent" ;;
+    *) echo "services/$1" ;;
+  esac
+}
+
 build_and_push_images() {
   local service="$1"
   local tag="$2"
-  local service_path="${PROJECT_ROOT}/services/${service}"
+  local service_path
+  service_path="${PROJECT_ROOT}/$(service_source_dir "${service}")"
 
   if [[ ! -d "${service_path}" ]]; then
     print_warning "Service directory not found: ${service_path}"
@@ -198,6 +222,12 @@ do_deploy() {
   helm_overrides+=" --set hubRouter.image.tag=${tag}"
   helm_overrides+=" --set hubWebui.image.repository=${IMAGE_REGISTRY}/tobogganing/hub-webui"
   helm_overrides+=" --set hubWebui.image.tag=${tag}"
+  # netsvcs-dns + node-agent: squawk P5-C umbrella sub-charts — same
+  # release, same values override mechanism as the three services above.
+  helm_overrides+=" --set netsvcs-dns.image.repository=${IMAGE_REGISTRY}/tobogganing/netsvcs-dns"
+  helm_overrides+=" --set netsvcs-dns.image.tag=${tag}"
+  helm_overrides+=" --set node-agent.image.repository=${IMAGE_REGISTRY}/tobogganing/node-agent"
+  helm_overrides+=" --set node-agent.image.tag=${tag}"
   helm_overrides+=" --set ingress.hosts[0].host=${APP_HOST}"
 
   # Use beta values file
@@ -251,11 +281,13 @@ verify_deployment() {
 
   while [[ ${attempt} -lt ${max_attempts} ]]; do
     # Check if all deployments are ready
-    local ready_replicas=$(kubectl get deployments -n "${NAMESPACE}" \
+    local ready_replicas
+    ready_replicas=$(kubectl get deployments -n "${NAMESPACE}" \
       -o jsonpath='{.items[*].status.readyReplicas}' | \
       awk '{for(i=1;i<=NF;i++)sum+=$i}END{print sum}')
 
-    local desired_replicas=$(kubectl get deployments -n "${NAMESPACE}" \
+    local desired_replicas
+    desired_replicas=$(kubectl get deployments -n "${NAMESPACE}" \
       -o jsonpath='{.items[*].spec.replicas}' | \
       awk '{for(i=1;i<=NF;i++)sum+=$i}END{print sum}')
 

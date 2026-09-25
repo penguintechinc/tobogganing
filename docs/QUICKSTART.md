@@ -63,7 +63,7 @@ docker-compose logs -f manager headend
 
 #### 🎛️ **Manager Web Portal**
 - **URL**: http://localhost:8000
-- **Features**: 
+- **Features**:
   - User management with role-based access
   - Real-time analytics dashboard
   - Firewall rule configuration
@@ -190,7 +190,7 @@ make build-website
 # Mobile app only
 ./scripts/build-apps.sh --mobile-only
 
-# Website only  
+# Website only
 ./scripts/build-apps.sh --website-only
 
 # Screenshots only
@@ -229,7 +229,7 @@ make test
 # Go tests
 make test-go
 
-# Python tests  
+# Python tests
 make test-python
 ```
 
@@ -295,16 +295,8 @@ tobogganing-client.exe --config config.yaml
 
 ### Mobile Client (Android)
 
-```bash
-# Build APK from source
-./scripts/deploy-mobile.sh
-
-# Install to connected device
-adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-
-# Or download from releases page
-# Install APK on Android device
-```
+The mobile client has moved to the unified `penguind` client in the
+`penguin` project — it no longer builds from this repo.
 
 ## Configuration
 
@@ -384,11 +376,11 @@ docker-compose -f docker-compose.local.yml logs headend-us-east
    docker-compose -f docker-compose.local.yml ps mysql
    ```
 
-3. **WireGuard module not loaded**: 
+3. **WireGuard module not loaded**:
    ```bash
    # Linux
    sudo modprobe wireguard
-   
+
    # Check if loaded
    lsmod | grep wireguard
    ```

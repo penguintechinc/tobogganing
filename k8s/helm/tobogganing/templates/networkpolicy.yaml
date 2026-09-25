@@ -1,3 +1,27 @@
+## Default deny: every pod in the namespace is isolated unless an allow
+## policy (below) selects it — required baseline per security standards.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-default-deny
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    ## DNS stays available to isolated pods
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -57,4 +81,156 @@ spec:
               - 192.168.0.0/16
       ports:
         - port: 443
+          protocol: TCP
+---
+## STANDARDS GAP: this whole file uses plain Kubernetes `NetworkPolicy`.
+## Per security.md "Kubernetes Network Security" the cluster baseline
+## requires `CiliumNetworkPolicy`/`CiliumClusterwideNetworkPolicy` — migrate
+## this file to Cilium in a follow-up. The gRPC rules below (squawk P5-C,
+## netsvcs-dns/node-agent -> hub-api) are added in the same NetworkPolicy
+## kind as the pre-existing policies above to avoid a mixed
+## enforcement/precedence model until that migration happens.
+##
+## node-agent and netsvcs-dns ship their own pod labels (not the
+## `tobogganing.*` selector helpers above), so they are NOT covered by
+## "allow-internal" and need their own ingress/egress allow pair — the
+## namespace default-deny (top of this file) blocks all their traffic
+## except DNS otherwise.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-netsvcs-grpc-ingress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  ## hub-api gRPC :50051 — CheckIOC lookups + config-sync (netsvcs-dns),
+  ## control-plane calls (node-agent, e.g. RegisterServer/GetConfig).
+  podSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: netsvcs-dns
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: node-agent
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - port: {{ .Values.hubApi.grpcPort }}
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-netsvcs-dns-grpc-egress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: netsvcs-dns
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: hub-api
+      ports:
+        - port: {{ .Values.hubApi.grpcPort }}
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-node-agent-grpc-egress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  ## node-agent's own :53 DNS-serving port and NET_ADMIN/NET_BIND_SERVICE
+  ## capabilities are unaffected by this policy — see charts/node-agent/
+  ## values.yaml nodeAgent.securityContext / templates/daemonset.yaml.
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-agent
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: hub-api
+      ports:
+        - port: {{ .Values.hubApi.grpcPort }}
+          protocol: TCP
+---
+## testserver (charts/testserver, ships its own `app: testserver` pod
+## labels — not the `tobogganing.*` selector helpers, same reasoning as
+## netsvcs-dns/node-agent above) is the WaddlePerf data-plane engine
+## hub_api/modules/perftest_cluster drives over plain HTTP :8080
+## (hub_api/modules/perftest_cluster/services/engine_client.py, default
+## ENGINE_URL=http://testserver:8080) — REST, not gRPC, so this is a
+## separate rule pair from the hub-api gRPC :50051 rules above.
+## node-agent is included as a future c2c-testing caller (see
+## docs/superpowers/plans/2026-07-10-phase-4-waddleperf-c2c.md) even
+## though no code path calls it yet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-testserver-ingress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: testserver
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: hub-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: node-agent
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-allow-hub-api-testserver-egress
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: testserver
+      ports:
+        - port: 8080
           protocol: TCP

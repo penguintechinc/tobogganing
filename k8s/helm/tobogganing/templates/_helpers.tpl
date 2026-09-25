@@ -80,5 +80,5 @@ Create the name of the service account to use
 Namespace helper
 */}}
 {{- define "tobogganing.namespace" -}}
-{{- default .Values.namespace .Release.Namespace }}
+{{- default .Release.Namespace .Values.namespace }}
 {{- end }}

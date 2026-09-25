@@ -65,67 +65,67 @@ func (pm *PortManager) SetConnectionHandlers(
 // ParsePortRanges parses port range configurations from strings like "8000-8100,9000,9500-9600"
 func (pm *PortManager) ParsePortRanges(tcpRanges, udpRanges string) error {
 	var err error
-	
+
 	pm.tcpRanges, err = pm.parseRangeString(tcpRanges, "tcp")
 	if err != nil {
 		return fmt.Errorf("failed to parse TCP ranges: %w", err)
 	}
-	
+
 	pm.udpRanges, err = pm.parseRangeString(udpRanges, "udp")
 	if err != nil {
 		return fmt.Errorf("failed to parse UDP ranges: %w", err)
 	}
-	
+
 	log.Infof("Configured TCP port ranges: %v", pm.tcpRanges)
 	log.Infof("Configured UDP port ranges: %v", pm.udpRanges)
-	
+
 	return nil
 }
 
 // parseRangeString parses a string like "8000-8100,9000,9500-9600" into PortRange structs
 func (pm *PortManager) parseRangeString(rangeStr, protocol string) ([]PortRange, error) {
 	var ranges []PortRange
-	
+
 	if strings.TrimSpace(rangeStr) == "" {
 		return ranges, nil
 	}
-	
+
 	parts := strings.Split(rangeStr, ",")
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		
+
 		if strings.Contains(part, "-") {
 			// Range like "8000-8100"
 			rangeParts := strings.Split(part, "-")
 			if len(rangeParts) != 2 {
 				return nil, fmt.Errorf("invalid range format: %s", part)
 			}
-			
+
 			start, err := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
 			if err != nil {
 				return nil, fmt.Errorf("invalid start port: %s", rangeParts[0])
 			}
-			
+
 			end, err := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
 			if err != nil {
 				return nil, fmt.Errorf("invalid end port: %s", rangeParts[1])
 			}
-			
+
 			if start > end {
 				return nil, fmt.Errorf("start port %d greater than end port %d", start, end)
 			}
-			
+
 			if start < 1 || end > 65535 {
 				return nil, fmt.Errorf("port range %d-%d outside valid range 1-65535", start, end)
 			}
-			
+
 			ranges = append(ranges, PortRange{
-				StartPort:    start,
-				EndPort:      end,
-				Protocol: protocol,
+				StartPort: start,
+				EndPort:   end,
+				Protocol:  protocol,
 			})
 		} else {
 			// Single port like "9000"
@@ -133,26 +133,26 @@ func (pm *PortManager) parseRangeString(rangeStr, protocol string) ([]PortRange,
 			if err != nil {
 				return nil, fmt.Errorf("invalid port: %s", part)
 			}
-			
+
 			if port < 1 || port > 65535 {
 				return nil, fmt.Errorf("port %d outside valid range 1-65535", port)
 			}
-			
+
 			ranges = append(ranges, PortRange{
-				StartPort:    port,
-				EndPort:      port,
-				Protocol: protocol,
+				StartPort: port,
+				EndPort:   port,
+				Protocol:  protocol,
 			})
 		}
 	}
-	
+
 	return ranges, nil
 }
 
 // StartListening begins listening on all configured port ranges
 func (pm *PortManager) StartListening() error {
 	log.Info("Starting port manager - creating listeners for configured ranges")
-	
+
 	// Start TCP listeners
 	for _, portRange := range pm.tcpRanges {
 		for port := portRange.StartPort; port <= portRange.EndPort; port++ {
@@ -162,7 +162,7 @@ func (pm *PortManager) StartListening() error {
 			}
 		}
 	}
-	
+
 	// Start UDP listeners
 	for _, portRange := range pm.udpRanges {
 		for port := portRange.StartPort; port <= portRange.EndPort; port++ {
@@ -172,7 +172,7 @@ func (pm *PortManager) StartListening() error {
 			}
 		}
 	}
-	
+
 	log.Infof("Port manager started with %d active listeners", len(pm.listeners))
 	return nil
 }
@@ -183,21 +183,21 @@ func (pm *PortManager) startTCPListener(port int) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on TCP port %d: %w", port, err)
 	}
-	
+
 	portListener := &PortListener{
 		Port:     port,
 		Protocol: "tcp",
 		Listener: listener,
 		Active:   true,
 	}
-	
+
 	pm.mu.Lock()
 	pm.listeners[fmt.Sprintf("tcp:%d", port)] = portListener
 	pm.mu.Unlock()
-	
+
 	// Start accepting connections in a goroutine
 	go pm.acceptTCPConnections(listener, port)
-	
+
 	log.Debugf("Started TCP listener on port %d", port)
 	return nil
 }
@@ -208,26 +208,26 @@ func (pm *PortManager) startUDPListener(port int) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve UDP address for port %d: %w", port, err)
 	}
-	
+
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on UDP port %d: %w", port, err)
 	}
-	
+
 	portListener := &PortListener{
 		Port:     port,
 		Protocol: "udp",
 		Listener: conn,
 		Active:   true,
 	}
-	
+
 	pm.mu.Lock()
 	pm.listeners[fmt.Sprintf("udp:%d", port)] = portListener
 	pm.mu.Unlock()
-	
+
 	// Start receiving packets in a goroutine
 	go pm.receiveUDPPackets(conn, port)
-	
+
 	log.Debugf("Started UDP listener on port %d", port)
 	return nil
 }
@@ -246,7 +246,7 @@ func (pm *PortManager) acceptTCPConnections(listener net.Listener, port int) {
 				continue
 			}
 		}
-		
+
 		// Handle the connection with the registered handler
 		if pm.onNewConn != nil {
 			go pm.onNewConn(conn, port, "tcp")
@@ -261,7 +261,7 @@ func (pm *PortManager) acceptTCPConnections(listener net.Listener, port int) {
 // receiveUDPPackets handles incoming UDP packets
 func (pm *PortManager) receiveUDPPackets(conn *net.UDPConn, port int) {
 	buffer := make([]byte, 65536) // Max UDP packet size
-	
+
 	for {
 		n, addr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
@@ -274,7 +274,7 @@ func (pm *PortManager) receiveUDPPackets(conn *net.UDPConn, port int) {
 				continue
 			}
 		}
-		
+
 		// Handle the packet with the registered handler
 		if pm.onNewPacket != nil {
 			go pm.onNewPacket(buffer[:n], addr, port)
@@ -286,12 +286,12 @@ func (pm *PortManager) receiveUDPPackets(conn *net.UDPConn, port int) {
 func (pm *PortManager) GetActiveListeners() map[string]*PortListener {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	
+
 	result := make(map[string]*PortListener)
 	for key, listener := range pm.listeners {
 		result[key] = listener
 	}
-	
+
 	return result
 }
 
@@ -305,13 +305,13 @@ func (pm *PortManager) GetListenerCount() int {
 // Stop gracefully shuts down all listeners
 func (pm *PortManager) Stop() {
 	log.Info("Stopping port manager")
-	
+
 	// Signal all goroutines to stop
 	close(pm.stopChan)
-	
+
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
-	
+
 	// Close all listeners
 	for key, portListener := range pm.listeners {
 		if portListener.Active {
@@ -330,7 +330,7 @@ func (pm *PortManager) Stop() {
 			portListener.Active = false
 		}
 	}
-	
+
 	log.Infof("Stopped %d port listeners", len(pm.listeners))
 }
 
@@ -341,15 +341,15 @@ func (pm *PortManager) ValidatePortRanges(tcpRanges, udpRanges string) error {
 	if err != nil {
 		return fmt.Errorf("invalid TCP ranges: %w", err)
 	}
-	
+
 	udpParsed, err := pm.parseRangeString(udpRanges, "udp")
 	if err != nil {
 		return fmt.Errorf("invalid UDP ranges: %w", err)
 	}
-	
+
 	// Check for overlaps and conflicts
 	allPorts := make(map[string]bool)
-	
+
 	for _, portRange := range tcpParsed {
 		for port := portRange.StartPort; port <= portRange.EndPort; port++ {
 			key := fmt.Sprintf("tcp:%d", port)
@@ -359,7 +359,7 @@ func (pm *PortManager) ValidatePortRanges(tcpRanges, udpRanges string) error {
 			allPorts[key] = true
 		}
 	}
-	
+
 	for _, portRange := range udpParsed {
 		for port := portRange.StartPort; port <= portRange.EndPort; port++ {
 			key := fmt.Sprintf("udp:%d", port)
@@ -369,6 +369,6 @@ func (pm *PortManager) ValidatePortRanges(tcpRanges, udpRanges string) error {
 			allPorts[key] = true
 		}
 	}
-	
+
 	return nil
 }

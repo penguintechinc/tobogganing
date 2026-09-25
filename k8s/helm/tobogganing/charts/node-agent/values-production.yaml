@@ -1,0 +1,28 @@
+# Production environment values for node-agent
+# Customer production deployments
+
+namespace: tobogganing
+
+image:
+  repository: ghcr.io/penguintechinc/tobogganing/node-agent
+  tag: v0.1.0
+  # TODO: pin to released digest — replace with the real sha256 once a
+  # v0.1.0 node-agent image is published to ghcr.io.
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  pullPolicy: IfNotPresent
+
+nodeAgent:
+  mode: daemonset
+  controlPlaneUrl: "https://hub-api.tobogganing.svc:8443"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Production: stricter pod disruption budget (maintain at least 1 running pod)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

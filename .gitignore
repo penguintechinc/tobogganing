@@ -24,12 +24,23 @@ certs/
 certificates/
 secrets/
 .secrets
+# ...but module certs/ source packages are code, not TLS material — keep tracked
+# (path is hub_api/modules/*/certs/ after the core->hub_api rename; covers sase, sdwan, etc.)
+!hub_api/modules/**/certs/
+!hub_api/modules/**/certs/**
 
 # Configuration files with sensitive data
 config.yaml
 config.json
 *config*.yaml
 *config*.json
+# ...but TypeScript/tooling configs match *config*.json and MUST be committed
+!tsconfig.json
+!tsconfig.*.json
+!**/tsconfig.json
+!**/tsconfig.*.json
+# ...and the pre-commit hook config matches *config*.yaml but MUST be committed
+!.pre-commit-config.yaml
 .env
 .env.local
 .env.*.local
@@ -118,13 +129,8 @@ obj/
 *.tmp
 vendor/
 
-# Lock files
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-Gemfile.lock
-Pipfile.lock
-poetry.lock
+# Lock files that pin dependencies MUST be committed (see standards);
+# only truly environment-local lockfiles may be ignored.
 Cargo.lock
 composer.lock
 
@@ -158,3 +164,26 @@ sasewaddle-*
 releases/
 artifacts/
 
+# Built Go headend binaries
+services/hub-router/headend-proxy*
+services/hub-router/headend-test
+services/hub-router/test-headend
+services/hub-router/proxy/headend-proxy
+
+# Git worktrees (local development only)
+.worktrees/
+
+# Helm: packaged local sub-chart archives are a `helm dependency
+# update`/`build` output regenerated from Chart.lock — the unpacked
+# k8s/helm/*/charts/<name>/ source directories themselves stay tracked.
+k8s/helm/*/charts/*.tgz
+
+# stray 0-byte file some tooling keeps creating at repo root
+/tobogganing
+
+# Rust binary-workspace lockfile MUST be committed (critical-rules.md Dependency
+# Pinning) — the blanket Cargo.lock ignore above is for library crates only.
+!agents/node-agent/Cargo.lock
+
+# Subagent local memory (mem0-style) — persists locally, never committed; do NOT delete it
+.claude/agent-memory/

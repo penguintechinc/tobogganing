@@ -1,0 +1,43 @@
+# Alpha environment overrides (local K8s)
+
+image:
+  tag: alpha-latest  # Local build, pushed to localhost:32000
+  repository: localhost:32000/tobogganing/testserver
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: NodePort
+  port: 8080
+  nodePort: 30081  # tobogganing already uses 30080 (netsvcs-dns doh) — next free slot
+
+# Alpha: minimal resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+config:
+  authEnabled: "false"  # No JWT/API-key flow wired for alpha smoke tests yet
+  maxConcurrentTests: "10"
+  allowedOrigins: "http://tobogganing.localhost.local"
+
+# Alpha: SQLite, in-memory (dev-tier only — database.go AutoMigrates its
+# own schema). No operator-provisioned MariaDB exists in the local
+# microk8s cluster (see values.yaml KNOWN GAP note), and this chart does
+# not deploy one itself, so alpha does not attempt to reach one. SQLite
+# needs no password: templates/db-credentials.yaml and the DB_PASS env var
+# in templates/deployment.yaml are both skipped when db.type == "sqlite".
+# db.name empty => in-memory (file::memory:?cache=shared) — no PVC/volume
+# needed, consistent with readOnlyRootFilesystem: true and no state mount
+# in this chart.
+db:
+  type: "sqlite"
+  name: ""
+
+autoscaling:
+  enabled: false

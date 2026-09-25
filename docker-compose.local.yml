@@ -109,7 +109,7 @@ services:
       DB_PASSWORD: sasewaddle-dev-password
       DB_NAME: sasewaddle
       DB_POOL_SIZE: 10
-      
+
       # Read Replica Configuration (optional)
       DB_READ_REPLICA_ENABLED: "true"   # Enable read replica support
       DB_READ_HOST: mysql-read          # Read replica host
@@ -118,31 +118,31 @@ services:
       DB_READ_PASSWORD: sasewaddle-dev-password
       DB_READ_NAME: sasewaddle
       DB_READ_POOL_SIZE: 5
-      
+
       # Alternative database configurations (commented out):
       # For PostgreSQL:
       # DB_TYPE: postgresql
       # DB_HOST: postgres
       # DB_PORT: 5432
-      # 
+      #
       # For SQLite (single file):
       # DB_TYPE: sqlite
       # DB_PATH: /data/sasewaddle.db
-      
+
       # Redis Configuration
       REDIS_URL: redis://redis:6379/0
-      
+
       # Authentication & Security
       JWT_SECRET: dev-jwt-secret-change-in-production
       SESSION_TIMEOUT_HOURS: 8
       METRICS_TOKEN: prometheus-scraper-dev-token
-      
+
       # Service Configuration
       PORT: 8000
       WORKERS: 2
       LOG_LEVEL: info
       THREAD_POOL_SIZE: 10
-      
+
       # Development Settings
       ENVIRONMENT: development
       DEBUG: "false"
@@ -187,16 +187,16 @@ services:
       HEADEND_SERVER_METRICS_PORT: 9090
       HEADEND_SERVER_CERT_FILE: /certs/headend.crt
       HEADEND_SERVER_KEY_FILE: /certs/headend.key
-      
+
       # Authentication
       HEADEND_AUTH_TYPE: jwt
       HEADEND_AUTH_MANAGER_URL: http://manager:8000
-      
+
       # WireGuard Configuration
       HEADEND_WIREGUARD_INTERFACE: wg0
       HEADEND_WIREGUARD_NETWORK: 10.200.0.0/16
       HEADEND_WIREGUARD_LISTEN_PORT: 51820
-      
+
       # Traffic Mirroring - Forward to Suricata for IDS/IPS
       HEADEND_MIRROR_ENABLED: "true"
       HEADEND_MIRROR_DESTINATIONS: "172.20.0.100:4789"
@@ -204,22 +204,22 @@ services:
       HEADEND_MIRROR_SURICATA_ENABLED: "true"
       HEADEND_MIRROR_SURICATA_HOST: "172.20.0.100"
       HEADEND_MIRROR_SURICATA_PORT: "9999"
-      
+
       # Syslog Configuration (UDP only)
       HEADEND_SYSLOG_ENABLED: "false"
       # HEADEND_SYSLOG_SERVER: "syslog.example.com:514"
       # HEADEND_SYSLOG_FACILITY: "local0"
       # HEADEND_SYSLOG_TAG: "sasewaddle-headend"
-      
+
       # Metrics Authentication
       HEADEND_METRICS_AUTH_TOKEN: prometheus-scraper-dev-token
-      
+
       # Cluster Identity
       CLUSTER_ID: us-east-1
       CLUSTER_NAME: "US East (Development)"
       CLUSTER_REGION: us-east-1
       CLUSTER_DATACENTER: dev-local
-      
+
       # Logging
       HEADEND_LOG_LEVEL: info
     volumes:
@@ -268,16 +268,16 @@ services:
       HEADEND_SERVER_METRICS_PORT: 9090
       HEADEND_SERVER_CERT_FILE: /certs/headend.crt
       HEADEND_SERVER_KEY_FILE: /certs/headend.key
-      
+
       # Authentication
       HEADEND_AUTH_TYPE: jwt
       HEADEND_AUTH_MANAGER_URL: http://manager:8000
-      
+
       # WireGuard Configuration
       HEADEND_WIREGUARD_INTERFACE: wg0
       HEADEND_WIREGUARD_NETWORK: 10.201.0.0/16
       HEADEND_WIREGUARD_LISTEN_PORT: 51820
-      
+
       # Traffic Mirroring - Forward to Suricata for IDS/IPS
       HEADEND_MIRROR_ENABLED: "true"
       HEADEND_MIRROR_DESTINATIONS: "172.20.0.100:4789"
@@ -285,22 +285,22 @@ services:
       HEADEND_MIRROR_SURICATA_ENABLED: "true"
       HEADEND_MIRROR_SURICATA_HOST: "172.20.0.100"
       HEADEND_MIRROR_SURICATA_PORT: "9999"
-      
+
       # Syslog Configuration (UDP only)
       HEADEND_SYSLOG_ENABLED: "false"
       # HEADEND_SYSLOG_SERVER: "syslog.example.com:514"
       # HEADEND_SYSLOG_FACILITY: "local0"
       # HEADEND_SYSLOG_TAG: "sasewaddle-headend"
-      
+
       # Metrics Authentication
       HEADEND_METRICS_AUTH_TOKEN: prometheus-scraper-dev-token
-      
+
       # Cluster Identity
       CLUSTER_ID: eu-west-1
       CLUSTER_NAME: "EU West (Development)"
       CLUSTER_REGION: eu-west-1
       CLUSTER_DATACENTER: dev-local
-      
+
       # Logging
       HEADEND_LOG_LEVEL: info
     volumes:
@@ -325,93 +325,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.headend-eu-west.rule=Host(`headend-eu-west.sasewaddle.local`)"
 
-  # Docker Client 1 - Simulated client
-  client-docker-1:
-    build:
-      context: ./clients/docker
-      dockerfile: Dockerfile
-    container_name: sasewaddle-client-docker-1
-    restart: unless-stopped
-    depends_on:
-      headend-us-east:
-        condition: service_healthy
-    environment:
-      # Manager Configuration
-      MANAGER_URL: http://manager:8000
-      
-      # Client Configuration
-      CLIENT_ID: docker-client-1
-      CLIENT_NAME: "Docker Client 1 (Development)"
-      CLIENT_TYPE: docker
-      
-      # Initial API Key (will be rotated after first connection)
-      API_KEY: dev-initial-api-key-docker-1
-      
-      # Connection Settings
-      AUTO_CONNECT: "true"
-      RECONNECT_INTERVAL: 30
-      
-      # Logging
-      LOG_LEVEL: info
-      
-      # WireGuard Settings
-      WIREGUARD_INTERFACE: wg0
-      WIREGUARD_DNS: "10.200.0.1,1.1.1.1"
-      WIREGUARD_MTU: 1420
-      WIREGUARD_PERSISTENT_KEEPALIVE: 25
-    volumes:
-      - client_docker_1_data:/app/data
-      - client_docker_1_config:/etc/sasewaddle
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    networks:
-      - sasewaddle
-
-  # Client Docker 2 - Another simulated client
-  client-docker-2:
-    build:
-      context: ./clients/docker
-      dockerfile: Dockerfile
-    container_name: sasewaddle-client-docker-2
-    restart: unless-stopped
-    depends_on:
-      headend-eu-west:
-        condition: service_healthy
-    environment:
-      # Manager Configuration
-      MANAGER_URL: http://manager:8000
-      
-      # Client Configuration
-      CLIENT_ID: docker-client-2
-      CLIENT_NAME: "Docker Client 2 (Development)"
-      CLIENT_TYPE: docker
-      
-      # Initial API Key
-      API_KEY: dev-initial-api-key-docker-2
-      
-      # Connection Settings
-      AUTO_CONNECT: "true"
-      RECONNECT_INTERVAL: 30
-      
-      # Logging
-      LOG_LEVEL: info
-      
-      # WireGuard Settings
-      WIREGUARD_INTERFACE: wg0
-      WIREGUARD_DNS: "10.201.0.1,1.1.1.1"
-      WIREGUARD_MTU: 1420
-      WIREGUARD_PERSISTENT_KEEPALIVE: 25
-    volumes:
-      - client_docker_2_data:/app/data
-      - client_docker_2_config:/etc/sasewaddle
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    networks:
-      - sasewaddle
 
   # Prometheus - Metrics collection
   prometheus:
@@ -520,20 +433,20 @@ services:
     environment:
       # Suricata Configuration
       SURICATA_OPTIONS: "-c /etc/suricata/suricata.yaml -i mirror0 --set sensor-name=sasewaddle-ids"
-      
+
       # Rule Management
       SURICATA_RULES_UPDATE: "true"
       SURICATA_RULES_URL: "https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"
-      
+
       # Logging Configuration
       SURICATA_LOG_LEVEL: "info"
       SURICATA_LOG_DIR: "/var/log/suricata"
-      
+
       # Performance Settings
       SURICATA_RUNMODE: "autofp"
       SURICATA_DETECT_ENGINE_PROFILE: "medium"
       SURICATA_MAX_PENDING_PACKETS: "1024"
-      
+
       # Output Configuration
       SURICATA_EVE_LOG: "yes"
       SURICATA_EVE_LOG_ALERTS: "yes"
@@ -542,11 +455,11 @@ services:
       SURICATA_EVE_LOG_TLS: "yes"
       SURICATA_EVE_LOG_SSH: "yes"
       SURICATA_EVE_LOG_SMTP: "yes"
-      
+
       # Alert Configuration
       SURICATA_ALERT_FAST: "yes"
       SURICATA_ALERT_DEBUG: "no"
-      
+
       # Stats Configuration
       SURICATA_STATS_ENABLED: "yes"
       SURICATA_STATS_INTERVAL: "8"
@@ -591,11 +504,11 @@ services:
       FRR_ROUTER_ID: "10.200.1.1"
       FRR_CLUSTER_ID: "us-east-1"
       FRR_MANAGER_URL: "http://manager:8000"
-      
+
       # OSPF Configuration
       FRR_OSPF_ENABLED: "true"
       FRR_OSPF_AREA: "0.0.0.0"
-      
+
       # VRF Configuration
       FRR_VRF_ENABLED: "true"
     volumes:
@@ -633,11 +546,11 @@ services:
       FRR_ROUTER_ID: "10.201.1.1"
       FRR_CLUSTER_ID: "eu-west-1"
       FRR_MANAGER_URL: "http://manager:8000"
-      
+
       # OSPF Configuration
       FRR_OSPF_ENABLED: "true"
       FRR_OSPF_AREA: "0.0.0.0"
-      
+
       # VRF Configuration
       FRR_VRF_ENABLED: "true"
     volumes:
@@ -671,7 +584,7 @@ volumes:
     driver: local
   grafana_data:
     driver: local
-  
+
   # Manager volumes
   manager_data:
     driver: local
@@ -679,7 +592,7 @@ volumes:
     driver: local
   manager_logs:
     driver: local
-  
+
   # Headend volumes
   headend_us_east_data:
     driver: local
@@ -693,21 +606,11 @@ volumes:
     driver: local
   headend_eu_west_wg:
     driver: local
-  
-  # Client volumes
-  client_docker_1_data:
-    driver: local
-  client_docker_1_config:
-    driver: local
-  client_docker_2_data:
-    driver: local
-  client_docker_2_config:
-    driver: local
-  
+
   # Nginx logs
   nginx_logs:
     driver: local
-  
+
   # Suricata volumes
   suricata_logs:
     driver: local
@@ -715,7 +618,7 @@ volumes:
     driver: local
   suricata_config:
     driver: local
-  
+
   # FRR volumes
   frr_us_east_config:
     driver: local

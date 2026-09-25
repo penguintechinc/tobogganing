@@ -1,0 +1,54 @@
+[Unit]
+Description=Tobogganing Node Agent - SASE Connectivity & Local Netsvcs
+Documentation=https://github.com/penguintechinc/tobogganing/blob/main/docs/superpowers/specs/2026-08-20-squawk-P4-rust-node-agent.md
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/node-agent run
+Restart=on-failure
+RestartSec=10
+
+# Runtime configuration
+WorkingDirectory=/var/lib/node-agent
+StateDirectory=node-agent
+CacheDirectory=node-agent
+RuntimeDirectory=node-agent
+
+# User and group (non-root execution)
+# Create the user with: useradd --system --home /var/lib/node-agent node-agent
+User=node-agent
+Group=node-agent
+DynamicUser=no
+
+# Capabilities: NET_ADMIN for WireGuard TUN device, NET_BIND_SERVICE for :53 DNS binding
+# These are ambient capabilities, inherited by child processes
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/node-agent /var/cache/node-agent /run/node-agent
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=node-agent
+
+[Install]
+WantedBy=multi-user.target

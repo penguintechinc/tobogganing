@@ -1,0 +1,146 @@
+## Tobogganing - Gamma Environment Overrides
+## Pre-release validation (dal2.penguintech.cloud, separate cluster/context
+## from beta — see penguintech.md Cluster Contexts). Mirrors values-beta.yaml
+## with gamma-tagged images and the gamma ingress host.
+
+namespace: tobogganing
+
+hubApi:
+  replicas: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  managerUrl: "https://tobogganing-gamma.penguintech.cloud/api"
+  corsOrigins: "https://tobogganing-gamma.penguintech.cloud"
+
+hubRouter:
+  replicas: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  # hubRouter.sessionSigningKey intentionally left unset — injected via
+  # `--set hubRouter.sessionSigningKey=$SIGNING_KEY` from a CI-managed
+  # secret at deploy time, never committed. See values.yaml
+  # hubRouter.sessionSigningKey comment; templates/hub-router-signing.yaml
+  # fails the render (by design) if this is omitted at deploy time.
+
+hubWebui:
+  replicas: 2
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+redis:
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  storage:
+    size: 1Gi
+
+## netsvcs-dns: CI-built gamma image (mirrors charts/netsvcs-dns/gamma.yml)
+netsvcs-dns:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
+    tag: gamma-1710000000  # Replaced by CI/CD with actual build tag
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+## node-agent: CI-built gamma image (mirrors charts/node-agent/values-gamma.yaml)
+node-agent:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/node-agent
+    tag: gamma-1724152800  # Replaced by CI/CD with actual build tag
+  nodeAgent:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+## testserver: CI-built gamma image (mirrors charts/testserver/gamma.yml)
+testserver:
+  enabled: true
+  image:
+    repository: ghcr.io/penguintechinc/tobogganing/testserver
+    tag: gamma-1710000000  # Replaced by CI/CD with actual build tag
+  replicaCount: 1
+  config:
+    allowedOrigins: "https://tobogganing-gamma.penguintech.cloud"
+  db:
+    host: "testserver-mariadb.tobogganing.svc.cluster.local"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+config:
+  env: "gamma"
+  logLevel: info
+  dbType: "postgresql"
+  dbHost: "tobogganing-postgres.tobogganing.svc.cluster.local"
+  dbPort: 5432
+  dbName: "tobogganing"
+  dbUser: "hub_api"
+  dbPoolSize: 5
+  jwtExpirationHours: 24
+  posthogHost: "https://license.penguintech.io"
+
+# secrets.dbPass / secrets.licenseKey / secrets.posthogKey intentionally
+# left unset — injected via `--set secrets.*=...` from a CI-managed secret
+# at deploy time, never committed. See values.yaml secrets.* comment;
+# templates/credentials.yaml's `required` fails the render (by design) if
+# any of these are omitted at deploy time.
+
+## Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  hosts:
+    - host: tobogganing-gamma.penguintech.cloud
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: hub-api
+          port: 8080
+        - path: /
+          pathType: Prefix
+          service: hub-webui
+          port: 80
+  tls:
+    - secretName: tobogganing-tls
+      hosts:
+        - tobogganing-gamma.penguintech.cloud

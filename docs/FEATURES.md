@@ -1,6 +1,6 @@
 # 🚀 Tobogganing Features Documentation
 
-> **Last Updated**: 2025-08-21  
+> **Last Updated**: 2025-08-21
 > **Version**: 1.1.0
 
 ## 📋 Table of Contents
@@ -40,7 +40,7 @@ firewall:
       pattern: "*.internal.company.com"
       action: allow
       priority: 10
-    
+
     - type: protocol_rule
       protocol: tcp
       dst_port: "22,80,443"
@@ -237,13 +237,10 @@ docker run -d \
 - ✅ **Server Selection** - Choose optimal headend location
 
 #### Installation
-```bash
-# Build from source
-./scripts/deploy-mobile.sh
 
-# Install to device
-adb install -r clients/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-```
+The mobile client no longer lives in this repo — it was consolidated into
+the unified `penguind` desktop/mobile client in the `penguin` project
+(`reference/tobogganing-clients/` for the prior implementation).
 
 ### 🔧 **Client Configuration**
 

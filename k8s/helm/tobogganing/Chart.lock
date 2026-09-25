@@ -1,0 +1,27 @@
+dependencies:
+- name: netsvcs-dns
+  repository: file://./charts/netsvcs-dns
+  version: 0.1.0
+- name: node-agent
+  repository: file://./charts/node-agent
+  version: 0.1.0
+- name: testserver
+  repository: file://./charts/testserver
+  version: 0.1.0
+- name: suricata
+  repository: file://./charts/suricata
+  version: 0.1.0
+- name: zeek
+  repository: file://./charts/zeek
+  version: 0.1.0
+- name: arkime
+  repository: file://./charts/arkime
+  version: 0.1.0
+- name: strelka
+  repository: file://./charts/strelka
+  version: 0.1.0
+- name: cape
+  repository: file://./charts/cape
+  version: 0.1.0
+digest: sha256:a6f8d7675a05e002d69d2cfc0de8ff7e6adbee714b7bc3defa5c7ff0094289f0
+generated: "2026-08-21T17:11:09.955252269-05:00"

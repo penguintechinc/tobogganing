@@ -83,6 +83,11 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "N", "D", "UP", "S", "B", "A", "C4", "T20", "RET", "SIM"]
 ignore = ["D100", "D104"]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests: assertions are the point (S101), and per-test docstrings add noise
+# over value — consistent with [tool.bandit] exclude_dirs below.
+"tests/**" = ["D100", "D101", "D102", "D103", "D107", "S101"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

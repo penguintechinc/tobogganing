@@ -12,7 +12,6 @@ resources:
   - hub-router.yaml
   - hub-webui.yaml
   - redis.yaml
-  - monitoring.yaml
 
 configMapGenerator:
   - name: tobogganing-config

@@ -1,0 +1,47 @@
+[package]
+name = "node-agent-netsvcs-edge"
+description = "Local :53 DNS/DHCP/NTP edge services for the tobogganing node-agent, forwarding DNS to the P3 DoH resolvers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "node_agent_netsvcs_edge"
+path = "src/lib.rs"
+
+[dependencies]
+node-agent-core = { workspace = true }
+node-agent-transport = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "net"] }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-no-provider", "http2"] }
+
+# Module-specific deps: exact-pinned here (not shared workspace-wide), per
+# the org dependency-pinning policy — only this crate uses them.
+hickory-server = { version = "=0.26.1", default-features = false }
+hickory-proto = { version = "=0.26.1", default-features = false, features = ["std"] }
+dhcproto = { version = "=0.15.0", default-features = false }
+# `__internal-api` unlocks `NtpPacket`/`PollInterval` etc.; ntp-proto marks
+# its packet-level API as not-yet-stable ("use at your own risk") but does
+# not otherwise restrict consumption — this is the only way to build/parse
+# NTP packets with this crate. `rustcrypto` (pure-Rust AEAD) is selected
+# over the default `aws-lc` backend to avoid a C/ASM build dependency for a
+# feature (NTS) this client does not use.
+ntp-proto = { version = "=1.9.0", default-features = false, features = ["__internal-api", "rustcrypto"] }
+lru = { version = "=0.18.2" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# `testing` unlocks `MessageRequest::mock`/`Request::from_message`/
+# `Queries::new` — resolver v2 (workspace-level `resolver = "2"`) keeps this
+# extra feature out of the production binary's feature set.
+hickory-server = { version = "=0.26.1", default-features = false, features = ["testing"] }
+# `__internal-test` (implies `__internal-api`) unlocks `NtpPacket::test()`/
+# `set_origin_timestamp`/etc. for building synthetic response packets in
+# unit tests — dev-only for the same resolver-v2 reason as above.
+ntp-proto = { version = "=1.9.0", default-features = false, features = ["__internal-test", "rustcrypto"] }

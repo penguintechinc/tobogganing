@@ -1,6 +1,4 @@
-"""
-gRPC security interceptors for authentication, rate limiting, and audit logging.
-"""
+"""gRPC security interceptors for authentication, rate limiting, and audit logging."""
 
 from __future__ import annotations
 
@@ -9,9 +7,10 @@ import time
 import traceback
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Callable, Optional
+from typing import Any
 
 import grpc
 import jwt
@@ -20,29 +19,39 @@ logger = logging.getLogger(__name__)
 
 
 class AuthInterceptor(grpc.ServerInterceptor):
-    """
-    JWT authentication interceptor for gRPC servers.
+    """JWT authentication and scope-based authorization interceptor for gRPC servers.
 
-    Validates JWT tokens in metadata and sets user context.
+    Validates JWT tokens in metadata and, when a method has required scopes
+    configured, enforces OIDC scope-based authorization before invoking the
+    handler — never role names, per org standard (security.md JWT Claims).
     """
 
     def __init__(
         self,
         secret_key: str,
-        algorithms: Optional[list[str]] = None,
-        public_methods: Optional[set[str]] = None,
+        algorithms: list[str] | None = None,
+        public_methods: set[str] | None = None,
+        method_scopes: dict[str, set[str]] | None = None,
     ):
-        """
-        Initialize auth interceptor.
+        """Initialize auth interceptor.
 
         Args:
             secret_key: JWT secret key for validation
             algorithms: List of allowed JWT algorithms (default: ['HS256'])
             public_methods: Set of method names that don't require auth
+            method_scopes: Optional mapping of method name -> set of required
+                OIDC scopes (`resource:action` format). All listed scopes must
+                be present in the token's `scope` claim for the call to be
+                authorized. Methods with no entry are authenticated only —
+                callers that need authorization must configure this.
+
         """
         self.secret_key = secret_key
         self.algorithms = algorithms or ["HS256"]
         self.public_methods = public_methods or set()
+        self.method_scopes = {
+            method: set(scopes) for method, scopes in (method_scopes or {}).items()
+        }
 
     def intercept_service(
         self,
@@ -79,22 +88,35 @@ class AuthInterceptor(grpc.ServerInterceptor):
 
             # Add user info to context (can be retrieved in handlers)
             user_id = payload.get("sub")
-            logger.info(
-                f"Authenticated request to {method}", extra={"user_id": user_id}
-            )
+
+            # Scope-based authorization (OIDC scopes, never role names)
+            required_scopes = self.method_scopes.get(method)
+            if required_scopes:
+                token_scopes = set(str(payload.get("scope", "")).split())
+                if not required_scopes.issubset(token_scopes):
+                    logger.warning(
+                        f"Insufficient scope for {method}",
+                        extra={
+                            "user_id": user_id,
+                            "required_scopes": sorted(required_scopes),
+                            "token_scopes": sorted(token_scopes),
+                        },
+                    )
+                    return self._abort_with_error(
+                        grpc.StatusCode.PERMISSION_DENIED,
+                        "Insufficient scope for this operation",
+                    )
+
+            logger.info(f"Authenticated request to {method}", extra={"user_id": user_id})
 
             return continuation(handler_call_details)
 
         except jwt.ExpiredSignatureError:
             logger.warning(f"Expired token for {method}")
-            return self._abort_with_error(
-                grpc.StatusCode.UNAUTHENTICATED, "Token has expired"
-            )
+            return self._abort_with_error(grpc.StatusCode.UNAUTHENTICATED, "Token has expired")
         except jwt.InvalidTokenError as e:
             logger.warning(f"Invalid token for {method}: {e}")
-            return self._abort_with_error(
-                grpc.StatusCode.UNAUTHENTICATED, "Invalid token"
-            )
+            return self._abort_with_error(grpc.StatusCode.UNAUTHENTICATED, "Invalid token")
 
     def _abort_with_error(
         self,
@@ -122,8 +144,7 @@ class RateLimitEntry:
 
 
 class RateLimitInterceptor(grpc.ServerInterceptor):
-    """
-    Rate limiting interceptor with per-client limits.
+    """Rate limiting interceptor with per-client limits.
 
     Implements sliding window rate limiting.
     """
@@ -132,16 +153,28 @@ class RateLimitInterceptor(grpc.ServerInterceptor):
         self,
         requests_per_minute: int = 100,
         per_user: bool = True,
+        secret_key: str | None = None,
+        algorithms: list[str] | None = None,
     ):
-        """
-        Initialize rate limiter.
+        """Initialize rate limiter.
 
         Args:
             requests_per_minute: Maximum requests per minute
             per_user: Rate limit per user (True) or per IP (False)
+            secret_key: JWT secret key used to verify the token's signature
+                before trusting its `sub` claim as the rate-limit identity.
+                Pass the same key configured on `AuthInterceptor`. Required
+                for `per_user=True` — without it, the `sub` claim cannot be
+                trusted (an unverified decode would let a caller forge any
+                identity to dodge or frame another client's limit), so the
+                limiter falls back to IP-based identification instead.
+            algorithms: List of allowed JWT algorithms (default: ['HS256'])
+
         """
         self.requests_per_minute = requests_per_minute
         self.per_user = per_user
+        self.secret_key = secret_key
+        self.algorithms = algorithms or ["HS256"]
         self.limits: dict[str, RateLimitEntry] = defaultdict(RateLimitEntry)
         self.lock = Lock()
 
@@ -155,15 +188,26 @@ class RateLimitInterceptor(grpc.ServerInterceptor):
         metadata = dict(handler_call_details.invocation_metadata)
 
         if self.per_user:
-            # Extract user from token
+            # Extract user from token — signature MUST be verified before the
+            # `sub` claim is trusted for a security decision (rate limiting).
+            # An unverified decode would let any caller forge a `sub` to
+            # dodge their own limit or frame another client's identity.
             auth_header = metadata.get("authorization", "")
-            if auth_header.startswith("Bearer "):
+            if auth_header.startswith("Bearer ") and self.secret_key:
                 try:
                     token = auth_header[7:]
-                    payload = jwt.decode(token, options={"verify_signature": False})
+                    payload = jwt.decode(token, self.secret_key, algorithms=self.algorithms)
                     client_id = payload.get("sub", "anonymous")
-                except Exception:
+                except jwt.InvalidTokenError:
                     client_id = "anonymous"
+            elif auth_header.startswith("Bearer ") and not self.secret_key:
+                # No key material configured to verify the token — fall back
+                # to IP-based limiting rather than trusting an unverified sub.
+                logger.warning(
+                    "RateLimitInterceptor per_user=True without secret_key; "
+                    "falling back to IP-based rate limiting"
+                )
+                client_id = metadata.get("x-forwarded-for", "unknown")
             else:
                 client_id = "anonymous"
         else:
@@ -217,8 +261,7 @@ class RateLimitInterceptor(grpc.ServerInterceptor):
 
 
 class AuditInterceptor(grpc.ServerInterceptor):
-    """
-    Audit logging interceptor for request/response tracking.
+    """Audit logging interceptor for request/response tracking.
 
     Logs method calls, duration, and status codes.
     """
@@ -291,8 +334,7 @@ class AuditInterceptor(grpc.ServerInterceptor):
 
 
 class CorrelationInterceptor(grpc.ServerInterceptor):
-    """
-    Correlation ID interceptor for request tracing.
+    """Correlation ID interceptor for request tracing.
 
     Adds or propagates correlation IDs across service calls.
     """
@@ -318,8 +360,7 @@ class CorrelationInterceptor(grpc.ServerInterceptor):
 
 
 class RecoveryInterceptor(grpc.ServerInterceptor):
-    """
-    Recovery interceptor for exception handling.
+    """Recovery interceptor for exception handling.
 
     Catches unexpected exceptions and returns proper gRPC errors.
     """
@@ -358,9 +399,7 @@ class RecoveryInterceptor(grpc.ServerInterceptor):
                         exc_info=True,
                     )
 
-                    context.abort(
-                        grpc.StatusCode.INTERNAL, f"Internal server error: {str(e)}"
-                    )
+                    context.abort(grpc.StatusCode.INTERNAL, f"Internal server error: {str(e)}")
 
             return grpc.unary_unary_rpc_method_handler(
                 recovery_handler,

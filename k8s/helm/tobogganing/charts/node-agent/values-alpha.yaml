@@ -1,0 +1,20 @@
+# Alpha environment values for node-agent
+# Local development environment (MicroK8s)
+
+namespace: tobogganing
+
+image:
+  repository: localhost:32000/tobogganing/node-agent
+  tag: alpha-1724152800
+  pullPolicy: Always
+
+nodeAgent:
+  mode: daemonset
+  controlPlaneUrl: "https://hub-api.tobogganing.svc:8443"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

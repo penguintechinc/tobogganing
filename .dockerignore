@@ -1,0 +1,30 @@
+# Root-level .dockerignore for Docker builds starting from worktree root
+# Multi-service root context build support: hub_api, node-agent, netsvcs-dns, testserver
+
+# Exclude everything by default, then explicitly allow what we need
+**
+
+# hub_api: Python service with shared module dependency
+!hub_api/
+!shared/
+
+# node-agent: Rust agent with proto dependency
+!agents/
+!agents/node-agent/
+!agents/node-agent/Cargo.toml
+!agents/node-agent/Cargo.lock
+!agents/node-agent/crates/
+!agents/node-agent/rust-toolchain.toml
+
+# Proto definitions (used by node-agent and netsvcs-dns)
+!proto/
+!proto/netsvcs/
+!proto/netsvcs/v1/
+!proto/netsvcs/v1/manager.proto
+
+# netsvcs-dns: Python service
+!engines/
+!engines/netsvcs-dns/
+
+# testserver: Go service
+!engines/testserver/

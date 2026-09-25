@@ -1,0 +1,60 @@
+## Zeek network security monitor — out-of-band analysis tool for SASE
+## Slice D adapters. Deployed OFF by default (parent Chart.yaml: condition
+## zeek.enabled). Not yet wired to a live mirror in this slice — only
+## Suricata has direct hub-router mirror wiring today (see
+## services/hub-router/proxy/mirror/manager.go); this stub establishes the
+## deployable pattern for when Zeek gets a traffic source.
+enabled: false
+
+image:
+  repository: zeek/zeek
+  tag: "6.2.1"
+  digest: "sha256:825d7f338cb539fa0e937cab5a68a4859e696cdc851dc06428a3961e6bb16014"
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+## Path the ZeekAdapter poller tails for notice.log
+## (hub_api/modules/sase/security/adapters/config.py: ZEEK_LOG_PATH).
+## Pod-local emptyDir by default — see ../README.md for the shared-volume
+## wiring needed to make this readable from hub-api.
+notice:
+  logPath: /usr/local/zeek/logs/current/notice.log
+
+## Reserved for future direct integration (e.g. a management/metrics
+## endpoint) — Zeek is log-based in this deployment, not endpoint-polled,
+## so nothing listens here yet. Kept for Service/values symmetry with the
+## other four tools.
+mgmt:
+  port: 9997
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  liveness:
+    command: ["sh", "-c", "pgrep -x zeek"]
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    command: ["sh", "-c", "pgrep -x zeek"]
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3

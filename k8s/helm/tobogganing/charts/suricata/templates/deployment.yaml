@@ -1,0 +1,78 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "suricata.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "suricata.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "suricata.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "suricata.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      containers:
+        - name: suricata
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}@{{ .Values.image.digest }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ## ROOT EXCEPTION (approved): requires NET_ADMIN/NET_RAW for raw
+          ## packet capture off mirrored traffic — see values.yaml.
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              add:
+                {{- toYaml .Values.securityContext.capabilities.add | nindent 16 }}
+          ports:
+            - name: mirror-feed
+              containerPort: {{ .Values.mirror.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                {{- toYaml .Values.probes.liveness.command | nindent 16 }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                {{- toYaml .Values.probes.readiness.command | nindent 16 }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: eve-log
+              mountPath: /var/log/suricata
+      volumes:
+        - name: eve-log
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "suricata.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "suricata.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: mirror-feed
+      port: {{ .Values.mirror.port }}
+      targetPort: mirror-feed
+      protocol: TCP
+  selector:
+    {{- include "suricata.selectorLabels" . | nindent 4 }}
+{{- end }}

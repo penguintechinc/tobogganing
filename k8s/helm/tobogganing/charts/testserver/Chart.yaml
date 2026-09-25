@@ -1,0 +1,16 @@
+apiVersion: v2
+name: testserver
+description: >-
+  WaddlePerf Go test engine (data-plane) — target server that
+  hub_api/modules/perftest_cluster drives for http/tcp/udp/icmp/traceroute
+  and speedtest/throughput tests. See engines/testserver/.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - waddleperf
+  - perftest
+  - testserver
+maintainers:
+  - name: PenguinTech
+    email: dev@penguintech.io
