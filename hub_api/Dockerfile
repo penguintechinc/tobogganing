@@ -8,8 +8,8 @@ WORKDIR /build
 RUN pip install --no-cache-dir uv
 
 # Copy requirements and compile/install dependencies
-COPY hub_api/requirements.txt .
-RUN uv pip install --system --require-hashes -r requirements.txt
+COPY hub_api/requirements.txt /build/
+RUN uv pip install --system --require-hashes -r /build/requirements.txt
 
 # Stage 2: Runtime
 FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7

@@ -21,8 +21,8 @@ RUN rustup target add x86_64-unknown-linux-musl
 
 # Copy workspace and crate manifests from worktree root
 # Note: build.rs expects proto at /proto (4 levels up from /build/crates/transport)
-COPY agents/node-agent/Cargo.toml agents/node-agent/Cargo.lock ./
-COPY agents/node-agent/crates ./crates
+COPY agents/node-agent/Cargo.toml agents/node-agent/Cargo.lock /build/
+COPY agents/node-agent/crates /build/crates
 COPY proto /proto
 
 # Build the agent binary statically linked (release profile with lto, strip, etc.)

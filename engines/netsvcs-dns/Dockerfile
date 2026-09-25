@@ -8,8 +8,8 @@ WORKDIR /build
 RUN pip install --no-cache-dir uv
 
 # Copy requirements and compile/install dependencies
-COPY requirements.txt .
-RUN uv pip install --system --require-hashes -r requirements.txt
+COPY engines/netsvcs-dns/requirements.txt /build/
+RUN uv pip install --system --require-hashes -r /build/requirements.txt
 
 # Stage 2: Runtime
 FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7
@@ -24,11 +24,10 @@ COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code (service directory)
-COPY . .
+COPY engines/netsvcs-dns /app
 
-# Copy proto definitions via BuildKit named context
-# hadolint ignore=DL3022
-COPY --from=proto . /app/proto/
+# Copy proto definitions from repo root
+COPY proto /app/proto
 
 # Set ownership to appuser
 RUN chown -R appuser:appuser /app
