@@ -118,6 +118,66 @@ async def test_redis_timeout_fails_open_to_in_memory_counter(monkeypatch: Any) -
     assert limiter._redis_init_failed is True
 
 
+@pytest.mark.asyncio
+async def test_redis_failure_latch_resets_after_cooldown(monkeypatch: Any) -> None:
+    """regression (ops audit O4/O5): the fail-open latch must not stay
+    permanently set. Before this fix, once Redis failed once, this
+    process used the in-memory fallback for the rest of its life, even
+    after Redis recovered -- desyncing rate-limit state from every other
+    replica under N pods."""
+    limiter = SlidingWindowRateLimiter(5, 60, "test_redis_recovery")
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr("hub_api.security.rate_limit.sliding_window_redis_check", _boom)
+    await limiter.is_allowed("k1")
+    assert limiter._redis_init_failed is True
+
+    # Simulate the cooldown having elapsed and Redis becoming healthy again.
+    limiter._failed_at = time.time() - 31
+    healthy_calls: list[str] = []
+
+    def _healthy(*args: Any, **kwargs: Any) -> tuple[bool, int]:
+        healthy_calls.append(args[1])
+        return True, 0
+
+    monkeypatch.setattr("hub_api.security.rate_limit.sliding_window_redis_check", _healthy)
+
+    allowed, retry_after = await limiter.is_allowed("k2")
+
+    assert allowed is True
+    assert retry_after == 0
+    assert healthy_calls, "Redis should have been retried, not skipped"
+    assert limiter._redis_init_failed is False
+
+
+@pytest.mark.asyncio
+async def test_redis_not_retried_before_cooldown_elapses(monkeypatch: Any) -> None:
+    """A healthy-again Redis is not even probed until the cooldown elapses."""
+    limiter = SlidingWindowRateLimiter(5, 60, "test_redis_too_soon")
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr("hub_api.security.rate_limit.sliding_window_redis_check", _boom)
+    await limiter.is_allowed("k1")
+    assert limiter._redis_init_failed is True
+
+    healthy_calls: list[str] = []
+
+    def _healthy(*args: Any, **kwargs: Any) -> tuple[bool, int]:
+        healthy_calls.append(args[1])
+        return True, 0
+
+    monkeypatch.setattr("hub_api.security.rate_limit.sliding_window_redis_check", _healthy)
+
+    await limiter.is_allowed("k2")
+
+    assert not healthy_calls, "Redis should still be skipped before the cooldown elapses"
+    assert limiter._redis_init_failed is True
+
+
 # ---------------------------------------------------------------------------
 # sliding_window_redis_check / sliding_window_fallback_check (direct)
 # ---------------------------------------------------------------------------

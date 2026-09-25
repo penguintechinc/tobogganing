@@ -15,6 +15,7 @@ unchanged for its existing call sites and tests.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import defaultdict, deque
 
 import redis
@@ -26,6 +27,13 @@ from hub_api.security.rate_limit import (
 )
 
 logger = structlog.get_logger()
+
+# How long to stay latched onto the in-memory fallback after a Redis
+# failure before probing again -- see hub_api/security/rate_limit.py's
+# identical constant/rationale (ops audit finding O4/O5: a permanent
+# per-process latch desyncs this counter from every other replica for the
+# rest of the process's life once Redis blips even once).
+_REDIS_RETRY_COOLDOWN_SECS = 30.0
 
 
 class LiveTestRateLimiter:
@@ -55,9 +63,22 @@ class LiveTestRateLimiter:
         self.max_tests = max_tests
         self.window_seconds = window_seconds
         self._redis_init_failed = False  # Track failed init to avoid repeated attempts
+        self._failed_at = 0.0  # time.time() of the failure that set _redis_init_failed
 
         # Fallback in-memory counters (deque per key)
         self._fallback_counters: dict[str, deque[float]] = defaultdict(deque)
+
+    def _cooldown_elapsed(self) -> bool:
+        """Whether it's time to retry Redis after a prior failure.
+
+        `_failed_at <= 0` means `_redis_init_failed` was never actually set
+        via a real failure (e.g. set directly in a test) -- stays
+        permanently latched exactly as before, rather than probing a
+        backend that was never really timed.
+        """
+        if self._failed_at <= 0:
+            return False
+        return (time.time() - self._failed_at) >= _REDIS_RETRY_COOLDOWN_SECS
 
     async def is_allowed(self, tenant_id: str, connection_id: str = "") -> tuple[bool, int]:
         """Check if a test is allowed for the tenant.
@@ -84,8 +105,9 @@ class LiveTestRateLimiter:
             key_parts.append(connection_id)
         key = ":".join(key_parts)
 
-        # If Redis already failed, skip it and use in-memory immediately
-        if self._redis_init_failed:
+        # If Redis already failed and the retry cooldown hasn't elapsed yet,
+        # skip it and use in-memory immediately.
+        if self._redis_init_failed and not self._cooldown_elapsed():
             return self._check_rule_fallback(key)
 
         # Try Redis with very fast timeout (50ms); fall back to in-memory immediately on any error
@@ -95,10 +117,15 @@ class LiveTestRateLimiter:
                 asyncio.to_thread(self._check_rule_redis, key),
                 timeout=0.05,
             )
+            if self._redis_init_failed:
+                self._redis_init_failed = False
+                self._failed_at = 0.0
+                logger.info("live_test_rate_limit_redis_recovered")
             return result
         except (asyncio.TimeoutError, Exception) as e:
-            # Mark Redis as failed so we skip it on future calls
+            # Mark Redis as failed so we skip it until the retry cooldown elapses
             self._redis_init_failed = True
+            self._failed_at = time.time()
             if isinstance(e, asyncio.TimeoutError):
                 logger.debug(
                     "live_test_rate_limit_redis_timeout",

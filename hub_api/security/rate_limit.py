@@ -36,6 +36,13 @@ logger = structlog.get_logger()
 
 _REDIS_CHECK_TIMEOUT_SECS = 0.05
 
+# How long to stay latched onto the in-memory fallback after a Redis
+# failure before probing again. Without this, one blip pins every replica
+# to its own per-process counter for the rest of the process's life --
+# under N replicas that's a permanent rate-limit desync, not a transient
+# degradation (ops audit finding O4/O5).
+_REDIS_RETRY_COOLDOWN_SECS = 30.0
+
 # Dedicated Redis/Valkey db for all rate-limit ZSETs -- distinct from
 # CacheClient's general-purpose cache (db=0, hub_api/cache/client.py) and
 # the live-test limiter's original db (db=2, unchanged for backward
@@ -137,26 +144,41 @@ class SlidingWindowRateLimiter:
     redis_db: int = RATE_LIMIT_REDIS_DB
     redis_client: Optional[redis.Redis] = None
     _redis_init_failed: bool = False
+    _failed_at: float = 0.0  # time.time() of the failure that set _redis_init_failed
     _fallback_counters: dict[str, deque[float]] = field(default_factory=lambda: defaultdict(deque))
+
+    def _cooldown_elapsed(self) -> bool:
+        """Whether it's time to retry Redis after a prior failure.
+
+        `_failed_at <= 0` means `_redis_init_failed` was never actually set
+        via a real failure (e.g. set directly in a test) -- treated as "not
+        yet eligible" so that path stays permanently latched exactly as
+        before, rather than probing a backend that was never really timed.
+        """
+        if self._failed_at <= 0:
+            return False
+        return (time.time() - self._failed_at) >= _REDIS_RETRY_COOLDOWN_SECS
 
     async def is_allowed(self, key: str) -> tuple[bool, int]:
         """Check + record one request for `key`.
 
         Returns (allowed, retry_after_seconds); retry_after_seconds is 0
         when allowed. Never raises -- any Redis error/timeout fails open to
-        the in-memory fallback and is logged at debug level, and Redis is
-        skipped for the rest of this process's lifetime once it has failed
-        once (matches LiveTestRateLimiter's existing behavior).
+        the in-memory fallback and is logged at debug level. Redis is
+        skipped for _REDIS_RETRY_COOLDOWN_SECS after a failure, then
+        probed again on the next call -- a permanent per-process latch
+        would otherwise desync this counter from every other replica for
+        the rest of the process's life once Redis blips even once.
         """
         full_key = f"rl:{self.key_prefix}:{key}"
 
-        if self._redis_init_failed:
+        if self._redis_init_failed and not self._cooldown_elapsed():
             return sliding_window_fallback_check(
                 self._fallback_counters, full_key, self.max_requests, self.window_seconds
             )
 
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 asyncio.to_thread(
                     sliding_window_redis_check,
                     self._ensure_redis(),
@@ -166,8 +188,14 @@ class SlidingWindowRateLimiter:
                 ),
                 timeout=_REDIS_CHECK_TIMEOUT_SECS,
             )
+            if self._redis_init_failed:
+                self._redis_init_failed = False
+                self._failed_at = 0.0
+                logger.info("rate_limit_redis_recovered", key_prefix=self.key_prefix)
+            return result
         except (asyncio.TimeoutError, Exception) as e:
             self._redis_init_failed = True
+            self._failed_at = time.time()
             logger.debug(
                 "rate_limit_redis_unavailable",
                 key_prefix=self.key_prefix,

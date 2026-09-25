@@ -264,6 +264,45 @@ async def test_tenant_isolation(real_dal: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delete_checkin_state_query_is_tenant_scoped(real_dal: Any, monkeypatch: Any) -> None:
+    """regression: the auto_checkin_state delete must filter on tenant, not
+    just checkin_id -- every other query in this manager (get_state, the
+    tier-dependents check, and this method's own auto_checkins delete)
+    already scopes by tenant at the ORM layer (security.md tenant
+    isolation); the state delete didn't."""
+    manager = AutoCheckInManager(real_dal)
+
+    created = await manager.create_checkin(
+        "t1",
+        "leaf",
+        "dev1",
+        "external",
+        "example.com",
+        ["icmp"],
+        tier=1,
+    )
+    checkin_id = created["id"]
+
+    captured: list[str] = []
+    original_call = type(real_dal).__call__
+
+    def _spy_call(self: Any, query: Any) -> Any:
+        captured.append(str(query.clause))
+        return original_call(self, query)
+
+    monkeypatch.setattr(type(real_dal), "__call__", _spy_call)
+
+    deleted = await manager.delete_checkin("t1", checkin_id)
+    assert deleted is True
+
+    state_queries = [q for q in captured if "auto_checkin_state" in q]
+    assert state_queries, "expected at least one query against auto_checkin_state"
+    assert any(
+        "auto_checkin_state.tenant" in q for q in state_queries
+    ), f"auto_checkin_state delete query is missing a tenant filter: {state_queries}"
+
+
+@pytest.mark.asyncio
 async def test_manager_rejects_none_db() -> None:
     """Constructing a manager with db=None raises ValueError immediately."""
     with pytest.raises(ValueError, match="Database instance cannot be None"):

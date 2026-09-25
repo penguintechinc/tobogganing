@@ -312,6 +312,18 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         claims["node_type"] = node_type
         claims["permissions"] = " ".join(permissions)
         claims["metadata"] = metadata
+        # FLAGGED (security-audit 2026-09-25, deferred, not implemented):
+        # `metadata` (region/datacenter/cluster_id topology) rides in this
+        # claim as plain JWS -- security.md calls for sign-then-encrypt
+        # (nested JWS-in-JWE) for sensitive claims. Out of scope for this
+        # resilience/hardening pass: this app's JWT stack (auth/jwt.py) is
+        # hand-rolled RS256 JWS with no JWE support, so nested-JWE needs a
+        # new dependency (e.g. jwcrypto/Authlib), symmetric/asymmetric
+        # encryption-key management + rotation for every verifier, and
+        # decode-path changes everywhere this claim is read (this
+        # blueprint's /validate, auth/middleware.py's
+        # _extract_machine_identity, etc.) -- an architectural change, not
+        # a bounded fix. Tracked, not silently dropped.
 
         # Generate access token (1 hour default)
         try:
