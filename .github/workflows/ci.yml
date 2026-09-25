@@ -49,15 +49,22 @@ jobs:
         uv pip install --system --require-hashes -r requirements.txt
         uv pip install --system --require-hashes -r requirements-kms.txt
 
-    - name: Lint with pylint
-      run: |
-        cd hub_api
-        python -m pylint --rcfile=.pylintrc . || exit 0
+    # pylint removed — ruff is the only Python linter/formatter (see
+    # backend-python.md); this step was also silently no-op before removal
+    # since pylint was never in hub_api/requirements*.txt (command-not-found,
+    # masked by `|| exit 0`).
 
-    - name: Type check with mypy
+    - name: Type check with mypy (gate on NEW errors only; ~1453 pre-existing baselined)
       run: |
+        pip install --no-cache-dir mypy==1.14.0 mypy-baseline==0.7.4
         cd hub_api
-        python -m mypy . || exit 0
+        # mypy exits non-zero whenever ANY error exists, baselined or not —
+        # writing to a file first (instead of piping directly) keeps that
+        # expected non-zero status from tripping GitHub Actions' default
+        # `pipefail` and masking the real gate below, which is
+        # mypy-baseline's own exit code (0 = no NEW errors).
+        python -m mypy . > mypy-output.txt 2>&1 || true
+        mypy-baseline filter --allow-unsynced --baseline-path .mypy-baseline.txt < mypy-output.txt
 
     - name: Test with pytest
       run: |
@@ -99,12 +106,13 @@ jobs:
         cd services/hub-router
         go mod download
 
-    - name: Lint with golangci-lint
+    - name: Lint with golangci-lint (gate on NEW issues only via PR diff — action-native, avoids a hardcoded/staleness-prone base ref since main lags the release branch)
       uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6
       with:
         version: latest
         working-directory: services/hub-router
         args: --timeout=5m --out-format=colored-line-number
+        only-new-issues: true
 
     - name: Test with go test
       run: |
@@ -252,17 +260,34 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
 
-    - name: Run bandit (Python security scanner)
+    - name: Run bandit (Python security scanner, JSON artifact for GitHub Security tab)
       run: |
         pip install bandit[toml]
         bandit -r hub_api --format json --output bandit-results.json || true
       continue-on-error: true
 
-    - name: Run gosec (Go security scanner)
+    # Real gating run on the same inputs as above (Verification Integrity —
+    # masking above is only legitimate because this follows it). Must pass
+    # `-c pyproject.toml` explicitly: bandit does NOT auto-discover
+    # pyproject.toml's `[tool.bandit] exclude_dirs = ["tests", ...]` even
+    # with the toml extra installed, confirmed 2026-09-25 — without `-c`
+    # this fails on 10 medium findings that are all `0.0.0.0`/tmpdir mock
+    # values in hub_api/tests/ fixtures, not real issues. 0 med/high today
+    # once tests/ is correctly excluded.
+    - name: Gate on bandit medium/high findings
+      run: bandit -r hub_api -ll -c pyproject.toml
+
+    - name: Run gosec (Go security scanner, high severity only — no pre-existing findings once scoped correctly)
       uses: securego/gosec@5e5517beec77b8228ba43ec8d7cc22d82ed31924  # v2.25.0
       with:
-        args: '-no-fail -fmt json -out gosec-results.json ./services/hub-router ./k8s-cni'
-      continue-on-error: true
+        # Previous args (`./services/hub-router ./k8s-cni`, no trailing `/...`)
+        # scanned 0 files: `./k8s-cni` doesn't exist in this repo, and without
+        # `/...` gosec only scans hub-router's top-level package (no .go
+        # files there — everything lives in subpackages). `-no-fail` masked
+        # this being a no-op scan for as long as it existed. Fixed to
+        # recursively scan the real module; k8s-cni removed since it has
+        # never existed here.
+        args: '-severity high -fmt json -out gosec-results.json ./services/hub-router/...'
 
     - name: Run Trivy filesystem scanning
       uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0

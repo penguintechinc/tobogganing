@@ -1,0 +1,13 @@
+# Repo-wide default code owners — required because the org ruleset sets
+# require_code_owner_review: true; without this file that requirement
+# matched nobody and blocked no PR.
+#
+# PenguinzTech is the repo's usual PR author/bot (admin) and is deliberately
+# excluded — branch protection already blocks self-approval, so naming the
+# usual author here would leave reviews satisfying nobody in practice.
+# Tim-Machine and Chromeninja are the two other write-collaborators.
+#
+# This is a starting default, not a final ownership model — refine with
+# path-scoped owner lines (e.g. `/hub_api/ @someone`) as areas gain distinct
+# maintainers.
+* @Tim-Machine @Chromeninja

@@ -99,6 +99,9 @@ jobs:
   security-check:
     runs-on: ubuntu-24.04
     name: Security Scanning with Version Context
+    # Reporter only, not a merge gate — this job's bandit/gosec steps below
+    # summarize scan status alongside the .version bump; the actual gating
+    # scans live in ci.yml's security-scan job. Left as-is intentionally.
 
     steps:
     - name: Checkout code

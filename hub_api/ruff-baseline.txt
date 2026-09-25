@@ -1,0 +1,229 @@
+hub_api/api/portal_routes.py:F401: `quart.jsonify` imported but unused
+hub_api/auth/refresh.py:F401: `typing.Optional` imported but unused
+hub_api/auth/refresh.py:I001: Import block is un-sorted or un-formatted
+hub_api/cache/client.py:F401: `collections.defaultdict` imported but unused
+hub_api/cache/client.py:F841: Local variable `auth` is assigned to but never used
+hub_api/core/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/core/backup/cli.py:F821: Undefined name `parser`
+hub_api/core/backup/cli.py:F841: Local variable `s3_parser` is assigned to but never used
+hub_api/core/backup/manager.py:E711: Comparison to `None` should be `cond is not None`
+hub_api/core/backup/manager.py:F401: `logging` imported but unused
+hub_api/core/backup/manager.py:F401: `os` imported but unused
+hub_api/core/backup/manager.py:F401: `uuid.uuid4` imported but unused
+hub_api/core/backup/s3.py:F841: Local variable `e` is assigned to but never used
+hub_api/core/certificates.py:F401: `cryptography.hazmat.primitives.asymmetric.rsa` imported but unused
+hub_api/core/certificates.py:F401: `cryptography.x509.oid.ExtensionOID` imported but unused
+hub_api/core/certificates.py:F841: Local variable `private_key` is assigned to but never used
+hub_api/core/certificates.py:I001: Import block is un-sorted or un-formatted
+hub_api/crypto/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/crypto/selection.py:I001: Import block is un-sorted or un-formatted
+hub_api/db/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/db/session.py:F401: `hub_api.config.Config` imported but unused
+hub_api/db/session.py:F821: Undefined name `Any`
+hub_api/flags/__init__.py:E402: Module level import not at top of file
+hub_api/migrations/env.py:F401: `hub_api.config.Config` imported but unused
+hub_api/migrations/env.py:F401: `hub_api.config.build_db_uri` imported but unused
+hub_api/migrations/env.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/api/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/api/analytics.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/api/dns_servers.py:F401: `asyncio` imported but unused
+hub_api/modules/netsvcs/api/dns_servers.py:F401: `quart_schema.validate_request` imported but unused
+hub_api/modules/netsvcs/api/dns_servers.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/api/zones.py:F401: `asyncio` imported but unused
+hub_api/modules/netsvcs/api/zones.py:F401: `dataclasses.field` imported but unused
+hub_api/modules/netsvcs/api/zones.py:F401: `quart.current_app` imported but unused
+hub_api/modules/netsvcs/api/zones.py:F401: `quart.request` imported but unused
+hub_api/modules/netsvcs/api/zones.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/managers/config_service.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/managers/server_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/netsvcs/managers/zone_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_c2c/api/endpoints.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/perftest_c2c/api/matrix.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_c2c/api/regions.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/perftest_c2c/api/runs.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_c2c/services/matrix_service.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_c2c/services/run_manager.py:E731: Do not assign a `lambda` expression, use a `def`
+hub_api/modules/perftest_c2c/services/run_manager.py:F401: `asyncio` imported but unused
+hub_api/modules/perftest_c2c/services/run_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_c2c/worker/tasks.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_client/api/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_client/api/client_config.py:F401: `hub_api.entitlements.gate.require_feature` imported but unused
+hub_api/modules/perftest_client/api/client_config.py:F401: `quart.current_app` imported but unused
+hub_api/modules/perftest_client/api/client_config.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/perftest_client/api/client_config.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_client/api/schedules.py:F401: `quart.current_app` imported but unused
+hub_api/modules/perftest_client/api/schedules.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/perftest_client/api/schedules.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_client/api/version.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/perftest_client/api/version.py:F401: `quart.request` imported but unused
+hub_api/modules/perftest_client/api/version.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_client/services/schedule_manager.py:E711: Comparison to `None` should be `cond is None`
+hub_api/modules/perftest_client/services/schedule_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/api/org_units.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/api/scheduled_tests.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/api/stats.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/api/tests.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/services/autoperf_manager.py:F401: `json` imported but unused
+hub_api/modules/perftest_cluster/services/device_auth.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/services/device_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/services/org_unit_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/services/stats_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/perftest_cluster/services/test_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/ping/routes.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/sase/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/auth/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/arkime.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/base.py:F401: `datetime.datetime` imported but unused
+hub_api/modules/sase/security/adapters/base.py:F401: `datetime.timezone` imported but unused
+hub_api/modules/sase/security/adapters/base.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/cape.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/poller.py:F401: `datetime.datetime` imported but unused
+hub_api/modules/sase/security/adapters/poller.py:F401: `datetime.timezone` imported but unused
+hub_api/modules/sase/security/adapters/poller.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/strelka.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/suricata.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/adapters/zeek.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/blockpages/api.py:F401: `.models.BlockPage` imported but unused
+hub_api/modules/sase/security/blockpages/api.py:F401: `.models.BlockRoute` imported but unused
+hub_api/modules/sase/security/blockpages/api.py:F401: `.models.PageStatus` imported but unused
+hub_api/modules/sase/security/blockpages/api.py:F401: `typing.Any` imported but unused
+hub_api/modules/sase/security/blockpages/api.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/blockpages/models.py:F401: `typing.Any` imported but unused
+hub_api/modules/sase/security/blockpages/pages.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/blockpages/render.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/blockpages/routes.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/protection/datatypes.py:F401: `dataclasses.field` imported but unused
+hub_api/modules/sase/security/protection/ddos.py:F401: `typing.Any` imported but unused
+hub_api/modules/sase/security/protection/models.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/protection/ratelimit.py:F401: `.datatypes.SecurityEventData` imported but unused
+hub_api/modules/sase/security/protection/ratelimit.py:F401: `.models.RateLimitRule` imported but unused
+hub_api/modules/sase/security/protection/ratelimit.py:F401: `.models.SecurityEvent` imported but unused
+hub_api/modules/sase/security/protection/ratelimit.py:F401: `datetime.timedelta` imported but unused
+hub_api/modules/sase/security/scanner/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/scanner/core.py:F401: `.models.SecurityFinding` imported but unused
+hub_api/modules/sase/security/scanner/core.py:F401: `.models.SecurityScan` imported but unused
+hub_api/modules/sase/security/scanner/core.py:F401: `dataclasses.field` imported but unused
+hub_api/modules/sase/security/scanner/core.py:F401: `logging` imported but unused
+hub_api/modules/sase/security/scanner/core.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/scanner/models.py:F401: `typing.Any` imported but unused
+hub_api/modules/sase/security/scanner/models.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/scanner/parsers.py:F401: `json` imported but unused
+hub_api/modules/sase/security/scanner/parsers.py:F841: Local variable `current_section` is assigned to but never used
+hub_api/modules/sase/security/scanner/scans.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/swg/ingest.py:F401: `datetime.datetime` imported but unused
+hub_api/modules/sase/security/swg/ingest.py:F401: `datetime.timezone` imported but unused
+hub_api/modules/sase/security/swg/ingest.py:F811: Redefinition of unused `datetime` from line 7: `datetime` redefined here
+hub_api/modules/sase/security/swg/ingest.py:F811: Redefinition of unused `timezone` from line 7: `timezone` redefined here
+hub_api/modules/sase/security/swg/policy.py:F841: Local variable `action_enum` is assigned to but never used
+hub_api/modules/sase/security/swg/policy.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/swg/tasks.py:F401: `celery.Celery` imported but unused; consider using `importlib.util.find_spec` to test for availability
+hub_api/modules/sase/security/swg/tasks.py:F841: Local variable `ingester` is assigned to but never used
+hub_api/modules/sase/security/swg/tasks.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/swg/tier2/fetcher.py:F401: `typing.Optional` imported but unused
+hub_api/modules/sase/security/swg/tier2/fetcher.py:F841: Local variable `headers` is assigned to but never used
+hub_api/modules/sase/security/swg/tier2/scraper.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sase/security/swg/tier2/train.py:F401: `sklearn.pipeline.Pipeline` imported but unused
+hub_api/modules/sase/security/swg/tier2/train.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sdwan/api/clients.py:F401: `asyncio` imported but unused
+hub_api/modules/sdwan/api/clients.py:F401: `quart.jsonify` imported but unused
+hub_api/modules/sdwan/api/clients.py:F401: `secrets` imported but unused
+hub_api/modules/sdwan/api/clients.py:F841: Local variable `data` is assigned to but never used
+hub_api/modules/sdwan/api/clients.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sdwan/network/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/sdwan/orchestrator/__init__.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/threatintel/blocklist/curator.py:E712: Avoid equality comparisons to `True`; use `self.dal.threat_indicators.active:` for truth checks
+hub_api/modules/threatintel/blocklist/curator.py:F401: `hub_api.modules.threatintel.blocklist.models.IOC_TYPES` imported but unused
+hub_api/modules/threatintel/blocklist/curator.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/threatintel/blocklist/stix_normalizer.py:F401: `.models.SEVERITIES` imported but unused
+hub_api/modules/threatintel/blocklist/store.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/threatintel/feeds/detection.py:E712: Avoid equality comparisons to `True`; use `self.db.threat_indicators.active:` for truth checks
+hub_api/modules/threatintel/feeds/detection.py:F401: `.models.ThreatDetection` imported but unused
+hub_api/modules/threatintel/feeds/detection.py:F401: `.models.ThreatIndicator` imported but unused
+hub_api/modules/threatintel/feeds/detection.py:I001: Import block is un-sorted or un-formatted
+hub_api/modules/threatintel/feeds/manager.py:E712: Avoid equality comparisons to `True`; use `self.db.threat_indicators.active:` for truth checks
+hub_api/modules/threatintel/feeds/manager.py:F401: `.models.FeedUpdate` imported but unused
+hub_api/modules/threatintel/feeds/manager.py:F401: `.models.ThreatIndicator` imported but unused
+hub_api/modules/threatintel/feeds/manager.py:F401: `.sources.query_dnsbl` imported but unused
+hub_api/modules/threatintel/feeds/manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/registry/registry.py:F401: `typing.Callable` imported but unused
+hub_api/registry/registry.py:I001: Import block is un-sorted or un-formatted
+hub_api/scheduler/tasks.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_auth_service.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_auth_service_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_autoperf_manager.py:F841: Local variable `now` is assigned to but never used
+hub_api/tests/test_c2c_api_endpoints.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_api_matrix.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_api_runs.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_managers_realdal.py:F841: Local variable `result2` is assigned to but never used
+hub_api/tests/test_c2c_managers_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_models.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_node_health.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_regions.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_c2c_tasks.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_config.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_core_backup.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_core_backup_isolation_realdal.py:E711: Comparison to `None` should be `cond is not None`
+hub_api/tests/test_core_certs.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_core_user_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_crypto_data_keys.py:F841: Local variable `tmpdir` is assigned to but never used
+hub_api/tests/test_crypto_data_keys.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_crypto_kms_aws.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_crypto_kms_gcp.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_crypto_selection.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_dal_backup_scanner_ratelimit.py:F841: Local variable `limiter2` is assigned to but never used
+hub_api/tests/test_dal_backup_scanner_ratelimit.py:F841: Local variable `result1` is assigned to but never used
+hub_api/tests/test_dal_backup_scanner_ratelimit.py:F841: Local variable `rule_id` is assigned to but never used
+hub_api/tests/test_dal_backup_scanner_ratelimit.py:F841: Local variable `scanner2` is assigned to but never used
+hub_api/tests/test_dal_backup_scanner_ratelimit.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_database.py:F821: Undefined name `Any`
+hub_api/tests/test_database.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_machine_jwt_issuance.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_machine_jwt_routes.py:F841: Local variable `provider` is assigned to but never used
+hub_api/tests/test_machine_jwt_routes.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_metering.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_module_boundaries.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_netsvcs_dns_servers.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_netsvcs_grpc.py:F841: Local variable `refresh_jti` is assigned to but never used
+hub_api/tests/test_netsvcs_grpc.py:F841: Local variable `response` is assigned to but never used
+hub_api/tests/test_netsvcs_grpc.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_netsvcs_isolation_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_netsvcs_zones.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_openapi_spec.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_portal_manifest_api.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_refresh_rotation.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_blocklist_normalizer.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_blockpages_models.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_blockpages_pages.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_blockpages_render.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_context_auth.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_feeds_realdal.py:F841: Local variable `manager` is assigned to but never used
+hub_api/tests/test_sase_managers_realdal.py:F541: f-string without any placeholders
+hub_api/tests/test_sase_managers_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_module.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_swg_ingest.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_swg_lookup.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_swg_models.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_swg_policy.py:F841: Local variable `scopes` is assigned to but never used
+hub_api/tests/test_sase_swg_policy.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sase_swg_tier2_worker.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_schedule_manager_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_scheduler_job_manager.py:F841: Local variable `original_next` is assigned to but never used
+hub_api/tests/test_scheduler_sweep.py:F841: Local variable `future_job` is assigned to but never used
+hub_api/tests/test_scheduler_sweep.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sdwan_firewall.py:F841: Local variable `query_proxy` is assigned to but never used
+hub_api/tests/test_sdwan_orchestrator_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sdwan_ports.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sdwan_vrf.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_sdwan_vrf.py:W293: Blank line contains whitespace
+hub_api/tests/test_session_auth.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpc_models.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpc_org_units.py:F841: Local variable `mock_db` is assigned to but never used
+hub_api/tests/test_wpc_org_units.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpc_stats.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpcl_config.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpcl_models.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpcl_schedule_manager.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpcl_schedules.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpcl_services_realdal.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_wpcl_version.py:I001: Import block is un-sorted or un-formatted
+hub_api/tests/test_ziti_module.py:I001: Import block is un-sorted or un-formatted
