@@ -16,8 +16,38 @@ qrcode==8.0
 posthog==3.7.0
 penguin-aaa>=0.1.0
 penguin-licensing>=0.1.0
+penguin-utils>=0.2.0
 python-dotenv==1.2.3
 structlog==24.4.0
+# OpenTelemetry: logs + metrics + traces exported via OTLP (env-gated, see
+# hub_api/telemetry.py). opentelemetry-exporter-otlp is the umbrella package
+# pulling in both grpc and http/protobuf proto exporters so the wire protocol
+# is selectable at runtime via OTEL_EXPORTER_OTLP_PROTOCOL. Kept OUT of the
+# semgrep scan env on purpose -- semgrep pins opentelemetry-sdk~=1.37.0 and
+# runs fully isolated via uvx (scripts/hooks/run-semgrep.sh); never add these
+# to a shared/semgrep environment.
+# Pinned to the 1.27.0/0.48b0 release line (2024-08-28), NOT latest (1.45.0):
+# every opentelemetry-proto release from 1.28.0 onward requires protobuf>=5.0,
+# which conflicts with this file's protobuf==4.25.9 pin (gencode in
+# proto/**/*_pb2.py is generated against protobuf 4.25.1 -- see the protobuf
+# comment above; bumping requires regenerating those committed stubs, out of
+# scope here). 1.27.0 is the newest opentelemetry-proto release still on
+# protobuf<5.0. Flagged residual: revisit alongside a coordinated
+# protobuf/_pb2 stub regen, matching the existing protobuf CVE posture below.
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp==1.27.0
+opentelemetry-instrumentation-asgi==0.48b0
+opentelemetry-instrumentation-sqlalchemy==0.48b0
+# opentelemetry-instrumentation==0.48b0 (pulled in by the two instrumentation
+# packages above) imports `pkg_resources` at module load; setuptools>=81
+# dropped pkg_resources entirely, which would otherwise resolve to the
+# unconstrained latest and break the import at startup. Pin to the last 80.x
+# release that still ships it.
+setuptools<81,>=70
+# Prometheus text-exposition /metrics endpoint (existing hub-api
+# ServiceMonitor + Grafana dashboards scrape this; OTLP metrics above are the
+# secondary/primary OTel signal, this is the Prometheus scrape surface).
+prometheus-client==0.26.0
 stix2==3.0.2
 defusedxml==0.7.1
 beautifulsoup4==4.12.3

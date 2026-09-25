@@ -45,6 +45,15 @@ class Config:
     # NOTE: in P-B this re-binds to the live hub-router registry count
     hub_router_count: int = int(os.getenv("HUB_ROUTER_COUNT", "1"))
 
+    # OpenTelemetry configuration. Unset OTEL_EXPORTER_OTLP_ENDPOINT disables
+    # all OTLP wiring (traces/metrics/logs) fail-safe -- see hub_api/telemetry.py.
+    # OTEL_EXPORTER_OTLP_HEADERS is intentionally not mirrored here: the SDK's
+    # exporters read it directly from the environment, keeping any auth
+    # header value out of this dataclass (and out of any log/repr of it).
+    otel_exporter_otlp_endpoint: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    otel_exporter_otlp_protocol: str = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
+    otel_service_name: str = os.getenv("OTEL_SERVICE_NAME", "hub-api")
+
 
 def build_db_uri(cfg: Config) -> str:
     """Build database connection URI based on DB_TYPE.
