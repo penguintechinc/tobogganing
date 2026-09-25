@@ -97,10 +97,19 @@ tolerations:
 # Node affinity (empty = run on all nodes; DaemonSet default)
 affinity: {}
 
-# Pod disruption budget
+# Pod disruption budget — now rendered by templates/poddisruptionbudget.yaml
+# (previously dead config: this key existed with no template consuming it).
+# Defaults disabled: minAvailable:1 on a single-node alpha/beta/gamma
+# cluster would deadlock the only node's drain. values-production.yaml
+# enables it for the multi-node production cluster.
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
+
+# Cluster Security Baseline — Tetragon TracingPolicy (enforced exec
+# allowlist). See templates/tracingpolicy.yaml.
+tracingPolicy:
+  enabled: true
 
 # Node selector (optional, e.g., run only on specific nodes)
 nodeSelector: {}

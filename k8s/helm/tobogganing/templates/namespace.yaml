@@ -5,3 +5,10 @@ metadata:
   labels:
     {{- include "tobogganing.labels" . | nindent 4 }}
     app.kubernetes.io/component: namespace
+    {{- if .Values.podSecurityAdmission.enabled }}
+    ## Cluster Security Baseline (devops-kubernetes.md) — Pod Security
+    ## Admission, restricted by default.
+    pod-security.kubernetes.io/enforce: {{ .Values.podSecurityAdmission.enforce }}
+    pod-security.kubernetes.io/audit: {{ .Values.podSecurityAdmission.audit }}
+    pod-security.kubernetes.io/warn: {{ .Values.podSecurityAdmission.warn }}
+    {{- end }}

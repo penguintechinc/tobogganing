@@ -1,0 +1,46 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-api
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-api
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-router
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-router
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-router
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-webui
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-webui
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-webui
+{{- end }}

@@ -110,6 +110,18 @@ affinity: {}
 # Tolerations (optional)
 tolerations: []
 
+# Pod disruption budget — maxUnavailable (not minAvailable) so a
+# single-node alpha/beta/gamma DaemonSet instance can still be voluntarily
+# evicted; see ../../values.yaml podDisruptionBudget comment.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# Cluster Security Baseline — Tetragon TracingPolicy (enforced exec
+# allowlist). See templates/tracingpolicy.yaml.
+tracingPolicy:
+  enabled: true
+
 # Labels
 labels:
   app: netsvcs-dns

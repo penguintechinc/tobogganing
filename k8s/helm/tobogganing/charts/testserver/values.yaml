@@ -160,6 +160,17 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
 
+# Pod disruption budget — maxUnavailable (not minAvailable) so this still
+# works at replicaCount:1 (alpha/beta/gamma) without deadlocking a drain.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# Cluster Security Baseline — Tetragon TracingPolicy (enforced exec
+# allowlist). See templates/tracingpolicy.yaml.
+tracingPolicy:
+  enabled: true
+
 labels:
   app: testserver
   component: test-engine

@@ -1,0 +1,27 @@
+{{- if .Values.tracingPolicy.enabled }}
+## Cluster Security Baseline — Tetragon TracingPolicy, enforcing (Sigkill).
+## node-agent's only legitimate runtime process is the static Rust binary
+## (agents/node-agent/Dockerfile ENTRYPOINT ["/usr/local/bin/node-agent"]).
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: {{ include "node-agent.fullname" . }}-exec-allowlist
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "node-agent.selectorLabels" . | nindent 6 }}
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotEquals"
+              values:
+                - "/usr/local/bin/node-agent"
+          matchActions:
+            - action: Sigkill
+{{- end }}

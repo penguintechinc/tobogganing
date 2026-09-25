@@ -1,0 +1,17 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+## Consumes the podDisruptionBudget values key that already existed here
+## (values.yaml / values-production.yaml) with no template rendering it —
+## dead config until this template was added.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "node-agent.fullname" . }}
+  namespace: {{ include "node-agent.namespace" . }}
+  labels:
+    {{- include "node-agent.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "node-agent.selectorLabels" . | nindent 6 }}
+{{- end }}

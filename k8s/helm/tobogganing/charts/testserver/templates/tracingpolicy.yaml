@@ -1,0 +1,27 @@
+{{- if .Values.tracingPolicy.enabled }}
+## Cluster Security Baseline — Tetragon TracingPolicy, enforcing (Sigkill).
+## testserver's only legitimate runtime process is the static Go binary
+## (engines/testserver/Dockerfile CMD ["/app/testserver"]).
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: testserver-exec-allowlist
+spec:
+  podSelector:
+    matchLabels:
+      {{- toYaml .Values.labels | nindent 6 }}
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotEquals"
+              values:
+                - "/app/testserver"
+          matchActions:
+            - action: Sigkill
+{{- end }}

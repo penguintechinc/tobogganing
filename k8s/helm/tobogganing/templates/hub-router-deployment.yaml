@@ -7,7 +7,9 @@ metadata:
     {{- include "tobogganing.labels" . | nindent 4 }}
     app.kubernetes.io/component: hub-router
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.hubRouter.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "tobogganing.selectorLabels" . | nindent 6 }}

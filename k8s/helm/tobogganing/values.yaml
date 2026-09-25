@@ -86,6 +86,22 @@ hubRouter:
     limits:
       memory: "1Gi"
       cpu: "1000m"
+  ## ROOT EXCEPTION (approved): NET_ADMIN for WireGuard TUN/iptables;
+  ## process is otherwise non-root — services/hub-router/Dockerfile itself
+  ## sets `USER wireguard` (non-root) as the image default; this chart
+  ## overrides to root only because entrypoint.sh performs operations that
+  ## need more than NET_ADMIN alone: `chown wireguard:wireguard
+  ## /etc/wireguard/wg0.key` (requires CAP_CHOWN even to re-assert existing
+  ## ownership — Linux chown(2) gates on capability, not on whether the
+  ## owner is actually changing) and writes non-namespaced net.core.*
+  ## sysctls (rmem_max/wmem_max/netdev_max_backlog) that aren't grantable
+  ## via a scoped capability from inside a container. Fixing either
+  ## requires an entrypoint.sh change (out of scope for this chart) before
+  ## this can drop to a non-root uid + capability-only securityContext.
+  ## SYS_MODULE removed (was here previously, undocumented): no modprobe
+  ## call exists in entrypoint.sh or wireguard/scripts/*.sh — wg-quick +
+  ## wireguard-tools operate against the host's mainline kernel WireGuard
+  ## support without loading a module from inside the container.
   securityContext:
     runAsNonRoot: false
     runAsUser: 0
@@ -93,7 +109,6 @@ hubRouter:
     capabilities:
       add:
         - NET_ADMIN
-        - SYS_MODULE
   probes:
     liveness:
       exec:
@@ -174,6 +189,12 @@ redis:
   image:
     repository: redis
     tag: 7-bookworm
+    ## External image — SHA256 digest mandatory in ALL environments
+    ## (critical-rules.md Dependency Pinning). Verified via
+    ## `docker buildx imagetools inspect redis:7-bookworm`
+    ## (2026-09-25) — this is the multi-arch image-index digest, not a
+    ## single-platform manifest digest, so amd64/arm64 both resolve.
+    digest: "sha256:c6eabf748fc7a61dbb5a705c78bcf3d6377b1127a97d0ce965c11c44ba46896f"
     pullPolicy: IfNotPresent
   replicas: 1
   port: 6379
@@ -226,6 +247,13 @@ autoscaling:
     minReplicas: 2
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
+  ## hubRouter.replicas (below) is used verbatim when autoscaling.enabled is
+  ## false; when true, templates/hub-router-deployment.yaml omits `replicas`
+  ## and templates/hpa.yaml's hub-router HorizontalPodAutoscaler takes over.
+  hubRouter:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
 
 ## Monitoring
 monitoring:
@@ -234,6 +262,33 @@ monitoring:
     scrapeInterval: 30s
   grafana:
     enabled: true
+
+## Pod Disruption Budgets — one per core Deployment/DaemonSet (hub-api,
+## hub-router, hub-webui here; netsvcs-dns/node-agent/testserver have their
+## own equivalent block in charts/*/values.yaml). maxUnavailable (not
+## minAvailable) so a single-replica alpha/beta/gamma deployment can still
+## be voluntarily evicted — minAvailable >= replica count would deadlock
+## every node drain/cluster upgrade for those environments.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+## Cluster Security Baseline — Tetragon TracingPolicy (enforced, not
+## observe-only). Scoped per-component in templates/tracingpolicy.yaml —
+## each object allowlists only that component's own runtime binary
+## (devops-kubernetes.md "Cluster Security Baseline": a policy loose enough
+## to cover every service stops covering any of them). netsvcs-dns/
+## node-agent/testserver ship their own equivalent in charts/*/templates/.
+tracingPolicy:
+  enabled: true
+
+## Cluster Security Baseline — Pod Security Admission (restricted).
+## Rendered onto the namespace in templates/namespace.yaml.
+podSecurityAdmission:
+  enabled: true
+  enforce: restricted
+  audit: restricted
+  warn: restricted
 
 ## Service Account
 serviceAccount:
