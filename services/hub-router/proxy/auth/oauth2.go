@@ -67,7 +67,12 @@ func NewOAuth2Provider(issuer, clientID, clientSecret, sessionSigningKey string)
 
 func (p *OAuth2Provider) LoginHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		state := generateState()
+		state, err := generateState()
+		if err != nil {
+			log.Errorf("failed to generate OAuth2 state: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
 		c.SetCookie("oauth_state", state, 300, "/", "", true, true)
 
 		url := p.config.AuthCodeURL(state)
@@ -206,15 +211,15 @@ func (p *OAuth2Provider) GetUser(c *gin.Context) (*User, error) {
 // generateState returns a cryptographically secure random token used as the
 // OAuth2 "state" parameter (and, via SAML2Provider.LoginHandler, the SAML
 // AuthnRequest ID) — both are anti-CSRF/replay correlation values and must
-// never be derived from a predictable source like a timestamp.
-func generateState() string {
+// never be derived from a predictable source like a timestamp. On RNG
+// failure this fails closed (returns an error) rather than falling back to a
+// guessable value — crypto/rand.Read only fails on catastrophic system
+// misconfiguration, and a predictable state defeats the CSRF protection it
+// exists to provide.
+func generateState() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
-		// crypto/rand.Read on Linux only fails on catastrophic system
-		// misconfiguration; fall back to a timestamp-seeded value rather than
-		// returning an empty state, but make the degradation loud.
-		log.Errorf("crypto/rand unavailable, falling back to weak state generation: %v", err)
-		return fmt.Sprintf("%d", time.Now().UnixNano())
+		return "", fmt.Errorf("failed to generate secure random state: %w", err)
 	}
-	return hex.EncodeToString(buf)
+	return hex.EncodeToString(buf), nil
 }

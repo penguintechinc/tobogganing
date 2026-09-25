@@ -114,7 +114,13 @@ func (p *SAML2Provider) loadMetadata() error {
 
 func (p *SAML2Provider) LoginHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		requestID := fmt.Sprintf("_%s", generateState())
+		state, err := generateState()
+		if err != nil {
+			log.Errorf("failed to generate SAML request ID: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+		requestID := fmt.Sprintf("_%s", state)
 		// Single-use, short-lived correlation cookie: binds the eventual
 		// CallbackHandler response to a login this proxy actually initiated,
 		// and its ID doubles as the value the assertion's InResponseTo must

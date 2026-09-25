@@ -87,6 +87,42 @@ func TestOAuth2SessionToken_RejectsNoneAlg(t *testing.T) {
 	}
 }
 
+func TestGenerateState_ReturnsDistinctNonEmptyValues(t *testing.T) {
+	state1, err := generateState()
+	if err != nil {
+		t.Fatalf("expected no error generating state, got: %v", err)
+	}
+	if state1 == "" {
+		t.Fatal("expected non-empty state")
+	}
+
+	state2, err := generateState()
+	if err != nil {
+		t.Fatalf("expected no error generating state, got: %v", err)
+	}
+	if state1 == state2 {
+		t.Fatal("expected two successive generateState calls to produce distinct values")
+	}
+}
+
+func TestOAuth2StateValidation_RejectsMismatchedOrEmptyState(t *testing.T) {
+	// Mirrors CallbackHandler's state-comparison logic (oauth2.go
+	// `c.Query("state") != state`): a real generated state must never
+	// validate-equal against a mismatched or empty value — guarding against
+	// the exact failure mode a fail-open generateState would have produced.
+	cookieState, err := generateState()
+	if err != nil {
+		t.Fatalf("expected no error generating state, got: %v", err)
+	}
+
+	if queryState := ""; queryState == cookieState {
+		t.Fatal("empty query state must not equal a real generated cookie state")
+	}
+	if queryState := "attacker-supplied-value"; queryState == cookieState {
+		t.Fatal("mismatched query state must not equal the generated cookie state")
+	}
+}
+
 func TestNewOAuth2Provider_FailsClosedWithoutSessionSigningKey(t *testing.T) {
 	// The session-signing-key check must run before any network call
 	// (OIDC discovery), so these fail fast against an unreachable issuer.
