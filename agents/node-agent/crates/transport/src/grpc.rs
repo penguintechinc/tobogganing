@@ -32,6 +32,13 @@ impl GrpcClient {
     /// (`connect_lazy`) so construction never blocks or fails; a malformed
     /// URL falls back to a loopback default and is logged, surfacing as a
     /// `Transport` error on the first actual call instead of a panic here.
+    ///
+    /// Both a connect timeout and a per-request timeout are bounded at
+    /// `cfg.request_timeout_secs` (same knob the REST transport uses) —
+    /// without them a hung control-plane dial or a stalled RPC blocks the
+    /// calling task (enrollment, the lifecycle loop's heartbeat/config-poll
+    /// tick) indefinitely, since `tonic`'s default `Channel` has no timeout
+    /// at all.
     pub fn new(cfg: &AgentConfig) -> Self {
         let endpoint = Endpoint::from_shared(cfg.control_plane_url.clone()).unwrap_or_else(|err| {
             tracing::warn!(
@@ -41,6 +48,8 @@ impl GrpcClient {
             );
             Endpoint::from_static("http://127.0.0.1:50051")
         });
+        let timeout = std::time::Duration::from_secs(cfg.request_timeout_secs);
+        let endpoint = endpoint.connect_timeout(timeout).timeout(timeout);
         let channel = endpoint.connect_lazy();
         Self {
             channel,
@@ -285,6 +294,7 @@ mod tests {
     use super::*;
     use pb::manager_service_server::{ManagerService, ManagerServiceServer};
     use std::pin::Pin;
+    use std::time::Duration;
     use tokio::sync::Mutex as AsyncMutex;
     use tokio_util::sync::CancellationToken;
     use tonic::codegen::tokio_stream::Stream as TonicStream;
@@ -776,6 +786,47 @@ mod tests {
         // only proven out on first use, which is covered by the "not
         // enrolled" error path above.
         let _ = client;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn enroll_times_out_against_a_peer_that_never_completes_the_handshake() {
+        // A real listener that accepts the TCP connection but never speaks
+        // HTTP/2 back — without `Endpoint::connect_timeout`/`timeout` this
+        // hangs forever (h2's own handshake has no built-in deadline).
+        // Wrapping the call in `tokio::time::timeout` is a test-safety net
+        // only; the real assertion is that `GrpcClient` itself surfaces an
+        // error well before that outer bound, proving the configured
+        // timeout — not the test harness — is what unblocks the call.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("binding an ephemeral loopback port must succeed");
+        let addr = listener
+            .local_addr()
+            .expect("a bound listener has a local address");
+        tokio::spawn(async move {
+            // Accept and hold the connection open, replying to nothing.
+            let _ = listener.accept().await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+
+        let mut cfg = test_cfg(&format!("http://{addr}"));
+        cfg.request_timeout_secs = 1;
+        let client = GrpcClient::new(&cfg);
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            client.enroll(EnrollRequest {
+                machine_jwt: "mjwt".to_string(),
+                node_type: "node-agent".to_string(),
+                hostname: "host-1".to_string(),
+                public_key: None,
+            }),
+        )
+        .await
+        .expect("GrpcClient's own configured timeout must fire well inside the 5s test bound");
+
+        let err = result.expect_err("a peer that never completes the handshake must time out");
+        assert!(matches!(err, AgentError::Transport(_)));
     }
 
     #[test]
