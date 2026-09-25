@@ -17,6 +17,7 @@ import functools
 import hmac
 import os
 import secrets
+import time
 from datetime import datetime
 from typing import Any, Callable
 
@@ -24,9 +25,18 @@ import structlog
 from quart import Response, current_app, g, jsonify, request
 
 from hub_api.auth.jwt import decode_token
+from hub_api.cache.client import CacheUnavailable
 from hub_api.flags import feature_enabled
 
 logger = structlog.get_logger()
+
+# Whether this deployment is local/dev (no TLS-terminating proxy in front --
+# see security.md Kubernetes Network Security: every other environment puts
+# an Ingress/Gateway API in front of this service and terminates TLS
+# there). Read once at import time, matching the module-level
+# env-configuration pattern used elsewhere (e.g.
+# hub_api/security/rate_limit.py's _TRUSTED_PROXY_HOPS).
+_DEV_ENV = os.getenv("ENV", "dev") == "dev"
 
 # Browser auth cookie names (set by api/auth_routes.py's login/refresh, cleared
 # by logout) and the double-submit CSRF header name. Distinct from the
@@ -123,6 +133,12 @@ async def _validate_and_store_token() -> bool:
     (see _csrf_check_required/csrf_token_valid) — bearer-header requests are
     never CSRF-checked, since a cross-site page cannot forge that header.
 
+    Also enforces the cache-backed jti denylist (see
+    revoke_current_access_token, set at logout) so a logged-out access JWT
+    stops authenticating immediately rather than remaining valid for its
+    full natural TTL -- mirrors the machine-JWT denylist check in
+    _extract_machine_identity below.
+
     Returns:
         True if token valid, False otherwise.
     """
@@ -149,6 +165,19 @@ async def _validate_and_store_token() -> bool:
 
     expected = current_app.config.get("PRODUCT_NAME", "tobogganing")
     claims = decode_token(token, key_provider, expected_iss=expected, expected_aud=expected)
+
+    if claims:
+        cache = current_app.config.get("CACHE")
+        if cache:
+            # Deferred import: avoids a module-import-time dependency from
+            # auth/middleware.py -> auth/refresh.py (mirrors the existing
+            # deferred import in _extract_machine_identity below).
+            from hub_api.auth.refresh import is_jti_revoked
+
+            jti = claims.get("jti")
+            if jti and await is_jti_revoked(jti, cache):
+                claims = None
+
     g.claims = claims
     return claims is not None
 
@@ -737,19 +766,77 @@ def require_machine_jwt(
     return decorator
 
 
+def _cookie_secure() -> bool:
+    """Whether Secure should be set on auth/session cookies.
+
+    Defaults to True in every non-dev environment, regardless of what
+    X-Forwarded-Proto says: this service is never directly internet-facing
+    outside local dev (security.md Kubernetes Network Security -- an
+    Ingress/Gateway API always terminates TLS in front of it), and
+    X-Forwarded-Proto alone is client-influenced whenever the proxy in
+    front doesn't unconditionally overwrite it rather than merely pass it
+    through. In dev (ENV=dev, typically no TLS-terminating proxy), honor
+    X-Forwarded-Proto so local http:// testing still round-trips cookies.
+    """
+    if not _DEV_ENV:
+        return True
+    return request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+
+async def revoke_current_access_token() -> None:
+    """Best-effort denylist of the presented access JWT (bearer header or cookie).
+
+    Called by the browser/portal logout route (api/auth_routes.py) so a
+    logged-out access JWT stops authenticating immediately via
+    _validate_and_store_token's jti check, rather than remaining valid for
+    its full natural TTL (up to ACCESS_TOKEN_COOKIE_MAX_AGE) after logout
+    only revokes the refresh token. Mirrors the machine-JWT jti-denylist
+    pattern (core/api/jwt.py's _revoke_jti / auth/refresh.py's
+    is_jti_revoked) -- durable across pods/restarts via the shared cache,
+    capped to the token's own remaining lifetime. Never raises: a
+    decode/cache failure here must never block logout.
+    """
+    token = _extract_token_from_header() or request.cookies.get(ACCESS_TOKEN_COOKIE)
+    if not token:
+        return
+
+    key_provider = current_app.config.get("KEY_PROVIDER")
+    cache = current_app.config.get("CACHE")
+    if not key_provider or not cache:
+        return
+
+    claims = decode_token(token, key_provider)
+    if not claims:
+        return
+
+    jti = claims.get("jti")
+    if not jti:
+        return
+
+    exp = claims.get("exp")
+    now = int(time.time())
+    ttl = max(int(exp) - now, 60) if exp else int(ACCESS_TOKEN_COOKIE_MAX_AGE)
+    try:
+        await cache.set("auth", "revoked_jti", jti, value="1", ttl_seconds=ttl)
+        logger.info("access_jti_revoked", jti_prefix=jti[:8])
+    except CacheUnavailable as e:
+        logger.warning("access_jti_revocation_cache_unavailable", error=str(e))
+
+
 def set_session_cookie(
     response: Response,
     session_id: str,
 ) -> None:
     """Set secure session cookie on response.
 
-    Attributes: max_age 8h, httponly, samesite=Lax, secure if X-Forwarded-Proto == https.
+    Attributes: max_age 8h, httponly, samesite=Lax, secure per _cookie_secure()
+    (True outside local dev; dev honors X-Forwarded-Proto).
 
     Args:
         response: Quart response object.
         session_id: Session token to set in cookie.
     """
-    secure = request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+    secure = _cookie_secure()
 
     response.set_cookie(
         "sasewaddle_session",
@@ -803,7 +890,7 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         access_token: Signed JWT access token (as returned in the JSON body).
         refresh_token: Opaque refresh token string (as returned in the JSON body).
     """
-    secure = request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+    secure = _cookie_secure()
 
     response.set_cookie(
         ACCESS_TOKEN_COOKIE,

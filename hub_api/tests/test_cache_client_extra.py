@@ -185,6 +185,67 @@ class TestFallbackInternals:
         assert "rl:new-key" in c._fallback
 
 
+class TestFailureLatchResets:
+    """Regression: the failed-backend latch must not stay permanently set.
+
+    Before this fix, `_backend_failed` was a one-way flag: once Redis
+    failed once, this process used the in-memory fallback for its entire
+    remaining life, even after Redis recovered -- desyncing rate-limit/
+    cache state from every other replica (ops audit O4/O5).
+    """
+
+    @pytest.mark.asyncio
+    async def test_recovers_after_cooldown_when_redis_becomes_healthy(self) -> None:
+        """After the retry cooldown elapses, a healthy Redis clears the latch."""
+        c = CacheClient(host="127.0.0.1", port=6399)
+        await c.get("rl", "k")  # fails fast against the unreachable port
+        assert c.available is False
+
+        # Simulate the cooldown having elapsed and swap in a working client.
+        object.__setattr__(c, "_failed_at", time.time() - 31)
+        fake_redis = MagicMock()
+        fake_redis.get.return_value = "recovered-value"
+        object.__setattr__(c, "_redis", fake_redis)
+
+        result = await c.get("rl", "k")
+
+        assert result == "recovered-value"
+        assert c.available is True
+
+    @pytest.mark.asyncio
+    async def test_stays_on_fallback_before_cooldown_elapses(self) -> None:
+        """A healthy Redis is not even attempted before the cooldown elapses."""
+        c = CacheClient(host="127.0.0.1", port=6399)
+        await c.get("rl", "k")  # fails fast, starts the cooldown
+        assert c.available is False
+
+        fake_redis = MagicMock()
+        fake_redis.get.return_value = "should-not-be-used"
+        object.__setattr__(c, "_redis", fake_redis)
+
+        result = await c.get("rl", "k")
+
+        fake_redis.get.assert_not_called()
+        assert result is None  # in-memory fallback, key never set
+        assert c.available is False
+
+    @pytest.mark.asyncio
+    async def test_set_also_recovers_after_cooldown(self) -> None:
+        """The retry/recovery path is exercised by set(), not just get()."""
+        c = CacheClient(host="127.0.0.1", port=6399)
+        await c.set("rl", "k", value="v")  # fails fast, starts the cooldown
+        assert c.available is False
+
+        object.__setattr__(c, "_failed_at", time.time() - 31)
+        fake_redis = MagicMock()
+        object.__setattr__(c, "_redis", fake_redis)
+
+        await c.set("rl", "k", value="v2")
+
+        fake_redis.set.assert_called_once_with("rl:k", "v2")
+        assert c.available is True
+
+
 class TestEnsureRedisAuth:
     """Tests for _ensure_redis()'s username/password wiring."""
 

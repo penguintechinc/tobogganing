@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
 
@@ -14,6 +13,13 @@ import structlog
 from hub_api.cache.keys import prefixed
 
 logger = structlog.get_logger()
+
+# How long to stay latched onto the in-memory fallback after a backend
+# failure before probing Redis again. Without this, a single blip pins the
+# process to per-pod in-memory state (rate-limit counters, JWT-revocation
+# checks, etc.) for the rest of its life -- across N replicas that's a
+# permanent desync, not a transient degradation (ops audit finding O4/O5).
+_RETRY_COOLDOWN_SECS = 30.0
 
 
 class CacheUnavailable(RuntimeError):
@@ -38,6 +44,7 @@ class CacheClient:
 
     _redis: Optional[redis.Redis] = None
     _backend_failed: bool = False  # Track failure to skip repeated init attempts
+    _failed_at: float = 0.0  # time.time() of the failure that set _backend_failed
     _fallback: dict[str, tuple[float, str]] = None  # {key: (expiry_time, value)}
 
     def __post_init__(self) -> None:
@@ -50,9 +57,31 @@ class CacheClient:
         """Whether the backend is currently available."""
         return not self._backend_failed
 
-    async def get(
-        self, namespace: str, *parts: str, fail_closed: bool = False
-    ) -> Optional[str]:
+    def _cooldown_elapsed(self) -> bool:
+        """Whether it's time to retry Redis after a prior failure.
+
+        `_failed_at <= 0` means `_backend_failed` was never actually set via
+        `_mark_failed()` (e.g. set directly in a test) -- treated as "not
+        yet eligible" so that path stays permanently latched exactly as
+        before, rather than probing a backend that was never really timed.
+        """
+        if self._failed_at <= 0:
+            return False
+        return (time.time() - self._failed_at) >= _RETRY_COOLDOWN_SECS
+
+    def _mark_failed(self) -> None:
+        """Record a backend failure and start the retry cooldown."""
+        object.__setattr__(self, "_backend_failed", True)
+        object.__setattr__(self, "_failed_at", time.time())
+
+    def _mark_recovered(self) -> None:
+        """Clear the failure latch once a backend call succeeds again."""
+        if self._backend_failed:
+            object.__setattr__(self, "_backend_failed", False)
+            object.__setattr__(self, "_failed_at", 0.0)
+            logger.info("cache_backend_recovered")
+
+    async def get(self, namespace: str, *parts: str, fail_closed: bool = False) -> Optional[str]:
         """Get a value from cache.
 
         Args:
@@ -68,7 +97,7 @@ class CacheClient:
         """
         key = prefixed(namespace, *parts)
 
-        if self._backend_failed:
+        if self._backend_failed and not self._cooldown_elapsed():
             if fail_closed:
                 raise CacheUnavailable("cache backend unavailable")
             return self._get_fallback(key)
@@ -79,9 +108,10 @@ class CacheClient:
                 asyncio.to_thread(self._redis_get, key),
                 timeout=0.05,
             )
+            self._mark_recovered()
             return result
         except (asyncio.TimeoutError, Exception) as e:
-            object.__setattr__(self, "_backend_failed", True)
+            self._mark_failed()
             if fail_closed:
                 raise CacheUnavailable(f"cache backend unavailable: {e}") from e
             logger.debug("cache_backend_error_fallback", error=str(e), key=key)
@@ -109,7 +139,7 @@ class CacheClient:
         """
         key = prefixed(namespace, *parts)
 
-        if self._backend_failed:
+        if self._backend_failed and not self._cooldown_elapsed():
             if fail_closed:
                 raise CacheUnavailable("cache backend unavailable")
             self._set_fallback(key, value, ttl_seconds)
@@ -120,8 +150,9 @@ class CacheClient:
                 asyncio.to_thread(self._redis_set, key, value, ttl_seconds),
                 timeout=0.05,
             )
+            self._mark_recovered()
         except (asyncio.TimeoutError, Exception) as e:
-            object.__setattr__(self, "_backend_failed", True)
+            self._mark_failed()
             if fail_closed:
                 raise CacheUnavailable(f"cache backend unavailable: {e}") from e
             logger.debug("cache_backend_error_fallback", error=str(e), key=key)
@@ -136,7 +167,7 @@ class CacheClient:
         """
         key = prefixed(namespace, *parts)
 
-        if self._backend_failed:
+        if self._backend_failed and not self._cooldown_elapsed():
             self._delete_fallback(key)
             return
 
@@ -145,8 +176,9 @@ class CacheClient:
                 asyncio.to_thread(self._redis_delete, key),
                 timeout=0.05,
             )
+            self._mark_recovered()
         except (asyncio.TimeoutError, Exception) as e:
-            object.__setattr__(self, "_backend_failed", True)
+            self._mark_failed()
             logger.debug("cache_backend_error_fallback", error=str(e), key=key)
             self._delete_fallback(key)
 
@@ -162,7 +194,7 @@ class CacheClient:
         """
         key = prefixed(namespace, *parts)
 
-        if self._backend_failed:
+        if self._backend_failed and not self._cooldown_elapsed():
             return self._exists_fallback(key)
 
         try:
@@ -170,18 +202,16 @@ class CacheClient:
                 asyncio.to_thread(self._redis_exists, key),
                 timeout=0.05,
             )
+            self._mark_recovered()
             return result
         except (asyncio.TimeoutError, Exception) as e:
-            object.__setattr__(self, "_backend_failed", True)
+            self._mark_failed()
             logger.debug("cache_backend_error_fallback", error=str(e), key=key)
             return self._exists_fallback(key)
 
     def _ensure_redis(self) -> redis.Redis:
         """Lazy-init Redis client with short timeouts."""
         if self._redis is None:
-            auth = None
-            if self.user and self.password:
-                auth = (self.user, self.password)
             rc = redis.Redis(
                 host=self.host,
                 port=self.port,
@@ -230,9 +260,7 @@ class CacheClient:
                 del self._fallback[key]
         return None
 
-    def _set_fallback(
-        self, key: str, value: str, ttl_seconds: Optional[int]
-    ) -> None:
+    def _set_fallback(self, key: str, value: str, ttl_seconds: Optional[int]) -> None:
         """Set in in-memory fallback (best-effort, capped at ~10k keys)."""
         # Simple cap: if we exceed 10k, clear the whole fallback
         if len(self._fallback) >= 10000:

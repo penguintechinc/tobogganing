@@ -18,6 +18,25 @@ logger = logging.getLogger(__name__)
 _DEV_ENV_VALUES = {"dev", "development", "local"}
 _TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
+# grpc-python's own built-in receive default; send was previously left at
+# grpc's -1 (unlimited) by omission here. Bounding both prevents a single
+# oversized message from exhausting memory/CPU on this server -- an
+# unbounded gRPC message size is the RPC equivalent of an unbounded HTTP
+# request body (security.md Input Validation: bounds validation).
+_DEFAULT_MAX_MESSAGE_BYTES = 4 * 1024 * 1024  # 4 MiB
+
+
+def _default_allow_insecure() -> bool:
+    """Whether add_insecure_port is permitted when no TLS credentials are given.
+
+    Fails closed: plaintext is refused by default (security.md TLS 1.2+
+    mandatory) unless GRPC_ALLOW_INSECURE explicitly opts in (e.g. local
+    dev/tests, or intra-pod loopback where mTLS is terminated by a
+    sidecar) -- mirrors _default_enable_reflection's env-driven,
+    explicit-override pattern.
+    """
+    return os.getenv("GRPC_ALLOW_INSECURE", "").strip().lower() in _TRUTHY_VALUES
+
 
 def _default_enable_reflection() -> bool:
     """Reflection defaults on only for local/dev; off everywhere else.
@@ -48,6 +67,8 @@ class ServerOptions:
     max_connection_age_ms: int = 600000  # 10 minutes
     keepalive_time_ms: int = 60000  # 1 minute
     keepalive_timeout_ms: int = 20000  # 20 seconds
+    max_receive_message_length: int = _DEFAULT_MAX_MESSAGE_BYTES
+    max_send_message_length: int = _DEFAULT_MAX_MESSAGE_BYTES
 
 
 def create_server(
@@ -88,6 +109,8 @@ def create_server(
         ("grpc.http2.max_pings_without_data", 0),
         ("grpc.http2.min_time_between_pings_ms", 10000),
         ("grpc.http2.min_ping_interval_without_data_ms", 5000),
+        ("grpc.max_receive_message_length", options.max_receive_message_length),
+        ("grpc.max_send_message_length", options.max_send_message_length),
     ]
 
     # Create server with thread pool
@@ -151,28 +174,86 @@ def _enable_reflection(server: grpc.Server) -> None:
     logger.info("Server reflection enabled")
 
 
+def bind_server_port(
+    server: grpc.Server,
+    port: int,
+    server_credentials: grpc.ServerCredentials | None = None,
+    allow_insecure: bool | None = None,
+) -> None:
+    """Bind `server` to `port`, TLS-preferred, plaintext fail-closed.
+
+    Pass `server_credentials` (e.g. SPIFFE/SPIRE-issued X.509-SVID or any
+    `grpc.ssl_server_credentials`) to bind a secure port -- every service
+    is SPIFFE-ready per security.md regardless of whether SPIRE is
+    deployed yet. Without credentials, plaintext is refused unless
+    explicitly opted into via `allow_insecure=True` or `GRPC_ALLOW_INSECURE`
+    (fail closed -- security.md TLS 1.2+ mandatory). Split out from
+    `start_server_with_graceful_shutdown` so the bind decision is testable
+    without also invoking `server.start()`/`wait_for_termination()`.
+
+    Args:
+        server: gRPC server instance.
+        port: Port to bind.
+        server_credentials: TLS server credentials. When provided, binds
+            `add_secure_port` instead of `add_insecure_port`.
+        allow_insecure: Explicit opt-in to `add_insecure_port` when no
+            credentials are supplied. Defaults to `GRPC_ALLOW_INSECURE`
+            (fail closed) when None.
+
+    Raises:
+        RuntimeError: No credentials supplied and insecure binding was not
+            explicitly allowed.
+
+    """
+    if server_credentials is not None:
+        server.add_secure_port(f"[::]:{port}", server_credentials)
+        logger.info(f"gRPC server binding port {port} (TLS)")
+        return
+
+    insecure_ok = allow_insecure if allow_insecure is not None else _default_allow_insecure()
+    if not insecure_ok:
+        raise RuntimeError(
+            "bind_server_port: no server_credentials supplied and GRPC_ALLOW_INSECURE "
+            "is not set -- refusing to bind a plaintext port (security.md TLS 1.2+ "
+            "mandatory). Pass server_credentials for TLS, or set "
+            "GRPC_ALLOW_INSECURE=true / allow_insecure=True to explicitly opt into "
+            "plaintext (e.g. local dev, or intra-pod loopback behind an mTLS sidecar)."
+        )
+    server.add_insecure_port(f"[::]:{port}")
+    logger.warning(f"gRPC server binding port {port} (insecure -- explicit opt-in)")
+
+
 def start_server_with_graceful_shutdown(
     server: grpc.Server,
     port: int = 50051,
     grace_period: float = 30.0,
+    server_credentials: grpc.ServerCredentials | None = None,
+    allow_insecure: bool | None = None,
 ) -> None:
     """Start server and handle graceful shutdown on SIGTERM/SIGINT.
+
+    See `bind_server_port` for the TLS-preferred/fail-closed-plaintext
+    binding behavior and its `server_credentials`/`allow_insecure` args.
 
     Args:
         server: gRPC server instance
         port: Port to listen on
         grace_period: Seconds to wait for ongoing RPCs to complete
+        server_credentials: Forwarded to `bind_server_port`.
+        allow_insecure: Forwarded to `bind_server_port`.
+
+    Raises:
+        RuntimeError: No credentials supplied and insecure binding was not
+            explicitly allowed.
 
     Example:
         >>> server = create_server()
         >>> # Add your servicers
-        >>> start_server_with_graceful_shutdown(server, port=50051)
+        >>> start_server_with_graceful_shutdown(server, port=50051, server_credentials=creds)
 
     """
-    server.add_insecure_port(f"[::]:{port}")
+    bind_server_port(server, port, server_credentials, allow_insecure)
     server.start()
-
-    logger.info(f"gRPC server listening on port {port}")
 
     # Setup graceful shutdown
     def handle_shutdown(signum: int, frame: Any) -> None:

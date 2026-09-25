@@ -334,7 +334,10 @@ class AutoCheckInManager:
         if job:
             await self.job_manager.delete_job(tenant, job["id"])
 
-        await self.db(self.db.auto_checkin_state.checkin_id == checkin_id).delete()
+        await self.db(
+            (self.db.auto_checkin_state.tenant == tenant)
+            & (self.db.auto_checkin_state.checkin_id == checkin_id)
+        ).delete()
         count = await self.db(
             (self.db.auto_checkins.tenant == tenant) & (self.db.auto_checkins.id == checkin_id)
         ).delete()

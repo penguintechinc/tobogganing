@@ -32,6 +32,7 @@ from hub_api.auth.middleware import REFRESH_TOKEN_COOKIE as _REFRESH_TOKEN_COOKI
 from hub_api.auth.middleware import (
     clear_auth_cookies,
     csrf_token_valid,
+    revoke_current_access_token,
     set_auth_cookies,
 )
 from hub_api.auth.service import AuthService
@@ -296,6 +297,12 @@ async def logout() -> tuple[Response, int]:
             logger.warning("logout_csrf_invalid")
             response = jsonify({"error": "Forbidden: CSRF token missing or invalid"})
             return response, 403
+
+        # Best-effort: denylist the presented access JWT (bearer header or
+        # cookie) so it stops authenticating immediately rather than
+        # remaining valid until its natural 1h expiry -- never raises, so
+        # a decode/cache failure here can't block logout.
+        await revoke_current_access_token()
 
         # Get AuthService to extract user_id from refresh_tokens table
         db = get_db()

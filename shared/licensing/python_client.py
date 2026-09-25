@@ -168,8 +168,17 @@ class PenguinTechLicenseClient:
             return False
 
         except requests.RequestException as e:
-            logger.error(f"Feature check failed for {feature}: {e}")
-            return False
+            # Graceful degradation (client.md / critical-rules.md Feature
+            # Flags & License Tiers): server unreachable -> fall back to the
+            # last-known cached entitlement rather than hard-disabling a
+            # previously-entitled feature. Only a feature that has never
+            # been validated (no cache entry at all) defaults closed.
+            cached_result = self._feature_cache.get(feature)
+            logger.error(
+                f"Feature check failed for {feature}: {e}; "
+                f"using last-known cached value: {cached_result}"
+            )
+            return bool(cached_result) if cached_result is not None else False
 
     def keepalive(self, usage_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
