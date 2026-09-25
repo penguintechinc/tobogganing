@@ -99,7 +99,7 @@ test-go: ## Run Go service tests (if go.mod available)
 		for mod in services/hub-router engines/testserver; do \
 			if [ -f $$mod/go.mod ]; then \
 				echo "  Testing $$mod..."; \
-				(cd $$mod && go test -v -race ./... || true); \
+				(cd $$mod && go test -v -race ./...); \
 			fi; \
 		done; \
 	else \
@@ -114,18 +114,9 @@ test-cov: ## Run hub_api tests with coverage report
 # Lint targets
 lint: lint-python lint-portal lint-go ## Run all linters
 
-lint-python: ## Lint Python code
+lint-python: ## Lint Python code (ruff ONLY — never flake8/black alongside it, see backend-python.md); gated on NEW violations only, see scripts/hooks/run-ruff-gate.sh
 	@echo "🔍 Linting Python (hub_api)..."
-	@if command -v ruff &> /dev/null; then \
-		ruff check hub_api/ || true; \
-	elif command -v flake8 &> /dev/null; then \
-		flake8 hub_api/ || true; \
-	else \
-		echo "⚠️  No Python linter found (ruff/flake8 not installed)"; \
-	fi
-	@if command -v black &> /dev/null; then \
-		black --check hub_api/ || true; \
-	fi
+	@scripts/hooks/run-ruff-gate.sh
 
 lint-portal: ## Lint portal code (if npm available)
 	@if [ -f portal/package.json ]; then \
@@ -138,13 +129,23 @@ lint-portal: ## Lint portal code (if npm available)
 test-security: ## Run Python SAST (semgrep), fully isolated via uvx — never touches hub_api's venv/opentelemetry-sdk
 	@scripts/hooks/run-semgrep.sh
 
-lint-go: ## Lint Go services (if golangci-lint available)
+# Base ref for `--new-from-rev`: feature/fix/chore/hotfix branches are cut
+# from the release branch, not main (devops.md), and main lags release by a
+# large, growing margin — engines/testserver doesn't exist in main at all yet.
+# Diffing against origin/main would therefore treat testserver's entire
+# existing backlog (44 issues) as "new" and block on it immediately; diffing
+# against the release branch correctly tolerates that backlog while still
+# gating anything newly introduced. Update when the active release line
+# rolls (e.g. to release/v1.3.X).
+GOLANGCI_BASE_REF ?= origin/release/v1.2.X
+
+lint-go: ## Lint Go services (if golangci-lint available) — gated on NEW issues only vs GOLANGCI_BASE_REF (default origin/release/v1.2.X)
 	@if command -v golangci-lint &> /dev/null; then \
-		echo "🔍 Linting Go services..."; \
+		echo "🔍 Linting Go services (new issues vs $(GOLANGCI_BASE_REF))..."; \
 		for mod in services/hub-router engines/testserver; do \
 			if [ -f $$mod/go.mod ]; then \
 				echo "  Linting $$mod..."; \
-				(cd $$mod && golangci-lint run || true); \
+				(cd $$mod && golangci-lint run --new-from-rev=$(GOLANGCI_BASE_REF)); \
 			fi; \
 		done; \
 	else \
