@@ -127,8 +127,10 @@ func (m *Manager) Start() error {
 	}
 
 	// Start periodic refresh with randomized interval (30-90 seconds)
-	// This prevents thundering herd when multiple headends start simultaneously
-	refreshInterval := time.Duration(30+rand.Intn(61)) * time.Second
+	// This prevents thundering herd when multiple headends start simultaneously.
+	// math/rand is intentional here: this jitter is scheduling/timing only,
+	// not security-sensitive (no token, key, or auth decision derives from it).
+	refreshInterval := time.Duration(30+rand.Intn(61)) * time.Second // #nosec G404 -- non-cryptographic jitter for refresh scheduling, not security-sensitive
 	log.Infof("Setting randomized refresh interval to %v", refreshInterval)
 
 	m.refreshTicker = time.NewTicker(refreshInterval)
@@ -155,8 +157,9 @@ func (m *Manager) refreshLoop() {
 			if err := m.fetchRules(); err != nil {
 				log.Errorf("Failed to refresh rules: %v", err)
 			} else {
-				// Randomize next refresh interval to prevent synchronization
-				nextInterval := time.Duration(30+rand.Intn(61)) * time.Second
+				// Randomize next refresh interval to prevent synchronization.
+				// Same non-security-sensitive jitter as Start() above.
+				nextInterval := time.Duration(30+rand.Intn(61)) * time.Second // #nosec G404 -- non-cryptographic jitter for refresh scheduling, not security-sensitive
 				m.refreshTicker.Reset(nextInterval)
 				log.Debugf("Next refresh scheduled in %v", nextInterval)
 			}

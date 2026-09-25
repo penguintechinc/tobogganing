@@ -83,6 +83,33 @@ func (s *ProxyServer) Run() error {
 	return s.httpServer.ListenAndServe()
 }
 
+// durationSetting parses a viper duration string setting, falling back to
+// def (and logging a warning) on a missing/unparseable value so a bad
+// config/env value degrades gracefully instead of blocking startup.
+func durationSetting(key string, def time.Duration) time.Duration {
+	raw := viper.GetString(key)
+	if raw == "" {
+		return def
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Warnf("Invalid duration for %s (%q), using default %s: %v", key, raw, def, err)
+		return def
+	}
+	return d
+}
+
+// connLimit parses a viper int setting for a connection/goroutine cap,
+// falling back to def (and logging a warning) on a non-positive value.
+func connLimit(key string, def int) int {
+	limit := viper.GetInt(key)
+	if limit <= 0 {
+		log.Warnf("Invalid value for %s (%d), using default %d", key, limit, def)
+		return def
+	}
+	return limit
+}
+
 func (s *ProxyServer) initializeTCPProxy() error {
 	tcpPort := viper.GetString("server.tcp_port")
 
@@ -91,6 +118,9 @@ func (s *ProxyServer) initializeTCPProxy() error {
 		return fmt.Errorf("failed to create TCP listener: %w", err)
 	}
 
+	maxConns := connLimit("server.tcp_max_conns", 10000)
+	idleTimeout := durationSetting("server.tcp_idle_timeout", 5*time.Minute)
+
 	s.tcpProxy = &TCPProxy{
 		listener:        listener,
 		authProvider:    s.authProvider,
@@ -98,12 +128,14 @@ func (s *ProxyServer) initializeTCPProxy() error {
 		firewallManager: s.firewallManager,
 		syslogLogger:    s.syslogLogger,
 		wgRouter:        s.wgRouter,
+		connSem:         make(chan struct{}, maxConns),
+		idleTimeout:     idleTimeout,
 	}
 
 	// Start TCP proxy in goroutine
 	go s.tcpProxy.Start()
 
-	log.Infof("TCP proxy listening on port %s", tcpPort)
+	log.Infof("TCP proxy listening on port %s (max_conns=%d, idle_timeout=%s)", tcpPort, maxConns, idleTimeout)
 	return nil
 }
 
@@ -120,6 +152,9 @@ func (s *ProxyServer) initializeUDPProxy() error {
 		return fmt.Errorf("failed to create UDP listener: %w", err)
 	}
 
+	maxConns := connLimit("server.udp_max_conns", 10000)
+	idleTimeout := durationSetting("server.udp_idle_timeout", 30*time.Second)
+
 	s.udpProxy = &UDPProxy{
 		conn:            conn,
 		authProvider:    s.authProvider,
@@ -127,12 +162,14 @@ func (s *ProxyServer) initializeUDPProxy() error {
 		firewallManager: s.firewallManager,
 		syslogLogger:    s.syslogLogger,
 		wgRouter:        s.wgRouter,
+		connSem:         make(chan struct{}, maxConns),
+		idleTimeout:     idleTimeout,
 	}
 
 	// Start UDP proxy in goroutine
 	go s.udpProxy.Start()
 
-	log.Infof("UDP proxy listening on port %s", udpPort)
+	log.Infof("UDP proxy listening on port %s (max_conns=%d, idle_timeout=%s)", udpPort, maxConns, idleTimeout)
 	return nil
 }
 
