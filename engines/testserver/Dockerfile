@@ -3,13 +3,13 @@ FROM golang:1.25-bookworm@sha256:a9c020ee3d1508c7be5435c262434e3d3fc1d0e76a11afe
 
 WORKDIR /build
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy go mod files (root-relative from repo root context)
+COPY engines/testserver/go.mod engines/testserver/go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY cmd ./cmd
-COPY internal ./internal
+# Copy source code (root-relative from repo root context)
+COPY engines/testserver/cmd ./cmd
+COPY engines/testserver/internal ./internal
 
 # Build binary
 ARG TARGETOS=linux
