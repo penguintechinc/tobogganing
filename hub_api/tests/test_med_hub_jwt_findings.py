@@ -338,27 +338,27 @@ async def test_max_content_length_configured(app: Quart) -> None:
 
 @pytest.mark.asyncio
 async def test_oversized_request_body_rejected(app: Quart) -> None:
-    """A body over MAX_CONTENT_LENGTH is rejected by Quart before full parsing.
+    """A body over MAX_CONTENT_LENGTH is rejected with 413 before the handler runs.
 
-    The route's own broad ``except Exception`` still maps this to its
-    generic error response (401 for /auth/login), but the underlying error
-    confirms Quart's RequestEntityTooLarge fired instead of the body being
-    fully buffered/parsed.
+    /login is wrapped by the rate-limit decorator whose per-account key
+    function reads the request body to derive its bucket; on an oversized body
+    that access raises Quart's RequestEntityTooLarge, so the request is
+    rejected with 413 (Payload Too Large) before the login handler executes and
+    before the body is fully buffered/parsed. 413 is the correct response for
+    an oversized body and leaks nothing about credentials. (Previously the
+    login handler's broad ``except`` masked this as a 401; the rate-limit
+    decorator now surfaces the proper 413.)
     """
     big_body = b"a" * (app.config["MAX_CONTENT_LENGTH"] + 1024)
     client = app.test_client()
 
-    with patch("hub_api.api.auth_routes.logger.error") as mock_log_error:
-        resp = await client.post(
-            "/api/v1/auth/login",
-            data=big_body,
-            headers={"Content-Type": "application/json"},
-        )
+    resp = await client.post(
+        "/api/v1/auth/login",
+        data=big_body,
+        headers={"Content-Type": "application/json"},
+    )
 
-    assert resp.status_code == 401
-    mock_log_error.assert_called_once()
-    _, kwargs = mock_log_error.call_args
-    assert "413" in kwargs.get("error", "") or "Too Large" in kwargs.get("error", "")
+    assert resp.status_code == 413
 
 
 # ---------------------------------------------------------------------------
