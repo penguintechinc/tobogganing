@@ -40,10 +40,21 @@ impl MachineJwtSigner {
         }
     }
 
-    /// Loads an EC or RSA private key from a PEM file on disk (expected
-    /// mode `0600` per the credential-hygiene policy) and builds a signer
-    /// using `algorithm`.
+    /// Loads an EC or RSA private key from a PEM file on disk and builds a
+    /// signer using `algorithm`.
+    ///
+    /// The signing key is a K8s Secret mounted at `0600` (owner read/write
+    /// only) — full platform-secure storage (Keychain/Keystore/secure
+    /// enclave) is the desktop-`penguind` client's concern per `client.md`,
+    /// not this server-side/DaemonSet agent's. What this agent *can* and
+    /// must enforce at load time is that the mount actually landed with
+    /// tightened permissions: on Unix, [`check_key_permissions`] rejects
+    /// any mode with a group or world bit set (`mode & 0o077 != 0`) —
+    /// fail-closed, since a group/world-readable copy of this key lets
+    /// another local user or container forge machine JWTs as this node.
     pub fn from_pem_file(path: impl AsRef<Path>, algorithm: Algorithm) -> Result<Self> {
+        let path = path.as_ref();
+        check_key_permissions(path)?;
         let pem = std::fs::read(path)?;
         let encoding_key = EncodingKey::from_ec_pem(&pem)
             .or_else(|_| EncodingKey::from_rsa_pem(&pem))
@@ -75,6 +86,34 @@ impl MachineJwtSigner {
         let header = Header::new(self.algorithm);
         Ok(jsonwebtoken::encode(&header, &claims, &self.encoding_key)?)
     }
+}
+
+/// Verifies that the key file at `path` is not group/world-accessible
+/// (`mode & 0o077 != 0`) before it is ever read — fail-closed: a key
+/// mounted or left with looser permissions than the `0600` the K8s Secret
+/// mount is expected to produce is refused rather than silently loaded, so
+/// a misconfigured mount or a shared-filesystem edge deployment can't leak
+/// this node's signing key to another local user or container.
+#[cfg(unix)]
+fn check_key_permissions(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::metadata(path)?.permissions().mode();
+    if mode & 0o077 != 0 {
+        return Err(AgentError::Config(format!(
+            "machine-JWT signing key at {} is group/world-accessible (mode {:o}); expected 0600 or tighter — refusing to load",
+            path.display(),
+            mode & 0o777,
+        )));
+    }
+    Ok(())
+}
+
+/// Non-Unix fallback: the mode bits this check inspects don't exist on
+/// non-Unix targets, and no current deployment (K8s DaemonSet, bare-metal
+/// edge) loads this key on one — nothing to enforce.
+#[cfg(not(unix))]
+fn check_key_permissions(_path: &Path) -> Result<()> {
+    Ok(())
 }
 
 /// Decodes the claims of an opaque JWT **without verifying its signature**.
@@ -154,5 +193,56 @@ mod tests {
         let claims: TenantOnly =
             decode_unverified_claims(&token).expect("unverified decode must not require a key");
         assert_eq!(claims.tenant, "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn from_pem_file_rejects_a_group_or_world_readable_key() {
+        use std::os::unix::fs::PermissionsExt;
+        let path = std::env::temp_dir().join(format!(
+            "node-agent-jwt-test-{}-loose.pem",
+            std::process::id()
+        ));
+        // Content is irrelevant here — the permission gate must reject the
+        // file before its bytes are ever read.
+        std::fs::write(&path, b"not a real key").expect("writing the test file must succeed");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .expect("chmod must succeed");
+
+        // `expect_err` would require `MachineJwtSigner: Debug`, which it
+        // deliberately does not implement (it holds live key material via
+        // `jsonwebtoken::EncodingKey`, which itself withholds `Debug` to
+        // avoid ever formatting key bytes) — match instead.
+        let err = match MachineJwtSigner::from_pem_file(&path, Algorithm::ES256) {
+            Ok(_) => panic!("a 0644 key file must be rejected before its contents are ever parsed"),
+            Err(err) => err,
+        };
+        assert!(matches!(err, AgentError::Config(msg) if msg.contains("group/world-accessible")));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn from_pem_file_accepts_an_owner_only_key_and_proceeds_past_the_permission_check() {
+        use std::os::unix::fs::PermissionsExt;
+        let path = std::env::temp_dir().join(format!(
+            "node-agent-jwt-test-{}-tight.pem",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"not a real key").expect("writing the test file must succeed");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod must succeed");
+
+        let err = match MachineJwtSigner::from_pem_file(&path, Algorithm::ES256) {
+            Ok(_) => panic!("garbage PEM content must still fail to parse"),
+            Err(err) => err,
+        };
+        // Proves the permission gate passed (an 0o600 file is never
+        // rejected on permissions) and the failure came from PEM parsing
+        // instead, not from `check_key_permissions`.
+        assert!(matches!(err, AgentError::Jwt(_)));
+
+        let _ = std::fs::remove_file(&path);
     }
 }

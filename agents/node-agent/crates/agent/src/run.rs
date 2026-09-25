@@ -1,7 +1,9 @@
 //! `run` subcommand: loads config, performs the node's single enrollment
 //! with the control plane, and supervises the connectivity/netsvcs-edge
 //! data-plane modules plus one node-level lifecycle loop (heartbeat +
-//! config-poll + token refresh) until an interrupt is received.
+//! config-poll + token refresh) until SIGINT or SIGTERM is received — the
+//! latter is what K8s sends on pod termination, so it must trigger the same
+//! drain/shutdown path as an interactive Ctrl-C.
 //!
 //! This is the *only* place in the workspace that calls
 //! [`ControlPlaneClient::enroll`] — a node enrolls exactly once, with its
@@ -39,7 +41,7 @@ const REFRESH_MARGIN_SECS: i64 = 60;
 /// build a transport client → generate this node's WireGuard identity (if
 /// applicable) → enroll exactly once → spawn the capability modules and
 /// the node-level lifecycle loop under a shared [`CancellationToken`] →
-/// wait for an interrupt → cancel and join every task.
+/// wait for SIGINT/SIGTERM → cancel and join every task.
 pub async fn run(
     config_path: Option<&Path>,
     mode_override: Option<AgentMode>,
@@ -155,8 +157,8 @@ pub async fn run(
         });
     }
 
-    let _ = tokio::signal::ctrl_c().await;
-    tracing::info!("received interrupt; shutting down");
+    wait_for_shutdown_signal().await;
+    tracing::info!("received shutdown signal; draining");
     shutdown.cancel();
 
     while let Some(joined) = tasks.join_next().await {
@@ -273,6 +275,44 @@ async fn lifecycle_loop(
             }
         }
     }
+}
+
+/// Waits for either SIGINT (Ctrl-C, interactive/bare-metal use) or SIGTERM
+/// (the signal K8s sends on pod termination — `kubectl delete`, rolling
+/// update, `terminationGracePeriodSeconds` countdown). Without a SIGTERM
+/// handler the drain/shutdown logic below never runs on a real pod
+/// termination and the container is hard-killed once the grace period
+/// expires, dropping in-flight heartbeats/config-polls and skipping the
+/// supervised tasks' own drain paths.
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    // SAFETY/infallibility note: `signal()` only fails if the process is
+    // out of file descriptors or the signal can't be installed at all
+    // (e.g. SIGKILL) — neither applies to SIGINT/SIGTERM, so a failure
+    // here means the process is already too broken to shut down cleanly;
+    // fall back to `ctrl_c()` alone rather than panicking.
+    let mut sigterm = match signal(SignalKind::terminate()) {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to install SIGTERM handler; only SIGINT will trigger shutdown");
+            let _ = tokio::signal::ctrl_c().await;
+            return;
+        }
+    };
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = sigterm.recv() => {}
+    }
+}
+
+/// Non-Unix fallback (no SIGTERM equivalent installable via
+/// `tokio::signal::unix`): SIGINT/Ctrl-C only.
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 fn unix_now() -> i64 {
@@ -561,6 +601,18 @@ mod tests {
         let key_path = dir.join("machine.pem");
         std::fs::write(&key_path, generate_test_ec_key_pem())
             .expect("writing the test key must succeed");
+        // `MachineJwtSigner::from_pem_file` now enforces owner-only
+        // permissions on the key it loads (fail-closed against a
+        // group/world-readable signing key); `std::fs::write` honors the
+        // process umask, which on most CI/dev boxes leaves the group bit
+        // set, so this test's key must be tightened explicitly just like a
+        // real K8s Secret mount would be.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+                .expect("chmod on the test key must succeed");
+        }
 
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
