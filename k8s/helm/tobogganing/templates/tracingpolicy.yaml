@@ -1,0 +1,101 @@
+{{- if .Values.tracingPolicy.enabled }}
+## Cluster Security Baseline — Tetragon TracingPolicy, enforcing (Sigkill).
+## Scoped per-component: each pod's only legitimate runtime binary is
+## allowlisted (devops-kubernetes.md — a policy loose enough to cover every
+## service stops covering any of them). Requires the Tetragon agent
+## DaemonSet running in the cluster (cluster add-on, not part of this
+## chart). netsvcs-dns/node-agent/testserver ship their own equivalent
+## policy in charts/*/templates/tracingpolicy.yaml.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-api-exec-allowlist
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-api
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotEquals"
+              ## hub_api/Dockerfile CMD — hypercorn ASGI server, `--system`
+              ## pip install into the base python:3.13-slim-bookworm image.
+              values:
+                - "/usr/local/bin/hypercorn"
+          matchActions:
+            - action: Sigkill
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-router-exec-allowlist
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-router
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotEquals"
+              ## hub-router's startup is a shell-orchestrated WireGuard
+              ## bring-up (services/hub-router/entrypoint.sh), not a single
+              ## static binary — allowlist covers the entrypoint itself,
+              ## the compiled Go proxy, and every tool the script execs
+              ## (wg-quick/wg, iptables, ip, openssl, curl, jq) plus the two
+              ## helper scripts it calls directly.
+              values:
+                - "/bin/bash"
+                - "/app/entrypoint.sh"
+                - "/app/headend-proxy"
+                - "/app/wireguard/scripts/setup-routing.sh"
+                - "/app/scripts/setup-mirror.sh"
+                - "/usr/bin/wg-quick"
+                - "/usr/bin/wg"
+                - "/usr/sbin/iptables"
+                - "/usr/sbin/ip"
+                - "/usr/bin/openssl"
+                - "/usr/bin/curl"
+                - "/usr/bin/jq"
+          matchActions:
+            - action: Sigkill
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-webui-exec-allowlist
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tobogganing.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hub-webui
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotEquals"
+              ## portal/Dockerfile CMD ["node", "server.js"] on
+              ## node:26-bookworm-slim.
+              values:
+                - "/usr/local/bin/node"
+          matchActions:
+            - action: Sigkill
+{{- end }}

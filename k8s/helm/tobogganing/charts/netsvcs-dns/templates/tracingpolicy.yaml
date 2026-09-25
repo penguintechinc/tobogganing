@@ -1,0 +1,27 @@
+{{- if .Values.tracingPolicy.enabled }}
+## Cluster Security Baseline — Tetragon TracingPolicy, enforcing (Sigkill).
+## netsvcs-dns's only legitimate runtime process is python3 (Dockerfile
+## ENTRYPOINT ["python3", "-m", "app.main"] on python:3.13-slim-bookworm).
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: netsvcs-dns-exec-allowlist
+spec:
+  podSelector:
+    matchLabels:
+      {{- toYaml .Values.labels | nindent 6 }}
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotEquals"
+              values:
+                - "/usr/local/bin/python3"
+          matchActions:
+            - action: Sigkill
+{{- end }}

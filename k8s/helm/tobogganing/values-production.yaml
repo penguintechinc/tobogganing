@@ -24,6 +24,10 @@ hubApi:
       cpu: "1000m"
 
 hubRouter:
+  ## Superseded by autoscaling.hubRouter (below) once autoscaling.enabled is
+  ## true — templates/hub-router-deployment.yaml omits `replicas` in that
+  ## case. Left set for parity with hubApi/hubWebui and as the effective
+  ## value if autoscaling is ever disabled again in this file.
   replicas: 3
   image:
     repository: ghcr.io/penguintechinc/tobogganing/hub-router
@@ -139,6 +143,10 @@ autoscaling:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
   hubWebui:
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  hubRouter:
     minReplicas: 3
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70

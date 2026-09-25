@@ -1,103 +1,118 @@
-## Default deny: every pod in the namespace is isolated unless an allow
-## policy (below) selects it — required baseline per security standards.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+## Cluster Security Baseline — CiliumNetworkPolicy (security.md "Kubernetes
+## Network Security" / devops-kubernetes.md "Cluster Security Baseline").
+## Replaces the former plain `networking.k8s.io/v1 NetworkPolicy` set
+## (STANDARDS GAP closed) with Cilium's native CRD: default-deny,
+## same-namespace allowed, explicit cross-namespace allowlist only.
+##
+## Cilium policy model note: applying ANY CiliumNetworkPolicy to an endpoint
+## puts that endpoint in default-deny for the directions the policy
+## specifies; rules from every CiliumNetworkPolicy selecting the same
+## endpoint are unioned. The default-deny object below sets `ingress: []`
+## (deny all) + DNS-only egress for every pod in the namespace; the
+## component-scoped objects that follow ADD their own allowed
+## ingress/egress on top for the pods they select — same net effect as the
+## previous default-deny + explicit-allow NetworkPolicy pair.
+##
+## kubelet liveness/readiness probes originate from the node, not a pod
+## identity — under Cilium this must be explicitly allowed via
+## `fromEntities: [host, remote-node]` or probes fail closed once a pod is
+## selected by any CiliumNetworkPolicy (this was not a concern under plain
+## NetworkPolicy). Allowed once, namespace-wide, in the default-deny object.
+##
+## node-agent and netsvcs-dns ship their own pod labels (not the
+## `tobogganing.*` selector helpers), so they are NOT covered by
+## "allow-internal" and need their own ingress/egress allow pair — the
+## namespace default-deny (top of this file) blocks all their traffic
+## except DNS/kubelet-probe otherwise.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-default-deny
   namespace: {{ include "tobogganing.namespace" . }}
   labels:
     {{- include "tobogganing.labels" . | nindent 4 }}
 spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
   egress:
-    ## DNS stays available to isolated pods
-    - to:
-        - namespaceSelector: {}
-      ports:
-        - port: 53
-          protocol: UDP
-        - port: 53
-          protocol: TCP
+    ## DNS stays available to isolated pods (CoreDNS in kube-system).
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
 ---
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-allow-internal
   namespace: {{ include "tobogganing.namespace" . }}
   labels:
     {{- include "tobogganing.labels" . | nindent 4 }}
 spec:
-  podSelector:
+  endpointSelector:
     matchLabels:
       {{- include "tobogganing.selectorLabels" . | nindent 6 }}
-  policyTypes:
-    - Ingress
-    - Egress
   ingress:
     ## Allow traffic between all tobogganing services
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 12 }}
     ## Allow ingress controller traffic to hub-api and hub-webui
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - port: {{ .Values.hubApi.port }}
-          protocol: TCP
-        - port: {{ .Values.hubWebui.port }}
-          protocol: TCP
-    ## Allow external WireGuard traffic to hub-router
-    - from: []
-      ports:
-        - port: {{ .Values.hubRouter.ports.wireguard }}
-          protocol: UDP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": ingress-nginx
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubApi.port }}"
+              protocol: TCP
+            - port: "{{ .Values.hubWebui.port }}"
+              protocol: TCP
+    ## Allow external WireGuard traffic to hub-router (arbitrary client IPs)
+    - fromEntities:
+        - all
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubRouter.ports.wireguard }}"
+              protocol: UDP
   egress:
     ## Allow traffic between all tobogganing services
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
+    - toEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 12 }}
     ## Allow DNS resolution
-    - to:
-        - namespaceSelector: {}
-      ports:
-        - port: 53
-          protocol: UDP
-        - port: 53
-          protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
     ## Allow external HTTPS (for license server, updates)
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-      ports:
-        - port: 443
-          protocol: TCP
+    - toCIDRSet:
+        - cidr: "0.0.0.0/0"
+          except:
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+            - "192.168.0.0/16"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
 ---
-## STANDARDS GAP: this whole file uses plain Kubernetes `NetworkPolicy`.
-## Per security.md "Kubernetes Network Security" the cluster baseline
-## requires `CiliumNetworkPolicy`/`CiliumClusterwideNetworkPolicy` — migrate
-## this file to Cilium in a follow-up. The gRPC rules below (squawk P5-C,
-## netsvcs-dns/node-agent -> hub-api) are added in the same NetworkPolicy
-## kind as the pre-existing policies above to avoid a mixed
-## enforcement/precedence model until that migration happens.
-##
-## node-agent and netsvcs-dns ship their own pod labels (not the
-## `tobogganing.*` selector helpers above), so they are NOT covered by
-## "allow-internal" and need their own ingress/egress allow pair — the
-## namespace default-deny (top of this file) blocks all their traffic
-## except DNS otherwise.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-allow-netsvcs-grpc-ingress
   namespace: {{ include "tobogganing.namespace" . }}
@@ -106,50 +121,45 @@ metadata:
 spec:
   ## hub-api gRPC :50051 — CheckIOC lookups + config-sync (netsvcs-dns),
   ## control-plane calls (node-agent, e.g. RegisterServer/GetConfig).
-  podSelector:
+  endpointSelector:
     matchLabels:
       {{- include "tobogganing.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: hub-api
-  policyTypes:
-    - Ingress
   ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: netsvcs-dns
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: node-agent
-              app.kubernetes.io/instance: {{ .Release.Name }}
-      ports:
-        - port: {{ .Values.hubApi.grpcPort }}
-          protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: netsvcs-dns
+        - matchLabels:
+            app.kubernetes.io/name: node-agent
+            app.kubernetes.io/instance: {{ .Release.Name }}
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubApi.grpcPort }}"
+              protocol: TCP
 ---
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-allow-netsvcs-dns-grpc-egress
   namespace: {{ include "tobogganing.namespace" . }}
   labels:
     {{- include "tobogganing.labels" . | nindent 4 }}
 spec:
-  podSelector:
+  endpointSelector:
     matchLabels:
       app: netsvcs-dns
-  policyTypes:
-    - Egress
   egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: hub-api
-      ports:
-        - port: {{ .Values.hubApi.grpcPort }}
-          protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: hub-api
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubApi.grpcPort }}"
+              protocol: TCP
 ---
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-allow-node-agent-grpc-egress
   namespace: {{ include "tobogganing.namespace" . }}
@@ -159,21 +169,19 @@ spec:
   ## node-agent's own :53 DNS-serving port and NET_ADMIN/NET_BIND_SERVICE
   ## capabilities are unaffected by this policy — see charts/node-agent/
   ## values.yaml nodeAgent.securityContext / templates/daemonset.yaml.
-  podSelector:
+  endpointSelector:
     matchLabels:
       app.kubernetes.io/name: node-agent
       app.kubernetes.io/instance: {{ .Release.Name }}
-  policyTypes:
-    - Egress
   egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: hub-api
-      ports:
-        - port: {{ .Values.hubApi.grpcPort }}
-          protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: hub-api
+      toPorts:
+        - ports:
+            - port: "{{ .Values.hubApi.grpcPort }}"
+              protocol: TCP
 ---
 ## testserver (charts/testserver, ships its own `app: testserver` pod
 ## labels — not the `tobogganing.*` selector helpers, same reasoning as
@@ -185,52 +193,47 @@ spec:
 ## node-agent is included as a future c2c-testing caller (see
 ## docs/superpowers/plans/2026-07-10-phase-4-waddleperf-c2c.md) even
 ## though no code path calls it yet.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-allow-testserver-ingress
   namespace: {{ include "tobogganing.namespace" . }}
   labels:
     {{- include "tobogganing.labels" . | nindent 4 }}
 spec:
-  podSelector:
+  endpointSelector:
     matchLabels:
       app: testserver
-  policyTypes:
-    - Ingress
   ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "tobogganing.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: hub-api
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: node-agent
-              app.kubernetes.io/instance: {{ .Release.Name }}
-      ports:
-        - port: 8080
-          protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            {{- include "tobogganing.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: hub-api
+        - matchLabels:
+            app.kubernetes.io/name: node-agent
+            app.kubernetes.io/instance: {{ .Release.Name }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
 ---
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
 metadata:
   name: {{ include "tobogganing.fullname" . }}-allow-hub-api-testserver-egress
   namespace: {{ include "tobogganing.namespace" . }}
   labels:
     {{- include "tobogganing.labels" . | nindent 4 }}
 spec:
-  podSelector:
+  endpointSelector:
     matchLabels:
       {{- include "tobogganing.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: hub-api
-  policyTypes:
-    - Egress
   egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app: testserver
-      ports:
-        - port: 8080
-          protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: testserver
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

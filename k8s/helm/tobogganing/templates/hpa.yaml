@@ -44,4 +44,27 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.hubWebui.targetCPUUtilizationPercentage }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "tobogganing.fullname" . }}-hub-router
+  namespace: {{ include "tobogganing.namespace" . }}
+  labels:
+    {{- include "tobogganing.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub-router
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "tobogganing.fullname" . }}-hub-router
+  minReplicas: {{ .Values.autoscaling.hubRouter.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.hubRouter.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.hubRouter.targetCPUUtilizationPercentage }}
 {{- end }}
