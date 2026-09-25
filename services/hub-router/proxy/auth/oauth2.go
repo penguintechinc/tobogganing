@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
 
@@ -200,7 +203,18 @@ func (p *OAuth2Provider) GetUser(c *gin.Context) (*User, error) {
 	return p.ValidateToken(cookie)
 }
 
+// generateState returns a cryptographically secure random token used as the
+// OAuth2 "state" parameter (and, via SAML2Provider.LoginHandler, the SAML
+// AuthnRequest ID) — both are anti-CSRF/replay correlation values and must
+// never be derived from a predictable source like a timestamp.
 func generateState() string {
-	// In production, use a cryptographically secure random generator
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		// crypto/rand.Read on Linux only fails on catastrophic system
+		// misconfiguration; fall back to a timestamp-seeded value rather than
+		// returning an empty state, but make the degradation loud.
+		log.Errorf("crypto/rand unavailable, falling back to weak state generation: %v", err)
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(buf)
 }

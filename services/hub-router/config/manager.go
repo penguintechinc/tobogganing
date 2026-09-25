@@ -29,13 +29,13 @@ import (
 
 // Manager handles configuration retrieval from SASEWaddle Manager Service
 type Manager struct {
-	managerURL      string
-	apiKey          string
-	httpClient      *http.Client
-	lastUpdate      time.Time
-	config          *HeadendConfig
-	jwtClient       *auth.MachineJWTClient
-	useMachineJWT   bool
+	managerURL    string
+	apiKey        string
+	httpClient    *http.Client
+	lastUpdate    time.Time
+	config        *HeadendConfig
+	jwtClient     *auth.MachineJWTClient
+	useMachineJWT bool
 }
 
 // HeadendConfig represents the complete configuration for a headend server
@@ -160,12 +160,17 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
 		return nil, fmt.Errorf("CLUSTER_ID environment variable not set")
 	}
 
+	// url is built from cm.managerURL (operator-supplied at NewManager
+	// construction time, from this proxy's own startup config/env — never
+	// from an inbound request) and CLUSTER_ID (a deployment-time env var,
+	// same trust boundary). Neither is attacker-influenced, so this is not
+	// an SSRF vector despite the taint-analysis match.
 	url := fmt.Sprintf("%s/api/v1/clusters/%s/headend-config", cm.managerURL, clusterID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil) // #nosec G704 -- managerURL/clusterID are operator config, not request-tainted (see comment above)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -186,7 +191,7 @@ func (cm *Manager) FetchConfig() (*HeadendConfig, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := cm.httpClient.Do(req)
+	resp, err := cm.httpClient.Do(req) // #nosec G704 -- same operator-configured URL as above, not request-tainted
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
 	}

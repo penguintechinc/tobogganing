@@ -21,8 +21,25 @@ func (u *UDPProxy) Start() {
 			continue
 		}
 
-		// Handle packet in goroutine with authentication
-		go u.handlePacket(buffer[:n], clientAddr)
+		// Copy the packet before handing it to a goroutine — buffer is reused
+		// by the next ReadFromUDP iteration.
+		packet := make([]byte, n)
+		copy(packet, buffer[:n])
+
+		// Bound the number of concurrently handled packets with a counting
+		// semaphore (u.connSem) so a packet flood cannot fan out into an
+		// unbounded number of goroutines/upstream sockets. When the cap is
+		// hit, drop the packet and log rather than blocking the read loop
+		// or crashing.
+		select {
+		case u.connSem <- struct{}{}:
+			go func() {
+				defer func() { <-u.connSem }()
+				u.handlePacket(packet, clientAddr)
+			}()
+		default:
+			log.Warnf("UDP packet-handler limit (%d) reached, dropping packet from %s", cap(u.connSem), clientAddr)
+		}
 	}
 }
 
@@ -90,6 +107,16 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
 		}
 	}()
 
+	idleTimeout := u.idleTimeout
+	if idleTimeout <= 0 {
+		idleTimeout = 30 * time.Second
+	}
+
+	if err := targetConn.SetWriteDeadline(time.Now().Add(idleTimeout)); err != nil {
+		log.Errorf("Failed to set write deadline: %v", err)
+		return
+	}
+
 	// Forward packet to target
 	if _, err := targetConn.Write(data); err != nil {
 		log.Errorf("Failed to write to target: %v", err)
@@ -103,7 +130,7 @@ func (u *UDPProxy) handlePacket(data []byte, clientAddr *net.UDPAddr) {
 
 	// Read response and send back
 	response := make([]byte, 65536)
-	if err := targetConn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+	if err := targetConn.SetReadDeadline(time.Now().Add(idleTimeout)); err != nil {
 		log.Errorf("Failed to set read deadline: %v", err)
 		return
 	}

@@ -40,7 +40,11 @@ type ProxyServer struct {
 	mu              sync.RWMutex
 }
 
-// TCPProxy handles raw TCP traffic with JWT authentication
+// TCPProxy handles raw TCP traffic with JWT authentication. connSem bounds
+// the number of concurrently handled connections (a buffered channel used as
+// a counting semaphore); idleTimeout is applied as a rolling read/write
+// deadline on both legs of the proxied connection so a stalled peer cannot
+// pin a goroutine (and its backend connection) forever.
 type TCPProxy struct {
 	listener        net.Listener
 	authProvider    auth.Provider
@@ -48,9 +52,13 @@ type TCPProxy struct {
 	firewallManager *firewall.Manager
 	syslogLogger    *syslog.SyslogLogger
 	wgRouter        *WireGuardRouter
+	connSem         chan struct{}
+	idleTimeout     time.Duration
 }
 
-// UDPProxy handles raw UDP traffic with JWT authentication
+// UDPProxy handles raw UDP traffic with JWT authentication. connSem bounds
+// the number of concurrently handled packets/pseudo-sessions; idleTimeout
+// bounds how long a per-packet upstream socket waits for a response.
 type UDPProxy struct {
 	conn            *net.UDPConn
 	authProvider    auth.Provider
@@ -58,6 +66,8 @@ type UDPProxy struct {
 	firewallManager *firewall.Manager
 	syslogLogger    *syslog.SyslogLogger
 	wgRouter        *WireGuardRouter
+	connSem         chan struct{}
+	idleTimeout     time.Duration
 }
 
 func main() {
@@ -91,6 +101,14 @@ func initConfig() {
 	viper.SetDefault("server.tcp_port", "8444")
 	viper.SetDefault("server.udp_port", "8445")
 	viper.SetDefault("server.metrics_port", "9090")
+	// Bounded concurrency + idle timeouts for the raw TCP/UDP data-plane
+	// proxies (proxy/tcp_proxy.go, proxy/udp_proxy.go) — prevent an
+	// unbounded goroutine-per-connection/datagram fan-out and stalled peers
+	// from exhausting memory/FDs in front of every backend.
+	viper.SetDefault("server.tcp_max_conns", 10000)
+	viper.SetDefault("server.tcp_idle_timeout", "5m")
+	viper.SetDefault("server.udp_max_conns", 10000)
+	viper.SetDefault("server.udp_idle_timeout", "30s")
 	viper.SetDefault("auth.type", "jwt")
 	viper.SetDefault("auth.manager_url", "http://manager:8000")
 	viper.SetDefault("mirror.enabled", false)

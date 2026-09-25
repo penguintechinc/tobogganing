@@ -3,6 +3,7 @@ package main
 
 import (
 	"net"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -18,8 +19,23 @@ func (t *TCPProxy) Start() {
 			continue
 		}
 
-		// Handle connection in goroutine with authentication
-		go t.handleConnection(conn)
+		// Bound the number of concurrently handled connections with a
+		// counting semaphore (t.connSem) so a connection flood in front of
+		// every backend cannot fan out into an unbounded number of
+		// goroutines/backend sockets. When the cap is hit, reject the new
+		// connection immediately rather than blocking Accept() or crashing.
+		select {
+		case t.connSem <- struct{}{}:
+			go func() {
+				defer func() { <-t.connSem }()
+				t.handleConnection(conn)
+			}()
+		default:
+			log.Warnf("TCP connection limit (%d) reached, rejecting connection from %s", cap(t.connSem), conn.RemoteAddr())
+			if err := conn.Close(); err != nil {
+				log.Debugf("Error closing rejected TCP connection: %v", err)
+			}
+		}
 	}
 }
 
@@ -29,6 +45,14 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
 			log.Debugf("Error closing client connection: %v", err)
 		}
 	}()
+
+	// Idle deadline on the client leg — bounds how long a peer can hold a
+	// goroutine/connection open without sending anything (auth included).
+	if t.idleTimeout > 0 {
+		if err := clientConn.SetDeadline(time.Now().Add(t.idleTimeout)); err != nil {
+			log.Debugf("Failed to set client read deadline: %v", err)
+		}
+	}
 
 	// Read first packet to extract JWT token from headers
 	buffer := make([]byte, 4096)
@@ -105,6 +129,12 @@ func (t *TCPProxy) handleConnection(clientConn net.Conn) {
 		}
 	}()
 
+	if t.idleTimeout > 0 {
+		if err := targetConn.SetDeadline(time.Now().Add(t.idleTimeout)); err != nil {
+			log.Debugf("Failed to set target connection deadline: %v", err)
+		}
+	}
+
 	// Send original packet to target
 	if _, err := targetConn.Write(buffer[:n]); err != nil {
 		log.Errorf("Failed to write to target: %v", err)
@@ -125,9 +155,24 @@ func (t *TCPProxy) proxyData(src, dst net.Conn, direction string) {
 	buffer := make([]byte, 32768)
 
 	for {
+		// Rolling idle deadline: reset on every iteration rather than once
+		// per connection, so an actively-used long-lived transfer is never
+		// killed while a genuinely stalled peer is bounded.
+		if t.idleTimeout > 0 {
+			if err := src.SetReadDeadline(time.Now().Add(t.idleTimeout)); err != nil {
+				log.Debugf("Failed to set read deadline (%s): %v", direction, err)
+			}
+		}
+
 		n, err := src.Read(buffer)
 		if err != nil {
 			break
+		}
+
+		if t.idleTimeout > 0 {
+			if err := dst.SetWriteDeadline(time.Now().Add(t.idleTimeout)); err != nil {
+				log.Debugf("Failed to set write deadline (%s): %v", direction, err)
+			}
 		}
 
 		if _, err := dst.Write(buffer[:n]); err != nil {
