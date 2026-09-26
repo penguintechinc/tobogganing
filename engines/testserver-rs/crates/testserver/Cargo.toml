@@ -1,0 +1,50 @@
+[package]
+name = "testserver"
+description = "WaddlePerf diagnostic probe target — Rust rewrite of engines/testserver (Go). REST (axum) + gRPC (tonic) surfaces, SeaORM persistence, JWT auth, OTLP tracing/metrics."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "testserver"
+path = "src/main.rs"
+
+[dependencies]
+testserver-core = { workspace = true }
+testserver-db = { workspace = true }
+testserver-protocols = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["cors", "limit", "trace"] }
+tonic = { workspace = true, features = ["router", "transport"] }
+tonic-prost = { workspace = true }
+prost = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { workspace = true, features = ["grpc-tonic"] }
+tracing-opentelemetry = { workspace = true }
+rustls = { workspace = true, features = ["ring", "std", "tls12", "logging"] }
+rand = { workspace = true }
+# Used only by the `healthcheck` CLI subcommand (native Rust HEALTHCHECK,
+# never curl, per devops-containers.md) to GET /health from the running
+# server.
+reqwest = { workspace = true, features = ["json", "rustls-no-provider"] }
+
+[build-dependencies]
+tonic-prost-build = { workspace = true }
+protoc-bin-vendored = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }

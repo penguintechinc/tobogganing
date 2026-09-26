@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+// testserver.v1 is the gRPC surface for the WaddlePerf diagnostic probe
+// target (engines/testserver-rs). It mirrors the REST /api/v1/test/* and
+// /health routes for callers that prefer gRPC over REST — see backend.md
+// API Versioning for the two-layer scheme this package implements:
+//   1. compile-time isolation via this package path (testserver.v1)
+//   2. runtime routing via the `api_version` field on every request
+// A request with an unknown/missing api_version gets UNIMPLEMENTED with
+// message "api_version {v} not supported" rather than falling through to a
+// mismatched handler.
+package testserver.v1;
+
+option go_package = "github.com/penguintechinc/tobogganing/proto/testserver/v1;testserverv1";
+
+service TestService {
+  // Health reports liveness; never requires auth or a DB connection.
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // RunHttpTest exercises an HTTP/1.1 or HTTP/2 request against Target,
+  // measuring latency/jitter over Count iterations. See http.rs for the
+  // exact semantics ported from engines/testserver/internal/protocols/http.go.
+  rpc RunHttpTest(HttpTestRequest) returns (HttpTestResult);
+
+  // RunTcpTest exercises a raw TCP or TLS connection against Target. The
+  // `ssh` protocol value is accepted by validation but returns UNIMPLEMENTED
+  // until the russh-backed banner probe lands in a follow-up PR.
+  rpc RunTcpTest(TcpTestRequest) returns (TcpTestResult);
+
+  // RunUdpTest exercises a raw UDP packet exchange or a DNS lookup against
+  // Target. UDP is connectionless — a write-succeeded/read-timed-out result
+  // is still reported as success, matching the Go implementation.
+  rpc RunUdpTest(UdpTestRequest) returns (UdpTestResult);
+}
+
+message HealthRequest {
+  string api_version = 1;
+}
+
+message HealthResponse {
+  string status = 1;
+  string version = 2;
+}
+
+message HttpTestRequest {
+  string api_version = 1;
+  string target = 2;
+  string protocol = 3;        // http1, http2 (http3 not yet implemented)
+  string protocol_detail = 4; // alternative field name, used when protocol is empty
+  string method = 5;          // GET, POST, HEAD, OPTIONS — default GET
+  int32 timeout = 6;          // seconds, default 30
+  int32 count = 7;            // iterations for jitter calc, default 1
+}
+
+message HttpTestResult {
+  string target = 1;
+  string protocol = 2;
+  int32 status_code = 3;
+  double latency_ms = 4;
+  double min_latency_ms = 5;
+  double max_latency_ms = 6;
+  double jitter_ms = 7;
+  double ttfb_ms = 8;
+  double total_time_ms = 9;
+  bool success = 10;
+  string error = 11;
+  string connected_proto = 12;
+}
+
+message TcpTestRequest {
+  string api_version = 1;
+  string target = 2;
+  string protocol = 3;        // raw, tls, ssh (ssh: UNIMPLEMENTED for now)
+  string protocol_detail = 4;
+  int32 port = 5;             // optional port override
+  int32 timeout = 6;          // seconds, default 10
+  int32 count = 7;            // iterations for jitter calc, default 1
+}
+
+message TcpTestResult {
+  string target = 1;
+  string protocol = 2;
+  bool connected = 3;
+  double latency_ms = 4;
+  double min_latency_ms = 5;
+  double max_latency_ms = 6;
+  double jitter_ms = 7;
+  double handshake_ms = 8;
+  bool success = 9;
+  string error = 10;
+  string remote_addr = 11;
+  string tls_version = 12;
+  string ssh_version = 13;
+}
+
+message UdpTestRequest {
+  string api_version = 1;
+  string target = 2;
+  string protocol = 3;        // raw, dns (tls/DTLS not implemented, matches Go)
+  string protocol_detail = 4;
+  int32 port = 5;             // optional port override
+  int32 timeout = 6;          // seconds, default 5
+  int32 count = 7;            // iterations for jitter calc, default 1
+  string query = 8;           // DNS query name
+}
+
+message UdpTestResult {
+  string target = 1;
+  string protocol = 2;
+  bool success = 3;
+  double latency_ms = 4;
+  double min_latency_ms = 5;
+  double max_latency_ms = 6;
+  double jitter_ms = 7;
+  string error = 8;
+  string remote_addr = 9;
+  string response = 10;
+}
