@@ -6,6 +6,7 @@
 //! never a silent fall-through to a mismatched handler.
 
 use std::sync::Arc;
+use std::time::Instant;
 use testserver_core::{check_api_version, validation, ApiError};
 use testserver_db::SwitchableStore;
 use tonic::{Request, Response, Status};
@@ -86,9 +87,11 @@ impl TestService for TestServiceImpl {
             count: req.count as i64,
         };
 
-        let result = testserver_protocols::test_http(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_http(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("http", elapsed, result.success);
 
         Ok(Response::new(PbHttpTestResult {
             target: result.target,
@@ -137,9 +140,11 @@ impl TestService for TestServiceImpl {
             count: req.count as i64,
         };
 
-        let result = testserver_protocols::test_tcp(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_tcp(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("tcp", elapsed, result.success);
 
         Ok(Response::new(PbTcpTestResult {
             target: result.target,
@@ -191,9 +196,11 @@ impl TestService for TestServiceImpl {
             query: validation::sanitize_string(&req.query, validation::MAX_QUERY_LENGTH),
         };
 
-        let result = testserver_protocols::test_udp(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_udp(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("udp", elapsed, result.success);
 
         Ok(Response::new(PbUdpTestResult {
             target: result.target,
@@ -236,9 +243,11 @@ impl TestService for TestServiceImpl {
             timeout: req.timeout as i64,
         };
 
-        let result = testserver_protocols::test_icmp(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_icmp(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("icmp", elapsed, result.success);
 
         Ok(Response::new(PbIcmpTestResult {
             target: result.target,
@@ -273,9 +282,11 @@ impl TestService for TestServiceImpl {
             target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
             timeout: req.timeout as i64,
         };
-        let result = testserver_protocols::test_traceroute(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_traceroute(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("traceroute", elapsed, result.success);
         Ok(Response::new(to_pb_trace_result(result)))
     }
 
@@ -300,9 +311,11 @@ impl TestService for TestServiceImpl {
             port: req.port as i64,
             timeout: req.timeout as i64,
         };
-        let result = testserver_protocols::test_http_trace(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_http_trace(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("http_trace", elapsed, result.success);
         Ok(Response::new(to_pb_trace_result(result)))
     }
 
@@ -327,9 +340,11 @@ impl TestService for TestServiceImpl {
             port: req.port as i64,
             timeout: req.timeout as i64,
         };
-        let result = testserver_protocols::test_tcp_trace(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_tcp_trace(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("tcp_trace", elapsed, result.success);
         Ok(Response::new(to_pb_trace_result(result)))
     }
 
@@ -354,9 +369,11 @@ impl TestService for TestServiceImpl {
             port: req.port as i64,
             timeout: req.timeout as i64,
         };
-        let result = testserver_protocols::test_udp_trace(inner)
-            .await
-            .map_err(to_status)?;
+        let probe_start = Instant::now();
+        let outcome = testserver_protocols::test_udp_trace(inner).await;
+        let elapsed = probe_start.elapsed().as_secs_f64();
+        let result = outcome.map_err(to_status)?;
+        crate::telemetry::record_probe("udp_trace", elapsed, result.success);
         Ok(Response::new(to_pb_trace_result(result)))
     }
 }
@@ -416,5 +433,233 @@ mod tests {
             .await
             .expect("v1 must be accepted");
         assert_eq!(resp.into_inner().status, "healthy");
+    }
+
+    fn local_test_ip() -> std::net::IpAddr {
+        let sock = std::net::UdpSocket::bind("0.0.0.0:0").expect("bind an ephemeral UDP socket");
+        sock.connect("8.8.8.8:80")
+            .expect("connect() on a UDP socket only resolves a route, no packet is sent");
+        sock.local_addr()
+            .expect("a connected UDP socket always has a local address")
+            .ip()
+    }
+
+    #[tokio::test]
+    async fn run_http_test_rejects_unknown_api_version() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_http_test(Request::new(PbHttpTestRequest {
+                api_version: "v99".to_string(),
+                target: "10.255.255.1".to_string(),
+                protocol: "http1".to_string(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::Unimplemented);
+    }
+
+    #[tokio::test]
+    async fn run_http_test_rejects_invalid_target() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_http_test(Request::new(PbHttpTestRequest {
+                api_version: "v1".to_string(),
+                target: String::new(),
+                protocol: "http1".to_string(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn run_tcp_test_rejects_invalid_protocol() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_tcp_test(Request::new(PbTcpTestRequest {
+                api_version: "v1".to_string(),
+                target: "10.255.255.1".to_string(),
+                protocol: "quic".to_string(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn run_tcp_test_succeeds_against_local_listener() {
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                if listener.accept().await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let resp = svc
+            .run_tcp_test(Request::new(PbTcpTestRequest {
+                api_version: "v1".to_string(),
+                target: ip.to_string(),
+                protocol: "raw".to_string(),
+                port: addr.port() as i32,
+                timeout: 3,
+                ..Default::default()
+            }))
+            .await
+            .expect("must succeed");
+        assert!(resp.into_inner().success);
+    }
+
+    #[tokio::test]
+    async fn run_udp_test_rejects_invalid_dns_query() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_udp_test(Request::new(PbUdpTestRequest {
+                api_version: "v1".to_string(),
+                target: "10.255.255.1".to_string(),
+                protocol: "dns".to_string(),
+                query: "not a domain!!".to_string(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn run_icmp_test_rejects_invalid_count() {
+        // count must be > 0 to enter the validate_count() check at all (see
+        // run_icmp_test's `if req.count > 0` guard) — 1001 is positive but
+        // exceeds MAX_COUNT, so it actually reaches and fails validation
+        // instead of falling through to a real ping subprocess.
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_icmp_test(Request::new(PbIcmpTestRequest {
+                api_version: "v1".to_string(),
+                target: "10.255.255.1".to_string(),
+                protocol: "ping".to_string(),
+                count: 1001,
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn run_traceroute_rejects_invalid_target() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_traceroute(Request::new(PbTracerouteRequest {
+                api_version: "v1".to_string(),
+                target: String::new(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn run_http_trace_rejects_invalid_port() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_http_trace(Request::new(PbHttpTraceRequest {
+                api_version: "v1".to_string(),
+                target: "10.255.255.1".to_string(),
+                port: 999_999,
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn run_tcp_trace_succeeds_against_local_listener_via_dial_fallback() {
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                if listener.accept().await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let resp = svc
+            .run_tcp_trace(Request::new(PbTcpTraceRequest {
+                api_version: "v1".to_string(),
+                target: ip.to_string(),
+                port: addr.port() as i32,
+                timeout: 3,
+            }))
+            .await
+            .expect("must succeed");
+        assert!(resp.into_inner().success);
+    }
+
+    #[tokio::test]
+    async fn run_udp_trace_rejects_invalid_target() {
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+        };
+        let err = svc
+            .run_udp_trace(Request::new(PbUdpTraceRequest {
+                api_version: "v1".to_string(),
+                target: String::new(),
+                ..Default::default()
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[test]
+    fn to_pb_trace_result_empty_raw_results_yields_empty_json_string() {
+        let result = testserver_protocols::trace::TraceResult {
+            raw_results: serde_json::Map::new(),
+            ..Default::default()
+        };
+        assert_eq!(to_pb_trace_result(result).raw_results_json, "");
+    }
+
+    #[test]
+    fn to_pb_trace_result_nonempty_raw_results_serializes_to_json() {
+        let mut raw_results = serde_json::Map::new();
+        raw_results.insert("hops".to_string(), serde_json::json!(3));
+        let result = testserver_protocols::trace::TraceResult {
+            raw_results,
+            ..Default::default()
+        };
+        let json = to_pb_trace_result(result).raw_results_json;
+        assert!(json.contains("\"hops\":3"));
     }
 }

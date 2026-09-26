@@ -4,16 +4,11 @@
 //! by SeaORM (`testserver-db`) with a degraded-start/reconnect DB lifecycle,
 //! and emits OTLP traces + Prometheus metrics (`:9090`).
 
-mod grpc_api;
-mod http_api;
-mod telemetry;
-
 use clap::{Parser, Subcommand};
-use std::net::SocketAddr;
 use std::time::Duration;
+use testserver::telemetry;
 use testserver_core::AppConfig;
-use testserver_db::connection::{connect_with_retry, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_DELAY};
-use testserver_db::SwitchableStore;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Parser)]
 #[command(
@@ -36,7 +31,7 @@ enum Command {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Command::Run) {
         Command::Run => run().await,
@@ -44,11 +39,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-async fn healthcheck() -> Result<(), Box<dyn std::error::Error>> {
-    let port = std::env::var("PORT")
-        .ok()
-        .and_then(|v| v.parse::<u16>().ok())
-        .unwrap_or(8080);
+/// Reads `PORT` for the healthcheck's target — pure/no I/O so it's
+/// unit-testable without mutating the process environment (mirrors
+/// `testserver_core::config`'s env-var-parsing test pattern).
+fn healthcheck_port(raw: Option<&str>) -> u16 {
+    raw.and_then(|v| v.parse::<u16>().ok()).unwrap_or(8080)
+}
+
+async fn healthcheck() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let port = healthcheck_port(std::env::var("PORT").ok().as_deref());
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
@@ -68,106 +67,77 @@ async fn healthcheck() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
+async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Fails closed here (never starts with auth silently unenforceable) if
     // AUTH_ENABLED=true and no ES256 JWT public key is configured, or if a
     // configured key is malformed — see testserver_core::config::ConfigError.
     let cfg = AppConfig::from_env()?;
-    let _tracer_provider = telemetry::init_tracing("testserver");
+    let telemetry_providers = telemetry::init_tracing("testserver");
+    let meter_provider = telemetry::init_meter_provider("testserver");
     telemetry::init_metrics(cfg.metrics_port);
     testserver_protocols::tls_provider::install_crypto_provider();
 
-    let db = SwitchableStore::new();
-    {
-        let db = db.clone();
-        let db_cfg = cfg.db.clone();
-        // Dials in the background — `/health` and every DB-independent
-        // route serve immediately, mirroring `cmd/testserver/main.go`'s
-        // `connectDB` goroutine. Never panics/exits on failure.
-        tokio::spawn(async move {
-            match connect_with_retry(&db_cfg, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_DELAY).await {
-                Ok(conn) => {
-                    db.set_connection(conn).await;
-                    tracing::info!("database connected — auth and result storage now active");
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "database unavailable, continuing in degraded mode");
-                }
-            }
-        });
+    let shutdown = CancellationToken::new();
+    let signal_shutdown = shutdown.clone();
+    tokio::spawn(async move {
+        testserver::app::wait_for_os_shutdown_signal().await;
+        signal_shutdown.cancel();
+    });
+
+    let result = testserver::app::serve(&cfg, shutdown).await;
+
+    // Flush any batched-but-not-yet-exported traces/logs/metrics before
+    // exit — graceful shutdown must not silently drop in-flight telemetry.
+    telemetry_providers.force_flush();
+    if let Some(provider) = &meter_provider {
+        if let Err(e) = provider.force_flush() {
+            tracing::warn!(error = %e, "otlp metric force_flush failed");
+        }
     }
 
-    tracing::info!(
-        db_type = ?cfg.db.db_type,
-        auth_enabled = cfg.auth_enabled,
-        max_concurrent_tests = cfg.max_concurrent_tests,
-        allowed_origins = cfg.allowed_origins.len(),
-        "config loaded"
-    );
-
-    let state = http_api::AppState::new(db.clone(), &cfg);
-    let app = http_api::router(state, cfg.allowed_origins.clone());
-
-    let http_addr: SocketAddr = ([0, 0, 0, 0], cfg.http_port).into();
-    let grpc_addr: SocketAddr = ([0, 0, 0, 0], cfg.grpc_port).into();
-    tracing::info!(%http_addr, %grpc_addr, "testserver listening");
-
-    let http_server = async {
-        let listener = tokio::net::TcpListener::bind(http_addr).await?;
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-    };
-
-    let grpc_server = async {
-        tonic::transport::Server::builder()
-            .add_service(grpc_api::TestServiceImpl::into_server(db.clone()))
-            .serve_with_shutdown(grpc_addr, shutdown_signal())
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-    };
-
-    let (http_result, grpc_result) = tokio::join!(http_server, grpc_server);
-    http_result?;
-    grpc_result?;
-
-    Ok(())
+    result
 }
 
-/// Waits for SIGINT or (on Unix) SIGTERM, whichever arrives first — used as
-/// the graceful-shutdown future for both the HTTP and gRPC servers. Never
-/// panics on signal-handler installation failure; logs and falls back to
-/// pending (the other signal source, or the process's own termination,
-/// still takes effect).
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        if let Err(error) = tokio::signal::ctrl_c().await {
-            tracing::error!(%error, "failed to install ctrl_c handler");
-        }
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    #[cfg(unix)]
-    let terminate = async {
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(mut sig) => {
-                sig.recv().await;
-            }
-            Err(error) => {
-                tracing::error!(%error, "failed to install sigterm handler");
-                std::future::pending::<()>().await;
-            }
-        }
-    };
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        () = ctrl_c => {},
-        () = terminate => {},
+    #[test]
+    fn healthcheck_port_defaults_when_unset_or_unparseable() {
+        assert_eq!(healthcheck_port(None), 8080);
+        assert_eq!(healthcheck_port(Some("")), 8080);
+        assert_eq!(healthcheck_port(Some("not-a-port")), 8080);
+        assert_eq!(healthcheck_port(Some("99999999")), 8080); // out of u16 range
     }
-    tracing::info!("shutdown signal received");
+
+    #[test]
+    fn healthcheck_port_parses_valid_value() {
+        assert_eq!(healthcheck_port(Some("9091")), 9091);
+    }
+
+    #[test]
+    fn cli_defaults_to_run_when_no_subcommand_given() {
+        let cli = Cli::try_parse_from(["testserver"]).expect("no subcommand must parse");
+        assert!(cli.command.is_none());
+        // Mirrors main()'s `unwrap_or(Command::Run)` dispatch — the actual
+        // branch under test there, not just the parser.
+        assert!(matches!(cli.command.unwrap_or(Command::Run), Command::Run));
+    }
+
+    #[test]
+    fn cli_parses_run_subcommand_explicitly() {
+        let cli = Cli::try_parse_from(["testserver", "run"]).expect("must parse");
+        assert!(matches!(cli.command, Some(Command::Run)));
+    }
+
+    #[test]
+    fn cli_parses_healthcheck_subcommand() {
+        let cli = Cli::try_parse_from(["testserver", "healthcheck"]).expect("must parse");
+        assert!(matches!(cli.command, Some(Command::Healthcheck)));
+    }
+
+    #[test]
+    fn cli_rejects_unknown_subcommand() {
+        assert!(Cli::try_parse_from(["testserver", "bogus"]).is_err());
+    }
 }

@@ -171,6 +171,68 @@ jobs:
       working-directory: agents/node-agent
       run: cargo llvm-cov --workspace --fail-under-lines 90
 
+  # Test testserver-rs (Rust) — WaddlePerf diagnostic probe target
+  test-testserver-rs:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master (2026-08)
+      with:
+        toolchain: "1.98.0"
+        components: clippy, rustfmt
+
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4
+      with:
+        tool: cargo-llvm-cov
+
+    - name: Install cargo-deny
+      uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481  # v2.9.4
+      with:
+        tool: cargo-deny
+
+    - name: Cache cargo registry and build artifacts
+      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c  # v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          engines/testserver-rs/target
+        key: ${{ runner.os }}-cargo-testserver-rs-${{ hashFiles('engines/testserver-rs/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-testserver-rs-
+
+    - name: Build (all targets)
+      working-directory: engines/testserver-rs
+      run: cargo build --workspace --all-targets
+
+    - name: Format check
+      working-directory: engines/testserver-rs
+      run: cargo fmt --check
+
+    - name: Clippy (deny warnings)
+      working-directory: engines/testserver-rs
+      run: cargo clippy --all-targets -- -D warnings
+
+    - name: cargo deny (advisories, licenses, bans, sources)
+      working-directory: engines/testserver-rs
+      run: cargo deny check
+
+    - name: Test (unit + integration, incl. telemetry-validation smoke test)
+      working-directory: engines/testserver-rs
+      run: cargo test --workspace -- --nocapture
+
+    - name: Coverage (90% lines/regions/functions minimum)
+      working-directory: engines/testserver-rs
+      run: |
+        cargo llvm-cov --workspace \
+          --fail-under-lines 90 \
+          --fail-under-regions 90 \
+          --fail-under-functions 90
+
   # Test netsvcs-dns (Python)
   test-netsvcs-dns:
     runs-on: ubuntu-24.04

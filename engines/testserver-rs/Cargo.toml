@@ -81,8 +81,18 @@ opentelemetry = "=0.33.0"
 opentelemetry-otlp = "=0.33.0"
 opentelemetry_sdk = "=0.33.0"
 tracing-opentelemetry = "=0.34.0"
+# Bridges `tracing` events into OTel LogRecords (OTLP log export) —
+# completes the logs leg of the OTLP triad alongside the existing trace
+# exporter and the new OTLP metrics exporter (telemetry.rs).
+opentelemetry-appender-tracing = "=0.33.0"
 metrics = "=0.24.6"
 metrics-exporter-prometheus = "=0.18.3"
+
+# OTLP collector proto/tonic stubs — dev-dependency only, for an in-process
+# mock OTLP collector (tests/telemetry_smoke.rs) that asserts real export
+# traffic rather than trusting a "no error" absence-of-failure signal.
+opentelemetry-proto = "=0.33.0"
+tokio-stream = "=0.1.19"
 
 # workspace-internal crates — explicit `version` alongside `path` so
 # cargo-deny's `bans.wildcards = "deny"` doesn't treat a `workspace = true`

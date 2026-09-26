@@ -8,6 +8,10 @@ license.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[lib]
+name = "testserver"
+path = "src/lib.rs"
+
 [[bin]]
 name = "testserver"
 path = "src/main.rs"
@@ -17,6 +21,7 @@ testserver-core = { workspace = true }
 testserver-db = { workspace = true }
 testserver-protocols = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 clap = { workspace = true, features = ["derive"] }
@@ -33,6 +38,7 @@ metrics-exporter-prometheus = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic"] }
+opentelemetry-appender-tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 rustls = { workspace = true, features = ["ring", "std", "tls12", "logging"] }
 rand = { workspace = true }
@@ -51,3 +57,18 @@ jsonwebtoken = { workspace = true, default-features = true, features = ["rust_cr
 # EC P-256 keypair generation for ES256 JWT tests only.
 p256 = { workspace = true }
 rand_core = { workspace = true }
+# In-process mock OTLP collector for tests/telemetry_smoke.rs — generated
+# tonic client/server stubs for the standard OTLP collector services
+# (trace/metrics/logs), not a runtime dependency of the service itself.
+opentelemetry-proto = { workspace = true, features = ["gen-tonic", "trace", "metrics", "logs"] }
+tokio-stream = { workspace = true, features = ["net"] }
+tower = { workspace = true, features = ["util"] }
+# Minimal local HTTP/1.1 mock server for handler success-path tests —
+# mirrors testserver-protocols' own `spawn_http1_server` test helper.
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util = { workspace = true, features = ["tokio"] }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+# MockDatabase for exercising the "DB actually connected" success paths of
+# handlers that use testserver-db's SwitchableStore.
+sea-orm = { workspace = true, features = ["mock"] }

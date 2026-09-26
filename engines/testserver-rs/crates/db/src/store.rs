@@ -162,6 +162,7 @@ impl AuthDb for SwitchableStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sea_orm::{DatabaseBackend, MockDatabase};
 
     #[tokio::test]
     async fn switchable_store_starts_degraded() {
@@ -174,5 +175,80 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, DbError::Unavailable));
+    }
+
+    #[tokio::test]
+    async fn switchable_store_delegates_once_connected() {
+        // `ActiveModelTrait::insert()` always calls `exec_with_returning()`
+        // regardless of backend (see sea-orm's `entity/active_model.rs`) —
+        // on Postgres/Sqlite that's a single `INSERT ... RETURNING` (a
+        // *query*, not an exec), so the mock only needs a queued query
+        // result for the returned row, no `MockExecResult` at all. Queued
+        // in call order: first the `users` SELECT (validate_api_key), then
+        // the `server_test_results` RETURNING row (insert_test_result).
+        let conn = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![users::Model {
+                id: 1,
+                username: "svc".to_string(),
+                email: "svc@example.com".to_string(),
+                role: "maintainer".to_string(),
+                ou_id: Some(7),
+                is_active: true,
+                api_key: Some("valid-key".to_string()),
+            }]])
+            .append_query_results([vec![server_test_results::Model {
+                id: 42,
+                user_id: None,
+                device_serial: "unknown".to_string(),
+                device_hostname: "unknown".to_string(),
+                device_os: "unknown".to_string(),
+                device_os_version: "unknown".to_string(),
+                test_type: "http".to_string(),
+                protocol_detail: String::new(),
+                target_host: String::new(),
+                target_ip: String::new(),
+                client_ip: String::new(),
+                latency_ms: None,
+                throughput_mbps: None,
+                jitter_ms: None,
+                packet_loss_percent: None,
+                raw_results: "{\"ok\":true}".to_string(),
+            }]])
+            .into_connection();
+
+        let store = SwitchableStore::new();
+        assert!(!store.is_connected().await);
+        store.set_connection(conn).await;
+        assert!(store.is_connected().await);
+
+        let user = store
+            .validate_api_key("valid-key")
+            .await
+            .expect("mocked query must succeed");
+        assert_eq!(user.id, "1");
+        assert_eq!(user.tenant.as_deref(), Some("7"));
+
+        let id = store
+            .insert_test_result(NewTestResult {
+                test_type: "http".to_string(),
+                raw_results: serde_json::json!({"ok": true}),
+                ..Default::default()
+            })
+            .await
+            .expect("mocked insert must succeed");
+        assert_eq!(id, 42);
+    }
+
+    #[tokio::test]
+    async fn sea_orm_store_validate_api_key_not_found_maps_to_invalid_api_key() {
+        let conn = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([Vec::<users::Model>::new()])
+            .into_connection();
+        let store = SeaOrmStore::new(conn);
+        let err = store
+            .validate_api_key("missing-key")
+            .await
+            .expect_err("no matching row must be InvalidApiKey");
+        assert!(matches!(err, DbError::InvalidApiKey));
     }
 }

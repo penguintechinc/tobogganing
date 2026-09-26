@@ -145,6 +145,7 @@ async fn speedtest_upload(body: axum::body::Body) -> Result<Json<Value>, ApiErro
     } else {
         0.0
     };
+    crate::telemetry::record_probe("speedtest_upload", duration.as_secs_f64(), true);
 
     Ok(Json(json!({
         "success": true,
@@ -345,9 +346,12 @@ async fn http_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
-    let result = testserver_protocols::test_http(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_http(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("http", probe_elapsed, result.success);
 
     let new_result = NewTestResult {
         user_id: user_ext.and_then(|axum::Extension(u)| u.id.parse::<i32>().ok()),
@@ -396,9 +400,12 @@ async fn tcp_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
-    let result = testserver_protocols::test_tcp(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_tcp(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("tcp", probe_elapsed, result.success);
 
     let new_result = NewTestResult {
         user_id: user_ext.and_then(|axum::Extension(u)| u.id.parse::<i32>().ok()),
@@ -447,9 +454,12 @@ async fn udp_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
-    let result = testserver_protocols::test_udp(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_udp(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("udp", probe_elapsed, result.success);
 
     let new_result = NewTestResult {
         user_id: user_ext.and_then(|axum::Extension(u)| u.id.parse::<i32>().ok()),
@@ -502,9 +512,12 @@ async fn icmp_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
-    let result = testserver_protocols::test_icmp(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_icmp(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("icmp", probe_elapsed, result.success);
 
     let new_result = NewTestResult {
         user_id: user_ext.and_then(|axum::Extension(u)| u.id.parse::<i32>().ok()),
@@ -570,9 +583,12 @@ async fn traceroute_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
-    let result = testserver_protocols::test_traceroute(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_traceroute(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("traceroute", probe_elapsed, result.success);
 
     save_trace_result(
         &state,
@@ -604,9 +620,12 @@ async fn http_trace_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
-    let result = testserver_protocols::test_http_trace(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_http_trace(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("http_trace", probe_elapsed, result.success);
 
     save_trace_result(
         &state,
@@ -638,9 +657,12 @@ async fn tcp_trace_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
-    let result = testserver_protocols::test_tcp_trace(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_tcp_trace(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("tcp_trace", probe_elapsed, result.success);
 
     save_trace_result(
         &state,
@@ -672,9 +694,12 @@ async fn udp_trace_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
-    let result = testserver_protocols::test_udp_trace(req)
-        .await
-        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    let probe_start = Instant::now();
+    let outcome = testserver_protocols::test_udp_trace(req).await;
+    let probe_elapsed = probe_start.elapsed().as_secs_f64();
+    let result =
+        outcome.map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+    crate::telemetry::record_probe("udp_trace", probe_elapsed, result.success);
 
     save_trace_result(
         &state,
@@ -950,6 +975,87 @@ mod tests {
         assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
+    #[tokio::test]
+    async fn api_v1_test_http_rejects_bearer_when_no_jwt_verifier_configured() {
+        // auth_enabled=true but jwt_verifier=None (e.g. AUTH_ENABLED=true
+        // with only an API-key path configured, no JWT public key) — a
+        // Bearer token must still be rejected, not panic on `.unwrap()`.
+        let app = test_router(test_state(true, None));
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                Some("Bearer some-token"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn api_v1_test_http_accepts_valid_api_key() {
+        use sea_orm::{DatabaseBackend, MockDatabase};
+        use testserver_db::entities::users;
+
+        let conn = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![users::Model {
+                id: 42,
+                username: "svc".to_string(),
+                email: "svc@example.com".to_string(),
+                role: "maintainer".to_string(),
+                ou_id: None,
+                is_active: true,
+                api_key: Some("valid-api-key".to_string()),
+            }]])
+            .into_connection();
+        let db = SwitchableStore::new();
+        db.set_connection(conn).await;
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(AppState {
+            db,
+            jwt_verifier: Some(
+                JwtVerifier::new_es256(public_pem.as_bytes())
+                    .expect("a freshly generated EC public key must build a verifier"),
+            ),
+            auth_enabled: true,
+        });
+
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                Some("ApiKey valid-api-key"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        // A valid API key must clear the auth middleware — the empty body
+        // then fails request validation (missing `target`), never 401.
+        assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn api_v1_test_http_rejects_invalid_api_key() {
+        let db = SwitchableStore::new(); // starts degraded — validate_api_key always Err
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(AppState {
+            db,
+            jwt_verifier: Some(
+                JwtVerifier::new_es256(public_pem.as_bytes())
+                    .expect("a freshly generated EC public key must build a verifier"),
+            ),
+            auth_enabled: true,
+        });
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                Some("ApiKey bogus-key"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
     // -----------------------------------------------------------------
     // Alg-confusion guard, exercised through the real middleware (not just
     // JwtVerifier::verify in isolation — see testserver_core::auth's unit
@@ -1033,5 +1139,576 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "  ,  ".parse().unwrap());
         assert_eq!(client_ip(&headers, &peer), peer.to_string());
+    }
+
+    // -----------------------------------------------------------------
+    // Speedtest handlers — public, no auth.
+    // -----------------------------------------------------------------
+
+    #[tokio::test]
+    async fn speedtest_download_defaults_to_10mb() {
+        let app = test_router(test_state(false, None));
+        let resp = app
+            .oneshot(get_request("/speedtest/download"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(body.len(), 10 * 1024 * 1024);
+    }
+
+    #[tokio::test]
+    async fn speedtest_download_honours_valid_size_param() {
+        let app = test_router(test_state(false, None));
+        let resp = app
+            .oneshot(get_request("/speedtest/download?size=1"))
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(body.len(), 1024 * 1024);
+    }
+
+    #[tokio::test]
+    async fn speedtest_download_clamps_out_of_range_size_to_default() {
+        let app = test_router(test_state(false, None));
+        // 0, negative-equivalent, and > 100 all fall through the
+        // `filter(|&v| v > 0 && v <= 100)` guard to the 10MB default.
+        for size in ["0", "-5", "500", "not-a-number"] {
+            let app = app.clone();
+            let resp = app
+                .oneshot(get_request(&format!("/speedtest/download?size={size}")))
+                .await
+                .unwrap();
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            assert_eq!(body.len(), 10 * 1024 * 1024, "size={size}");
+        }
+    }
+
+    #[tokio::test]
+    async fn speedtest_upload_reports_bytes_and_throughput() {
+        let app = test_router(test_state(false, None));
+        let payload = vec![b'x'; 4096];
+        let req = Request::builder()
+            .method("POST")
+            .uri("/speedtest/upload")
+            .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12345))))
+            .body(Body::from(payload))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["bytes_received"], 4096);
+    }
+
+    #[tokio::test]
+    async fn speedtest_info_returns_static_metadata() {
+        let app = test_router(test_state(false, None));
+        let resp = app.oneshot(get_request("/speedtest/info")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["name"], "WaddlePerf SpeedTest");
+        assert_eq!(json["max_streams"], 32);
+    }
+
+    #[tokio::test]
+    async fn speedtest_result_returns_500_when_db_disconnected() {
+        // Unlike save_best_effort (used by the probe handlers),
+        // speedtest_result propagates an insert failure via `?` rather than
+        // swallowing it — a disconnected SwitchableStore therefore surfaces
+        // as a real error response, not a silent best-effort 200.
+        let app = test_router(test_state(false, None));
+        let body = serde_json::json!({
+            "download_mbps": 100.0,
+            "upload_mbps": 50.0,
+            "latency_ms": 12.5,
+            "jitter_ms": 1.0,
+            "server_url": "speedtest.local",
+        });
+        let resp = app
+            .oneshot(post_json(
+                "/speedtest/result",
+                None,
+                &serde_json::to_string(&body).unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn speedtest_result_saves_and_returns_success_once_db_connected() {
+        use sea_orm::{DatabaseBackend, MockDatabase};
+        use testserver_db::entities::server_test_results;
+
+        // `ActiveModelTrait::insert()` always calls `exec_with_returning()`
+        // regardless of backend — on Postgres that's a single
+        // `INSERT ... RETURNING` (a *query*), so the mock only needs a
+        // queued query result for the returned row, no `MockExecResult` at
+        // all. See testserver-db's `switchable_store_delegates_once_connected`
+        // for the full rationale.
+        let conn = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![server_test_results::Model {
+                id: 1,
+                user_id: None,
+                device_serial: "unknown".to_string(),
+                device_hostname: "unknown".to_string(),
+                device_os: "unknown".to_string(),
+                device_os_version: "unknown".to_string(),
+                test_type: "speedtest".to_string(),
+                protocol_detail: "download_upload".to_string(),
+                target_host: "speedtest.local".to_string(),
+                target_ip: "self".to_string(),
+                client_ip: String::new(),
+                latency_ms: Some(12.5),
+                throughput_mbps: Some(100.0),
+                jitter_ms: Some(1.0),
+                packet_loss_percent: None,
+                raw_results: "{}".to_string(),
+            }]])
+            .into_connection();
+        let db = SwitchableStore::new();
+        db.set_connection(conn).await;
+        let app = test_router(AppState {
+            db,
+            jwt_verifier: None,
+            auth_enabled: false,
+        });
+
+        let body = serde_json::json!({
+            "download_mbps": 100.0,
+            "upload_mbps": 50.0,
+            "latency_ms": 12.5,
+            "jitter_ms": 1.0,
+            "server_url": "speedtest.local",
+        });
+        let resp = app
+            .oneshot(post_json(
+                "/speedtest/result",
+                None,
+                &serde_json::to_string(&body).unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp_body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&resp_body).unwrap();
+        assert_eq!(json["success"], true);
+    }
+
+    // -----------------------------------------------------------------
+    // Validation-failure paths — every `/api/v1/test/*` handler must reject
+    // an invalid request *before* dispatching to a probe/subprocess.
+    // -----------------------------------------------------------------
+
+    fn auth_bypassed_state() -> AppState {
+        test_state(false, None)
+    }
+
+    #[tokio::test]
+    async fn http_test_rejects_empty_target() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                None,
+                r#"{"target":"","protocol":"http1"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn http_test_rejects_invalid_protocol() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                None,
+                r#"{"target":"10.255.255.1","protocol":"gopher"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn http_test_rejects_ssrf_blocked_loopback_target() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                None,
+                r#"{"target":"127.0.0.1","protocol":"http1"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn tcp_test_rejects_invalid_port() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/tcp",
+                None,
+                r#"{"target":"10.255.255.1","protocol":"raw","port":999999}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn udp_test_rejects_invalid_dns_query() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/udp",
+                None,
+                r#"{"target":"10.255.255.1","protocol":"dns","query":"not a domain!!"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn icmp_test_rejects_invalid_count() {
+        // count must be > 0 to even enter the validate_count() check (0/negative
+        // means "unset, use default" — see icmp_test_handler) — 1001 is
+        // positive but exceeds MAX_COUNT, so it actually reaches and fails
+        // validation instead of falling through to a real ping subprocess
+        // against an unreachable target.
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/icmp",
+                None,
+                r#"{"target":"10.255.255.1","protocol":"ping","count":1001}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn traceroute_rejects_invalid_timeout() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/traceroute",
+                None,
+                r#"{"target":"10.255.255.1","timeout":9999}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn http_trace_rejects_invalid_port() {
+        // port=0 is treated as "unset" by the handler's `if port > 0` guard
+        // (falls through to a real probe attempt instead) — 999999 is
+        // positive but out of the valid 1..=65535 range, so it actually
+        // reaches and fails validate_port().
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http_trace",
+                None,
+                r#"{"target":"10.255.255.1","port":999999}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn tcp_trace_rejects_invalid_target() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/tcp_trace",
+                None,
+                r#"{"target":""}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn udp_trace_rejects_invalid_target() {
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/udp_trace",
+                None,
+                r#"{"target":""}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // -----------------------------------------------------------------
+    // Success paths — exercised against a real local listener bound to
+    // this host's own (non-loopback) network address, since
+    // `validate_target` deliberately rejects loopback as an SSRF guard
+    // (see `testserver_core::validation`'s doc comment). Determined via a
+    // connected-UDP-socket routing lookup — no packets are actually sent by
+    // that `connect()` call, it only resolves the outbound interface.
+    // -----------------------------------------------------------------
+
+    fn local_test_ip() -> std::net::IpAddr {
+        let sock = std::net::UdpSocket::bind("0.0.0.0:0").expect("bind an ephemeral UDP socket");
+        sock.connect("8.8.8.8:80")
+            .expect("connect() on a UDP socket only resolves a route, no packet is sent");
+        sock.local_addr()
+            .expect("a connected UDP socket always has a local address")
+            .ip()
+    }
+
+    #[tokio::test]
+    async fn tcp_test_succeeds_against_local_listener() {
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                if listener.accept().await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        let app = test_router(auth_bypassed_state());
+        let body = format!(
+            r#"{{"target":"{ip}","protocol":"raw","port":{},"timeout":3}}"#,
+            addr.port()
+        );
+        let resp = app
+            .oneshot(post_json("/api/v1/test/tcp", None, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp_body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&resp_body).unwrap();
+        assert_eq!(json["success"], true);
+    }
+
+    #[tokio::test]
+    async fn udp_test_succeeds_against_local_echo_listener() {
+        let ip = local_test_ip();
+        let sock = tokio::net::UdpSocket::bind((ip, 0)).await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            if let Ok((n, peer)) = sock.recv_from(&mut buf).await {
+                let _ = sock.send_to(&buf[..n], peer).await;
+            }
+        });
+
+        let app = test_router(auth_bypassed_state());
+        let body = format!(
+            r#"{{"target":"{ip}","protocol":"raw","port":{},"timeout":3}}"#,
+            addr.port()
+        );
+        let resp = app
+            .oneshot(post_json("/api/v1/test/udp", None, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp_body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&resp_body).unwrap();
+        assert_eq!(json["success"], true);
+    }
+
+    #[tokio::test]
+    async fn http_test_succeeds_against_local_http1_server() {
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    return;
+                };
+                tokio::spawn(async move {
+                    let io = hyper_util::rt::TokioIo::new(stream);
+                    let service = hyper::service::service_fn(
+                        move |_req: hyper::Request<hyper::body::Incoming>| {
+                            let resp = hyper::Response::builder()
+                                .status(200)
+                                .body(http_body_util::Empty::<bytes::Bytes>::new())
+                                .unwrap();
+                            async move { Ok::<_, std::convert::Infallible>(resp) }
+                        },
+                    );
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(io, service)
+                        .await;
+                });
+            }
+        });
+
+        let app = test_router(auth_bypassed_state());
+        let body = format!(r#"{{"target":"http://{addr}","protocol":"http1","timeout":5}}"#);
+        let resp = app
+            .oneshot(post_json("/api/v1/test/http", None, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp_body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&resp_body).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["status_code"], 200);
+    }
+
+    #[tokio::test]
+    async fn tcp_trace_succeeds_against_local_listener_via_dial_fallback() {
+        // Mirrors testserver_protocols::trace's
+        // `tcp_trace_fallback_dial_success_when_traceroute_unavailable` —
+        // exercised here through the full authenticated handler + result
+        // save path instead of the bare protocol function.
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                if listener.accept().await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        let app = test_router(auth_bypassed_state());
+        let body = format!(r#"{{"target":"{ip}","port":{},"timeout":3}}"#, addr.port());
+        let resp = app
+            .oneshot(post_json("/api/v1/test/tcp_trace", None, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn udp_trace_succeeds_via_dial_fallback() {
+        // Mirrors testserver_protocols::trace's
+        // `udp_trace_fallback_dial_is_always_success` — UDP is
+        // connectionless, so this succeeds even without a real listener
+        // (no `traceroute` binary is required in this sandbox either).
+        let app = test_router(auth_bypassed_state());
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/udp_trace",
+                None,
+                r#"{"target":"10.255.255.1","port":33434,"timeout":2}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+    }
+
+    #[tokio::test]
+    async fn http_trace_succeeds_against_local_http1_server() {
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    return;
+                };
+                tokio::spawn(async move {
+                    let io = hyper_util::rt::TokioIo::new(stream);
+                    let service = hyper::service::service_fn(
+                        move |_req: hyper::Request<hyper::body::Incoming>| {
+                            let resp = hyper::Response::builder()
+                                .status(200)
+                                .body(http_body_util::Empty::<bytes::Bytes>::new())
+                                .unwrap();
+                            async move { Ok::<_, std::convert::Infallible>(resp) }
+                        },
+                    );
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(io, service)
+                        .await;
+                });
+            }
+        });
+
+        // The actual HTTP GET reconstructs its URL from `target` alone
+        // (`{scheme}://{rest}`) — `port` only feeds the traceroute/
+        // tcptraceroute subprocess args, so the port must be embedded in
+        // `target` itself for the HTTP leg to reach this mock server.
+        let app = test_router(auth_bypassed_state());
+        let body = format!(r#"{{"target":"http://{addr}","timeout":5}}"#);
+        let resp = app
+            .oneshot(post_json("/api/v1/test/http_trace", None, &body))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn tcp_test_records_device_headers_when_present() {
+        // Exercises header_or_unknown's "present and non-empty" branch —
+        // every other test in this file omits these headers, hitting only
+        // the "unknown" default.
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                if listener.accept().await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        let app = test_router(auth_bypassed_state());
+        let mut req = post_json(
+            "/api/v1/test/tcp",
+            None,
+            &format!(
+                r#"{{"target":"{ip}","protocol":"raw","port":{},"timeout":3}}"#,
+                addr.port()
+            ),
+        );
+        let headers = req.headers_mut();
+        headers.insert("x-device-serial", "SN123".parse().unwrap());
+        headers.insert("x-device-hostname", "test-host".parse().unwrap());
+        headers.insert("x-device-os", "linux".parse().unwrap());
+        headers.insert("x-device-os-version", "6.8".parse().unwrap());
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }
