@@ -14,12 +14,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"] }
 tracing = { workspace = true }
-jsonwebtoken = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
-p256 = "=0.13.2"
-rand = "=0.8.7"
-base64 = "=0.22.1"
 wiremock = "=0.6.5"
