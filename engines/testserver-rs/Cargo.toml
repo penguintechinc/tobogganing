@@ -1,0 +1,93 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/db",
+    "crates/protocols",
+    "crates/testserver",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98.0"
+license = "Apache-2.0"
+publish = false
+repository = "https://github.com/penguintechinc/tobogganing"
+
+# Exact-pinned versions only (no `^`/`~`/bare `*`) per org dependency-pinning
+# policy — mirrors agents/node-agent's workspace convention. Member crates
+# consume these via `dep.workspace = true` so every crate resolves to a
+# single shared version. Versions shared with node-agent (tokio, tracing,
+# tonic, jsonwebtoken, etc.) are pinned identically for consistency.
+[workspace.dependencies]
+# core / async
+async-trait = "=0.1.92"
+thiserror = "=2.0.20"
+tokio = "=1.53.1"
+tokio-util = "=0.7.19"
+tracing = "=0.1.44"
+tracing-subscriber = "=0.3.23"
+clap = "=4.6.6"
+serde = "=1.0.229"
+serde_json = "=1.0.151"
+bytes = "=1.12.1"
+regex = "=1.13.1"
+url = "=2.5.8"
+hyper = "=1.11.1"
+hyper-util = "=0.1.21"
+http-body-util = "=0.1.5"
+rand = "=0.10.3"
+
+# auth
+jsonwebtoken = "=11.0.0"
+
+# HTTP surface
+# NOTE: utoipa/OpenAPI generation is deferred to a follow-up PR (not part of
+# this PR's scope — see PR description); adding it now would need every
+# handler annotated to produce a non-misleading spec.
+axum = "=0.8.9"
+tower = "=0.5.3"
+tower-http = "=0.7.1"
+
+# gRPC surface (versions match agents/node-agent for a single vendored protoc)
+tonic = "=0.14.6"
+tonic-prost = "=0.14.6"
+tonic-prost-build = "=0.14.6"
+prost = "=0.14.4"
+protoc-bin-vendored = "=3.2.0"
+
+# outbound HTTP probe client + TLS
+reqwest = { version = "=0.13.4", default-features = false }
+rustls = { version = "=0.23.45", default-features = false }
+
+# DNS probe
+hickory-resolver = "=0.26.3"
+
+# TCP/TLS probe
+tokio-rustls = { version = "=0.26.5", default-features = false }
+webpki-roots = "=1.0.9"
+rustls-pki-types = "=1.15.1"
+
+# database
+sea-orm = "=2.0.3"
+
+# observability
+opentelemetry = "=0.33.0"
+opentelemetry-otlp = "=0.33.0"
+opentelemetry_sdk = "=0.33.0"
+tracing-opentelemetry = "=0.34.0"
+metrics = "=0.24.6"
+metrics-exporter-prometheus = "=0.18.3"
+
+# workspace-internal crates — explicit `version` alongside `path` so
+# cargo-deny's `bans.wildcards = "deny"` doesn't treat a `workspace = true`
+# consumer as an unpinned wildcard dependency (same rationale as node-agent).
+testserver-core = { path = "crates/core", version = "0.1.0" }
+testserver-db = { path = "crates/db", version = "0.1.0" }
+testserver-protocols = { path = "crates/protocols", version = "0.1.0" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

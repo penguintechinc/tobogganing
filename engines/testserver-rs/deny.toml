@@ -1,0 +1,55 @@
+# cargo-deny configuration for the tobogganing testserver-rs workspace.
+# Run: cargo deny check (advisories + licenses + bans + sources)
+
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+]
+
+[advisories]
+version = 2
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = [
+    # RUSTSEC-2023-0071 (Marvin Attack): non-constant-time timing sidechannel
+    # in the RustCrypto `rsa` crate's PKCS#1v1.5 *decryption* path. Reaches
+    # this workspace transitively via jsonwebtoken v11's `rust_crypto`
+    # feature bundle (ed25519-dalek/hmac/p256/p384/rand/rsa/sha2 as one unit —
+    # see agents/node-agent/deny.toml for the identical rationale). This
+    # service verifies machine/API JWTs with HS256/ES256 only — no RSA key
+    # is ever constructed, so the vulnerable decrypt path is dead code here
+    # too. Revisit if jsonwebtoken splits `rust_crypto` into per-algorithm
+    # features.
+    "RUSTSEC-2023-0071",
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = [
+    # openssl/native-tls are forbidden org-wide — rustls only.
+    { crate = "openssl" },
+    { crate = "openssl-sys" },
+    { crate = "native-tls" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
