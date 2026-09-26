@@ -1,6 +1,6 @@
 # Go → Rust Migration Plan — tobogganing
 
-**Status:** PROPOSED — for review before any production code
+**Status:** APPROVED (direction + all 5 decisions resolved 2026-09-25) — execution gated per §5
 **Date:** 2026-09-25
 **Scope:** the 3 remaining Go modules in `tobogganing`
 **Driver:** Go Phase-Out standard (`critical-rules.md` Data Plane; `general.md` Language Selection) — in-line-of-traffic → Rust; agents/CLI → Rust. hub-router is the flagged migration-debt priority.
@@ -51,7 +51,7 @@ WaddlePerf diagnostic probe target. **Not in the live customer-traffic path** (c
 1. Scaffold the Rust service mirroring node-agent (workspace, CI job, multi-stage Dockerfile with root-context per the fixed build convention).
 2. **Port the Go test suite first** as the executable spec (the JSON request/response field names for every protocol are the contract — documented in the analysis).
 3. Port protocols easy→hard: speedtest → TCP/HTTP/TLS → UDP/DNS → ICMP/traceroute/traces (shell-out) → SSH.
-4. **Fix the flagged pre-existing gaps during the rewrite** (don't port them): opaque-hash "auth" → real JWT signature/claims verification (`security.md`); add the gRPC/`api_version` layer if we want `/api/v1` compliant (`backend.md`) — or explicitly keep REST-only and record the exception; wire the dead `MAX_CONCURRENT_TESTS` cap.
+4. **Fix the flagged pre-existing gaps during the rewrite** (don't port them): opaque-hash "auth" → real JWT signature/claims verification (`security.md`); **add the gRPC surface with two-layer versioning** — proto package `testserver.v1` + an `api_version` field per request message (`backend.md`), alongside the REST surface (decision #1); wire the dead `MAX_CONCURRENT_TESTS` cap.
 5. Cutover: build the Rust image, deploy to alpha, run the ported suite + live probes, then swap the Deployment image (it's a stateless target — a normal rolling replace, no traffic-continuity concern).
 
 ---
@@ -72,7 +72,7 @@ In-line data-plane proxy + WireGuard control + OAuth2/SAML SSO + firewall. Runs 
 |---|---|---|---|
 | gin (HTTP) | `axum` + `tokio` | ✅ prod | matches node-agent |
 | `golang.org/x/oauth2` | `oauth2` | ✅ prod | timing-safe |
-| `crewjam/saml` (SAML SP) | `samael`/`opensaml`/`saml-rs` | ⚠️ **pre-1.0, unaudited** | **highest risk — see mitigation** |
+| `crewjam/saml` (SAML SP) | Rust `samael`/`opensaml`/`saml-rs`; **Python `pysaml2` sidecar fallback (never Go)** | ⚠️ **pre-1.0, unaudited** | **highest risk — Rust-first, Python fallback per decision #2 (§4.4)** |
 | kernel WireGuard cfg (live: shell `wg`) | `wireguard-control` 2.0 + `rtnetlink` 0.23 | ✅ prod | redesign, not port; `spawn_blocking` for syscalls |
 | iptables (live: shell per-conn) | `nftables` (atomic batches) or `rtnetlink` | ⚠️ pre-1.0 / needs host `nft` | replace per-connection insert with SO_MARK |
 | prometheus client | `metrics` + `opentelemetry-otlp` | ✅ prod | aligns with the hub_api OTel work |
@@ -83,7 +83,7 @@ In-line data-plane proxy + WireGuard control + OAuth2/SAML SSO + firewall. Runs 
 1. helpers · 2. middleware · 3. syslog · 4. **machine-JWT** (452 LOC of tests = near-complete spec, do early) · 5. ports/config-client · 6. mirror · 7. RSA JWT provider (no tests — careful re-derivation) · 8. firewall (no tests, hot path — fix the O(n·log n)-per-request sort while porting) · 9. tcp/udp proxy (**dedup the 3× duplicated loop**, fix unbounded buffering → streaming) · 10. HTTP reverse-proxy (no 1:1 axum equivalent) · 11. **SAML2/XML-DSig** (highest security-regression risk) · 12. **WireGuard/netlink control** (the redesign; spike this first).
 
 ### 4.4 The three top risks + mitigations
-1. **SAML 2.0 in Rust (pre-1.0, unaudited; XML-DSig canonicalization/XSW interop gaps vs Go).** → **Keep the audited Go `crewjam/saml` as a thin sidecar** (assertion-validator → mints a short-lived JWT); Rust verifies only JWTs. Validate assertion parity against production IdPs, then retire the sidecar in a later iteration once a Rust SAML lib is proven. This preserves the just-hardened SAML XSW/replay protections during transition.
+1. **SAML 2.0 in Rust (pre-1.0, unaudited; XML-DSig canonicalization/XSW interop gaps vs Go).** → **Target a Rust SAML SP.** If the Rust XML-DSig ecosystem proves inadequate, fall back to a **Python** SAML sidecar (mature `pysaml2`/`python3-saml`) that validates the assertion → mints a short-lived JWT; Rust verifies only JWTs. **Never a Go sidecar** (decision #2; auth is security-sensitive = Rust/Python only per `general.md`). Validate assertion parity (XSW/replay/expiry, matching the current hardened pipeline) against production IdPs before retiring the sidecar.
 2. **Async-runtime starvation** — kernel syscalls (`rtnetlink`/`nftables`/WG) inside axum handlers starve tokio → dropped packets/keepalives. → **Mandatory `tokio::task::spawn_blocking`** for all kernel I/O; a dedicated control-plane worker pool separate from the request runtime.
 3. **WireGuard state desync on crash mid-update** (traffic leak/black-hole). → `nftables` **atomic batches**; dry-run pre-validate; **adopt existing kernel state on startup** (query `wg0`/peers via `rtnetlink`, resume without teardown).
 
@@ -91,7 +91,7 @@ In-line data-plane proxy + WireGuard control + OAuth2/SAML SSO + firewall. Runs 
 Blue-green is unsafe (stateful WG tunnels). Three phases:
 1. **Shadow (wks 1–2):** Rust daemon runs read-only, mirrors kernel state, exports telemetry. Go still owns all writes.
 2. **API-proxy (wks 3–4):** Go reverse-proxies non-critical routes (health, config reads) to Rust; validate parity via golden tests.
-3. **State takeover (wk 5+):** Go stops **without tearing down `wg0`/peers/rules**; Rust adopts the existing `ifindex` + peers via `rtnetlink` and resumes. Active flows persist (no forced rekey). *(Note: `entrypoint.sh` currently owns `wg0` via `wg-quick` — the takeover design must decide whether Rust or an init step owns device creation.)*
+3. **State takeover (wk 5+):** Go stops **without tearing down `wg0`/peers/rules**; Rust adopts the existing `ifindex` + peers via `rtnetlink` and resumes. Active flows persist (no forced rekey). **Post-migration the Rust process owns `wg0`** (creation + lifecycle), replacing `entrypoint.sh`'s `wg-quick` (decision #3) — during the takeover it adopts the device the old entrypoint created, and on subsequent restarts it creates/adopts `wg0` itself.
 
 **Verification:** declarative state-diff (WG peers + routes + nft rules from Go runtime vs Rust shadow → byte-for-byte match before any write handoff); WG keepalive/rekey continuity monitored across takeover; replay the (net-new characterization + existing auth) test suite against the Rust impl before each phase.
 
@@ -113,16 +113,16 @@ Blue-green is unsafe (stateful WG tunnels). Three phases:
 | 2a | **hub-router WireGuard/netlink SPIKE** (SO_MARK routing + wireguard-control/rtnetlink prototype) | spike proves the redesign + informs timeline | 1 wk |
 | 2b | hub-router control-plane subsystems (auth/machine-JWT/ports/firewall/mirror) + SAML sidecar | golden/parity tests green in shadow mode | 3–4 wks |
 | 2c | hub-router data-plane (proxy + WG control) + cutover phases 1–3 | state-diff match; keepalive continuity; takeover w/o dropped flows | 3–4 wks |
-| 3 | retire Go CI toolchain; retire SAML sidecar once Rust SAML proven | no Go left; SAML parity validated on prod IdPs | trailing |
+| 3 | retire Go CI toolchain; retire the (Python, if used) SAML sidecar once Rust SAML proven | no Go left; SAML parity validated on prod IdPs | trailing |
 
 **Total ≈ 10–12 weeks.** Phases 0–1 deliver standalone value (Go partly gone, patterns proven) before the high-risk hub-router work.
 
-## 6. Open decisions for review
-1. **testserver `/api/v1`:** add the gRPC/`api_version` layer (`backend.md`) during the rewrite, or keep REST-only and record an exception?
-2. **SAML sidecar:** accept a temporary Go SAML sidecar (keeps audited XSW/replay protection) vs. block hub-router on a pure-Rust SAML solution?
-3. **WG device ownership** post-migration: Rust process vs init container owns `wg0` creation.
-4. **Timeline commitment:** gate the hub-router estimate on the Phase-2a spike result (recommended) vs commit now.
-5. **Scope of bug-fixes:** confirm the fix-while-porting list (§4.6) is in-scope (recommended — several are active liabilities).
+## 6. Decisions — RESOLVED (2026-09-25)
+1. **testserver `/api/v1`:** ✅ **Add the gRPC + `api_version` two-layer versioning** (`backend.md`) during the rewrite (proto package `testserver.v1` + `api_version` field per request). Not REST-only.
+2. **SAML:** ✅ **No Go — anywhere.** Real-time/data-plane is strictly Rust. SAML is security-sensitive, so per `general.md` it is **Rust or Python, never Go**: target a **Rust** SAML SP; if the pre-1.0 Rust XML-DSig ecosystem proves inadequate during the spike/build, fall back to a **Python** SAML sidecar (mature `pysaml2`/`python3-saml`) — **not** a Go sidecar. Retire the sidecar once Rust SAML is validated against production IdPs.
+3. **WG device ownership:** ✅ **The Rust process owns `wg0`** (creation + lifecycle), replacing `entrypoint.sh`'s `wg-quick`. This folds device setup into the Rust control plane and is what enables the non-root/init-container split (§4.6).
+4. **Timeline:** ✅ **Gated on the Phase-2a WireGuard/netlink spike** — the hub-router estimate is not committed until the spike proves the SO_MARK redesign + crate maturity.
+5. **Fix-while-porting scope:** ✅ **Confirmed in-scope** (§4.6) — the iptables leak, 3× duplicated proxy loop, unbounded buffering, per-request firewall sort, and root/CAP_CHOWN init-container split are all fixed during the rewrite.
 
 ---
 
