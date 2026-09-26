@@ -7,27 +7,18 @@
 //! same algorithm `agents/node-agent`'s `MachineJwtSigner` signs with — with
 //! no database round trip; the `ApiKey <key>` scheme is unchanged and still
 //! resolved via `testserver-db`.
+//!
+//! Verification itself delegates to the shared [`penguin_aaa::Es256Verifier`]
+//! (the `penguin-aaa` crate, `penguin-libs` repo) rather than a local
+//! `jsonwebtoken`-based implementation. See that crate's root doc for the
+//! full algorithm policy: the EC family (ES256/ES384/ES512/EdDSA) plus
+//! RS256 as a verify-only legacy backup, hand-rolled JWS framing with zero
+//! `rsa`-crate dependency — so RUSTSEC-2023-0071 (Marvin Attack, RustCrypto
+//! `rsa` timing sidechannel) no longer reaches this workspace at all
+//! (verify with `cargo tree | grep rsa`).
 
 use crate::error::ApiError;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::Deserialize;
-
-/// JWT claims this service requires — matches the platform's mandatory
-/// claim set (security.md JWT Claims): `sub`, `exp`, plus `tenant`/`scope`/
-/// `roles` where present. `roles` is audit/display only; no authz decision
-/// in this crate branches on it.
-#[derive(Debug, Clone, Deserialize)]
-struct Claims {
-    sub: String,
-    #[serde(default)]
-    tenant: Option<String>,
-    #[serde(default)]
-    scope: Option<String>,
-    #[serde(default)]
-    roles: Vec<String>,
-    #[allow(dead_code)] // required by jsonwebtoken's exp validation, never read directly
-    exp: usize,
-}
+use std::sync::Arc;
 
 /// AuthUser is the sanitized, request-scoped identity extracted from a
 /// verified credential — never the raw DB row or raw JWT claims (see
@@ -47,23 +38,29 @@ pub struct AuthUser {
 #[derive(Debug, thiserror::Error)]
 pub enum JwtKeyError {
     #[error("invalid ES256 public key PEM: {0}")]
-    InvalidKey(#[from] jsonwebtoken::errors::Error),
+    InvalidKey(#[from] penguin_aaa::AaaError),
 }
 
-/// JwtVerifier owns the decoding key + validation policy for Bearer tokens.
-/// Constructed once at startup from the platform auth service's ES256 (EC
-/// P-256) public key (see `testserver_core::config`); `AUTH_ENABLED=false`
-/// bypasses this entirely (see `testserver::http_api::auth_middleware`).
+/// JwtVerifier wraps the shared [`penguin_aaa::Es256Verifier`] with the
+/// key-material load path and claims-to-[`AuthUser`] mapping this service
+/// needs. Constructed once at startup from the platform auth service's
+/// ES256 (EC P-256) public key (see `testserver_core::config`);
+/// `AUTH_ENABLED=false` bypasses this entirely (see
+/// `testserver::http_api::auth_middleware`).
+///
+/// Held behind an `Arc` because `penguin_aaa::Es256Verifier` itself isn't
+/// `Clone` (it owns raw key bytes / a `p521` verifying key, neither of
+/// which derive `Clone`), while `AppConfig`/`AppState` — which embed this —
+/// are cloned per Axum request.
 #[derive(Clone)]
 pub struct JwtVerifier {
-    decoding_key: DecodingKey,
-    validation: Validation,
+    inner: Arc<penguin_aaa::Es256Verifier>,
 }
 
-// `DecodingKey`/`Validation` don't derive `Debug`, and there's no key
-// material here worth hiding anyway (this is a *public* key) — a minimal
-// manual impl lets `AppConfig` (which embeds this) keep deriving `Debug`
-// without leaking internals that aren't `Debug` themselves.
+// `penguin_aaa::Es256Verifier` already has its own key-material-free
+// `Debug` impl (`finish_non_exhaustive`); this wrapper keeps that guarantee
+// explicit at its own layer too rather than relying on it transitively
+// through `Arc`.
 impl std::fmt::Debug for JwtVerifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("JwtVerifier").finish_non_exhaustive()
@@ -72,48 +69,43 @@ impl std::fmt::Debug for JwtVerifier {
 
 impl JwtVerifier {
     /// Builds an ES256 verifier from an EC P-256 public key in PEM
-    /// (`-----BEGIN PUBLIC KEY-----`, SPKI/DER) format. ES256 is the
-    /// platform standard (security.md JWT Claims) — asymmetric, so
-    /// testserver only ever needs the *public* half of the auth service's
-    /// signing keypair, never a shared secret it would have to protect as
-    /// tightly as a private key.
+    /// (`-----BEGIN PUBLIC KEY-----`, SPKI/DER) format, via
+    /// [`penguin_aaa::Es256Verifier::from_public_key_pem`]. No audience or
+    /// issuer is pinned — this service has never required a specific
+    /// `aud`/`iss`, and this migration doesn't change that.
     ///
-    /// `validation.algorithms` is pinned to `[ES256]` only, so a token
+    /// `penguin_aaa` derives the accepted algorithm from the key's own
+    /// type, never from a caller-supplied `Algorithm` enum, so a token
     /// signed HS256 — including the classic alg-confusion attack that
     /// reuses this public key as an HMAC secret — or one claiming
-    /// `alg: none` is rejected before signature verification ever runs;
-    /// `jsonwebtoken::Algorithm` has no `none` variant at all, so an
-    /// `alg: none` header fails to even parse.
+    /// `alg: none` is rejected before signature verification ever runs.
     pub fn new_es256(public_key_pem: &[u8]) -> Result<Self, JwtKeyError> {
-        let decoding_key = DecodingKey::from_ec_pem(public_key_pem)?;
-        let mut validation = Validation::new(Algorithm::ES256);
-        validation.validate_exp = true;
-        validation.algorithms = vec![Algorithm::ES256];
-        // Every mandatory claim from security.md JWT Claims must be present;
-        // this crate additionally requires `sub`/`exp` structurally via the
-        // Claims struct (a missing required field fails deserialization).
-        validation.required_spec_claims = ["exp", "sub"].into_iter().map(String::from).collect();
+        let inner = penguin_aaa::Es256Verifier::from_public_key_pem(public_key_pem)?;
         Ok(Self {
-            decoding_key,
-            validation,
+            inner: Arc::new(inner),
         })
     }
 
-    /// Verifies signature + expiration and returns the sanitized identity.
-    /// Any failure (bad signature, wrong/unsupported algorithm, expired,
-    /// malformed) collapses to the same `ApiError::InvalidCredentials` —
-    /// never leaking which check failed to the caller, only to the
-    /// (sanitized) debug log.
+    /// Verifies signature, required claims, and expiration via
+    /// [`penguin_aaa::Es256Verifier::verify`], returning the sanitized
+    /// identity. Any failure (bad signature, wrong/unsupported algorithm,
+    /// expired, malformed, missing required claim) collapses to the same
+    /// `ApiError::InvalidCredentials` — never leaking which check failed
+    /// to the caller, only to the (sanitized) debug log.
     pub fn verify(&self, token: &str) -> Result<AuthUser, ApiError> {
-        let data = decode::<Claims>(token, &self.decoding_key, &self.validation).map_err(|e| {
+        let claims = self.inner.verify(token).map_err(|e| {
             tracing::debug!(error = %e, "jwt verification failed");
             ApiError::InvalidCredentials
         })?;
         Ok(AuthUser {
-            id: data.claims.sub,
-            tenant: data.claims.tenant,
-            scope: data.claims.scope,
-            roles: data.claims.roles,
+            id: claims.sub,
+            tenant: claims.tenant,
+            // `penguin_aaa::Claims::scope` is a required, possibly-empty
+            // `String` (never absent); this service's `AuthUser` keeps the
+            // pre-migration `Option<String>` shape for its callers, so an
+            // empty scope collapses to `None` rather than `Some("")`.
+            scope: (!claims.scope.is_empty()).then_some(claims.scope),
+            roles: claims.roles,
         })
     }
 }
@@ -121,10 +113,12 @@ impl JwtVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jsonwebtoken::{encode, EncodingKey, Header};
-    use p256::ecdsa::{SigningKey, VerifyingKey};
-    use p256::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
-    use serde_json::json;
+    use hmac::{Hmac, Mac};
+    use p256::ecdsa::signature::Signer as _;
+    use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
+    use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
+    use penguin_aaa::{Claims, Es256Signer};
+    use sha2::Sha256;
 
     /// Generates a fresh, throwaway EC P-256 keypair as PKCS#8/SPKI PEM —
     /// generated at test time, never a fixed/committed key, so nothing
@@ -142,22 +136,75 @@ mod tests {
         (private_pem, public_pem)
     }
 
-    fn sign_es256(private_pem: &str, claims: serde_json::Value) -> String {
-        encode(
-            &Header::new(Algorithm::ES256),
-            &claims,
-            &EncodingKey::from_ec_pem(private_pem.as_bytes())
-                .expect("a freshly generated EC PEM must load as a signing key"),
-        )
-        .expect("signing a well-formed claim set must succeed")
-    }
-
-    fn now_plus(secs: u64) -> u64 {
+    fn now() -> i64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs()
-            + secs
+            .as_secs() as i64
+    }
+
+    /// Builds a structurally-complete claim set — `penguin_aaa::Claims`
+    /// requires `sub`/`iss`/`aud`/`iat`/`exp`/`scope`, unlike this crate's
+    /// pre-migration inline `Claims` (which only required `sub`/`exp`).
+    fn build_claims(
+        sub: &str,
+        tenant: Option<&str>,
+        scope: &str,
+        roles: Vec<String>,
+        exp: i64,
+    ) -> Claims {
+        Claims {
+            sub: sub.to_string(),
+            iss: "testserver-test".to_string(),
+            aud: "testserver".to_string(),
+            iat: now(),
+            exp,
+            scope: scope.to_string(),
+            tenant: tenant.map(str::to_string),
+            teams: Vec::new(),
+            roles,
+        }
+    }
+
+    /// Signs `claims` via [`Es256Signer`] — the same primitive the
+    /// platform auth service and `agents/node-agent`'s `MachineJwtSigner`
+    /// use in production.
+    fn sign_valid(private_pem: &str, claims: &Claims) -> String {
+        Es256Signer::from_ec_pem(private_pem.as_bytes())
+            .expect("a freshly generated EC PEM must load as a signing key")
+            .sign(claims)
+            .expect("signing a well-formed claim set must succeed")
+    }
+
+    /// Hand-signs a raw ES256 token from `header_json`/`payload_json`
+    /// bytes, bypassing [`Es256Signer`]/[`Claims`] so a claim set `Claims`
+    /// itself couldn't represent (e.g. missing `sub`) can still be
+    /// constructed for a rejection test.
+    fn sign_raw_es256(private_pem: &str, header_json: &str, payload_json: &str) -> String {
+        let signing_key = SigningKey::from_pkcs8_pem(private_pem)
+            .expect("a freshly generated PKCS#8 EC key must load");
+        let signing_input = format!(
+            "{}.{}",
+            b64url(header_json.as_bytes()),
+            b64url(payload_json.as_bytes())
+        );
+        let signature: Signature = signing_key.sign(signing_input.as_bytes());
+        format!("{signing_input}.{}", b64url(&signature.to_bytes()))
+    }
+
+    /// Forges an HS256-labeled token, HMAC-SHA256-signed with `secret` —
+    /// used only to prove [`JwtVerifier`] rejects it (alg-confusion guard).
+    fn forge_hs256(secret: &[u8], header_json: &str, payload_json: &str) -> String {
+        let signing_input = format!(
+            "{}.{}",
+            b64url(header_json.as_bytes()),
+            b64url(payload_json.as_bytes())
+        );
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret)
+            .expect("HMAC-SHA256 accepts a key of any length");
+        mac.update(signing_input.as_bytes());
+        let tag = mac.finalize().into_bytes();
+        format!("{signing_input}.{}", b64url(&tag))
     }
 
     #[test]
@@ -165,10 +212,14 @@ mod tests {
         let (private_pem, public_pem) = generate_test_keypair();
         let verifier = JwtVerifier::new_es256(public_pem.as_bytes())
             .expect("a freshly generated EC public key must build a verifier");
-        let token = sign_es256(
-            &private_pem,
-            json!({"sub": "user-123", "tenant": "acme", "scope": "test:run", "roles": ["viewer"], "exp": now_plus(3600)}),
+        let claims = build_claims(
+            "user-123",
+            Some("acme"),
+            "test:run",
+            vec!["viewer".to_string()],
+            now() + 3600,
         );
+        let token = sign_valid(&private_pem, &claims);
 
         let user = verifier.verify(&token).expect("valid token must verify");
         assert_eq!(user.id, "user-123");
@@ -181,10 +232,8 @@ mod tests {
     fn verify_rejects_wrong_key() {
         let (attacker_private_pem, _) = generate_test_keypair();
         let (_, real_public_pem) = generate_test_keypair();
-        let token = sign_es256(
-            &attacker_private_pem,
-            json!({"sub": "user-123", "exp": now_plus(3600)}),
-        );
+        let claims = build_claims("user-123", None, "test:run", vec![], now() + 3600);
+        let token = sign_valid(&attacker_private_pem, &claims);
 
         let verifier = JwtVerifier::new_es256(real_public_pem.as_bytes())
             .expect("a freshly generated EC public key must build a verifier");
@@ -196,7 +245,8 @@ mod tests {
         let (private_pem, public_pem) = generate_test_keypair();
         let verifier = JwtVerifier::new_es256(public_pem.as_bytes())
             .expect("a freshly generated EC public key must build a verifier");
-        let token = sign_es256(&private_pem, json!({"sub": "user-123", "exp": 1}));
+        let claims = build_claims("user-123", None, "test:run", vec![], 1);
+        let token = sign_valid(&private_pem, &claims);
 
         assert!(verifier.verify(&token).is_err());
     }
@@ -206,8 +256,19 @@ mod tests {
         let (private_pem, public_pem) = generate_test_keypair();
         let verifier = JwtVerifier::new_es256(public_pem.as_bytes())
             .expect("a freshly generated EC public key must build a verifier");
-        // Missing `sub`.
-        let token = sign_es256(&private_pem, json!({"exp": now_plus(3600)}));
+        // Missing `sub` — hand-built payload, since `penguin_aaa::Claims`
+        // can't itself construct an invalid claim set. `sub` is structurally
+        // required, so this fails to deserialize before any signature or
+        // expiration check even runs.
+        let token = sign_raw_es256(
+            &private_pem,
+            r#"{"alg":"ES256","typ":"JWT"}"#,
+            &format!(
+                r#"{{"iss":"x","aud":"y","iat":{},"exp":{},"scope":"test:run"}}"#,
+                now(),
+                now() + 3600
+            ),
+        );
 
         assert!(verifier.verify(&token).is_err());
     }
@@ -216,29 +277,32 @@ mod tests {
     /// ES256 *public* key bytes as the HMAC secret (the textbook
     /// asymmetric→HS256 confusion attack — a public key is not secret, so
     /// anyone who can see it could forge an HS256-signed token if the
-    /// verifier ever accepted HS256) must be rejected, because
-    /// `Validation::algorithms` is pinned to `[ES256]` only.
+    /// verifier ever accepted HS256) must be rejected — `Es256Verifier` has
+    /// no HS256 code path at all; the forged token is rejected by its
+    /// explicit `alg` check before the signature segment is ever
+    /// interpreted.
     #[test]
     fn verify_rejects_hs256_alg_confusion_token() {
         let (_, public_pem) = generate_test_keypair();
         let verifier = JwtVerifier::new_es256(public_pem.as_bytes())
             .expect("a freshly generated EC public key must build a verifier");
 
-        let forged = encode(
-            &Header::new(Algorithm::HS256),
-            &json!({"sub": "attacker", "exp": now_plus(3600)}),
-            &EncodingKey::from_secret(public_pem.as_bytes()),
-        )
-        .expect("signing an HS256 token must succeed");
+        let forged = forge_hs256(
+            public_pem.as_bytes(),
+            r#"{"alg":"HS256","typ":"JWT"}"#,
+            &format!(
+                r#"{{"sub":"attacker","iss":"x","aud":"y","iat":{},"exp":{},"scope":"admin:*"}}"#,
+                now(),
+                now() + 3600
+            ),
+        );
 
         assert!(verifier.verify(&forged).is_err());
     }
 
     /// Alg-confusion guard: a token that declares `alg: none` and carries no
-    /// signature must be rejected. `jsonwebtoken::Algorithm` has no `none`
-    /// variant, so this fails to parse before any claim/signature check
-    /// runs — asserted here so a future jsonwebtoken upgrade that changed
-    /// that behavior would be caught immediately.
+    /// signature must be rejected — caught by `Es256Verifier`'s explicit
+    /// `alg` check before any signature parsing is attempted.
     #[test]
     fn verify_rejects_alg_none_token() {
         let (_, public_pem) = generate_test_keypair();
@@ -246,16 +310,22 @@ mod tests {
             .expect("a freshly generated EC public key must build a verifier");
 
         let header = b64url(br#"{"alg":"none","typ":"JWT"}"#);
-        let payload =
-            b64url(format!(r#"{{"sub":"attacker","exp":{}}}"#, now_plus(3600)).as_bytes());
+        let payload = b64url(
+            format!(
+                r#"{{"sub":"attacker","iss":"x","aud":"y","iat":{},"exp":{},"scope":"admin:*"}}"#,
+                now(),
+                now() + 3600
+            )
+            .as_bytes(),
+        );
         let forged = format!("{header}.{payload}.");
 
         assert!(verifier.verify(&forged).is_err());
     }
 
-    /// Minimal unpadded base64url encoder for the single `alg: none` test
-    /// above — deliberately hand-rolled instead of pulling in a `base64`
-    /// dependency just to construct one malformed test token.
+    /// Minimal unpadded base64url encoder for the hand-forged tokens above
+    /// — deliberately hand-rolled instead of pulling in a `base64`
+    /// dependency just to construct a few malformed/forged test tokens.
     fn b64url(input: &[u8]) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut out = String::new();

@@ -40,11 +40,19 @@ http-body-util = "=0.1.5"
 rand = "=0.10.3"
 
 # auth
-jsonwebtoken = "=11.0.0"
+# penguin-aaa isn't published to crates.io yet — pinned to an immutable git
+# tag per the org's dependency-pinning policy for pre-registry internal
+# packages (mirrors agents/node-agent's identical pin).
+penguin-aaa = { git = "https://github.com/penguintechinc/penguin-libs", tag = "rust-aaa-v0.1.0", version = "=0.1.0" }
 # EC P-256 keypair generation for ES256 JWT tests only (mirrors
 # agents/node-agent's pin exactly) — never used outside #[cfg(test)].
 p256 = "=0.13.2"
 rand_core = { version = "=0.6.4", features = ["getrandom"] }
+# HMAC-SHA256 token forging for the HS256 alg-confusion regression tests
+# only (mirrors penguin-aaa's own test-suite pins exactly) — never used
+# outside #[cfg(test)].
+hmac = "=0.12.1"
+sha2 = "=0.10.9"
 
 # HTTP surface
 # NOTE: utoipa/OpenAPI generation is deferred to a follow-up PR (not part of
