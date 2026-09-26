@@ -16,10 +16,28 @@ path = "src/lib.rs"
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+# Machine-JWT ES256 signing — shared primitive across node-agent,
+# testserver-rs, and hub-router-rs (see the crate's own root doc for the
+# no-`rsa`-dependency rationale). Not published to crates.io yet; pinned
+# to an immutable release tag per the org's git-dependency policy. `version`
+# is set alongside `git`/`tag` (matching the tagged crate's own Cargo.toml)
+# solely so `cargo-deny`'s `bans.wildcards = "deny"` doesn't flag this as an
+# unpinned dependency — resolution still comes from the pinned git tag.
+penguin-aaa = { git = "https://github.com/penguintechinc/penguin-libs", tag = "rust-aaa-v0.1.0", version = "=0.1.0" }
+# `decode_unverified_claims`'s own minimal base64url decode (informational
+# exp/tenant reads only — never signature verification, which stays
+# exclusively in `penguin_aaa::Es256Verifier`). Module-specific, exact-pinned
+# here rather than promoted to `[workspace.dependencies]`, matching
+# `node-agent-connectivity`'s own direct `base64` pin.
+base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
+serde_json = { workspace = true }
 figment = { workspace = true, features = ["env", "json", "toml"] }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
+# Generates a fresh, throwaway P-256 EC keypair (private PEM to sign with,
+# public PEM to verify with) at test time — never a committed key value.
+p256 = "=0.13.2"
+rand_core = { version = "=0.6.4", features = ["getrandom"] }

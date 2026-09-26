@@ -32,5 +32,8 @@ protoc-bin-vendored = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tokio-util = { workspace = true }
-jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+# `enroll_extracts_tenant_...`'s hand-rolled unverified test JWT
+# (base64url-encodes a throwaway header/payload — `extract_tenant` never
+# checks a signature).
+base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
 wiremock = "=0.6.5"
