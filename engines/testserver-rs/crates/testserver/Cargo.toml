@@ -53,10 +53,14 @@ protoc-bin-vendored = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+penguin-aaa = { workspace = true }
 # EC P-256 keypair generation for ES256 JWT tests only.
 p256 = { workspace = true }
 rand_core = { workspace = true }
+# HMAC-SHA256 token forging for the HS256 alg-confusion regression test
+# only — never used outside #[cfg(test)].
+hmac = { workspace = true }
+sha2 = { workspace = true }
 # In-process mock OTLP collector for tests/telemetry_smoke.rs — generated
 # tonic client/server stubs for the standard OTLP collector services
 # (trace/metrics/logs), not a runtime dependency of the service itself.

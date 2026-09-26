@@ -840,20 +840,72 @@ mod tests {
         builder.body(Body::from(body.to_string())).unwrap()
     }
 
+    /// Signs a structurally-complete test claim set via
+    /// [`penguin_aaa::Es256Signer`] — the same primitive the platform auth
+    /// service and `agents/node-agent`'s `MachineJwtSigner` sign with in
+    /// production. `penguin_aaa::Claims` requires `sub`/`iss`/`aud`/`iat`/
+    /// `exp`/`scope` structurally, unlike the pre-migration inline `Claims`
+    /// this replaced (which only required `sub`/`exp`).
     fn sign_test_jwt(private_key_pem: &str) -> String {
-        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+        use penguin_aaa::{Claims, Es256Signer};
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs();
-        let claims = serde_json::json!({"sub": "test-user", "exp": now + 3600});
-        encode(
-            &Header::new(Algorithm::ES256),
-            &claims,
-            &EncodingKey::from_ec_pem(private_key_pem.as_bytes())
-                .expect("a freshly generated EC PEM must load as a signing key"),
-        )
-        .unwrap()
+            .as_secs() as i64;
+        let claims = Claims::new(
+            "test-user",
+            "testserver-test",
+            "testserver",
+            now,
+            now + 3600,
+            "test:run",
+        );
+        Es256Signer::from_ec_pem(private_key_pem.as_bytes())
+            .expect("a freshly generated EC PEM must load as a signing key")
+            .sign(&claims)
+            .expect("signing a well-formed claim set must succeed")
+    }
+
+    /// Forges an HS256-labeled token, HMAC-SHA256-signed with `secret` —
+    /// used only to prove the auth middleware's `JwtVerifier` rejects it
+    /// (alg-confusion guard); hand-rolled instead of pulling in a `base64`
+    /// dependency just to construct one malformed test token.
+    fn forge_hs256(secret: &[u8], header_json: &str, payload_json: &str) -> String {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        let signing_input = format!(
+            "{}.{}",
+            b64url(header_json.as_bytes()),
+            b64url(payload_json.as_bytes())
+        );
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret)
+            .expect("HMAC-SHA256 accepts a key of any length");
+        mac.update(signing_input.as_bytes());
+        let tag = mac.finalize().into_bytes();
+        format!("{signing_input}.{}", b64url(&tag))
+    }
+
+    /// Minimal unpadded base64url encoder for [`forge_hs256`] — deliberately
+    /// hand-rolled instead of pulling in a `base64` dependency just to
+    /// construct one forged test token.
+    fn b64url(input: &[u8]) -> String {
+        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut out = String::new();
+        for chunk in input.chunks(3) {
+            let b0 = chunk[0];
+            let b1 = chunk.get(1).copied().unwrap_or(0);
+            let b2 = chunk.get(2).copied().unwrap_or(0);
+            let n = ((b0 as u32) << 16) | ((b1 as u32) << 8) | (b2 as u32);
+            out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+            if chunk.len() > 1 {
+                out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+            }
+            if chunk.len() > 2 {
+                out.push(ALPHABET[(n & 0x3F) as usize] as char);
+            }
+        }
+        out
     }
 
     // -----------------------------------------------------------------
@@ -1064,26 +1116,27 @@ mod tests {
 
     #[tokio::test]
     async fn api_v1_test_http_rejects_hs256_alg_confusion_token() {
-        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-
         let (_, public_pem) = generate_test_keypair();
         let app = test_router(test_state(true, Some(&public_pem)));
 
         // This forged, HS256-signed JWT reuses this verifier's own ES256
         // *public* key bytes as the HMAC secret — the textbook
         // asymmetric-to-HS256 confusion attack. It must be rejected because
-        // the middleware's JwtVerifier pins `Validation::algorithms` to
-        // `[ES256]` only.
+        // `penguin_aaa::Es256Verifier` derives its accepted algorithm from
+        // the key's own type (EC P-256 here) and has no HS256 code path at
+        // all.
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let forged = encode(
-            &Header::new(Algorithm::HS256),
-            &serde_json::json!({"sub": "attacker", "exp": now + 3600}),
-            &EncodingKey::from_secret(public_pem.as_bytes()),
-        )
-        .unwrap();
+        let forged = forge_hs256(
+            public_pem.as_bytes(),
+            r#"{"alg":"HS256","typ":"JWT"}"#,
+            &format!(
+                r#"{{"sub":"attacker","iss":"x","aud":"y","iat":{now},"exp":{},"scope":"admin:*"}}"#,
+                now + 3600
+            ),
+        );
 
         let resp = app
             .oneshot(post_json(

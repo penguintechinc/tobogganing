@@ -20,7 +20,7 @@ regex = { workspace = true }
 url = { workspace = true }
 axum = { workspace = true }
 tonic = { workspace = true }
-jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+penguin-aaa = { workspace = true }
 # Used only for validate_target's anti-DNS-rebind hostname resolution
 # (tokio::net::lookup_host) — see validation.rs.
 tokio = { workspace = true, features = ["net"] }
@@ -31,3 +31,7 @@ tokio = { workspace = true, features = ["net", "rt", "macros"] }
 # EC P-256 keypair generation for ES256 JWT tests only.
 p256 = { workspace = true }
 rand_core = { workspace = true }
+# HMAC-SHA256 token forging for the HS256 alg-confusion regression test
+# only — never used outside #[cfg(test)].
+hmac = { workspace = true }
+sha2 = { workspace = true }
