@@ -18,12 +18,11 @@ use std::sync::Arc;
 use std::time::Instant;
 use testserver_core::{validation, ApiError, AppConfig, AuthUser, JwtVerifier};
 use testserver_db::{AuthDb, NewTestResult, SwitchableStore, TestResultStore};
-use testserver_protocols::deferred::{
-    self, HttpTraceRequest, IcmpTestRequest, TcpTraceRequest, TracerouteRequest, UdpTraceRequest,
-};
 use testserver_protocols::{
     http::{HttpTestRequest, HttpTestResult},
+    icmp::{IcmpTestRequest, IcmpTestResult},
     tcp::{TcpTestRequest, TcpTestResult},
+    trace::{HttpTraceRequest, TcpTraceRequest, TraceResult, TracerouteRequest, UdpTraceRequest},
     udp::{UdpTestRequest, UdpTestResult},
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -473,29 +472,221 @@ async fn udp_test_handler(
 }
 
 // ---------------------------------------------------------------------------
-// Deferred probes — TODO(follow-up PR): ICMP/traceroute/*_trace + SSH.
-// Routes stay wired (client-facing route shape is unchanged) but always
-// return 501 Not Implemented until the shell-out + russh ports land.
+// ICMP + traceroute family — shell out to `ping`/`traceroute`/
+// `tcptraceroute` and regex-parse stdout (see testserver_protocols::icmp /
+// ::trace module docs). SSH banner probe remains deferred to a follow-up
+// PR (tcp.rs's `ssh` protocol branch returns ApiError::NotImplemented).
 // ---------------------------------------------------------------------------
 
-async fn icmp_test_handler(Json(req): Json<IcmpTestRequest>) -> Result<Json<Value>, ApiError> {
-    Err(deferred::test_icmp(req).await)
+async fn icmp_test_handler(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    user_ext: Option<axum::Extension<AuthUser>>,
+    Json(mut req): Json<IcmpTestRequest>,
+) -> Result<Json<IcmpTestResult>, ApiError> {
+    validation::validate_target(&req.target).await?;
+    validation::validate_icmp_protocol(&req.protocol)?;
+    validation::validate_icmp_protocol(&req.protocol_detail)?;
+    if req.count > 0 {
+        validation::validate_count(req.count)?;
+    }
+    if req.timeout > 0 {
+        validation::validate_timeout(req.timeout)?;
+    }
+
+    req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
+    req.protocol = validation::sanitize_string(&req.protocol, validation::MAX_PROTOCOL_LENGTH);
+    req.protocol_detail =
+        validation::sanitize_string(&req.protocol_detail, validation::MAX_PROTOCOL_LENGTH);
+
+    let target = req.target.clone();
+    let protocol = req.protocol.clone();
+    let result = testserver_protocols::test_icmp(req)
+        .await
+        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+
+    let new_result = NewTestResult {
+        user_id: user_ext.and_then(|axum::Extension(u)| u.id.parse::<i32>().ok()),
+        test_type: "icmp".to_string(),
+        protocol_detail: protocol,
+        target_host: target,
+        target_ip: result.target.clone(),
+        client_ip: client_ip(&headers, &peer),
+        latency_ms: Some(result.latency_ms),
+        jitter_ms: (result.jitter_ms > 0.0).then_some(result.jitter_ms),
+        raw_results: json!({
+            "packets_sent": result.packets_sent,
+            "packets_received": result.packets_received,
+            "packet_loss_percent": result.packet_loss_percent,
+            "min_latency_ms": result.min_latency_ms,
+            "max_latency_ms": result.max_latency_ms,
+        }),
+        ..device_fields(&headers)
+    };
+    save_best_effort(&state, new_result).await;
+
+    Ok(Json(result))
 }
 
-async fn http_trace_handler(Json(req): Json<HttpTraceRequest>) -> Result<Json<Value>, ApiError> {
-    Err(deferred::test_http_trace(req).await)
+/// Shared validate → sanitize → save wiring for the `*_trace`/`traceroute`
+/// endpoints — every variant validates target/port/timeout the same way and
+/// persists the same `TraceResult` shape, differing only in which
+/// `testserver_protocols::trace` function runs and the request's port field.
+async fn save_trace_result(
+    state: &AppState,
+    headers: &HeaderMap,
+    peer: &SocketAddr,
+    user_ext: Option<axum::Extension<AuthUser>>,
+    test_type: &str,
+    target: String,
+    result: &TraceResult,
+) {
+    let new_result = NewTestResult {
+        user_id: user_ext.and_then(|axum::Extension(u)| u.id.parse::<i32>().ok()),
+        test_type: test_type.to_string(),
+        protocol_detail: result.protocol.clone(),
+        target_host: target,
+        target_ip: result.target.clone(),
+        client_ip: client_ip(headers, peer),
+        latency_ms: Some(result.latency_ms),
+        raw_results: Value::Object(result.raw_results.clone()),
+        ..device_fields(headers)
+    };
+    save_best_effort(state, new_result).await;
 }
 
-async fn tcp_trace_handler(Json(req): Json<TcpTraceRequest>) -> Result<Json<Value>, ApiError> {
-    Err(deferred::test_tcp_trace(req).await)
+async fn traceroute_handler(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    user_ext: Option<axum::Extension<AuthUser>>,
+    Json(mut req): Json<TracerouteRequest>,
+) -> Result<Json<TraceResult>, ApiError> {
+    validation::validate_target(&req.target).await?;
+    if req.timeout > 0 {
+        validation::validate_timeout(req.timeout)?;
+    }
+    req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
+
+    let target = req.target.clone();
+    let result = testserver_protocols::test_traceroute(req)
+        .await
+        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+
+    save_trace_result(
+        &state,
+        &headers,
+        &peer,
+        user_ext,
+        "traceroute",
+        target,
+        &result,
+    )
+    .await;
+    Ok(Json(result))
 }
 
-async fn udp_trace_handler(Json(req): Json<UdpTraceRequest>) -> Result<Json<Value>, ApiError> {
-    Err(deferred::test_udp_trace(req).await)
+async fn http_trace_handler(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    user_ext: Option<axum::Extension<AuthUser>>,
+    Json(mut req): Json<HttpTraceRequest>,
+) -> Result<Json<TraceResult>, ApiError> {
+    validation::validate_target(&req.target).await?;
+    if req.port > 0 {
+        validation::validate_port(req.port)?;
+    }
+    if req.timeout > 0 {
+        validation::validate_timeout(req.timeout)?;
+    }
+    req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
+
+    let target = req.target.clone();
+    let result = testserver_protocols::test_http_trace(req)
+        .await
+        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+
+    save_trace_result(
+        &state,
+        &headers,
+        &peer,
+        user_ext,
+        "http_trace",
+        target,
+        &result,
+    )
+    .await;
+    Ok(Json(result))
 }
 
-async fn traceroute_handler(Json(req): Json<TracerouteRequest>) -> Result<Json<Value>, ApiError> {
-    Err(deferred::test_traceroute(req).await)
+async fn tcp_trace_handler(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    user_ext: Option<axum::Extension<AuthUser>>,
+    Json(mut req): Json<TcpTraceRequest>,
+) -> Result<Json<TraceResult>, ApiError> {
+    validation::validate_target(&req.target).await?;
+    if req.port > 0 {
+        validation::validate_port(req.port)?;
+    }
+    if req.timeout > 0 {
+        validation::validate_timeout(req.timeout)?;
+    }
+    req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
+
+    let target = req.target.clone();
+    let result = testserver_protocols::test_tcp_trace(req)
+        .await
+        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+
+    save_trace_result(
+        &state,
+        &headers,
+        &peer,
+        user_ext,
+        "tcp_trace",
+        target,
+        &result,
+    )
+    .await;
+    Ok(Json(result))
+}
+
+async fn udp_trace_handler(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    user_ext: Option<axum::Extension<AuthUser>>,
+    Json(mut req): Json<UdpTraceRequest>,
+) -> Result<Json<TraceResult>, ApiError> {
+    validation::validate_target(&req.target).await?;
+    if req.port > 0 {
+        validation::validate_port(req.port)?;
+    }
+    if req.timeout > 0 {
+        validation::validate_timeout(req.timeout)?;
+    }
+    req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
+
+    let target = req.target.clone();
+    let result = testserver_protocols::test_udp_trace(req)
+        .await
+        .map_err(|_| ApiError::TestExecution("Test execution failed".to_string()))?;
+
+    save_trace_result(
+        &state,
+        &headers,
+        &peer,
+        user_ext,
+        "udp_trace",
+        target,
+        &result,
+    )
+    .await;
+    Ok(Json(result))
 }
 
 // ---------------------------------------------------------------------------
@@ -696,11 +887,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deferred_probe_routes_reject_missing_auth_header() {
-        // The deferred (icmp/http_trace/tcp_trace/udp_trace/traceroute)
-        // stubs still sit behind the same auth middleware as the
-        // implemented probes — a 501 body must never be reachable by an
-        // unauthenticated caller either.
+    async fn icmp_and_trace_routes_reject_missing_auth_header() {
+        // ICMP/traceroute-family probes sit behind the same auth middleware
+        // as http/tcp/udp — an unauthenticated caller must never reach the
+        // shell-out probes (or trigger a subprocess) either.
         for path in [
             "/api/v1/test/icmp",
             "/api/v1/test/http_trace",

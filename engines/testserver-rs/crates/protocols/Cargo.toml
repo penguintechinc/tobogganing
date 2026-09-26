@@ -1,6 +1,6 @@
 [package]
 name = "testserver-protocols"
-description = "Diagnostic probe implementations (HTTP, TCP/TLS, UDP/DNS) for the tobogganing testserver — port of engines/testserver/internal/protocols (Go)."
+description = "Diagnostic probe implementations (HTTP, TCP/TLS, UDP/DNS, ICMP/traceroute shell-out) for the tobogganing testserver — port of engines/testserver/internal/protocols (Go)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,7 +18,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["net", "time", "rt"] }
+tokio = { workspace = true, features = ["net", "time", "rt", "process"] }
 reqwest = { workspace = true, features = ["rustls-no-provider", "http2"] }
 rustls = { workspace = true, features = ["ring", "std", "tls12", "logging"] }
 tokio-rustls = { workspace = true, features = ["ring", "tls12", "logging"] }
@@ -26,6 +26,9 @@ webpki-roots = { workspace = true }
 rustls-pki-types = { workspace = true }
 hickory-resolver = { workspace = true, features = ["tokio"] }
 url = { workspace = true }
+# ICMP/traceroute shell-out output parsing (icmp.rs/trace.rs) — already a
+# vetted workspace dependency via testserver-core's validation.rs.
+regex = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -17,9 +17,12 @@ pub mod pb {
 use pb::test_service_server::{TestService, TestServiceServer};
 use pb::{
     HealthRequest, HealthResponse, HttpTestRequest as PbHttpTestRequest,
-    HttpTestResult as PbHttpTestResult, TcpTestRequest as PbTcpTestRequest,
-    TcpTestResult as PbTcpTestResult, UdpTestRequest as PbUdpTestRequest,
-    UdpTestResult as PbUdpTestResult,
+    HttpTestResult as PbHttpTestResult, HttpTraceRequest as PbHttpTraceRequest,
+    IcmpTestRequest as PbIcmpTestRequest, IcmpTestResult as PbIcmpTestResult,
+    TcpTestRequest as PbTcpTestRequest, TcpTestResult as PbTcpTestResult,
+    TcpTraceRequest as PbTcpTraceRequest, TraceResult as PbTraceResult,
+    TracerouteRequest as PbTracerouteRequest, UdpTestRequest as PbUdpTestRequest,
+    UdpTestResult as PbUdpTestResult, UdpTraceRequest as PbUdpTraceRequest,
 };
 
 pub struct TestServiceImpl {
@@ -204,6 +207,181 @@ impl TestService for TestServiceImpl {
             remote_addr: result.remote_addr,
             response: result.response,
         }))
+    }
+
+    async fn run_icmp_test(
+        &self,
+        request: Request<PbIcmpTestRequest>,
+    ) -> Result<Response<PbIcmpTestResult>, Status> {
+        let req = request.into_inner();
+        check_api_version(&req.api_version)?;
+
+        validation::validate_icmp_protocol(&req.protocol).map_err(to_status)?;
+        validation::validate_icmp_protocol(&req.protocol_detail).map_err(to_status)?;
+        if req.timeout > 0 {
+            validation::validate_timeout(req.timeout as i64).map_err(to_status)?;
+        }
+        if req.count > 0 {
+            validation::validate_count(req.count as i64).map_err(to_status)?;
+        }
+
+        let inner = testserver_protocols::icmp::IcmpTestRequest {
+            target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
+            protocol: validation::sanitize_string(&req.protocol, validation::MAX_PROTOCOL_LENGTH),
+            protocol_detail: validation::sanitize_string(
+                &req.protocol_detail,
+                validation::MAX_PROTOCOL_LENGTH,
+            ),
+            count: req.count as i64,
+            timeout: req.timeout as i64,
+        };
+
+        let result = testserver_protocols::test_icmp(inner)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(PbIcmpTestResult {
+            target: result.target,
+            protocol: result.protocol,
+            success: result.success,
+            packets_sent: result.packets_sent as i32,
+            packets_received: result.packets_received as i32,
+            packet_loss_percent: result.packet_loss_percent,
+            latency_ms: result.latency_ms,
+            min_latency_ms: result.min_latency_ms,
+            max_latency_ms: result.max_latency_ms,
+            jitter_ms: result.jitter_ms,
+            error: result.error,
+            hops: result.hops,
+        }))
+    }
+
+    async fn run_traceroute(
+        &self,
+        request: Request<PbTracerouteRequest>,
+    ) -> Result<Response<PbTraceResult>, Status> {
+        let req = request.into_inner();
+        check_api_version(&req.api_version)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
+        if req.timeout > 0 {
+            validation::validate_timeout(req.timeout as i64).map_err(to_status)?;
+        }
+
+        let inner = testserver_protocols::trace::TracerouteRequest {
+            target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
+            timeout: req.timeout as i64,
+        };
+        let result = testserver_protocols::test_traceroute(inner)
+            .await
+            .map_err(to_status)?;
+        Ok(Response::new(to_pb_trace_result(result)))
+    }
+
+    async fn run_http_trace(
+        &self,
+        request: Request<PbHttpTraceRequest>,
+    ) -> Result<Response<PbTraceResult>, Status> {
+        let req = request.into_inner();
+        check_api_version(&req.api_version)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
+        if req.port > 0 {
+            validation::validate_port(req.port as i64).map_err(to_status)?;
+        }
+        if req.timeout > 0 {
+            validation::validate_timeout(req.timeout as i64).map_err(to_status)?;
+        }
+
+        let inner = testserver_protocols::trace::HttpTraceRequest {
+            target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
+            port: req.port as i64,
+            timeout: req.timeout as i64,
+        };
+        let result = testserver_protocols::test_http_trace(inner)
+            .await
+            .map_err(to_status)?;
+        Ok(Response::new(to_pb_trace_result(result)))
+    }
+
+    async fn run_tcp_trace(
+        &self,
+        request: Request<PbTcpTraceRequest>,
+    ) -> Result<Response<PbTraceResult>, Status> {
+        let req = request.into_inner();
+        check_api_version(&req.api_version)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
+        if req.port > 0 {
+            validation::validate_port(req.port as i64).map_err(to_status)?;
+        }
+        if req.timeout > 0 {
+            validation::validate_timeout(req.timeout as i64).map_err(to_status)?;
+        }
+
+        let inner = testserver_protocols::trace::TcpTraceRequest {
+            target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
+            port: req.port as i64,
+            timeout: req.timeout as i64,
+        };
+        let result = testserver_protocols::test_tcp_trace(inner)
+            .await
+            .map_err(to_status)?;
+        Ok(Response::new(to_pb_trace_result(result)))
+    }
+
+    async fn run_udp_trace(
+        &self,
+        request: Request<PbUdpTraceRequest>,
+    ) -> Result<Response<PbTraceResult>, Status> {
+        let req = request.into_inner();
+        check_api_version(&req.api_version)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
+        if req.port > 0 {
+            validation::validate_port(req.port as i64).map_err(to_status)?;
+        }
+        if req.timeout > 0 {
+            validation::validate_timeout(req.timeout as i64).map_err(to_status)?;
+        }
+
+        let inner = testserver_protocols::trace::UdpTraceRequest {
+            target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
+            port: req.port as i64,
+            timeout: req.timeout as i64,
+        };
+        let result = testserver_protocols::test_udp_trace(inner)
+            .await
+            .map_err(to_status)?;
+        Ok(Response::new(to_pb_trace_result(result)))
+    }
+}
+
+/// Converts a `testserver_protocols::trace::TraceResult` to its gRPC wire
+/// shape — `raw_results` (a `serde_json::Map`, the Rust equivalent of Go's
+/// `map[string]interface{}`) has no direct proto3 scalar/message
+/// equivalent in this workspace (no `google.protobuf.Struct` dependency),
+/// so it's carried as a JSON-encoded string. REST callers (`http_api.rs`)
+/// get the native nested JSON object instead — this flattening only
+/// affects the gRPC surface.
+fn to_pb_trace_result(result: testserver_protocols::trace::TraceResult) -> PbTraceResult {
+    PbTraceResult {
+        target: result.target,
+        protocol: result.protocol,
+        success: result.success,
+        latency_ms: result.latency_ms,
+        hops: result.hops,
+        error: result.error,
+        route_info: result.route_info,
+        raw_results_json: if result.raw_results.is_empty() {
+            String::new()
+        } else {
+            serde_json::to_string(&result.raw_results).unwrap_or_default()
+        },
     }
 }
 
