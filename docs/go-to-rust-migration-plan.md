@@ -73,7 +73,7 @@ In-line data-plane proxy + WireGuard control + OAuth2/SAML SSO + firewall. Runs 
 | gin (HTTP) | `axum` + `tokio` | ✅ prod | matches node-agent |
 | `golang.org/x/oauth2` | `oauth2` | ✅ prod | timing-safe |
 | `crewjam/saml` (SAML SP) | Rust `samael`/`opensaml`/`saml-rs`; **Python `pysaml2` sidecar fallback (never Go)** | ⚠️ **pre-1.0, unaudited** | **highest risk — Rust-first, Python fallback per decision #2 (§4.4)** |
-| kernel WireGuard cfg (live: shell `wg`) | `wireguard-control` 2.0 + `rtnetlink` 0.23 | ✅ prod | redesign, not port; `spawn_blocking` for syscalls |
+| kernel WireGuard cfg (live: shell `wg`) | **`defguard_wireguard_rs` 0.12** + `rtnetlink` 0.23 | ✅ prod (Apache-2.0, cargo-deny clean) | redesign, not port; `spawn_blocking` for syscalls. **Spike (2026-09-25) rejected `wireguard-control` 2.0** — LGPL-2.1-or-later + unmaintained `paste` (RUSTSEC-2024-0436); see `docs/spikes/2026-09-25-rust-wireguard-netlink-spike.md` |
 | iptables (live: shell per-conn) | `nftables` (atomic batches) or `rtnetlink` | ⚠️ pre-1.0 / needs host `nft` | replace per-connection insert with SO_MARK |
 | prometheus client | `metrics` + `opentelemetry-otlp` | ✅ prod | aligns with the hub_api OTel work |
 | zap/logrus + syslog | `tracing` + OTLP | ✅ prod | repo standard |
@@ -110,7 +110,7 @@ Blue-green is unsafe (stateful WG tunnels). Three phases:
 |---|---|---|---|
 | 0 | Delete `go_libs`; scaffold Rust service conventions (from node-agent) | dead code gone; scaffold builds in CI | 0.5–1 wk |
 | 1 | **testserver** rewrite (parity-test-driven) + fix auth/api_version gaps | ported test suite green; alpha probes pass; image swapped | 1.5–2 wks |
-| 2a | **hub-router WireGuard/netlink SPIKE** (SO_MARK routing + wireguard-control/rtnetlink prototype) | spike proves the redesign + informs timeline | 1 wk |
+| 2a | **hub-router WireGuard/netlink SPIKE** (SO_MARK routing + WG/rtnetlink prototype) — ✅ **DONE 2026-09-25: GO** (defguard_wireguard_rs; spawn_blocking + `nft -f -` validated live; live-`wg0`-adoption zero-loss test deferred to first 1-2 days of 2c on a privileged node) | ✅ redesign proven; 2c estimate holds | done |
 | 2b | hub-router control-plane subsystems (auth/machine-JWT/ports/firewall/mirror) + SAML sidecar | golden/parity tests green in shadow mode | 3–4 wks |
 | 2c | hub-router data-plane (proxy + WG control) + cutover phases 1–3 | state-diff match; keepalive continuity; takeover w/o dropped flows | 3–4 wks |
 | 3 | retire Go CI toolchain; retire the (Python, if used) SAML sidecar once Rust SAML proven | no Go left; SAML parity validated on prod IdPs | trailing |
