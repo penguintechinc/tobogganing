@@ -1,0 +1,39 @@
+[package]
+name = "wg-netlink-poc"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+description = "THROWAWAY spike prototype — Phase 2a hub-router WireGuard/netlink redesign. Not production code, not part of any workspace. See docs/spikes/2026-09-25-rust-wireguard-netlink-spike.md."
+
+# Exact-pinned versions only, per org dependency-pinning policy — even in a
+# spike, so `cargo deny`/`cargo audit` runs against this crate stay meaningful.
+[dependencies]
+tokio = { version = "=1.53.1", features = ["full"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+thiserror = "=2.0.20"
+anyhow = "=1.0.104"
+
+# Goal 1: kernel WireGuard control.
+# NOTE: wireguard-control is kept deliberately alongside defguard_wireguard_rs
+# for a documented side-by-side `cargo deny` comparison — see the spike
+# report. wireguard-control 2.0.0 is itself LGPL-2.1-or-later licensed and
+# pulls an unmaintained transitive crate (RUSTSEC-2024-0436 `paste`, via its
+# stale netlink-packet-* pins) — `cargo deny check` catching both in this
+# crate IS the finding, not a bug to fix.
+wireguard-control = "=2.0.0"
+defguard_wireguard_rs = "=0.12.1"
+rtnetlink = "=0.23.0"
+futures = "=0.3.31"
+
+# Goal 2: SO_MARK connection marking
+libc = "=0.2.189"
+
+[[bin]]
+name = "spike"
+path = "src/main.rs"
+
+[profile.dev]
+# spike code, keep builds fast
+opt-level = 0
