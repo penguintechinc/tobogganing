@@ -413,4 +413,63 @@ mod tests {
             "8.8.8.8:53"
         );
     }
+
+    #[test]
+    fn parse_udp_target_parses_url_form_and_raw_default_port() {
+        assert_eq!(
+            parse_udp_target("https://example.com:9000/x", 0, "dns").unwrap(),
+            "example.com:9000"
+        );
+        assert_eq!(
+            parse_udp_target("example.com", 0, "raw").unwrap(),
+            "example.com:161"
+        );
+    }
+
+    #[tokio::test]
+    async fn dns_query_rejects_non_numeric_nameserver_address() {
+        // A hostname target (as opposed to a numeric "ip:port") always
+        // fails `SocketAddr` parsing inside `test_dns` — this is the
+        // "invalid nameserver address" branch, reachable with no network
+        // I/O at all since the parse failure happens before any socket is
+        // touched.
+        let req = UdpTestRequest {
+            target: "not-a-numeric-host.example".into(),
+            protocol: "dns".into(),
+            timeout: 2,
+            count: 1,
+            ..Default::default()
+        };
+        let err = test_udp(req)
+            .await
+            .expect_err("an unparseable nameserver address must be a hard error");
+        assert!(matches!(err, ApiError::TestExecution(_)));
+    }
+
+    #[tokio::test]
+    async fn dns_query_against_silent_socket_times_out_gracefully() {
+        // A bound-but-never-responding UDP socket standing in for an
+        // unreachable/black-holed nameserver — exercises test_dns's
+        // timeout/resolution-failure branch (whichever the resolver
+        // surfaces first) without any real network dependency.
+        let sock = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut buf = [0u8; 512];
+            let _ = sock.recv_from(&mut buf).await;
+        });
+
+        let req = UdpTestRequest {
+            target: addr.ip().to_string(),
+            port: addr.port() as i64,
+            protocol: "dns".into(),
+            timeout: 1,
+            count: 1,
+            ..Default::default()
+        };
+        let err = test_udp(req)
+            .await
+            .expect_err("a nameserver that never responds must not report success");
+        assert!(matches!(err, ApiError::TestExecution(_)));
+    }
 }

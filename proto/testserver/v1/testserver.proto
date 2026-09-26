@@ -31,6 +31,30 @@ service TestService {
   // Target. UDP is connectionless — a write-succeeded/read-timed-out result
   // is still reported as success, matching the Go implementation.
   rpc RunUdpTest(UdpTestRequest) returns (UdpTestResult);
+
+  // RunIcmpTest runs `ping` or `traceroute` against Target by shelling out
+  // to the system binary and parsing its stdout — this service never uses
+  // raw ICMP sockets. See icmp.rs for the exact semantics ported from
+  // engines/testserver/internal/protocols/icmp.go.
+  rpc RunIcmpTest(IcmpTestRequest) returns (IcmpTestResult);
+
+  // RunTraceroute runs the system `traceroute` binary against Target.
+  rpc RunTraceroute(TracerouteRequest) returns (TraceResult);
+
+  // RunHttpTrace combines a TCP/ICMP traceroute with an HTTP/1.1 request
+  // against Target, returning the network path plus the final HTTP
+  // response's detail as one combined hop list.
+  rpc RunHttpTrace(HttpTraceRequest) returns (TraceResult);
+
+  // RunTcpTrace runs `tcptraceroute` (falling back to `traceroute -T`)
+  // against Target:Port, with a direct-TCP-dial fallback when neither
+  // traceroute variant produces a usable hop list.
+  rpc RunTcpTrace(TcpTraceRequest) returns (TraceResult);
+
+  // RunUdpTrace runs `traceroute` in UDP mode against Target:Port, with a
+  // direct-UDP-dial fallback (always succeeds — UDP is connectionless)
+  // when traceroute produces no usable hop list.
+  rpc RunUdpTrace(UdpTraceRequest) returns (TraceResult);
 }
 
 message HealthRequest {
@@ -115,4 +139,71 @@ message UdpTestResult {
   string error = 8;
   string remote_addr = 9;
   string response = 10;
+}
+
+message IcmpTestRequest {
+  string api_version = 1;
+  string target = 2;
+  string protocol = 3;        // ping, traceroute — default "ping"
+  string protocol_detail = 4; // alternative field name, used when protocol is empty
+  int32 count = 5;            // ping packet count, default 4
+  int32 timeout = 6;          // seconds, default 10
+}
+
+message IcmpTestResult {
+  string target = 1;
+  string protocol = 2;
+  bool success = 3;
+  int32 packets_sent = 4;
+  int32 packets_received = 5;
+  double packet_loss_percent = 6;
+  double latency_ms = 7; // average
+  double min_latency_ms = 8;
+  double max_latency_ms = 9;
+  double jitter_ms = 10;
+  string error = 11;
+  repeated string hops = 12; // populated only for protocol=traceroute
+}
+
+message TracerouteRequest {
+  string api_version = 1;
+  string target = 2;
+  int32 timeout = 3; // seconds, default 30
+}
+
+message HttpTraceRequest {
+  string api_version = 1;
+  string target = 2;
+  int32 port = 3;    // optional port override
+  int32 timeout = 4; // seconds, default 30
+}
+
+message TcpTraceRequest {
+  string api_version = 1;
+  string target = 2;
+  int32 port = 3;    // default 22
+  int32 timeout = 4; // seconds, default 10 (dial fallback), traceroute uses a fixed 3s wait
+}
+
+message UdpTraceRequest {
+  string api_version = 1;
+  string target = 2;
+  int32 port = 3;    // default 53
+  int32 timeout = 4; // seconds, default 30
+}
+
+// TraceResult is shared by RunTraceroute/RunHttpTrace/RunTcpTrace/RunUdpTrace.
+// raw_results_json is a JSON-encoded object mirroring the Go source's
+// map[string]interface{} RawResults field (proto3 has no direct dynamic-map
+// equivalent without a google.protobuf.Struct dependency this workspace
+// does not otherwise need — see testserver-protocols::trace module docs).
+message TraceResult {
+  string target = 1;
+  string protocol = 2;
+  bool success = 3;
+  double latency_ms = 4;
+  repeated string hops = 5;
+  string error = 6;
+  string route_info = 7;
+  string raw_results_json = 8;
 }

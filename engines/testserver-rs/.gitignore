@@ -1,0 +1,6 @@
+# Belt-and-suspenders: CARGO_TARGET_DIR is normally set outside the repo for
+# local dev, but guard against a run without it (or an explicit
+# `CARGO_TARGET_DIR=./target`, as used by CI/coverage tooling) still landing
+# a target/ dir under this workspace — mirrors agents/node-agent/.gitignore.
+/target
+**/target

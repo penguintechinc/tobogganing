@@ -423,4 +423,115 @@ mod tests {
             "example.com:22"
         );
     }
+
+    #[test]
+    fn parse_target_parses_url_form_and_extracts_host_and_port() {
+        assert_eq!(
+            parse_target("https://example.com:9000/path", 0, "raw").unwrap(),
+            "example.com:9000"
+        );
+        // Port override wins even over a URL-embedded port.
+        assert_eq!(
+            parse_target("https://example.com:9000/path", 1234, "raw").unwrap(),
+            "example.com:1234"
+        );
+        // No port in the URL — falls back to the protocol default.
+        assert_eq!(
+            parse_target("https://example.com/path", 0, "tls").unwrap(),
+            "example.com:443"
+        );
+    }
+
+    #[test]
+    fn parse_target_rejects_malformed_url() {
+        assert!(parse_target("https://[bad", 0, "raw").is_err());
+    }
+
+    #[test]
+    fn tls_version_to_string_covers_known_and_unknown_and_none() {
+        assert_eq!(
+            tls_version_to_string(Some(rustls::ProtocolVersion::TLSv1_2)),
+            "TLS 1.2"
+        );
+        assert_eq!(
+            tls_version_to_string(Some(rustls::ProtocolVersion::TLSv1_3)),
+            "TLS 1.3"
+        );
+        assert_eq!(tls_version_to_string(None), "");
+        assert!(
+            tls_version_to_string(Some(rustls::ProtocolVersion::TLSv1_0)).starts_with("Unknown")
+        );
+    }
+
+    #[tokio::test]
+    async fn tls_tcp_handshake_fails_against_a_plain_tcp_listener() {
+        // A raw (non-TLS) listener accepts the TCP connection but can never
+        // complete a TLS handshake — exercises test_tls_tcp's
+        // "TLS handshake failed" branch without needing a real cert.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    return;
+                };
+                tokio::spawn(async move {
+                    use tokio::io::AsyncWriteExt;
+                    // Send non-TLS garbage so the handshake fails fast
+                    // instead of idling until the caller's timeout.
+                    let _ = stream.write_all(b"not a tls server hello").await;
+                });
+            }
+        });
+
+        let req = TcpTestRequest {
+            target: "127.0.0.1".into(),
+            protocol: "tls".into(),
+            port: addr.port() as i64,
+            timeout: 3,
+            count: 1,
+            ..Default::default()
+        };
+        let result = test_tcp(req)
+            .await
+            .expect("a handshake failure is not a hard error");
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn tls_tcp_rejects_empty_server_name() {
+        // target=":<port>" makes tcp::parse_target keep the string as-is
+        // (it already contains ':' and no "://"), so test_tls_tcp's
+        // `target.rsplit_once(':')` yields an empty host string. Whether
+        // that's rejected immediately by `ServerName::try_from` (invalid
+        // SNI name) or accepted and left to fail at connect/handshake time
+        // is a rustls-pki-types implementation detail this test
+        // deliberately doesn't pin down — either way it must degrade to a
+        // reported failure, never a panic or a false "success".
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                if listener.accept().await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        let req = TcpTestRequest {
+            target: format!(":{}", addr.port()),
+            protocol: "tls".into(),
+            timeout: 2,
+            count: 1,
+            ..Default::default()
+        };
+        let result = test_tcp(req)
+            .await
+            .expect("an empty server name is not a hard error");
+        assert!(!result.success);
+        // Parity quirk (see module docs): test_tcp's aggregation never
+        // copies the per-attempt `.error` up to the outer result, so this
+        // stays empty exactly like the raw-TCP connection-refused case.
+        assert!(result.error.is_empty());
+    }
 }

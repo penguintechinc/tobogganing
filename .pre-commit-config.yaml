@@ -120,3 +120,15 @@ repos:
         language: script
         files: (^|/)Dockerfile[^/]*$
         stages: [pre-push]
+
+  # ── Rust coverage gate (pre-push — build+test+coverage is too slow for
+  # ── the <30s pre-commit budget) ─────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: testserver-rs-coverage
+        name: testserver-rs coverage >=90% (lines/regions/functions)
+        entry: bash -c 'cd engines/testserver-rs && make coverage'
+        language: system
+        files: ^engines/testserver-rs/
+        pass_filenames: false
+        stages: [pre-push]

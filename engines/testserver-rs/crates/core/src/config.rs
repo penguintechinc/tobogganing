@@ -243,4 +243,146 @@ mod tests {
             .expect("a freshly generated EC public key must be accepted");
         assert!(verifier.is_some());
     }
+
+    // -----------------------------------------------------------------
+    // Env-var-touching tests — serialized via a process-wide mutex since
+    // `std::env::set_var`/`remove_var` mutate shared process state and
+    // `cargo test` runs within a binary in parallel by default. No other
+    // test in this file (or crate) touches these specific keys, so this
+    // mutex only needs to guard against races among the tests below.
+    // -----------------------------------------------------------------
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn clear_jwt_env() {
+        // SAFETY: guarded by ENV_MUTEX — no other test touches these keys.
+        unsafe {
+            std::env::remove_var("TESTSERVER_JWT_PUBLIC_KEY");
+            std::env::remove_var("TESTSERVER_JWT_PUBLIC_KEY_PATH");
+        }
+    }
+
+    #[test]
+    fn load_jwt_public_key_pem_returns_none_when_unset() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        assert!(load_jwt_public_key_pem().unwrap().is_none());
+    }
+
+    #[test]
+    fn load_jwt_public_key_pem_prefers_inline_over_path() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::set_var("TESTSERVER_JWT_PUBLIC_KEY", "inline-pem-bytes");
+            std::env::set_var(
+                "TESTSERVER_JWT_PUBLIC_KEY_PATH",
+                "/nonexistent/should-not-be-read",
+            );
+        }
+        let pem = load_jwt_public_key_pem()
+            .expect("inline key must win, so the bogus path is never touched")
+            .expect("inline key must be present");
+        assert_eq!(pem, b"inline-pem-bytes");
+        clear_jwt_env();
+    }
+
+    #[test]
+    fn load_jwt_public_key_pem_reads_from_path_when_no_inline_value() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        let dir =
+            std::env::temp_dir().join(format!("testserver-jwt-pem-test-{}", std::process::id()));
+        std::fs::write(&dir, b"file-pem-bytes").expect("write temp key file");
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::set_var("TESTSERVER_JWT_PUBLIC_KEY_PATH", &dir);
+        }
+        let pem = load_jwt_public_key_pem()
+            .expect("must read the file")
+            .expect("must be present");
+        assert_eq!(pem, b"file-pem-bytes");
+        let _ = std::fs::remove_file(&dir);
+        clear_jwt_env();
+    }
+
+    #[test]
+    fn load_jwt_public_key_pem_surfaces_read_errors() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::set_var(
+                "TESTSERVER_JWT_PUBLIC_KEY_PATH",
+                "/nonexistent/dir/does-not-exist.pem",
+            );
+        }
+        let err = load_jwt_public_key_pem().expect_err("a missing file must be a hard error");
+        assert!(matches!(err, ConfigError::JwtPublicKeyRead { .. }));
+        clear_jwt_env();
+    }
+
+    #[test]
+    fn from_env_fails_closed_with_auth_enabled_and_no_key_configured() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::set_var("AUTH_ENABLED", "true");
+        }
+        let err = AppConfig::from_env().expect_err("must fail closed without a configured key");
+        assert!(matches!(err, ConfigError::MissingJwtPublicKey));
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::remove_var("AUTH_ENABLED");
+        }
+    }
+
+    #[test]
+    fn from_env_loads_defaults_and_a_valid_inline_key() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        let pem = generate_test_public_key_pem();
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::set_var("AUTH_ENABLED", "true");
+            std::env::set_var("TESTSERVER_JWT_PUBLIC_KEY", &pem);
+            std::env::set_var(
+                "TESTSERVER_ALLOWED_ORIGINS",
+                "https://a.example, https://b.example",
+            );
+        }
+        let cfg = AppConfig::from_env().expect("a valid inline key must load successfully");
+        assert!(cfg.auth_enabled);
+        assert!(cfg.jwt_verifier.is_some());
+        assert_eq!(cfg.http_port, 8080);
+        assert_eq!(cfg.grpc_port, 50051);
+        assert_eq!(cfg.metrics_port, 9090);
+        assert_eq!(cfg.max_concurrent_tests, 100);
+        assert_eq!(cfg.allowed_origins.len(), 2);
+        assert_eq!(cfg.db.db_type, DbType::PostgreSql);
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::remove_var("AUTH_ENABLED");
+            std::env::remove_var("TESTSERVER_ALLOWED_ORIGINS");
+        }
+        clear_jwt_env();
+    }
+
+    #[test]
+    fn from_env_auth_disabled_needs_no_key() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_jwt_env();
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::set_var("AUTH_ENABLED", "false");
+        }
+        let cfg = AppConfig::from_env().expect("auth disabled must not require a key");
+        assert!(!cfg.auth_enabled);
+        assert!(cfg.jwt_verifier.is_none());
+        // SAFETY: guarded by ENV_MUTEX.
+        unsafe {
+            std::env::remove_var("AUTH_ENABLED");
+        }
+    }
 }

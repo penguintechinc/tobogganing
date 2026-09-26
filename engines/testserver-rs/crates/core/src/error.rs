@@ -138,4 +138,62 @@ mod tests {
         let resp = ApiError::InvalidCredentials.into_response();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
+
+    #[test]
+    fn validation_constructor_builds_the_validation_variant() {
+        let err = ApiError::validation("target", "target cannot be empty");
+        assert_eq!(
+            err.to_string(),
+            "validation error for field 'target': target cannot be empty"
+        );
+        assert_eq!(err.into_response().status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn bad_request_maps_to_400_http_and_invalid_argument_grpc() {
+        let resp = ApiError::BadRequest("malformed".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let status: tonic::Status = ApiError::BadRequest("malformed".into()).into();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[test]
+    fn unauthorized_maps_to_401_http_and_unauthenticated_grpc() {
+        let resp = ApiError::Unauthorized.into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let status: tonic::Status = ApiError::Unauthorized.into();
+        assert_eq!(status.code(), tonic::Code::Unauthenticated);
+    }
+
+    #[test]
+    fn server_side_errors_map_to_500_http_and_internal_grpc() {
+        for err in [
+            ApiError::TestExecution("boom".into()),
+            ApiError::Database("connection reset".into()),
+            ApiError::DatabaseUnavailable,
+        ] {
+            let status: tonic::Status = err.into();
+            assert_eq!(status.code(), tonic::Code::Internal);
+        }
+        assert_eq!(
+            ApiError::TestExecution("boom".into())
+                .into_response()
+                .status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(
+            ApiError::Database("x".into()).into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(
+            ApiError::DatabaseUnavailable.into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn not_implemented_maps_to_501_http_status() {
+        let resp = ApiError::NotImplemented("ssh".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    }
 }
