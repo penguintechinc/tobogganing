@@ -38,23 +38,20 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db: Arc<SwitchableStore>, cfg: &AppConfig) -> Self {
-        let jwt_verifier = cfg
-            .jwt_secret
-            .as_ref()
-            .map(|secret| JwtVerifier::new_hs256(secret.as_bytes()));
         Self {
             db,
-            jwt_verifier,
+            jwt_verifier: cfg.jwt_verifier.clone(),
             auth_enabled: cfg.auth_enabled,
         }
     }
 }
 
 /// Auth middleware for `/api/v1/test/*` — `Bearer <token>` is verified as a
-/// real signed JWT (the security fix this migration makes); `ApiKey <key>`
-/// still resolves via the database, unchanged from the Go behavior.
-/// `AUTH_ENABLED=false` bypasses this entirely, matching
-/// `internal/auth.Authenticator.Middleware`'s early return.
+/// real ES256-signed JWT against the platform auth service's public key
+/// (the security fix this migration makes); `ApiKey <key>` still resolves
+/// via the database, unchanged from the Go behavior. `AUTH_ENABLED=false`
+/// bypasses this entirely, matching `internal/auth.Authenticator.Middleware`'s
+/// early return.
 async fn auth_middleware(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -72,7 +69,9 @@ async fn auth_middleware(
 
     let user = if let Some(token) = auth_header.strip_prefix("Bearer ") {
         let verifier = state.jwt_verifier.as_ref().ok_or_else(|| {
-            tracing::warn!("Bearer token presented but JWT_SECRET is not configured — rejecting");
+            tracing::warn!(
+                "Bearer token presented but no JWT public key is configured — rejecting"
+            );
             ApiError::InvalidCredentials
         })?;
         verifier.verify(token)?
@@ -572,12 +571,32 @@ mod tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    fn test_state(auth_enabled: bool, jwt_secret: Option<&str>) -> AppState {
+    fn test_state(auth_enabled: bool, jwt_public_key_pem: Option<&str>) -> AppState {
         AppState {
             db: SwitchableStore::new(),
-            jwt_verifier: jwt_secret.map(|s| JwtVerifier::new_hs256(s.as_bytes())),
+            jwt_verifier: jwt_public_key_pem.map(|pem| {
+                JwtVerifier::new_es256(pem.as_bytes())
+                    .expect("a freshly generated EC public key must build a verifier")
+            }),
             auth_enabled,
         }
+    }
+
+    /// Generates a fresh, throwaway EC P-256 keypair as PKCS#8/SPKI PEM —
+    /// generated at test time, never a fixed/committed key (mirrors
+    /// `testserver_core::auth`'s identical test helper).
+    fn generate_test_keypair() -> (String, String) {
+        use p256::ecdsa::{SigningKey, VerifyingKey};
+        use p256::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
+        let signing_key = SigningKey::random(&mut rand_core::OsRng);
+        let private_pem = signing_key
+            .to_pkcs8_pem(LineEnding::LF)
+            .expect("encoding a freshly generated P-256 key as PKCS#8 PEM must succeed")
+            .to_string();
+        let public_pem = VerifyingKey::from(&signing_key)
+            .to_public_key_pem(LineEnding::LF)
+            .expect("encoding the matching public key as SPKI PEM must succeed");
+        (private_pem, public_pem)
     }
 
     fn test_router(state: AppState) -> Router {
@@ -605,7 +624,7 @@ mod tests {
         builder.body(Body::from(body.to_string())).unwrap()
     }
 
-    fn sign_test_jwt(secret: &str) -> String {
+    fn sign_test_jwt(private_key_pem: &str) -> String {
         use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -613,9 +632,10 @@ mod tests {
             .as_secs();
         let claims = serde_json::json!({"sub": "test-user", "exp": now + 3600});
         encode(
-            &Header::new(Algorithm::HS256),
+            &Header::new(Algorithm::ES256),
             &claims,
-            &EncodingKey::from_secret(secret.as_bytes()),
+            &EncodingKey::from_ec_pem(private_key_pem.as_bytes())
+                .expect("a freshly generated EC PEM must load as a signing key"),
         )
         .unwrap()
     }
@@ -628,21 +648,24 @@ mod tests {
 
     #[tokio::test]
     async fn health_is_public_without_auth() {
-        let app = test_router(test_state(true, Some("test-secret")));
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app.oneshot(get_request("/health")).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn speedtest_ping_is_public_without_auth() {
-        let app = test_router(test_state(true, Some("test-secret")));
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app.oneshot(get_request("/speedtest/ping")).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn api_v1_test_http_rejects_missing_auth_header() {
-        let app = test_router(test_state(true, Some("test-secret")));
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app
             .oneshot(post_json("/api/v1/test/http", None, "{}"))
             .await
@@ -652,7 +675,8 @@ mod tests {
 
     #[tokio::test]
     async fn api_v1_test_tcp_rejects_missing_auth_header() {
-        let app = test_router(test_state(true, Some("test-secret")));
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app
             .oneshot(post_json("/api/v1/test/tcp", None, "{}"))
             .await
@@ -662,7 +686,8 @@ mod tests {
 
     #[tokio::test]
     async fn api_v1_test_udp_rejects_missing_auth_header() {
-        let app = test_router(test_state(true, Some("test-secret")));
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app
             .oneshot(post_json("/api/v1/test/udp", None, "{}"))
             .await
@@ -683,7 +708,8 @@ mod tests {
             "/api/v1/test/udp_trace",
             "/api/v1/test/traceroute",
         ] {
-            let app = test_router(test_state(true, Some("test-secret")));
+            let (_, public_pem) = generate_test_keypair();
+            let app = test_router(test_state(true, Some(&public_pem)));
             let resp = app.oneshot(post_json(path, None, "{}")).await.unwrap();
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "path={path}");
         }
@@ -691,7 +717,8 @@ mod tests {
 
     #[tokio::test]
     async fn api_v1_test_http_rejects_invalid_bearer_token() {
-        let app = test_router(test_state(true, Some("test-secret")));
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app
             .oneshot(post_json(
                 "/api/v1/test/http",
@@ -705,9 +732,9 @@ mod tests {
 
     #[tokio::test]
     async fn api_v1_test_http_accepts_valid_bearer_token_past_auth() {
-        let secret = "test-secret";
-        let token = sign_test_jwt(secret);
-        let app = test_router(test_state(true, Some(secret)));
+        let (private_pem, public_pem) = generate_test_keypair();
+        let token = sign_test_jwt(&private_pem);
+        let app = test_router(test_state(true, Some(&public_pem)));
         let resp = app
             .oneshot(post_json(
                 "/api/v1/test/http",
@@ -731,6 +758,46 @@ mod tests {
         // AUTH_ENABLED=false: no 401, request reaches the handler and
         // fails on the empty body's missing `target` instead.
         assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // -----------------------------------------------------------------
+    // Alg-confusion guard, exercised through the real middleware (not just
+    // JwtVerifier::verify in isolation — see testserver_core::auth's unit
+    // tests for that layer).
+    // -----------------------------------------------------------------
+
+    #[tokio::test]
+    async fn api_v1_test_http_rejects_hs256_alg_confusion_token() {
+        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+
+        let (_, public_pem) = generate_test_keypair();
+        let app = test_router(test_state(true, Some(&public_pem)));
+
+        // This forged, HS256-signed JWT reuses this verifier's own ES256
+        // *public* key bytes as the HMAC secret — the textbook
+        // asymmetric-to-HS256 confusion attack. It must be rejected because
+        // the middleware's JwtVerifier pins `Validation::algorithms` to
+        // `[ES256]` only.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let forged = encode(
+            &Header::new(Algorithm::HS256),
+            &serde_json::json!({"sub": "attacker", "exp": now + 3600}),
+            &EncodingKey::from_secret(public_pem.as_bytes()),
+        )
+        .unwrap();
+
+        let resp = app
+            .oneshot(post_json(
+                "/api/v1/test/http",
+                Some(&format!("Bearer {forged}")),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     // -----------------------------------------------------------------
