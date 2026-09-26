@@ -5,7 +5,7 @@
 //! behavioral parity contract, not a redesign).
 
 use crate::error::ApiError;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
 
 pub const MAX_TARGET_LENGTH: usize = 255;
@@ -42,12 +42,80 @@ static DOMAIN_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
     .expect("DOMAIN_RE is a fixed, compile-time-verified pattern")
 });
 
+/// Returns true if `ip` lands in a range this service must never let a
+/// caller-supplied probe target reach: loopback (`127.0.0.0/8`, `::1`),
+/// link-local (`169.254.0.0/16` — this is also the cloud-metadata range,
+/// `169.254.169.254`; `fe80::/10`), IPv6 unique-local (`fc00::/7`), and
+/// unspecified (`0.0.0.0`, `::`). This is the authoritative SSRF guard —
+/// it supersedes the Go original's string-prefix denylist, which only
+/// matched a subset of these and (per
+/// `validate_target_ip_literal_denylist_is_dead_code_parity_with_go`) never
+/// actually ran against IP-literal input.
+///
+/// Deliberate divergence from Go parity: the Go source explicitly *allows*
+/// loopback/`localhost` ("permitted... intentional to support testing
+/// against local services" per its own comment) — this port tightens that
+/// policy per a security review, since a probe server that lets an
+/// authenticated-but-untrusted caller direct traffic at `127.0.0.1:<port>`
+/// can be used to reach loopback-only-bound services the caller has no
+/// other path to. RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`,
+/// `192.168.0.0/16`) remain allowed, matching the Go policy — internal
+/// connectivity testing is this service's entire purpose.
+fn is_blocked_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => is_blocked_ipv4(*v4),
+        IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return is_blocked_ipv4(mapped);
+            }
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || is_link_local_v6(*v6)
+                || is_unique_local_v6(*v6)
+        }
+    }
+}
+
+fn is_blocked_ipv4(v4: Ipv4Addr) -> bool {
+    v4.is_loopback() || v4.is_unspecified() || is_link_local_v4(v4)
+}
+
+fn is_link_local_v4(ip: Ipv4Addr) -> bool {
+    let o = ip.octets();
+    o[0] == 169 && o[1] == 254
+}
+
+fn is_link_local_v6(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xffc0) == 0xfe80
+}
+
+fn is_unique_local_v6(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xfe00) == 0xfc00
+}
+
+const SSRF_DENY_MESSAGE: &str =
+    "access to loopback, link-local, cloud-metadata, or unspecified addresses is prohibited";
+
 /// Validates a target hostname or IP address. Ported from Go's
-/// `ValidateTarget` — including the deliberately permissive allowance of
-/// localhost/RFC1918/loopback ranges (intentional, for testing against
-/// local services) while still blocking `0.0.0.0` and link-local
-/// (`169.254.0.0/16`).
-pub fn validate_target(target: &str) -> Result<(), ApiError> {
+/// `ValidateTarget`, with SSRF hardening layered on top (see
+/// `is_blocked_ip`'s doc comment for the parity/divergence rationale):
+///
+/// 1. An IP-literal target is checked against the block-list directly —
+///    this fixes the Go original's dead-code bug where `net.ParseIP`
+///    short-circuited *before* its own denylist check ever ran.
+/// 2. A hostname target is resolved via DNS and *every* resolved address
+///    is checked against the block-list (anti-DNS-rebind: a hostname that
+///    resolves to a blocked address is rejected even though the hostname
+///    string itself looks benign). This closes the validation-time gap but
+///    does not by itself guarantee the later probe connects to the exact
+///    address validated here — `testserver-protocols` re-resolves
+///    independently at connect time, so full TOCTOU closure requires
+///    pinning the resolved address through to the connect call, tracked as
+///    a further hardening follow-up.
+///
+/// RFC1918 private ranges (`10.x`, `172.16-31.x`, `192.168.x`) stay
+/// allowed, matching the Go policy.
+pub async fn validate_target(target: &str) -> Result<(), ApiError> {
     if target.is_empty() {
         return Err(ApiError::validation("target", "target cannot be empty"));
     }
@@ -79,8 +147,11 @@ pub fn validate_target(target: &str) -> Result<(), ApiError> {
         clean_target.clone()
     };
 
-    // Valid IP address short-circuits hostname validation.
-    if host.parse::<IpAddr>().is_ok() {
+    // IP-literal target: check the block-list directly (see is_blocked_ip).
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_blocked_ip(&ip) {
+            return Err(ApiError::validation("target", SSRF_DENY_MESSAGE));
+        }
         return Ok(());
     }
 
@@ -88,12 +159,22 @@ pub fn validate_target(target: &str) -> Result<(), ApiError> {
         return Err(ApiError::validation("target", "invalid hostname format"));
     }
 
-    let lower_host = host.to_lowercase();
-    if lower_host == "0.0.0.0" || lower_host.starts_with("169.254.") {
-        return Err(ApiError::validation(
-            "target",
-            "access to invalid targets is prohibited",
-        ));
+    // Anti-DNS-rebind: resolve the hostname and reject if ANY resolved
+    // address lands in a blocked range — this is what actually matters for
+    // hostnames like a spoofed "metadata.internal" pointed at
+    // 169.254.169.254; the string-based checks above can't catch it since
+    // the hostname text itself never contains the IP. A resolution failure
+    // is not treated as invalid input (transient DNS issues shouldn't block
+    // validation) — the probe itself will surface a clear connect error.
+    if let Ok(addrs) = tokio::net::lookup_host((host.as_str(), 0)).await {
+        for addr in addrs {
+            if is_blocked_ip(&addr.ip()) {
+                return Err(ApiError::validation(
+                    "target",
+                    "target hostname resolves to a prohibited address",
+                ));
+            }
+        }
     }
 
     Ok(())
@@ -220,58 +301,103 @@ pub fn sanitize_string(input: &str, max_length: usize) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn validate_target_rejects_empty() {
-        assert!(validate_target("").is_err());
+    #[tokio::test]
+    async fn validate_target_rejects_empty() {
+        assert!(validate_target("").await.is_err());
     }
 
-    #[test]
-    fn validate_target_accepts_ipv4() {
-        assert!(validate_target("192.168.1.1").is_ok());
-        assert!(validate_target("8.8.8.8").is_ok());
+    #[tokio::test]
+    async fn validate_target_accepts_ipv4() {
+        assert!(validate_target("192.168.1.1").await.is_ok());
+        assert!(validate_target("8.8.8.8").await.is_ok());
     }
 
-    #[test]
-    fn validate_target_rejects_bare_ipv6_parity_with_go() {
+    #[tokio::test]
+    async fn validate_target_rejects_bare_ipv6_parity_with_go() {
         // Parity quirk documented directly in the Go test
         // (validation_test.go: "bare IPv6 addresses like ::1 are not
         // supported by ValidateTarget because the colon detection sends it
         // into net.SplitHostPort which requires a port") — colon-based
         // port-stripping misparses an unbracketed IPv6 literal into a
         // non-IP, non-hostname string, so it's rejected in both languages.
-        assert!(validate_target("::1").is_err());
+        assert!(validate_target("::1").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_target_accepts_rfc1918_private_ranges() {
+        // Intentional permissiveness, matches Go — internal connectivity
+        // testing is this service's entire purpose.
+        assert!(validate_target("10.0.0.5").await.is_ok());
+        assert!(validate_target("192.168.1.1").await.is_ok());
+        assert!(validate_target("172.16.0.5").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_target_rejects_loopback_ip_literal_ssrf_hardening() {
+        // Security-review divergence from Go (which explicitly *allows*
+        // loopback/localhost) — see is_blocked_ip's doc comment. A probe
+        // server letting a caller reach 127.0.0.1:<port> can pivot to
+        // loopback-only-bound services with no other path to them.
+        assert!(validate_target("127.0.0.1").await.is_err());
+        assert!(validate_target("127.0.0.53").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_target_rejects_unspecified_ip_literal() {
+        assert!(validate_target("0.0.0.0").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_target_rejects_link_local_and_cloud_metadata_ip_literal() {
+        assert!(validate_target("169.254.1.1").await.is_err());
+        // The AWS/GCP/Azure cloud-metadata endpoint — the canonical SSRF
+        // pivot this guard exists to close.
+        assert!(validate_target("169.254.169.254").await.is_err());
     }
 
     #[test]
-    fn validate_target_accepts_localhost_and_private_ranges() {
-        // Intentional permissiveness (parity with Go) — used for local dev/testing.
-        assert!(validate_target("localhost").is_ok());
-        assert!(validate_target("10.0.0.5").is_ok());
-        assert!(validate_target("127.0.0.1").is_ok());
+    fn is_blocked_ip_covers_ipv6_loopback_link_local_and_unique_local() {
+        assert!(is_blocked_ip(&"::1".parse().unwrap()));
+        assert!(is_blocked_ip(&"fe80::1".parse().unwrap()));
+        assert!(is_blocked_ip(&"fc00::1".parse().unwrap()));
+        assert!(is_blocked_ip(&"::".parse().unwrap()));
+        assert!(!is_blocked_ip(&"2001:db8::1".parse().unwrap()));
     }
 
     #[test]
-    fn validate_target_ip_literal_denylist_is_dead_code_parity_with_go() {
-        // Go's ValidateTarget checks net.ParseIP(host) FIRST and returns nil
-        // immediately on any valid IP — the later 0.0.0.0/169.254.* denylist
-        // check only ever runs against the *hostname* branch, so it never
-        // actually rejects an IP-literal target. This is a quirk of the Go
-        // implementation, not a design goal, but the migration contract
-        // (see PR description) is exact behavioral parity — including this —
-        // so the Rust port reproduces it rather than "fixing" it.
-        assert!(validate_target("0.0.0.0").is_ok());
-        assert!(validate_target("169.254.1.1").is_ok());
+    fn is_blocked_ip_covers_ipv4_mapped_ipv6() {
+        // ::ffff:127.0.0.1 — an IPv4-mapped IPv6 loopback, a classic SSRF
+        // filter-bypass trick if the mapped form isn't unwrapped first.
+        assert!(is_blocked_ip(&"::ffff:127.0.0.1".parse().unwrap()));
+        assert!(is_blocked_ip(&"::ffff:169.254.169.254".parse().unwrap()));
     }
 
-    #[test]
-    fn validate_target_strips_scheme_and_port() {
-        assert!(validate_target("https://example.com:8443/path").is_ok());
-        assert!(validate_target("example.com:8080").is_ok());
+    #[tokio::test]
+    async fn validate_target_anti_rebind_rejects_hostname_resolving_to_loopback() {
+        // "localhost" is a hostname (not an IP literal), so it takes the
+        // DNS-resolution branch — this is the anti-rebind regression test:
+        // a hostname that LOOKS benign but resolves to a blocked address
+        // must still be rejected. Deliberately diverges from Go's explicit
+        // "localhost allowed" test case, per the security review.
+        assert!(validate_target("localhost").await.is_err());
     }
 
-    #[test]
-    fn validate_target_rejects_invalid_hostname() {
-        assert!(validate_target("not a hostname!!").is_err());
+    #[tokio::test]
+    async fn validate_target_strips_scheme_and_port() {
+        assert!(validate_target("https://example.com:8443/path")
+            .await
+            .is_ok());
+        assert!(validate_target("example.com:8080").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_target_rejects_invalid_hostname() {
+        assert!(validate_target("not a hostname!!").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_target_rejects_leading_hyphen_hostname() {
+        assert!(validate_target("-evil.example.com").await.is_err());
     }
 
     #[test]

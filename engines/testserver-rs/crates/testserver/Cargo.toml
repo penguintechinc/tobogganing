@@ -23,7 +23,7 @@ clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 axum = { workspace = true }
-tower = { workspace = true }
+tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "limit", "trace"] }
 tonic = { workspace = true, features = ["router", "transport"] }
 tonic-prost = { workspace = true }
@@ -47,3 +47,4 @@ protoc-bin-vendored = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }

@@ -21,6 +21,10 @@ url = { workspace = true }
 axum = { workspace = true }
 tonic = { workspace = true }
 jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
+# Used only for validate_target's anti-DNS-rebind hostname resolution
+# (tokio::net::lookup_host) — see validation.rs.
+tokio = { workspace = true, features = ["net"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt", "macros"] }

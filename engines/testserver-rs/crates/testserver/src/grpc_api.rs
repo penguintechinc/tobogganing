@@ -61,7 +61,9 @@ impl TestService for TestServiceImpl {
         let req = request.into_inner();
         check_api_version(&req.api_version)?;
 
-        validation::validate_target(&req.target).map_err(to_status)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
         validation::validate_http_protocol(&req.protocol).map_err(to_status)?;
         validation::validate_http_protocol(&req.protocol_detail).map_err(to_status)?;
         validation::validate_http_method(&req.method).map_err(to_status)?;
@@ -108,7 +110,9 @@ impl TestService for TestServiceImpl {
         let req = request.into_inner();
         check_api_version(&req.api_version)?;
 
-        validation::validate_target(&req.target).map_err(to_status)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
         validation::validate_tcp_protocol(&req.protocol).map_err(to_status)?;
         validation::validate_tcp_protocol(&req.protocol_detail).map_err(to_status)?;
         if req.port > 0 {
@@ -158,7 +162,9 @@ impl TestService for TestServiceImpl {
         let req = request.into_inner();
         check_api_version(&req.api_version)?;
 
-        validation::validate_target(&req.target).map_err(to_status)?;
+        validation::validate_target(&req.target)
+            .await
+            .map_err(to_status)?;
         validation::validate_udp_protocol(&req.protocol).map_err(to_status)?;
         validation::validate_udp_protocol(&req.protocol_detail).map_err(to_status)?;
         validation::validate_dns_query(&req.query).map_err(to_status)?;

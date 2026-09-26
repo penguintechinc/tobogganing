@@ -3946,6 +3946,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "jsonwebtoken",
  "metrics",
  "metrics-exporter-prometheus",
  "opentelemetry",
@@ -3982,6 +3983,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "tonic",
  "tracing",
  "url",
