@@ -20,7 +20,6 @@ netsvcs-edge = ["dep:node-agent-netsvcs-edge"]
 [dependencies]
 node-agent-core = { workspace = true }
 node-agent-transport = { workspace = true }
-jsonwebtoken = { workspace = true, default-features = true, features = ["rust_crypto"] }
 node-agent-connectivity = { path = "../connectivity", version = "0.1.0", optional = true }
 node-agent-netsvcs-edge = { path = "../netsvcs-edge", version = "0.1.0", optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs"] }
@@ -36,6 +35,9 @@ serde = { workspace = true, features = ["derive"] }
 # Only used by the lifecycle-loop unit tests' in-memory `MockClient`.
 async-trait = { workspace = true }
 serde_json = { workspace = true }
+# `token_with_exp`'s hand-rolled unverified test JWT (base64url-encodes a
+# throwaway header/payload — decode_exp never checks a signature).
+base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
 wiremock = "=0.6.5"
 # Generates a fresh throwaway P-256 EC key at test time for the run()
 # integration test's machine-JWT signer — never a committed key value.

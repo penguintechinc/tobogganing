@@ -460,14 +460,18 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn enroll_extracts_tenant_and_attaches_the_machine_jwt_as_bearer() {
         let manager = std::sync::Arc::new(ScriptedManager::default());
-        // `sub=node-1 tenant=tenant-9` — a real signed token isn't needed
-        // since `extract_tenant` deliberately never verifies the signature.
-        let jwt_with_tenant = jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
-            &serde_json::json!({"tenant": "tenant-9"}),
-            &jsonwebtoken::EncodingKey::from_secret(b"test-secret"),
-        )
-        .expect("encoding a throwaway test token must succeed");
+        // `tenant=tenant-9` — a real signed token isn't needed since
+        // `extract_tenant` deliberately never verifies the signature; only
+        // a structurally valid three '.'-segment token with a JSON payload
+        // is required.
+        let jwt_with_tenant = {
+            use base64::Engine;
+            let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(br#"{"alg":"ES256","typ":"JWT"}"#);
+            let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(serde_json::json!({"tenant": "tenant-9"}).to_string());
+            format!("{header}.{payload}.unsigned-test-signature")
+        };
         *manager.register_server.lock().await = Some(Ok(pb::RegisterServerResponse {
             jwt: jwt_with_tenant,
             server_id: "node-1".to_string(),

@@ -11,26 +11,12 @@ targets = [
 version = 2
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = [
-    # RUSTSEC-2023-0071 (Marvin Attack): a non-constant-time timing
-    # sidechannel in the RustCrypto `rsa` crate's PKCS#1v1.5 *decryption*
-    # path. `rsa` reaches this workspace transitively and unconditionally
-    # via jsonwebtoken v11's `rust_crypto` feature (`rust_crypto` bundles
-    # ed25519-dalek/hmac/p256/p384/rand/rsa/sha2 as one unit — there is no
-    # finer-grained feature to keep p256/ES256 while dropping `rsa`; see
-    # jsonwebtoken 11.0.0 `Cargo.toml` [features]). This workspace signs
-    # and verifies every machine JWT with ES256 only (see
-    # `core::jwt::MachineJwtSigner` / `crates/agent/src/run.rs`) — no
-    # `Algorithm::RS*`/`PS*` key is ever constructed, so the vulnerable
-    # `rsa` decrypt path is never exercised at runtime; the dependency is
-    # dead code pulled in by the feature bundle. Removing it would require
-    # switching jsonwebtoken's crypto backend to `aws_lc_rs`, which trades
-    # a pure-Rust build for a C/cmake toolchain dependency (aws-lc-sys) —
-    # a real risk for this workspace's static-musl bare-metal build target
-    # — so ignoring is preferred over that swap. Revisit if jsonwebtoken
-    # ever splits `rust_crypto` into per-algorithm features.
-    "RUSTSEC-2023-0071",
-]
+# No ignores: machine-JWT signing now goes through `penguin_aaa::Es256Signer`
+# (hand-rolled ES256 JWS framing over `p256`/`ring`, zero `rsa`-crate
+# dependency) instead of `jsonwebtoken`'s `rust_crypto` feature bundle, so
+# RUSTSEC-2023-0071 (Marvin Attack, RustCrypto `rsa` timing sidechannel)
+# no longer reaches this workspace at all — verify with `cargo tree | grep rsa`.
+ignore = []
 
 [licenses]
 version = 2
@@ -61,4 +47,7 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+# penguin-aaa isn't published to crates.io yet — pinned to an immutable
+# git tag (see `crates/core/Cargo.toml`) per the org's dependency-pinning
+# policy for pre-registry internal packages.
+allow-git = ["https://github.com/penguintechinc/penguin-libs"]
