@@ -8,6 +8,6 @@ pub mod config;
 pub mod error;
 pub mod validation;
 
-pub use auth::{AuthUser, JwtVerifier};
-pub use config::{AppConfig, DbConfig, DbType};
+pub use auth::{AuthUser, JwtKeyError, JwtVerifier};
+pub use config::{AppConfig, ConfigError, DbConfig, DbType};
 pub use error::{check_api_version, ApiError};

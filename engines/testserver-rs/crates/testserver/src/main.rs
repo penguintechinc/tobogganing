@@ -69,7 +69,10 @@ async fn healthcheck() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let cfg = AppConfig::from_env();
+    // Fails closed here (never starts with auth silently unenforceable) if
+    // AUTH_ENABLED=true and no ES256 JWT public key is configured, or if a
+    // configured key is malformed — see testserver_core::config::ConfigError.
+    let cfg = AppConfig::from_env()?;
     let _tracer_provider = telemetry::init_tracing("testserver");
     telemetry::init_metrics(cfg.metrics_port);
     testserver_protocols::tls_provider::install_crypto_provider();

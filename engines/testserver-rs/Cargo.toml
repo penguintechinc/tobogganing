@@ -41,6 +41,10 @@ rand = "=0.10.3"
 
 # auth
 jsonwebtoken = "=11.0.0"
+# EC P-256 keypair generation for ES256 JWT tests only (mirrors
+# agents/node-agent's pin exactly) — never used outside #[cfg(test)].
+p256 = "=0.13.2"
+rand_core = { version = "=0.6.4", features = ["getrandom"] }
 
 # HTTP surface
 # NOTE: utoipa/OpenAPI generation is deferred to a follow-up PR (not part of
