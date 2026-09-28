@@ -76,6 +76,11 @@ impl GrpcClient {
 
 #[async_trait]
 impl ControlPlaneClient for GrpcClient {
+    // `req`/`refresh_token` carry the bearer JWT and rotating refresh
+    // token respectively — both `skip`ped from span fields, never logged
+    // (see security.md Token & Secret Hygiene); `node_type`/`hostname` are
+    // the only non-sensitive identifying fields worth a span attribute.
+    #[tracing::instrument(skip(self, req), fields(node_type = %req.node_type, hostname = %req.hostname))]
     async fn enroll(&self, req: EnrollRequest) -> Result<EnrollResponse> {
         let mut request = Request::new(pb::RegisterServerRequest {
             api_version: API_VERSION.to_string(),
@@ -166,6 +171,7 @@ impl ControlPlaneClient for GrpcClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, refresh_token))]
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshResponse> {
         // The refresh token itself is the credential for this call — it is
         // presented as the bearer, not the (possibly expired) access token.

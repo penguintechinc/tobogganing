@@ -90,14 +90,20 @@ pub async fn run(
     #[cfg(not(feature = "connectivity"))]
     let wg_public_key: Option<String> = None;
 
-    let enroll_resp = client
+    let enroll_started = node_agent_core::metrics::start_timer();
+    let enroll_result = client
         .enroll(EnrollRequest {
             machine_jwt,
             node_type: "node-agent".to_string(),
             hostname: hostname.clone(),
             public_key: wg_public_key,
         })
-        .await?;
+        .await;
+    node_agent_core::metrics::record_enrollment_latency(
+        enroll_started.elapsed(),
+        if enroll_result.is_ok() { "ok" } else { "error" },
+    );
+    let enroll_resp = enroll_result?;
     tracing::info!(node_id = %enroll_resp.node_id, tenant = %enroll_resp.tenant, "enrolled with control plane");
 
     let shutdown = CancellationToken::new();
@@ -234,7 +240,17 @@ async fn tick(client: &dyn ControlPlaneClient, session: &mut Session) -> Option<
     };
 
     if unix_now() >= session.access_token_exp - REFRESH_MARGIN_SECS {
-        match client.refresh_token(&session.refresh_token).await {
+        let refresh_started = node_agent_core::metrics::start_timer();
+        let refresh_result = client.refresh_token(&session.refresh_token).await;
+        node_agent_core::metrics::record_refresh_latency(
+            refresh_started.elapsed(),
+            if refresh_result.is_ok() {
+                "ok"
+            } else {
+                "error"
+            },
+        );
+        match refresh_result {
             Ok(RefreshResponse {
                 access_token,
                 refresh_token,

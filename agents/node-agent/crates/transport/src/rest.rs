@@ -126,6 +126,11 @@ struct Envelope<T> {
 
 #[async_trait]
 impl ControlPlaneClient for RestClient {
+    // `req`/`refresh_token` carry the bearer JWT and rotating refresh
+    // token respectively — both `skip`ped from span fields, never logged
+    // (see security.md Token & Secret Hygiene); `node_type`/`hostname` are
+    // the only non-sensitive identifying fields worth a span attribute.
+    #[tracing::instrument(skip(self, req), fields(node_type = %req.node_type, hostname = %req.hostname))]
     async fn enroll(&self, req: EnrollRequest) -> Result<EnrollResponse> {
         #[derive(Serialize)]
         struct Body {
@@ -236,6 +241,7 @@ impl ControlPlaneClient for RestClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, refresh_token))]
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshResponse> {
         #[derive(Serialize)]
         struct Body {

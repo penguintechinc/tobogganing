@@ -32,6 +32,22 @@ serde_json = "=1.0.151"
 tokio = "=1.53.1"
 tokio-util = "=0.7.19"
 
+# observability — OTLP triad (traces/logs/metrics), versions match
+# engines/testserver-rs's workspace pins for consistency across the org's
+# Rust services. `opentelemetry` (API-only, no SDK) is also consumed by
+# `node-agent-core`/`node-agent-connectivity` so histogram recording works
+# from any crate via the process-global meter, without those crates
+# depending on the (heavier) SDK/OTLP-exporter crates themselves.
+opentelemetry = "=0.33.0"
+opentelemetry_sdk = "=0.33.0"
+opentelemetry-otlp = { version = "=0.33.0", default-features = false, features = ["grpc-tonic", "trace", "metrics", "logs"] }
+opentelemetry-appender-tracing = "=0.33.0"
+tracing-opentelemetry = "=0.34.0"
+# dev-only: generated OTLP collector service stubs (trace/logs/metrics),
+# used solely to run an in-process mock collector in the telemetry smoke
+# test — never a runtime dependency.
+opentelemetry-proto = { version = "=0.33.0", default-features = false, features = ["gen-tonic", "trace", "logs", "metrics"] }
+
 # transport
 tonic = "=0.14.6"
 tonic-prost = "=0.14.6"

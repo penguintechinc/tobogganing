@@ -6,6 +6,7 @@
 mod cli;
 mod healthz;
 mod run;
+mod telemetry;
 
 use clap::Parser;
 use cli::{Cli, Command};
@@ -13,7 +14,7 @@ use std::process::ExitCode;
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    init_tracing();
+    let telemetry_guard = telemetry::init("node-agent");
 
     let cli = Cli::parse();
     let result = match cli.command {
@@ -24,24 +25,17 @@ async fn main() -> ExitCode {
         Command::Healthz => healthz::healthz(cli.config.as_deref()).await,
     };
 
-    match result {
+    let exit_code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             tracing::error!(error = %err, "node-agent exited with an error");
             ExitCode::FAILURE
         }
-    }
-}
+    };
 
-/// Initializes structured JSON logging via `tracing-subscriber`, honoring
-/// `RUST_LOG` for level filtering — never raw `println!`/stdout per the
-/// org's structured-logging policy.
-fn init_tracing() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .json()
-        .init();
+    // Best-effort flush of any pending OTLP export before exit — never
+    // blocks the actual exit code on a dead/unreachable collector (see
+    // `TelemetryGuard::shutdown`'s doc comment).
+    telemetry_guard.shutdown();
+    exit_code
 }
