@@ -30,9 +30,11 @@ pub enum AgentError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Signing, encoding, or decoding a JWT failed.
+    /// Signing, encoding, or decoding a JWT failed — wraps `penguin_aaa`'s
+    /// collapsed sign/verify error, plus this crate's own
+    /// `decode_unverified_claims` failures (see `crate::jwt`).
     #[error("machine-JWT error: {0}")]
-    Jwt(#[from] jsonwebtoken::errors::Error),
+    Jwt(#[from] penguin_aaa::AaaError),
 
     /// The underlying transport (gRPC channel, HTTP client) failed before a
     /// control-plane response could be interpreted.

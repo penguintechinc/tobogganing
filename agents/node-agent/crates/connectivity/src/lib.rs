@@ -147,6 +147,8 @@ async fn bring_up(
     listen_port: u16,
     cfg: &WireguardConfig,
 ) {
+    let started = node_agent_core::metrics::start_timer();
+
     let apply_result = match device {
         Some(dev) => dev.apply(private_key_b64, listen_port, cfg),
         None => {
@@ -160,12 +162,18 @@ async fn bring_up(
         }
     };
 
-    match apply_result {
+    let outcome = match apply_result {
         Ok(()) => {
             if let Some(dev) = device.as_ref() {
-                if let Err(err) = apply_networking(dev, cfg).await {
-                    tracing::warn!(error = %err, "failed to apply WireGuard interface networking (address/routes/DNS)");
+                match apply_networking(dev, cfg).await {
+                    Ok(()) => "ok",
+                    Err(err) => {
+                        tracing::warn!(error = %err, "failed to apply WireGuard interface networking (address/routes/DNS)");
+                        "degraded"
+                    }
                 }
+            } else {
+                "ok"
             }
         }
         Err(err) => {
@@ -174,8 +182,10 @@ async fn bring_up(
                 interface = %cfg.interface_name,
                 "failed to bring up/apply the WireGuard interface (likely missing NET_ADMIN)"
             );
+            "error"
         }
-    }
+    };
+    node_agent_core::metrics::record_connectivity_latency(started.elapsed(), outcome);
 }
 
 /// Opens a fresh rtnetlink connection and applies `cfg`'s interface

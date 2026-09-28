@@ -13,7 +13,6 @@
 //! data-plane consumers of the config this loop publishes; neither talks
 //! to the control plane directly.
 
-use jsonwebtoken::Algorithm;
 use node_agent_core::{
     AgentConfig, AgentError, AgentMode, ConnectivityConfig, ControlPlaneClient, EnrollRequest,
     Heartbeat, MachineJwtSigner, NodeConfig, RefreshResponse, Result,
@@ -58,14 +57,15 @@ pub async fn run(
     node_agent_transport::install_crypto_provider()?;
     let client = node_agent_transport::build_client(&cfg);
 
-    let signer = MachineJwtSigner::from_pem_file(&cfg.machine_jwt_path, Algorithm::ES256)?;
+    let signer = MachineJwtSigner::from_pem_file(&cfg.machine_jwt_path)?;
     let hostname = local_hostname()?;
     // node_id isn't known until the control plane assigns one in
     // EnrollResponse, so the hostname doubles as the bootstrap JWT subject.
+    // `node_type` travels separately in `EnrollRequest::node_type` below,
+    // not as a JWT claim — mirrors `hub-router-rs`'s `TokenExchangeRequest`.
     let machine_jwt = signer.sign(
         "node-agent",
         &hostname,
-        "node-agent",
         MACHINE_JWT_SCOPE,
         Duration::from_secs(300),
     )?;
@@ -90,14 +90,20 @@ pub async fn run(
     #[cfg(not(feature = "connectivity"))]
     let wg_public_key: Option<String> = None;
 
-    let enroll_resp = client
+    let enroll_started = node_agent_core::metrics::start_timer();
+    let enroll_result = client
         .enroll(EnrollRequest {
             machine_jwt,
             node_type: "node-agent".to_string(),
             hostname: hostname.clone(),
             public_key: wg_public_key,
         })
-        .await?;
+        .await;
+    node_agent_core::metrics::record_enrollment_latency(
+        enroll_started.elapsed(),
+        if enroll_result.is_ok() { "ok" } else { "error" },
+    );
+    let enroll_resp = enroll_result?;
     tracing::info!(node_id = %enroll_resp.node_id, tenant = %enroll_resp.tenant, "enrolled with control plane");
 
     let shutdown = CancellationToken::new();
@@ -234,7 +240,17 @@ async fn tick(client: &dyn ControlPlaneClient, session: &mut Session) -> Option<
     };
 
     if unix_now() >= session.access_token_exp - REFRESH_MARGIN_SECS {
-        match client.refresh_token(&session.refresh_token).await {
+        let refresh_started = node_agent_core::metrics::start_timer();
+        let refresh_result = client.refresh_token(&session.refresh_token).await;
+        node_agent_core::metrics::record_refresh_latency(
+            refresh_started.elapsed(),
+            if refresh_result.is_ok() {
+                "ok"
+            } else {
+                "error"
+            },
+        );
+        match refresh_result {
             Ok(RefreshResponse {
                 access_token,
                 refresh_token,
@@ -379,15 +395,18 @@ mod tests {
 
     fn token_with_exp(exp: i64) -> String {
         // `decode_exp` uses unverified decoding, so any structurally valid
-        // JWT (three base64url segments) with an `exp` claim round-trips —
-        // sign with a throwaway HMAC key, matching `core::jwt`'s own tests.
+        // JWT (three '.'-separated segments) with an `exp` claim
+        // round-trips — no real signing key or algorithm needed, matching
+        // `core::jwt`'s own unverified-decode tests. The trailing segment
+        // is never parsed as a signature by `decode_unverified_claims`.
+        use base64::Engine;
+        let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(br#"{"alg":"ES256","typ":"JWT"}"#);
         let claims = ExpClaim { exp };
-        jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(Algorithm::HS256),
-            &claims,
-            &jsonwebtoken::EncodingKey::from_secret(b"test-secret"),
-        )
-        .expect("encoding a throwaway test token must succeed")
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&claims).expect("serializing a simple exp claim must succeed"),
+        );
+        format!("{header}.{payload}.unsigned-test-signature")
     }
 
     #[async_trait]

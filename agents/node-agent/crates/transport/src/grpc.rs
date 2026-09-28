@@ -76,6 +76,11 @@ impl GrpcClient {
 
 #[async_trait]
 impl ControlPlaneClient for GrpcClient {
+    // `req`/`refresh_token` carry the bearer JWT and rotating refresh
+    // token respectively — both `skip`ped from span fields, never logged
+    // (see security.md Token & Secret Hygiene); `node_type`/`hostname` are
+    // the only non-sensitive identifying fields worth a span attribute.
+    #[tracing::instrument(skip(self, req), fields(node_type = %req.node_type, hostname = %req.hostname))]
     async fn enroll(&self, req: EnrollRequest) -> Result<EnrollResponse> {
         let mut request = Request::new(pb::RegisterServerRequest {
             api_version: API_VERSION.to_string(),
@@ -166,6 +171,7 @@ impl ControlPlaneClient for GrpcClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, refresh_token))]
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshResponse> {
         // The refresh token itself is the credential for this call — it is
         // presented as the bearer, not the (possibly expired) access token.
@@ -460,14 +466,18 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn enroll_extracts_tenant_and_attaches_the_machine_jwt_as_bearer() {
         let manager = std::sync::Arc::new(ScriptedManager::default());
-        // `sub=node-1 tenant=tenant-9` — a real signed token isn't needed
-        // since `extract_tenant` deliberately never verifies the signature.
-        let jwt_with_tenant = jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
-            &serde_json::json!({"tenant": "tenant-9"}),
-            &jsonwebtoken::EncodingKey::from_secret(b"test-secret"),
-        )
-        .expect("encoding a throwaway test token must succeed");
+        // `tenant=tenant-9` — a real signed token isn't needed since
+        // `extract_tenant` deliberately never verifies the signature; only
+        // a structurally valid three '.'-segment token with a JSON payload
+        // is required.
+        let jwt_with_tenant = {
+            use base64::Engine;
+            let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(br#"{"alg":"ES256","typ":"JWT"}"#);
+            let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(serde_json::json!({"tenant": "tenant-9"}).to_string());
+            format!("{header}.{payload}.unsigned-test-signature")
+        };
         *manager.register_server.lock().await = Some(Ok(pb::RegisterServerResponse {
             jwt: jwt_with_tenant,
             server_id: "node-1".to_string(),
