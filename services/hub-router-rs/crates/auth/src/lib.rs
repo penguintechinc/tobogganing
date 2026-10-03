@@ -4,6 +4,14 @@
 //! The client exchanges an API key for short-lived access and refresh tokens,
 //! handles automatic token refresh when approaching expiry, and falls back to
 //! a legacy static token if token exchange fails at startup.
+//!
+//! This is the OUTBOUND side — hub-router's own machine JWT, held/refreshed
+//! here, that hub-router presents when it calls OUT to hub-api. The
+//! INBOUND side (verifying JWTs on requests that arrive AT hub-router) is
+//! [`inbound`] — a separate, independent concern added on top of this
+//! module, not a replacement for it.
+
+pub mod inbound;
 
 use hub_router_common::Error;
 use serde::{Deserialize, Serialize};
@@ -311,6 +319,21 @@ mod tests {
     use super::*;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// `RetryWithCredentialsError`'s `Display` impl is never exercised by
+    /// the HTTP-flow tests below (its message only ever reaches a
+    /// `tracing::error!`/`contains()` check, never a direct `format!`) —
+    /// test it directly.
+    #[test]
+    fn retry_with_credentials_error_display_formats_message() {
+        let err = RetryWithCredentialsError {
+            status_code: 503,
+            message: "Valkey unavailable".to_string(),
+        };
+        let formatted = format!("{err}");
+        assert!(formatted.contains("503"));
+        assert!(formatted.contains("Valkey unavailable"));
+    }
 
     /// Test token exchange: client exchanges API key for access + refresh tokens.
     #[tokio::test]
@@ -647,5 +670,164 @@ mod tests {
         for handle in handles {
             handle.await.expect("Task panicked");
         }
+    }
+
+    /// Refresh failing with a plain (non-503) error must fall back to the
+    /// existing token without attempting re-exchange — the `else` arm
+    /// distinct from the `test_503_retry_with_credentials` re-exchange
+    /// path above.
+    #[tokio::test]
+    async fn test_refresh_failure_without_retry_flag_returns_existing_token() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(TokenResponse {
+                access_token: "eyJhbGc.access.token.initial".to_string(),
+                refresh_token: "eyJhbGc.refresh.token.initial".to_string(),
+                expires_in: 10,
+                token_type: "Bearer".to_string(),
+            }))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/refresh"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let client = MachineJWTClient::new(
+            mock_server.uri(),
+            "cluster-1".to_string(),
+            "api-key-123".to_string(),
+            "fallback-token".to_string(),
+        )
+        .await
+        .expect("Failed to create client");
+
+        {
+            let mut cache = client.token_cache.write().await;
+            cache.expires_at = SystemTime::now() - Duration::from_secs(300);
+        }
+
+        let token = client
+            .get_token()
+            .await
+            .expect("a plain refresh failure must fall back to the existing token, not error");
+        assert_eq!(token, "eyJhbGc.access.token.initial");
+    }
+
+    /// A 503-with-retry-flag refresh failure whose subsequent re-exchange
+    /// *also* fails must still fall back to the existing token rather than
+    /// propagating the re-exchange error — covers `get_token`'s innermost
+    /// `if let Err(exchange_err) = self.exchange_token().await` arm.
+    #[tokio::test]
+    async fn test_503_retry_with_credentials_reexchange_also_fails() {
+        let mock_server = MockServer::start().await;
+
+        // Initial exchange (in `new()`) succeeds exactly once; any later
+        // call to the same endpoint (the re-exchange triggered below)
+        // fails, simulating the manager being unreachable for re-exchange
+        // too.
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(TokenResponse {
+                access_token: "eyJhbGc.access.token.initial".to_string(),
+                refresh_token: "eyJhbGc.refresh.token.initial".to_string(),
+                expires_in: 10,
+                token_type: "Bearer".to_string(),
+            }))
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/token"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/refresh"))
+            .respond_with(ResponseTemplate::new(503).set_body_json(serde_json::json!({
+                "detail": "Valkey unavailable",
+                "retry_with_credentials": true
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let client = MachineJWTClient::new(
+            mock_server.uri(),
+            "cluster-1".to_string(),
+            "api-key-123".to_string(),
+            "fallback-token".to_string(),
+        )
+        .await
+        .expect("Failed to create client");
+
+        {
+            let mut cache = client.token_cache.write().await;
+            cache.expires_at = SystemTime::now() - Duration::from_secs(300);
+        }
+
+        let token = client
+            .get_token()
+            .await
+            .expect("a failed re-exchange must still fall back to the existing token");
+        assert_eq!(token, "eyJhbGc.access.token.initial");
+    }
+
+    /// `expires_in: 0` on both the exchange and refresh responses must
+    /// default to the one-hour TTL rather than expiring immediately —
+    /// covers both functions' `if token_resp.expires_in > 0 { .. } else {
+    /// 3600 }` default branch.
+    #[tokio::test]
+    async fn test_zero_expires_in_defaults_to_one_hour() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(TokenResponse {
+                access_token: "eyJhbGc.access.token.initial".to_string(),
+                refresh_token: "eyJhbGc.refresh.token.initial".to_string(),
+                expires_in: 0,
+                token_type: "Bearer".to_string(),
+            }))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/refresh"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(TokenResponse {
+                access_token: "eyJhbGc.access.token.refreshed".to_string(),
+                refresh_token: "eyJhbGc.refresh.token.refreshed".to_string(),
+                expires_in: 0,
+                token_type: "Bearer".to_string(),
+            }))
+            .mount(&mock_server)
+            .await;
+
+        let client = MachineJWTClient::new(
+            mock_server.uri(),
+            "cluster-1".to_string(),
+            "api-key-123".to_string(),
+            "fallback-token".to_string(),
+        )
+        .await
+        .expect("Failed to create client");
+
+        // expires_in: 0 on exchange must still default to ~1h out, so this
+        // get_token() must NOT trigger a refresh.
+        let token = client.get_token().await.expect("Failed to get token");
+        assert_eq!(token, "eyJhbGc.access.token.initial");
+
+        // Force a refresh explicitly to exercise refresh_token's own
+        // `expires_in: 0` default branch too.
+        {
+            let mut cache = client.token_cache.write().await;
+            cache.expires_at = SystemTime::now() - Duration::from_secs(300);
+        }
+        let refreshed = client
+            .get_token()
+            .await
+            .expect("Failed to get refreshed token");
+        assert_eq!(refreshed, "eyJhbGc.access.token.refreshed");
     }
 }

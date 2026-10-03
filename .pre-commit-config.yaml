@@ -132,3 +132,11 @@ repos:
         files: ^engines/testserver-rs/
         pass_filenames: false
         stages: [pre-push]
+
+      - id: hub-router-rs-coverage
+        name: hub-router-rs coverage >=90% (lines/regions/functions)
+        entry: bash -c 'cd services/hub-router-rs && make coverage'
+        language: system
+        files: ^services/hub-router-rs/
+        pass_filenames: false
+        stages: [pre-push]

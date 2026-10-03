@@ -48,6 +48,40 @@ rustls = { version = "=0.23.43", default-features = false }
 
 # http framework
 axum = "=0.8.7"
+tower = "=0.5.3"
+tower-http = "=0.7.1"
+
+# auth
+# penguin-aaa isn't published to crates.io yet — pinned to an immutable git
+# tag per the org's dependency-pinning policy for pre-registry internal
+# packages (mirrors agents/node-agent's and engines/testserver-rs's
+# identical pin).
+penguin-aaa = { git = "https://github.com/penguintechinc/penguin-libs", tag = "rust-aaa-v0.1.0", version = "=0.1.0" }
+# EC P-256 keypair generation for ES256 JWT tests only (mirrors
+# testserver-rs's pin exactly) — never used outside #[cfg(test)]/tests/.
+p256 = "=0.13.2"
+rand_core = { version = "=0.6.4", features = ["getrandom"] }
+# HMAC-SHA256 token forging for the HS256 alg-confusion regression tests
+# only (mirrors testserver-rs's/penguin-aaa's own test-suite pins exactly)
+# — never used outside #[cfg(test)]/tests/.
+hmac = "=0.12.1"
+sha2 = "=0.10.9"
+
+# observability — OTLP triad (logs/metrics/traces) + Prometheus secondary
+# scrape surface, same pins as engines/testserver-rs for consistency.
+opentelemetry = "=0.33.0"
+opentelemetry-otlp = "=0.33.0"
+opentelemetry_sdk = "=0.33.0"
+tracing-opentelemetry = "=0.34.0"
+opentelemetry-appender-tracing = "=0.33.0"
+metrics = "=0.24.6"
+metrics-exporter-prometheus = "=0.18.3"
+# OTLP collector proto/tonic stubs — dev-dependency only, for an in-process
+# mock OTLP collector (tests/telemetry_smoke.rs) that asserts real export
+# traffic rather than trusting a "no error" absence-of-failure signal.
+opentelemetry-proto = "=0.33.0"
+tokio-stream = "=0.1.19"
+wiremock = "=0.6.5"
 
 # workspace-internal crates — explicit `version` alongside `path` even
 # though nothing outside this workspace ever resolves them from a registry;
@@ -55,6 +89,7 @@ axum = "=0.8.7"
 # `workspace = true` consumer as an unpinned wildcard dependency.
 hub-router-common = { path = "crates/common", version = "0.1.0" }
 hub-router-config = { path = "crates/config", version = "0.1.0" }
+hub-router-auth = { path = "crates/auth", version = "0.1.0" }
 
 [profile.release]
 lto = true

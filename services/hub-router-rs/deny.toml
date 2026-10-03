@@ -11,6 +11,12 @@ targets = [
 version = 2
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
+# No ignores: inbound JWT verification goes through `penguin_aaa::Es256Verifier`
+# (hand-rolled JWS framing over `p256`/`p521`/`ring`, zero `rsa`-crate
+# dependency) instead of a `jsonwebtoken`-style multi-algorithm bundle, so
+# RUSTSEC-2023-0071 (Marvin Attack, RustCrypto `rsa` timing sidechannel)
+# never reaches this workspace — verify with `cargo tree | grep rsa`.
+ignore = []
 
 [licenses]
 version = 2
@@ -42,4 +48,7 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+# penguin-aaa isn't published to crates.io yet — pinned to an immutable git
+# tag (see root Cargo.toml's `[workspace.dependencies]`) per the org's
+# dependency-pinning policy for pre-registry internal packages.
+allow-git = ["https://github.com/penguintechinc/penguin-libs"]
