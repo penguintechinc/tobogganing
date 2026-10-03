@@ -7,6 +7,13 @@ license.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[features]
+# Exposes PublicKeyCache::inject_for_test — a direct, no-network way for a
+# *different* crate's tests (e.g. hub-router's own middleware tests) to
+# seed a verifier. Never enabled in a production build; hub-router pulls
+# this in only via its own [dev-dependencies] feature unification.
+test-util = []
+
 [dependencies]
 hub-router-common = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -15,7 +22,18 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"] }
 tracing = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
+# Inbound verification (crates::inbound) returns axum-native `ApiError`
+# responses directly, mirroring engines/testserver-rs's testserver-core
+# crate (JwtVerifier + ApiError colocated).
+axum = { workspace = true }
+penguin-aaa = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 wiremock = "=0.6.5"
+# EC P-256 keypair generation + HS256/alg:none forging for inbound.rs's
+# JWT verification tests only — never used outside #[cfg(test)].
+p256 = { workspace = true }
+rand_core = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }

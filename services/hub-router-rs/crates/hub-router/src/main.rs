@@ -1,53 +1,67 @@
-//! Hub Router service.
+//! Hub Router service entry point.
 //!
-//! Entry point for the hub-router service. Initializes logging and starts
-//! an Axum HTTP server with basic health check endpoints.
+//! Initializes telemetry (tracing + OTLP + Prometheus), builds the inbound
+//! JWT public-key cache (fetched from hub-api, refreshed hourly in the
+//! background — see `hub_router_auth::inbound::PublicKeyCache`), and
+//! serves the axum router (`hub_router::routes::router`) until a shutdown
+//! signal arrives. Kept deliberately thin — the testable logic
+//! (`resolve_port`/`resolve_hub_api_url`/`wait_for_os_shutdown_signal`)
+//! lives in `hub_router`'s lib surface, mirroring
+//! `engines/testserver-rs`'s main.rs/app.rs split.
 
-use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use hub_router::telemetry;
+use hub_router_auth::inbound::{PublicKeyCache, DEFAULT_REFRESH_INTERVAL};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 
-/// Health check response.
-#[derive(serde::Serialize)]
-struct HealthResponse {
-    status: String,
-}
-
-/// Health check handler.
-async fn health() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(HealthResponse {
-            status: "ok".to_string(),
-        }),
-    )
-}
-
 #[tokio::main]
 async fn main() {
-    // Initialize tracing.
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
+    let telemetry_providers = telemetry::init_tracing("hub-router");
+    let meter_provider = telemetry::init_meter_provider("hub-router");
+    telemetry::init_metrics(
+        std::env::var("METRICS_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(9090),
+    );
 
     info!("Hub Router service starting");
 
-    // Build the router.
-    let app = Router::new().route("/health", get(health));
+    // hub-api's base URL for the inbound JWT public-key fetch (REST, the
+    // transitional step — see hub_router_auth::inbound::PublicKeyCache's
+    // doc for the gRPC migration TODO). Degrades gracefully if unset or
+    // unreachable: the key cache simply stays empty and every protected
+    // request gets 503 until a fetch succeeds, never a crash.
+    let hub_api_url = hub_router::resolve_hub_api_url(std::env::var("HUB_API_URL").ok().as_deref());
+    let key_cache = Arc::new(
+        PublicKeyCache::new(hub_api_url).expect("failed to build the inbound JWT key-fetch client"),
+    );
+    key_cache
+        .clone()
+        .spawn_refresh_loop(DEFAULT_REFRESH_INTERVAL);
 
-    // Get port from environment or use default.
-    let port = std::env::var("PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse::<u16>()
-        .expect("PORT must be a valid u16");
+    let state = hub_router::AppState::new(key_cache);
+    let app = hub_router::router(state);
 
+    let port = hub_router::resolve_port(std::env::var("PORT").ok().as_deref());
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(&addr)
         .await
-        .expect("Failed to bind to address");
+        .expect("failed to bind to address");
 
-    info!("Server listening on {}", addr);
+    info!(%addr, "hub-router listening");
 
-    axum::serve(listener, app).await.expect("Server failed");
+    if let Err(error) = axum::serve(listener, app)
+        .with_graceful_shutdown(hub_router::wait_for_os_shutdown_signal())
+        .await
+    {
+        tracing::error!(%error, "hub-router server exited with an error");
+    }
+
+    telemetry_providers.force_flush();
+    if let Some(provider) = &meter_provider {
+        let _ = provider.force_flush();
+    }
 }
