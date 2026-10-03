@@ -29,13 +29,13 @@ deny: ## Gate: advisories (RustSec), license policy, banned/duplicate crates
 # proxy per testing-rust.md, and is strictly finer-grained than branch
 # counting (every distinct code region, not just true/false branch arms).
 #
-# --exclude hub-router-{config,firewall,mirror,ports,proxy,wireguard}: these
-# five crates are untouched scaffold placeholders from PR #159 (each is a
-# one-line `pub fn` stub with no real logic yet) — out of this PR's scope
-# (inbound JWT-verify middleware). Excluding them keeps the gate meaningful
-# for the crates this PR actually implements/tests (auth, hub-router)
-# rather than diluting it with 0%-covered stub code; drop this exclusion
-# list crate-by-crate as each one gets its own real Rust port + tests.
+# --exclude hub-router-{config,firewall,mirror,proxy,wireguard}: these
+# four crates are untouched scaffold placeholders from PR #159 (each is a
+# one-line `pub fn` stub with no real logic yet) — out of this PR's scope.
+# hub-router-ports was ported (with characterization tests) in the
+# Go->Rust ports-subsystem PR and is no longer excluded; drop the rest of
+# this exclusion list crate-by-crate as each one gets its own real Rust
+# port + tests.
 #
 # --ignore-filename-regex 'main\.rs$': the binary entry point is a thin
 # `#[tokio::main]` glue function (env parsing delegates to tested
@@ -48,7 +48,6 @@ coverage: ## Gate: fails below 90% lines/regions/functions — never `|| true`
 		--exclude hub-router-config \
 		--exclude hub-router-firewall \
 		--exclude hub-router-mirror \
-		--exclude hub-router-ports \
 		--exclude hub-router-proxy \
 		--exclude hub-router-wireguard \
 		--ignore-filename-regex 'main\.rs$$' \
