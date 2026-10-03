@@ -10,6 +10,7 @@ members = [
     "crates/config",
     "crates/wireguard",
     "crates/hub-router",
+    "crates/syslog",
 ]
 
 [workspace.package]
@@ -55,6 +56,12 @@ url = "=2.5.8"
 # use) — already resolved transitively via the same dependency graph as
 # engines/testserver-rs's `rand::rng()` use.
 rand = "=0.9.5"
+# hub-router-syslog's `Logger::hostname_or_fallback` — the syslog wire
+# frame's `hostname` field, replacing Go's DNS-based "resolution" bug
+# (a CNAME lookup of the literal string "localhost") with a real
+# `gethostname(2)` call. Not previously a workspace dependency; MIT
+# licensed, no transitive deps beyond platform libc bindings.
+hostname = "=0.4.2"
 
 # transport
 tonic = "=0.14.6"
