@@ -10,6 +10,24 @@ repository.workspace = true
 [dependencies]
 hub-router-common = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
 tracing = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+tokio-util = { workspace = true }
+# CIDR-range (ip_range rule) containment checks.
+ipnet = { workspace = true }
+# url_pattern rule regex matching.
+regex = { workspace = true }
+# http(s):// target hostname extraction for domain/ip/ip_range rules.
+url = { workspace = true }
+# Randomized [30, 90]s refresh-interval jitter, mirroring the Go source's
+# thundering-herd-avoidance scheduling (non-cryptographic, timing-only use).
+rand = { workspace = true }
+opentelemetry = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+wiremock = { workspace = true }

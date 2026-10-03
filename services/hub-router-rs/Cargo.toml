@@ -41,6 +41,20 @@ tokio-util = "=0.7.19"
 # pinned to the version already resolved transitively via reqwest/hyper so
 # adding it as a direct dependency doesn't perturb Cargo.lock.
 bytes = "=1.12.1"
+# hub-router-firewall's ip_range rule (CIDR containment), url_pattern rule
+# (regex), and http(s):// target hostname extraction — all three already
+# resolved transitively (ipnet via no current direct consumer but pinned
+# here ahead of use; regex via tracing-subscriber's env-filter; url via
+# reqwest) so pinning these exact versions as direct dependencies doesn't
+# perturb Cargo.lock.
+ipnet = "=2.12.2"
+regex = "=1.13.1"
+url = "=2.5.8"
+# Randomized refresh-interval jitter (hub-router-firewall's Manager,
+# mirroring hub-router-auth's identical non-cryptographic scheduling-jitter
+# use) — already resolved transitively via the same dependency graph as
+# engines/testserver-rs's `rand::rng()` use.
+rand = "=0.9.5"
 
 # transport
 tonic = "=0.14.6"

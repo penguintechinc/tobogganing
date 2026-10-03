@@ -785,11 +785,21 @@ dependencies = [
 name = "hub-router-firewall"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "hub-router-common",
+ "ipnet",
+ "opentelemetry",
+ "rand",
+ "regex",
+ "reqwest",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
+ "url",
+ "wiremock",
 ]
 
 [[package]]
