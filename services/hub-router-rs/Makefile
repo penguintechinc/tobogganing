@@ -29,12 +29,12 @@ deny: ## Gate: advisories (RustSec), license policy, banned/duplicate crates
 # proxy per testing-rust.md, and is strictly finer-grained than branch
 # counting (every distinct code region, not just true/false branch arms).
 #
-# --exclude hub-router-{config,mirror,proxy,wireguard}: these three
-# crates are untouched scaffold placeholders from PR #159 (each is a
-# one-line `pub fn` stub with no real logic yet) — out of this PR's scope.
-# hub-router-ports and hub-router-firewall were ported (with
-# characterization tests) in their respective Go->Rust subsystem PRs and
-# are no longer excluded; drop the rest of this exclusion list
+# --exclude hub-router-{config,proxy,wireguard}: these remaining crates
+# are untouched scaffold placeholders from PR #159 (each is a one-line
+# `pub fn` stub with no real logic yet) — out of this PR's scope.
+# hub-router-ports, hub-router-firewall, and hub-router-mirror were ported
+# (with characterization tests) in their respective Go->Rust subsystem
+# PRs and are no longer excluded; drop the rest of this exclusion list
 # crate-by-crate as each one gets its own real Rust port + tests.
 #
 # --ignore-filename-regex 'main\.rs$': the binary entry point is a thin
@@ -46,7 +46,6 @@ deny: ## Gate: advisories (RustSec), license policy, banned/duplicate crates
 coverage: ## Gate: fails below 90% lines/regions/functions — never `|| true`
 	cargo llvm-cov --workspace \
 		--exclude hub-router-config \
-		--exclude hub-router-mirror \
 		--exclude hub-router-proxy \
 		--exclude hub-router-wireguard \
 		--ignore-filename-regex 'main\.rs$$' \
