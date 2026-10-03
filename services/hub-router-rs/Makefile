@@ -32,10 +32,12 @@ deny: ## Gate: advisories (RustSec), license policy, banned/duplicate crates
 # --exclude hub-router-{config,proxy,wireguard}: these remaining crates
 # are untouched scaffold placeholders from PR #159 (each is a one-line
 # `pub fn` stub with no real logic yet) — out of this PR's scope.
-# hub-router-ports, hub-router-firewall, and hub-router-mirror were ported
-# (with characterization tests) in their respective Go->Rust subsystem
-# PRs and are no longer excluded; drop the rest of this exclusion list
-# crate-by-crate as each one gets its own real Rust port + tests.
+# hub-router-ports, hub-router-firewall, hub-router-mirror, and
+# hub-router-syslog (the last control-plane crate of the Go->Rust
+# hub-router migration) were ported (with characterization tests) in
+# their respective subsystem PRs and are no longer excluded; drop the
+# rest of this exclusion list crate-by-crate as each one gets its own
+# real Rust port + tests.
 #
 # --ignore-filename-regex 'main\.rs$': the binary entry point is a thin
 # `#[tokio::main]` glue function (env parsing delegates to tested
