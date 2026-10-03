@@ -806,10 +806,14 @@ dependencies = [
 name = "hub-router-mirror"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "hub-router-common",
+ "opentelemetry",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
