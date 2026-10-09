@@ -36,16 +36,29 @@ docker-push: ## Push Docker image to registry
 	@echo "✅ Docker push complete"
 
 # Proto generation
+# NOTE: requires grpc_tools.protoc producing "Protobuf Python Version: 4.25.1"
+# -style gencode (grpcio-tools==1.62.3) to match hub_api/requirements.in's
+# protobuf==4.25.9 pin and the already-committed proto/netsvcs/v1/*_pb2.py
+# stubs. grpcio-tools>=1.63 requires protobuf>=5.26.1 at its own build time
+# and emits new-style gencode (imports google.protobuf.runtime_version) that
+# protobuf==4.25.9 cannot load — do not regenerate with a newer grpcio-tools
+# without a coordinated protobuf pin bump (see requirements.in comment).
+# grpcio-tools==1.62.3 has no cp313 wheel; run it under Python 3.12
+# (`uvx -p 3.12 --from grpcio-tools==1.62.3 python3 -m grpc_tools.protoc ...`)
+# if your default interpreter is 3.13.
 proto: ## Generate gRPC stubs from .proto files
 	@echo "📝 Generating gRPC stubs..."
 	@python3 -m grpc_tools.protoc \
 		-I proto \
 		--python_out=proto \
 		--grpc_python_out=proto \
-		proto/netsvcs/v1/manager.proto
+		proto/netsvcs/v1/manager.proto \
+		proto/hubauth/v1/hubauth.proto
 	@touch proto/__init__.py proto/netsvcs/__init__.py proto/netsvcs/v1/__init__.py
+	@touch proto/hubauth/__init__.py proto/hubauth/v1/__init__.py
 	@# Fix imports to use relative paths for PEP 328 compliance
 	@sed -i 's/^from netsvcs\.v1 import/from . import/g' proto/netsvcs/v1/manager_pb2_grpc.py
+	@sed -i 's/^from hubauth\.v1 import/from . import/g' proto/hubauth/v1/hubauth_pb2_grpc.py
 	@echo "✅ gRPC stubs generated"
 
 # OpenAPI spec generation and validation

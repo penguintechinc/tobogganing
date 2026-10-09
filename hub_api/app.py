@@ -178,6 +178,22 @@ def create_app(config: Config | None = None) -> Quart:
         for warning in readiness_warnings:
             logger.warning(warning)
 
+        # gRPC: HubAuthKeyService (SSO relocation PR-1, design doc §6) --
+        # dual-served alongside the existing REST GET /api/v1/auth/public-key
+        # poll (hub_api/api/headend_routes.py); intra-cluster only,
+        # SPIFFE-ready mTLS when HUBAUTH_GRPC_TLS_CERT_PATH/KEY_PATH are
+        # configured. Non-fatal on failure: REST remains the key-fetch
+        # transport hub-router uses until it migrates onto this RPC (PR-2).
+        try:
+            from hub_api.api.grpc.hubauth_server import create_hubauth_grpc_server
+
+            hubauth_grpc_server = await create_hubauth_grpc_server(app.config.get("KEY_PROVIDER"))
+            await hubauth_grpc_server.start()
+            app.hubauth_grpc_server = hubauth_grpc_server  # type: ignore[attr-defined]
+            logger.info("hubauth_grpc_server_started")
+        except Exception as e:
+            logger.error(f"Failed to start hubauth gRPC server: {e}")
+
         if get_db is not None:
             db = get_db()
             app.db = db  # type: ignore[attr-defined]
@@ -241,6 +257,14 @@ def create_app(config: Config | None = None) -> Quart:
                 # Non-fatal; continue startup
 
             logger.info("Services initialized on app startup")
+
+    @app.after_serving
+    async def teardown_services() -> None:
+        """Gracefully stop background services started in setup_services."""
+        hubauth_grpc_server = getattr(app, "hubauth_grpc_server", None)
+        if hubauth_grpc_server is not None:
+            await hubauth_grpc_server.stop(grace=5)
+            logger.info("hubauth_grpc_server_stopped")
 
     # Liveness probe endpoint (lightweight, no dependencies)
     @app.route("/health", methods=["GET"])
