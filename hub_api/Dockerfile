@@ -26,6 +26,12 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY hub_api /app/hub_api/
 COPY shared /app/shared/
+# proto/ generated gRPC stubs (proto.netsvcs.v1, proto.hubauth.v1) -- hub_api
+# imports these at module level (e.g. hub_api/api/grpc/hubauth_server.py);
+# previously omitted here, which was masked only because the netsvcs gRPC
+# server was never actually started from app.py. PR-1's HubAuthKeyService
+# IS started from app.py's before_serving, so this gap is now load-bearing.
+COPY proto /app/proto/
 
 # Set ownership to appuser
 RUN chown -R appuser:appuser /app
