@@ -27,6 +27,24 @@ reqwest = { workspace = true, features = ["json"] }
 # crate (JwtVerifier + ApiError colocated).
 axum = { workspace = true }
 penguin-aaa = { workspace = true }
+# Inbound JWT public-key fetch (crates::inbound::PublicKeyCache) — gRPC
+# client for hub-api's `HubAuthKeyService.GetPublicKeys` (SSO PR-2),
+# replacing the REST `GET /api/v1/auth/public-key` poll. `tls-ring`/
+# `tls-webpki-roots` let a `https://` endpoint be configured (standard CA
+# validation) without pulling in a second TLS backend alongside
+# `reqwest`'s; client-cert (mTLS/SPIFFE-SVID) loading is not yet wired —
+# see the PR description's penguin-aaa v0.2 note.
+tonic = { workspace = true, features = ["tls-ring", "tls-webpki-roots"] }
+tonic-prost = { workspace = true }
+prost = { workspace = true }
+# `inbound::peek_kid` — unverified base64url decode of a JWT header to
+# read `kid` only (never used to accept the token itself; signature
+# verification still runs via `penguin_aaa::Es256Verifier::verify`).
+base64 = { workspace = true }
+
+[build-dependencies]
+tonic-prost-build = { workspace = true }
+protoc-bin-vendored = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
@@ -37,3 +55,8 @@ p256 = { workspace = true }
 rand_core = { workspace = true }
 hmac = { workspace = true }
 sha2 = { workspace = true }
+# In-process loopback `HubAuthKeyService` double for inbound.rs's gRPC
+# key-fetch tests — mirrors agents/node-agent/crates/transport/src/grpc.rs's
+# identical `ScriptedManager` test pattern.
+async-trait = { workspace = true }
+tokio-util = { workspace = true }

@@ -27,6 +27,21 @@ pub fn resolve_hub_api_url(raw: Option<&str>) -> String {
         .to_string()
 }
 
+/// Resolves hub-api's gRPC endpoint (for
+/// `hub_router_auth::inbound::PublicKeyCache`'s `HubAuthKeyService.
+/// GetPublicKeys` calls, SSO PR-2) from the `HUB_API_GRPC_URL` env var
+/// (raw string, already read by the caller), defaulting to the in-cluster
+/// gRPC service name/port when unset — distinct from
+/// [`resolve_hub_api_url`]'s REST base (port 8000), since hub-api serves
+/// `HubAuthKeyService` on its own gRPC port (default 50051, matching
+/// `HUBAUTH_GRPC_PORT` / `k8s/manifests/hub-api-deployment.yaml`'s `grpc`
+/// containerPort).
+pub fn resolve_hub_api_grpc_url(raw: Option<&str>) -> String {
+    raw.filter(|v| !v.is_empty())
+        .unwrap_or("http://hub-api:50051")
+        .to_string()
+}
+
 /// Waits for SIGINT or (on Unix) SIGTERM, whichever arrives first — the
 /// production graceful-shutdown trigger `main` feeds into
 /// `axum::serve(...).with_graceful_shutdown`. Never panics on
@@ -90,6 +105,20 @@ mod tests {
         assert_eq!(
             resolve_hub_api_url(Some("https://hub-api.internal")),
             "https://hub-api.internal"
+        );
+    }
+
+    #[test]
+    fn resolve_hub_api_grpc_url_defaults_when_unset_or_empty() {
+        assert_eq!(resolve_hub_api_grpc_url(None), "http://hub-api:50051");
+        assert_eq!(resolve_hub_api_grpc_url(Some("")), "http://hub-api:50051");
+    }
+
+    #[test]
+    fn resolve_hub_api_grpc_url_passes_through_a_configured_value() {
+        assert_eq!(
+            resolve_hub_api_grpc_url(Some("https://hub-api.internal:50051")),
+            "https://hub-api.internal:50051"
         );
     }
 

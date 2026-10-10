@@ -13,6 +13,14 @@
 
 pub mod inbound;
 
+/// Generated gRPC client/message types (plus server stubs, used only by
+/// [`inbound`]'s own loopback tests) for `hubauth.v1`, produced at build
+/// time by `tonic-prost-build` from the shared `proto/` contract (see
+/// `build.rs`). Backs [`inbound::PublicKeyCache`]'s `GetPublicKeys` call.
+pub mod pb {
+    tonic::include_proto!("hubauth.v1");
+}
+
 use hub_router_common::Error;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
