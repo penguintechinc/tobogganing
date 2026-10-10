@@ -202,11 +202,12 @@ impl std::fmt::Debug for PublicKeyCache {
 
 impl PublicKeyCache {
     /// Builds an (initially empty) cache pointed at `grpc_endpoint` (e.g.
-    /// `http://hub-api:50051`, or `https://...` for a TLS-terminated
-    /// endpoint — see this crate's Cargo.toml for the `tls-*` feature
-    /// note). The channel connects lazily (`connect_lazy`): construction
-    /// only fails on a syntactically invalid endpoint, never on a dial
-    /// failure; no network call happens until
+    /// `http://hub-api:50051` — plaintext intra-cluster, same transport
+    /// assumption `reqwest`'s own REST predecessor made; a TLS/mTLS-SVID
+    /// endpoint is future scope, see this crate's Cargo.toml). The channel
+    /// connects lazily (`connect_lazy`): construction only fails on a
+    /// syntactically invalid endpoint, never on a dial failure; no network
+    /// call happens until
     /// [`PublicKeyCache::refresh`]/[`PublicKeyCache::spawn_refresh_loop`]
     /// runs.
     pub fn new(grpc_endpoint: impl Into<String>) -> Result<Self, KeyFetchError> {
@@ -247,20 +248,20 @@ impl PublicKeyCache {
         let mut others = Vec::with_capacity(response.keys.len());
 
         for key in &response.keys {
-            let verifier =
-                match penguin_aaa::Es256Verifier::from_public_key_pem(key.public_key_pem.as_bytes())
-                {
-                    Ok(verifier) => Arc::new(verifier),
-                    Err(error) => {
-                        tracing::warn!(
-                            kid = %key.kid,
-                            algorithm = %key.algorithm,
-                            %error,
-                            "skipping unusable key from hub-api's GetPublicKeys response"
-                        );
-                        continue;
-                    }
-                };
+            let verifier = match penguin_aaa::Es256Verifier::from_public_key_pem(
+                key.public_key_pem.as_bytes(),
+            ) {
+                Ok(verifier) => Arc::new(verifier),
+                Err(error) => {
+                    tracing::warn!(
+                        kid = %key.kid,
+                        algorithm = %key.algorithm,
+                        %error,
+                        "skipping unusable key from hub-api's GetPublicKeys response"
+                    );
+                    continue;
+                }
+            };
             by_kid.insert(key.kid.clone(), verifier.clone());
             if key.primary {
                 primary = Some(verifier);
@@ -614,7 +615,11 @@ mod tests {
             now(),
             now() + 3600
         );
-        let signing_input = format!("{}.{}", b64url(header.as_bytes()), b64url(payload.as_bytes()));
+        let signing_input = format!(
+            "{}.{}",
+            b64url(header.as_bytes()),
+            b64url(payload.as_bytes())
+        );
         let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(public_pem.as_bytes())
             .expect("HMAC-SHA256 accepts a key of any length");
         mac.update(signing_input.as_bytes());
@@ -682,9 +687,7 @@ mod tests {
     /// Starts `service` as a real loopback gRPC server on an OS-assigned
     /// port, returning its `http://127.0.0.1:<port>` endpoint and a
     /// [`CancellationToken`] that stops the server when cancelled.
-    async fn spawn_key_service(
-        service: Arc<ScriptedKeyService>,
-    ) -> (String, CancellationToken) {
+    async fn spawn_key_service(service: Arc<ScriptedKeyService>) -> (String, CancellationToken) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("binding an ephemeral loopback port must succeed");
@@ -790,7 +793,10 @@ mod tests {
 
         let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
         let cache = PublicKeyCache::new(url).expect("building a client must succeed");
-        cache.refresh().await.expect("fetching two keys must succeed");
+        cache
+            .refresh()
+            .await
+            .expect("fetching two keys must succeed");
 
         let claims_a = build_claims("node-a", Some("acme"), "router:read", now() + 3600);
         let token_a = sign_with_kid(&private_a, "key-a", &claims_a);
@@ -839,7 +845,10 @@ mod tests {
 
         let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
         let cache = PublicKeyCache::new(url).expect("building a client must succeed");
-        cache.refresh().await.expect("fetching two keys must succeed");
+        cache
+            .refresh()
+            .await
+            .expect("fetching two keys must succeed");
 
         // Signed under key-b but declares a `kid` the cache has never seen
         // — must still verify via the fallback sweep.
@@ -893,7 +902,10 @@ mod tests {
         let result = tokio::time::timeout(Duration::from_secs(5), unreachable.refresh())
             .await
             .expect("an unreachable gRPC endpoint must fail well inside this test's own bound");
-        assert!(result.is_err(), "fetch against an unreachable endpoint must fail");
+        assert!(
+            result.is_err(),
+            "fetch against an unreachable endpoint must fail"
+        );
         assert!(
             unreachable.has_keys(),
             "a failed refresh must never clear a previously cached key set"
