@@ -19,13 +19,45 @@
 //! (never raw claims) is handed to the caller for a per-route
 //! [`require_scope`] check — authz decisions are scope-only, `roles` is
 //! audit/display only (security.md OIDC Claims & Scopes).
+//!
+//! ## Key fetch: gRPC `GetPublicKeys`, multi-key/`kid`-selected (SSO PR-2)
+//!
+//! [`PublicKeyCache`] fetches hub-api's current JWT verification key
+//! *set* (JWKS-shaped, not a single key — see
+//! `proto/hubauth/v1/hubauth.proto`) over gRPC, replacing the earlier
+//! REST `GET /api/v1/auth/public-key` poll. This is what lets a later
+//! rekey (ES256-primary + RS256-legacy-verify-only, bake-out window) land
+//! without hub-router needing a second transport/schema migration: the
+//! wire shape already supports several simultaneously-valid keys. Each
+//! returned key builds its own [`penguin_aaa::Es256Verifier`] (that crate
+//! verifies against exactly one key at a time; there is no bundled
+//! multi-key/JWKS type to hand it — see the PR description's
+//! `penguin-aaa` v0.2 note), cached by `kid` in [`KeySet`].
+//!
+//! [`verify_inbound`] selects which cached verifier(s) to try from the
+//! token's own (unverified) JWS header `kid` field, via [`peek_kid`] — a
+//! plain base64url+JSON decode, never itself a trust decision; the
+//! decoded claims are only accepted once `Es256Verifier::verify` has
+//! cryptographically checked the signature. An exact `kid` match tries
+//! only that one key; no `kid` (or no match — e.g. a stale cache during
+//! key rotation) falls back to trying the primary key first, then every
+//! other key in the set, so a token never fails to verify merely because
+//! `kid` selection missed.
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+
+use crate::pb::hub_auth_key_service_client::HubAuthKeyServiceClient;
+use crate::pb::GetPublicKeysRequest;
+
+/// `api_version` stamped on every `GetPublicKeysRequest` — this crate only
+/// speaks `"v1"` today (backend.md API Versioning's runtime-routing rule).
+const API_VERSION: &str = "v1";
 
 /// Sanitized, request-scoped identity extracted from a verified inbound
 /// JWT — never the raw claims (security.md Output Validation: derived
@@ -81,135 +113,220 @@ impl IntoResponse for ApiError {
     }
 }
 
-/// Failure fetching/parsing hub-api's public key — always a fetch-time
-/// failure (network error, bad status, malformed body, invalid key
-/// material), never a per-request outcome; compare [`ApiError`].
+/// Failure fetching/parsing hub-api's public key set over gRPC — always a
+/// fetch-time failure (channel/transport error, RPC status, an
+/// unusable/empty response), never a per-request outcome; compare
+/// [`ApiError`].
 #[derive(Debug, thiserror::Error)]
 pub enum KeyFetchError {
-    #[error("building http client: {0}")]
-    ClientInit(reqwest::Error),
-    #[error("requesting public key from {0}: {1}")]
-    Request(String, reqwest::Error),
-    #[error("hub-api returned status {0} fetching public key")]
-    Status(u16),
-    #[error("parsing public key response: {0}")]
-    Decode(reqwest::Error),
-    #[error("invalid public key material: {0}")]
-    InvalidKey(#[from] penguin_aaa::AaaError),
-}
-
-/// Response shape of hub-api's `GET /api/v1/auth/public-key`
-/// (`hub_api/api/headend_routes.py::get_auth_public_key`): only
-/// `public_key` is consumed here — `kid`/`algorithm`/`use`/`meta` are
-/// ignored, since `penguin_aaa::Es256Verifier` derives the accepted
-/// algorithm from the key material itself, never from a server-supplied
-/// label (the same alg-confusion-closing design as the verifier's `alg`
-/// check at verify time).
-#[derive(Debug, serde::Deserialize)]
-struct PublicKeyResponse {
-    public_key: String,
+    #[error("invalid hub-api gRPC endpoint {0}: {1}")]
+    InvalidEndpoint(String, tonic::transport::Error),
+    #[error("GetPublicKeys RPC failed: {0}")]
+    Rpc(#[from] tonic::Status),
+    #[error("hub-api's GetPublicKeys response carried no keys")]
+    EmptyKeySet,
+    #[error("hub-api's GetPublicKeys response carried no key this crate can parse")]
+    NoUsableKeys,
 }
 
 /// Default refresh interval — one hour, matching the Go headend's
 /// `JWTProvider.ValidateToken`'s `1 * time.Hour` staleness window
-/// (`services/hub-router/proxy/auth/jwt.go`).
+/// (`services/hub-router/proxy/auth/jwt.go`); the transport changed
+/// (REST poll → gRPC `GetPublicKeys`, SSO PR-2) but the cadence didn't.
 pub const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(3600);
 
-/// Caches hub-api's current JWT verification public key, refreshed
+/// Per-RPC timeout (connect + request) for the `GetPublicKeys` call —
+/// without one, `tonic`'s default `Channel` has no deadline at all and a
+/// hung dial/call would block the refresh loop indefinitely (mirrors
+/// `node-agent-transport::GrpcClient`'s identical bound).
+const GRPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// One verified JWT verification key, keyed by the `kid` hub-api assigned
+/// it, plus whether it was the response's `primary` (currently-active
+/// signing) key.
+struct KeySet {
+    /// Every usable key from the most recent successful fetch, by `kid`.
+    by_kid: HashMap<String, Arc<penguin_aaa::Es256Verifier>>,
+    /// Fallback try-order for a token with no `kid` (or a `kid` this
+    /// cache doesn't recognize, e.g. a stale cache mid-rotation): the
+    /// `primary` key first (if any was flagged), then every other key in
+    /// the order hub-api returned them.
+    ordered: Vec<Arc<penguin_aaa::Es256Verifier>>,
+}
+
+impl KeySet {
+    fn empty() -> Self {
+        Self {
+            by_kid: HashMap::new(),
+            ordered: Vec::new(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.ordered.is_empty()
+    }
+
+    /// Candidate verifiers to try, in order, for a token whose (unverified)
+    /// header `kid` is `kid` — see module doc for the selection policy.
+    fn candidates(&self, kid: Option<&str>) -> Vec<Arc<penguin_aaa::Es256Verifier>> {
+        if let Some(verifier) = kid.and_then(|kid| self.by_kid.get(kid)) {
+            return vec![verifier.clone()];
+        }
+        self.ordered.clone()
+    }
+}
+
+/// Caches hub-api's current JWT verification public key *set*, refreshed
 /// periodically in the background via [`PublicKeyCache::spawn_refresh_loop`].
+/// Fetched over gRPC (`HubAuthKeyService.GetPublicKeys`,
+/// `proto/hubauth/v1/hubauth.proto`) — the SSO PR-2 replacement for the
+/// transitional REST `GET /api/v1/auth/public-key` poll this cache used
+/// before hub-api's gRPC key surface existed (SSO PR-1).
 ///
-/// // TODO(migration): switch to gRPC GetPublicKeys when hub-api SSO PR-1
-/// // lands — the settled architecture is worker<->hub-api gRPC; this REST
-/// // call against hub-api's `/api/v1/auth/public-key` (the same endpoint
-/// // the Go headend's `JWTProvider.fetchPublicKey` already used) is the
-/// // transitional step while that gRPC surface doesn't exist yet.
-///
-/// A fetch failure never clears the cache — the last-known-good verifier
-/// stays in use (graceful degradation: key server unreachable → cached
+/// A fetch failure never clears the cache — the last-known-good key set
+/// stays in use (graceful degradation: hub-api unreachable → cached
 /// value, never a crash) until a refresh succeeds again. Only an empty
 /// cache (no successful fetch has *ever* completed) causes inbound
 /// requests to be rejected, with [`ApiError::KeyUnavailable`] rather than a
 /// panic.
 pub struct PublicKeyCache {
-    hub_api_url: String,
-    http_client: reqwest::Client,
-    verifier: RwLock<Option<Arc<penguin_aaa::Es256Verifier>>>,
+    channel: tonic::transport::Channel,
+    keys: RwLock<KeySet>,
 }
 
 impl std::fmt::Debug for PublicKeyCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PublicKeyCache")
-            .field("hub_api_url", &self.hub_api_url)
-            .finish_non_exhaustive()
+        f.debug_struct("PublicKeyCache").finish_non_exhaustive()
     }
 }
 
 impl PublicKeyCache {
-    /// Builds an (initially empty) cache pointed at `hub_api_url` — no
-    /// network call happens until [`PublicKeyCache::refresh`] or
-    /// [`PublicKeyCache::spawn_refresh_loop`] runs.
-    pub fn new(hub_api_url: impl Into<String>) -> Result<Self, KeyFetchError> {
-        let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(KeyFetchError::ClientInit)?;
+    /// Builds an (initially empty) cache pointed at `grpc_endpoint` (e.g.
+    /// `http://hub-api:50051` — plaintext intra-cluster, same transport
+    /// assumption `reqwest`'s own REST predecessor made; a TLS/mTLS-SVID
+    /// endpoint is future scope, see this crate's Cargo.toml). The channel
+    /// connects lazily (`connect_lazy`): construction only fails on a
+    /// syntactically invalid endpoint, never on a dial failure; no network
+    /// call happens until
+    /// [`PublicKeyCache::refresh`]/[`PublicKeyCache::spawn_refresh_loop`]
+    /// runs.
+    pub fn new(grpc_endpoint: impl Into<String>) -> Result<Self, KeyFetchError> {
+        let grpc_endpoint = grpc_endpoint.into();
+        let endpoint = tonic::transport::Endpoint::from_shared(grpc_endpoint.clone())
+            .map_err(|error| KeyFetchError::InvalidEndpoint(grpc_endpoint, error))?
+            .connect_timeout(GRPC_REQUEST_TIMEOUT)
+            .timeout(GRPC_REQUEST_TIMEOUT);
         Ok(Self {
-            hub_api_url: hub_api_url.into(),
-            http_client,
-            verifier: RwLock::new(None),
+            channel: endpoint.connect_lazy(),
+            keys: RwLock::new(KeySet::empty()),
         })
     }
 
-    /// Fetches hub-api's current public key and, on success, replaces the
-    /// cached verifier. On failure the previous cached verifier (if any)
-    /// is left untouched — see struct docs on graceful degradation.
+    fn client(&self) -> HubAuthKeyServiceClient<tonic::transport::Channel> {
+        HubAuthKeyServiceClient::new(self.channel.clone())
+    }
+
+    /// Fetches hub-api's current public key set and, on success, replaces
+    /// the cached [`KeySet`] wholesale. On failure the previous cached set
+    /// (if any) is left untouched — see struct docs on graceful
+    /// degradation. A key entry that fails to parse as a usable verifier
+    /// (malformed PEM, unsupported algorithm) is logged and skipped rather
+    /// than failing the whole refresh, unless *every* entry is unusable
+    /// (then [`KeyFetchError::NoUsableKeys`]).
     pub async fn refresh(&self) -> Result<(), KeyFetchError> {
-        let url = format!("{}/api/v1/auth/public-key", self.hub_api_url);
+        let request = tonic::Request::new(GetPublicKeysRequest {
+            api_version: API_VERSION.to_string(),
+        });
+        let response = self.client().get_public_keys(request).await?.into_inner();
 
-        let response = self
-            .http_client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| KeyFetchError::Request(url.clone(), e))?;
-
-        if !response.status().is_success() {
-            return Err(KeyFetchError::Status(response.status().as_u16()));
+        if response.keys.is_empty() {
+            return Err(KeyFetchError::EmptyKeySet);
         }
 
-        let body: PublicKeyResponse = response.json().await.map_err(KeyFetchError::Decode)?;
-        let verifier = penguin_aaa::Es256Verifier::from_public_key_pem(body.public_key.as_bytes())?;
+        let mut by_kid = HashMap::with_capacity(response.keys.len());
+        let mut primary = None;
+        let mut others = Vec::with_capacity(response.keys.len());
+
+        for key in &response.keys {
+            let verifier = match penguin_aaa::Es256Verifier::from_public_key_pem(
+                key.public_key_pem.as_bytes(),
+            ) {
+                Ok(verifier) => Arc::new(verifier),
+                Err(error) => {
+                    tracing::warn!(
+                        kid = %key.kid,
+                        algorithm = %key.algorithm,
+                        %error,
+                        "skipping unusable key from hub-api's GetPublicKeys response"
+                    );
+                    continue;
+                }
+            };
+            by_kid.insert(key.kid.clone(), verifier.clone());
+            if key.primary {
+                primary = Some(verifier);
+            } else {
+                others.push(verifier);
+            }
+        }
+
+        if by_kid.is_empty() {
+            return Err(KeyFetchError::NoUsableKeys);
+        }
+        if primary.is_none() {
+            tracing::warn!(
+                "hub-api's GetPublicKeys response has no key flagged primary — every key will \
+                 still be tried, just with no preferred first attempt"
+            );
+        }
+
+        let mut ordered = Vec::with_capacity(by_kid.len());
+        ordered.extend(primary);
+        ordered.extend(others);
 
         let mut guard = self
-            .verifier
+            .keys
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *guard = Some(Arc::new(verifier));
+        *guard = KeySet { by_kid, ordered };
         Ok(())
     }
 
-    /// The current cached verifier, if any successful fetch has ever
-    /// completed. Never blocks across an `.await` point (the lock is held
-    /// only long enough to clone the `Arc`).
-    pub fn current(&self) -> Option<Arc<penguin_aaa::Es256Verifier>> {
-        self.verifier
+    /// The candidate verifiers to try for a token whose (unverified)
+    /// header `kid` is `kid` — empty only when no successful fetch has
+    /// *ever* completed (see struct docs).
+    fn candidates(&self, kid: Option<&str>) -> Vec<Arc<penguin_aaa::Es256Verifier>> {
+        self.keys
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+            .candidates(kid)
     }
 
-    /// Seeds the cache with an already-built verifier, bypassing the
-    /// network fetch entirely — for a *different* crate's tests only
-    /// (e.g. `hub-router`'s own middleware/route integration tests, which
-    /// can't reach this module's private `verifier` field directly). Only
-    /// compiled in with the `test-util` feature, which production builds
-    /// never enable.
+    /// `true` once at least one successful fetch has populated the cache.
+    fn has_keys(&self) -> bool {
+        !self
+            .keys
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty()
+    }
+
+    /// Seeds the cache with a single already-built verifier as the
+    /// `primary` (and only) key, bypassing the network fetch entirely —
+    /// for a *different* crate's tests only (e.g. `hub-router`'s own
+    /// middleware/route integration tests, which can't reach this
+    /// module's private fields directly). Only compiled in with the
+    /// `test-util` feature, which production builds never enable.
     #[cfg(feature = "test-util")]
     pub fn inject_for_test(&self, verifier: penguin_aaa::Es256Verifier) {
+        let verifier = Arc::new(verifier);
         *self
-            .verifier
+            .keys
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Arc::new(verifier));
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = KeySet {
+            by_kid: HashMap::new(),
+            ordered: vec![verifier],
+        };
     }
 
     /// Spawns a background task that calls [`PublicKeyCache::refresh`]
@@ -217,16 +334,16 @@ impl PublicKeyCache {
     /// covers both the startup fetch and the periodic (default hourly)
     /// refresh the Go headend performed lazily on each `ValidateToken`
     /// call. Never exits and never panics: a failed refresh is logged at
-    /// WARN and the loop continues with whatever verifier (or lack of one)
+    /// WARN and the loop continues with whatever key set (or lack of one)
     /// was already cached.
     pub fn spawn_refresh_loop(self: Arc<Self>, interval: Duration) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             loop {
                 match self.refresh().await {
-                    Ok(()) => tracing::info!("refreshed hub-api JWT public key"),
+                    Ok(()) => tracing::info!("refreshed hub-api JWT public key set"),
                     Err(error) => tracing::warn!(
                         %error,
-                        "failed to refresh hub-api JWT public key — using cached key if available"
+                        "failed to refresh hub-api JWT public key set — using cached keys if available"
                     ),
                 }
                 tokio::time::sleep(interval).await;
@@ -235,32 +352,70 @@ impl PublicKeyCache {
     }
 }
 
-/// Verifies `token` against `cache`'s current public key and enforces
-/// tenant isolation (security.md: tenant middleware/check runs first,
-/// before any scope check) before returning the sanitized [`AuthUser`].
-/// Every verification failure (bad/wrong-algorithm signature, expired,
-/// malformed, missing required claim) collapses to
+/// Reads the (unverified) `kid` field off a compact JWS's header segment,
+/// if present. This is **never** a trust decision by itself — it only
+/// narrows which cached [`penguin_aaa::Es256Verifier`] to try first;
+/// [`Es256Verifier::verify`] still performs the actual cryptographic
+/// check, and a wrong/missing/forged `kid` just falls back to trying
+/// every cached key (see [`KeySet::candidates`]), never to accepting the
+/// token.
+fn peek_kid(token: &str) -> Option<String> {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine as _;
+
+    let header_b64 = token.split('.').next()?;
+    let header_bytes = URL_SAFE_NO_PAD.decode(header_b64).ok()?;
+    let header: serde_json::Value = serde_json::from_slice(&header_bytes).ok()?;
+    header.get("kid")?.as_str().map(str::to_string)
+}
+
+/// Verifies `token` against `cache`'s current public key set (selecting a
+/// candidate verifier by the token's own `kid` header, falling back to
+/// the full set — see module doc) and enforces tenant isolation
+/// (security.md: tenant middleware/check runs first, before any scope
+/// check) before returning the sanitized [`AuthUser`]. Every verification
+/// failure (bad/wrong-algorithm signature, expired, malformed, missing
+/// required claim, no matching key) collapses to
 /// [`ApiError::InvalidCredentials`] — never leaking which check failed to
-/// the caller (only to the sanitized debug/warn log).
+/// the caller (only to the sanitized debug/warn log). Once a candidate
+/// key's signature check succeeds, the tenant check runs and its outcome
+/// (success or [`ApiError::Forbidden`]) is final — a verified-but-missing-
+/// tenant token is never retried against another key.
 pub fn verify_inbound(cache: &PublicKeyCache, token: &str) -> Result<AuthUser, ApiError> {
-    let verifier = cache.current().ok_or(ApiError::KeyUnavailable)?;
+    if !cache.has_keys() {
+        return Err(ApiError::KeyUnavailable);
+    }
 
-    let claims = verifier.verify(token).map_err(|error| {
-        tracing::debug!(%error, "inbound jwt verification failed");
-        ApiError::InvalidCredentials
-    })?;
+    let kid = peek_kid(token);
+    let candidates = cache.candidates(kid.as_deref());
 
-    let tenant = claims.tenant.ok_or_else(|| {
-        tracing::warn!(sub = %claims.sub, "rejected inbound token: missing tenant claim");
-        ApiError::Forbidden
-    })?;
+    let mut last_error = None;
+    for verifier in candidates {
+        let claims = match verifier.verify(token) {
+            Ok(claims) => claims,
+            Err(error) => {
+                last_error = Some(error);
+                continue;
+            }
+        };
 
-    Ok(AuthUser {
-        id: claims.sub,
-        tenant,
-        scope: claims.scope,
-        roles: claims.roles,
-    })
+        let tenant = claims.tenant.ok_or_else(|| {
+            tracing::warn!(sub = %claims.sub, "rejected inbound token: missing tenant claim");
+            ApiError::Forbidden
+        })?;
+
+        return Ok(AuthUser {
+            id: claims.sub,
+            tenant,
+            scope: claims.scope,
+            roles: claims.roles,
+        });
+    }
+
+    if let Some(error) = last_error {
+        tracing::debug!(%error, "inbound jwt verification failed against every candidate key");
+    }
+    Err(ApiError::InvalidCredentials)
 }
 
 /// Checks `user`'s scope for `required` (`resource:action`, exact match on
@@ -284,13 +439,21 @@ pub fn require_scope(user: &AuthUser, required: &str) -> Result<(), ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::hub_auth_key_service_server::{HubAuthKeyService, HubAuthKeyServiceServer};
+    use crate::pb::{PublicKey, PublicKeySetResponse};
+    use async_trait::async_trait;
     use hmac::{Hmac, Mac};
-    use p256::ecdsa::{SigningKey, VerifyingKey};
-    use p256::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
+    use p256::ecdsa::signature::Signer as _;
+    use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
+    use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
     use penguin_aaa::{Claims, Es256Signer};
     use sha2::Sha256;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Mutex as AsyncMutex;
+    use tokio_util::sync::CancellationToken;
+    use tonic::transport::server::TcpIncoming;
+    use tonic::transport::Server;
+    use tonic::{Request as TonicRequest, Response as TonicResponse, Status};
 
     /// Generates a fresh, throwaway EC P-256 keypair as PKCS#8/SPKI PEM —
     /// generated at test time, never a fixed/committed key (mirrors
@@ -335,22 +498,49 @@ mod tests {
             .expect("signing a well-formed claim set must succeed")
     }
 
-    /// Builds a cache with `verifier` already populated, bypassing any
-    /// network fetch — valid because this `tests` module is a descendant
-    /// of `inbound`, so it may touch the private `verifier` field
-    /// directly.
+    /// Hand-forges a well-formed ES256 JWS carrying a `kid` header field —
+    /// `penguin_aaa::Es256Signer` never adds one (its header is fixed to
+    /// `{alg, typ}`, see that crate's `token::Header`), so this crate's own
+    /// `kid`-based selection tests need to build the token by hand, reusing
+    /// the exact same raw fixed-size (r||s) ECDSA signature format
+    /// `Es256Signer::sign`/`Es256Verifier::verify` use.
+    fn sign_with_kid(private_pem: &str, kid: &str, claims: &Claims) -> String {
+        let signing_key = SigningKey::from_pkcs8_pem(private_pem)
+            .expect("a freshly generated EC PEM must load as a signing key");
+        let header = serde_json::json!({"alg": "ES256", "typ": "JWT", "kid": kid});
+        let header_b64 = b64url(&serde_json::to_vec(&header).expect("header serializes"));
+        let payload_b64 = b64url(&serde_json::to_vec(claims).expect("claims serialize"));
+        let signing_input = format!("{header_b64}.{payload_b64}");
+        let signature: Signature = signing_key
+            .try_sign(signing_input.as_bytes())
+            .expect("signing a well-formed signing input must succeed");
+        format!("{signing_input}.{}", b64url(&signature.to_bytes()))
+    }
+
+    /// Builds a cache with a single verifier already populated as the
+    /// `primary` (and only) key, bypassing any network fetch — valid
+    /// because this `tests` module is a descendant of `inbound`, so it may
+    /// touch private fields directly.
     fn cache_with_verifier(verifier: penguin_aaa::Es256Verifier) -> PublicKeyCache {
         let cache = PublicKeyCache::new("http://unused.invalid")
-            .expect("building a client with no special TLS/proxy config must succeed");
+            .expect("building a client against a syntactically valid endpoint must succeed");
+        let verifier = Arc::new(verifier);
         *cache
-            .verifier
+            .keys
             .write()
-            .expect("freshly constructed lock is never poisoned") = Some(Arc::new(verifier));
+            .expect("freshly constructed lock is never poisoned") = KeySet {
+            by_kid: HashMap::new(),
+            ordered: vec![verifier],
+        };
         cache
     }
 
-    #[test]
-    fn verify_inbound_accepts_valid_token_with_tenant() {
+    // `PublicKeyCache::new`'s `Endpoint::connect_lazy()` needs a Tokio
+    // runtime context to set up the channel even though it never dials
+    // out (mirrors `node-agent-transport::GrpcClient`'s identical note),
+    // so every test touching a `PublicKeyCache` is `#[tokio::test]`.
+    #[tokio::test]
+    async fn verify_inbound_accepts_valid_token_with_tenant() {
         let (private_pem, public_pem) = generate_test_keypair();
         let cache = cache_with_verifier(
             penguin_aaa::Es256Verifier::from_public_key_pem(public_pem.as_bytes())
@@ -370,8 +560,8 @@ mod tests {
         assert!(require_scope(&user, "router:read").is_ok());
     }
 
-    #[test]
-    fn verify_inbound_rejects_missing_tenant_as_forbidden() {
+    #[tokio::test]
+    async fn verify_inbound_rejects_missing_tenant_as_forbidden() {
         let (private_pem, public_pem) = generate_test_keypair();
         let cache = cache_with_verifier(
             penguin_aaa::Es256Verifier::from_public_key_pem(public_pem.as_bytes())
@@ -398,10 +588,10 @@ mod tests {
         assert!(matches!(err, ApiError::Forbidden));
     }
 
-    #[test]
-    fn verify_inbound_rejects_when_key_unavailable() {
+    #[tokio::test]
+    async fn verify_inbound_rejects_when_key_unavailable() {
         let cache = PublicKeyCache::new("http://unused.invalid")
-            .expect("building a client with no special TLS/proxy config must succeed");
+            .expect("building a client against a syntactically valid endpoint must succeed");
         let err = verify_inbound(&cache, "whatever.token.here")
             .expect_err("an empty cache must reject every token");
         assert!(matches!(err, ApiError::KeyUnavailable));
@@ -411,8 +601,8 @@ mod tests {
     /// ES256 *public* key bytes as the HMAC secret must be rejected —
     /// `Es256Verifier` has no HS256 code path at all (mirrors
     /// `engines/testserver-rs`'s identical regression test).
-    #[test]
-    fn verify_inbound_rejects_hs256_alg_confusion_token() {
+    #[tokio::test]
+    async fn verify_inbound_rejects_hs256_alg_confusion_token() {
         let (_, public_pem) = generate_test_keypair();
         let cache = cache_with_verifier(
             penguin_aaa::Es256Verifier::from_public_key_pem(public_pem.as_bytes())
@@ -442,8 +632,8 @@ mod tests {
 
     /// Alg-confusion guard: a token declaring `alg: none` with no signature
     /// segment must be rejected before any signature parsing is attempted.
-    #[test]
-    fn verify_inbound_rejects_alg_none_token() {
+    #[tokio::test]
+    async fn verify_inbound_rejects_alg_none_token() {
         let (_, public_pem) = generate_test_keypair();
         let cache = cache_with_verifier(
             penguin_aaa::Es256Verifier::from_public_key_pem(public_pem.as_bytes())
@@ -465,61 +655,272 @@ mod tests {
         assert!(matches!(err, ApiError::InvalidCredentials));
     }
 
-    /// Proves [`PublicKeyCache::refresh`]'s graceful-degradation contract
-    /// end-to-end over real HTTP: a successful fetch populates the cache;
-    /// a subsequent failed fetch (connection refused) leaves the
-    /// previously cached verifier untouched rather than clearing it.
-    #[tokio::test]
-    async fn refresh_falls_back_to_cached_key_when_endpoint_unreachable() {
-        let (_, public_pem) = generate_test_keypair();
-        let mock_server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/api/v1/auth/public-key"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "public_key": public_pem,
-                "kid": "test-kid",
-                "algorithm": "ES256",
-            })))
-            .mount(&mock_server)
-            .await;
+    /// An in-process `hubauth.v1.HubAuthKeyService` double: each RPC pops
+    /// one canned `Result` (panicking on a second call). This is what
+    /// makes these tests a real end-to-end exercise of
+    /// `PublicKeyCache::refresh` over the wire rather than a unit test of
+    /// request builders alone — mirrors
+    /// `agents/node-agent/crates/transport/src/grpc.rs`'s identical
+    /// `ScriptedManager` pattern.
+    #[derive(Default)]
+    struct ScriptedKeyService {
+        response: AsyncMutex<Option<Result<PublicKeySetResponse, Status>>>,
+        calls: AtomicUsize,
+    }
 
-        let cache = PublicKeyCache::new(mock_server.uri())
-            .expect("building a client with no special TLS/proxy config must succeed");
+    #[async_trait]
+    impl HubAuthKeyService for ScriptedKeyService {
+        async fn get_public_keys(
+            &self,
+            _request: TonicRequest<GetPublicKeysRequest>,
+        ) -> Result<TonicResponse<PublicKeySetResponse>, Status> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.response
+                .lock()
+                .await
+                .take()
+                .expect("scripted RPC called more times than configured")
+                .map(TonicResponse::new)
+        }
+    }
+
+    /// Starts `service` as a real loopback gRPC server on an OS-assigned
+    /// port, returning its `http://127.0.0.1:<port>` endpoint and a
+    /// [`CancellationToken`] that stops the server when cancelled.
+    async fn spawn_key_service(service: Arc<ScriptedKeyService>) -> (String, CancellationToken) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("binding an ephemeral loopback port must succeed");
+        let addr = listener
+            .local_addr()
+            .expect("a bound listener has a local address");
+        let incoming = TcpIncoming::from(listener);
+        let shutdown = CancellationToken::new();
+        let stop = shutdown.clone();
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(HubAuthKeyServiceServer::from_arc(service))
+                .serve_with_incoming_shutdown(incoming, stop.cancelled())
+                .await
+                .expect("mock HubAuthKeyService server must not fail to serve");
+        });
+
+        (format!("http://{addr}"), shutdown)
+    }
+
+    fn one_key_response(public_pem: &str, kid: &str) -> PublicKeySetResponse {
+        PublicKeySetResponse {
+            keys: vec![PublicKey {
+                kid: kid.to_string(),
+                algorithm: "ES256".to_string(),
+                public_key_pem: public_pem.to_string(),
+                r#use: "sig".to_string(),
+                primary: true,
+                fetched_at_unix: now(),
+            }],
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn refresh_fetches_a_single_key_over_grpc_and_it_verifies_a_token() {
+        let (private_pem, public_pem) = generate_test_keypair();
+        let service = Arc::new(ScriptedKeyService::default());
+        *service.response.lock().await = Some(Ok(one_key_response(&public_pem, "key-a")));
+
+        let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
+        let cache = PublicKeyCache::new(url).expect("building a client must succeed");
+        cache
+            .refresh()
+            .await
+            .expect("fetching from a healthy mock server must succeed");
+
+        let claims = build_claims("node-1", Some("acme"), "router:read", now() + 3600);
+        let token = sign_valid(&private_pem, &claims);
+        let user = verify_inbound(&cache, &token)
+            .expect("a token signed by the gRPC-fetched key must verify");
+        assert_eq!(user.tenant, "acme");
+
+        assert_eq!(service.calls.load(Ordering::SeqCst), 1);
+        shutdown.cancel();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn refresh_rejects_an_empty_key_set() {
+        let service = Arc::new(ScriptedKeyService::default());
+        *service.response.lock().await = Some(Ok(PublicKeySetResponse { keys: vec![] }));
+
+        let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
+        let cache = PublicKeyCache::new(url).expect("building a client must succeed");
+        let err = cache
+            .refresh()
+            .await
+            .expect_err("an empty key set must be rejected, not silently cached");
+        assert!(matches!(err, KeyFetchError::EmptyKeySet));
+        shutdown.cancel();
+    }
+
+    /// Proves the multi-key/`kid`-selection contract end-to-end: hub-api
+    /// returns two keys (one `primary`), and a token signed under *either*
+    /// key — each carrying that key's own `kid` in its header — verifies,
+    /// because `verify_inbound` selects the matching verifier by `kid`
+    /// rather than only ever trying the primary.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn multi_key_set_verifies_tokens_signed_under_either_key_by_kid() {
+        let (private_a, public_a) = generate_test_keypair();
+        let (private_b, public_b) = generate_test_keypair();
+        let service = Arc::new(ScriptedKeyService::default());
+        *service.response.lock().await = Some(Ok(PublicKeySetResponse {
+            keys: vec![
+                PublicKey {
+                    kid: "key-a".to_string(),
+                    algorithm: "ES256".to_string(),
+                    public_key_pem: public_a.clone(),
+                    r#use: "sig".to_string(),
+                    primary: true,
+                    fetched_at_unix: now(),
+                },
+                PublicKey {
+                    kid: "key-b".to_string(),
+                    algorithm: "ES256".to_string(),
+                    public_key_pem: public_b.clone(),
+                    r#use: "sig".to_string(),
+                    primary: false,
+                    fetched_at_unix: now(),
+                },
+            ],
+        }));
+
+        let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
+        let cache = PublicKeyCache::new(url).expect("building a client must succeed");
+        cache
+            .refresh()
+            .await
+            .expect("fetching two keys must succeed");
+
+        let claims_a = build_claims("node-a", Some("acme"), "router:read", now() + 3600);
+        let token_a = sign_with_kid(&private_a, "key-a", &claims_a);
+        let user_a =
+            verify_inbound(&cache, &token_a).expect("a token signed under key-a must verify");
+        assert_eq!(user_a.id, "node-a");
+
+        let claims_b = build_claims("node-b", Some("acme"), "router:read", now() + 3600);
+        let token_b = sign_with_kid(&private_b, "key-b", &claims_b);
+        let user_b = verify_inbound(&cache, &token_b)
+            .expect("a token signed under the non-primary key-b must also verify");
+        assert_eq!(user_b.id, "node-b");
+
+        shutdown.cancel();
+    }
+
+    /// A `kid` the cache doesn't recognize (stale cache mid-rotation, or no
+    /// `kid` at all) must still verify by falling back to trying every
+    /// cached key, not just the one named — the fallback-sweep half of the
+    /// selection contract.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn unknown_kid_falls_back_to_trying_every_cached_key() {
+        let (_private_a, public_a) = generate_test_keypair();
+        let (private_b, public_b) = generate_test_keypair();
+        let service = Arc::new(ScriptedKeyService::default());
+        *service.response.lock().await = Some(Ok(PublicKeySetResponse {
+            keys: vec![
+                PublicKey {
+                    kid: "key-a".to_string(),
+                    algorithm: "ES256".to_string(),
+                    public_key_pem: public_a,
+                    r#use: "sig".to_string(),
+                    primary: true,
+                    fetched_at_unix: now(),
+                },
+                PublicKey {
+                    kid: "key-b".to_string(),
+                    algorithm: "ES256".to_string(),
+                    public_key_pem: public_b,
+                    r#use: "sig".to_string(),
+                    primary: false,
+                    fetched_at_unix: now(),
+                },
+            ],
+        }));
+
+        let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
+        let cache = PublicKeyCache::new(url).expect("building a client must succeed");
+        cache
+            .refresh()
+            .await
+            .expect("fetching two keys must succeed");
+
+        // Signed under key-b but declares a `kid` the cache has never seen
+        // — must still verify via the fallback sweep.
+        let claims = build_claims("node-b", Some("acme"), "router:read", now() + 3600);
+        let token = sign_with_kid(&private_b, "key-unknown", &claims);
+        let user = verify_inbound(&cache, &token)
+            .expect("an unrecognized kid must fall back to trying every cached key");
+        assert_eq!(user.id, "node-b");
+
+        shutdown.cancel();
+    }
+
+    /// Proves [`PublicKeyCache::refresh`]'s graceful-degradation contract
+    /// end-to-end over a real gRPC connection: a successful fetch
+    /// populates the cache; a subsequent failed fetch (connection refused)
+    /// leaves the previously cached key set untouched rather than clearing
+    /// it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn refresh_falls_back_to_cached_keys_when_endpoint_unreachable() {
+        let (_, public_pem) = generate_test_keypair();
+        let service = Arc::new(ScriptedKeyService::default());
+        *service.response.lock().await = Some(Ok(one_key_response(&public_pem, "key-a")));
+
+        let (url, shutdown) = spawn_key_service(Arc::clone(&service)).await;
+        let cache = PublicKeyCache::new(url)
+            .expect("building a client against a healthy endpoint must succeed");
         cache
             .refresh()
             .await
             .expect("initial fetch against a healthy mock server must succeed");
-        let first = cache
-            .current()
-            .expect("cache must be populated after a successful refresh");
+        assert!(cache.has_keys());
 
-        // Point at an address nothing is listening on — refresh must fail
-        // without touching the cached verifier.
+        // Point a *different* cache at an address nothing is listening on,
+        // seed it with the same key set as if it had previously succeeded,
+        // then prove a failed refresh never clears what's already cached.
         let unreachable = PublicKeyCache::new("http://127.0.0.1:1")
             .expect("building a client with no special TLS/proxy config must succeed");
-        *unreachable
-            .verifier
-            .write()
-            .expect("freshly constructed lock is never poisoned") = Some(first.clone());
-        let result = unreachable.refresh().await;
+        {
+            let seeded = cache
+                .keys
+                .read()
+                .expect("freshly constructed lock is never poisoned");
+            *unreachable
+                .keys
+                .write()
+                .expect("freshly constructed lock is never poisoned") = KeySet {
+                by_kid: seeded.by_kid.clone(),
+                ordered: seeded.ordered.clone(),
+            };
+        }
+        let result = tokio::time::timeout(Duration::from_secs(5), unreachable.refresh())
+            .await
+            .expect("an unreachable gRPC endpoint must fail well inside this test's own bound");
         assert!(
             result.is_err(),
             "fetch against an unreachable endpoint must fail"
         );
-
-        let still_cached = unreachable
-            .current()
-            .expect("a failed refresh must never clear a previously cached verifier");
         assert!(
-            Arc::ptr_eq(&first, &still_cached),
-            "cached verifier must be the exact same instance after a failed refresh"
+            unreachable.has_keys(),
+            "a failed refresh must never clear a previously cached key set"
         );
+
+        shutdown.cancel();
     }
 
     /// Minimal unpadded base64url encoder for the hand-forged tokens above
     /// — deliberately hand-rolled instead of pulling in a `base64`
     /// dependency just to construct a few malformed/forged test tokens
-    /// (mirrors `engines/testserver-rs`'s identical helper).
+    /// (mirrors `engines/testserver-rs`'s identical helper). Production
+    /// code's own base64url need ([`peek_kid`]) uses the real `base64`
+    /// crate instead, since decoding untrusted input by hand is exactly
+    /// the kind of thing not to hand-roll outside a test.
     fn b64url(input: &[u8]) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut out = String::new();

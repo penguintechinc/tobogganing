@@ -1,11 +1,12 @@
 //! Hub Router service entry point.
 //!
 //! Initializes telemetry (tracing + OTLP + Prometheus), builds the inbound
-//! JWT public-key cache (fetched from hub-api, refreshed hourly in the
-//! background — see `hub_router_auth::inbound::PublicKeyCache`), and
-//! serves the axum router (`hub_router::routes::router`) until a shutdown
-//! signal arrives. Kept deliberately thin — the testable logic
-//! (`resolve_port`/`resolve_hub_api_url`/`wait_for_os_shutdown_signal`)
+//! JWT public-key cache (fetched from hub-api over gRPC
+//! `HubAuthKeyService.GetPublicKeys`, refreshed hourly in the background
+//! — see `hub_router_auth::inbound::PublicKeyCache`), and serves the axum
+//! router (`hub_router::routes::router`) until a shutdown signal arrives.
+//! Kept deliberately thin — the testable logic
+//! (`resolve_port`/`resolve_hub_api_grpc_url`/`wait_for_os_shutdown_signal`)
 //! lives in `hub_router`'s lib surface, mirroring
 //! `engines/testserver-rs`'s main.rs/app.rs split.
 
@@ -29,14 +30,17 @@ async fn main() {
 
     info!("Hub Router service starting");
 
-    // hub-api's base URL for the inbound JWT public-key fetch (REST, the
-    // transitional step — see hub_router_auth::inbound::PublicKeyCache's
-    // doc for the gRPC migration TODO). Degrades gracefully if unset or
-    // unreachable: the key cache simply stays empty and every protected
-    // request gets 503 until a fetch succeeds, never a crash.
-    let hub_api_url = hub_router::resolve_hub_api_url(std::env::var("HUB_API_URL").ok().as_deref());
+    // hub-api's gRPC endpoint for the inbound JWT public-key fetch
+    // (`HubAuthKeyService.GetPublicKeys`, SSO PR-2 — replaces the
+    // transitional REST `GET /api/v1/auth/public-key` poll). Degrades
+    // gracefully if unset or unreachable: the key cache simply stays
+    // empty and every protected request gets 503 until a fetch succeeds,
+    // never a crash.
+    let hub_api_grpc_url =
+        hub_router::resolve_hub_api_grpc_url(std::env::var("HUB_API_GRPC_URL").ok().as_deref());
     let key_cache = Arc::new(
-        PublicKeyCache::new(hub_api_url).expect("failed to build the inbound JWT key-fetch client"),
+        PublicKeyCache::new(hub_api_grpc_url)
+            .expect("failed to build the inbound JWT key-fetch client"),
     );
     key_cache
         .clone()

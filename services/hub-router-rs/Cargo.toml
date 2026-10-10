@@ -62,6 +62,12 @@ rand = "=0.9.5"
 # `gethostname(2)` call. Not previously a workspace dependency; MIT
 # licensed, no transitive deps beyond platform libc bindings.
 hostname = "=0.4.2"
+# hub-router-auth's `inbound::peek_kid` -- a header-only, unverified
+# base64url decode of a JWT's `kid` (used solely to pick which cached
+# verifier to try first; `penguin_aaa::Es256Verifier::verify` still does
+# the actual cryptographic check). Same pin as node-agent-transport's
+# identical use.
+base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
 
 # transport
 tonic = "=0.14.6"
