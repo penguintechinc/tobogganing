@@ -1,249 +1,98 @@
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/agents/node-agent"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/engines/netsvcs-dns"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/engines/testserver"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/hub_api"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/portal"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "docker"
-    directory: "/services/hub-router"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "pip"
-    directory: "/engines/netsvcs-dns"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "pip"
-    directory: "/hub_api"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "pip"
-    directory: "/shared/py_libs"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "npm"
-    directory: "/portal"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "npm"
-    directory: "/shared/node_libs"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "cargo"
-    directory: "/agents/node-agent"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "cargo"
-    directory: "/engines/testserver-rs"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "cargo"
-    directory: "/services/hub-router-rs"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "gomod"
-    directory: "/engines/testserver"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
-  - package-ecosystem: "gomod"
-    directory: "/services/hub-router"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-dependencies:
-        applies-to: version-updates
-        patterns:
-          - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
+- package-ecosystem: github-actions
+  directory: /
+  schedule:
+    interval: weekly
+  groups:
+    all-dependencies:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+- package-ecosystem: docker
+  directories:
+  - /
+  - /agents/node-agent
+  - /engines/netsvcs-dns
+  - /engines/testserver
+  - /hub_api
+  - /portal
+  - /services/hub-router
+  schedule:
+    interval: weekly
+  groups:
+    all-dependencies:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+- package-ecosystem: pip
+  directories:
+  - /
+  - /engines/netsvcs-dns
+  - /hub_api
+  - /shared/py_libs
+  schedule:
+    interval: weekly
+  groups:
+    all-dependencies:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+- package-ecosystem: npm
+  directories:
+  - /portal
+  - /shared/node_libs
+  schedule:
+    interval: weekly
+  groups:
+    all-dependencies:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+- package-ecosystem: cargo
+  directories:
+  - /agents/node-agent
+  - /engines/testserver-rs
+  - /services/hub-router-rs
+  schedule:
+    interval: weekly
+  groups:
+    all-dependencies:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+- package-ecosystem: gomod
+  directories:
+  - /engines/testserver
+  - /services/hub-router
+  schedule:
+    interval: weekly
+  groups:
+    all-dependencies:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    security:
+      applies-to: security-updates
+      patterns:
+      - '*'
