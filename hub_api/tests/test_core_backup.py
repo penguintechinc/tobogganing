@@ -664,7 +664,7 @@ class TestS3Manager:
             {
                 "Contents": [
                     {
-                        "Key": "backups/backup1/backup1.json.gz",
+                        "Key": "backups/_global/backup1/backup1.json.gz",
                         "Size": 1024,
                         "LastModified": MagicMock(isoformat=lambda: "2026-01-01T00:00:00"),
                     }

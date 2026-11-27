@@ -139,44 +139,186 @@ async def test_restore_backup_invalid_format_raises(
 
 
 @pytest.mark.asyncio
-async def test_restore_backup_scope_mismatch_logged_but_continues(
+async def test_restore_backup_scope_mismatch_refused_and_rows_kept(
+    backup_manager_and_dir: tuple[BackupManager, Path],
+) -> None:
+    """Regression (s174): a tenant restore of a non-matching-scope file raises before
+    deleting anything, so the tenant's existing rows survive."""
+    manager, backup_dir = backup_manager_and_dir
+    now = datetime.now(timezone.utc)
+    await manager.db.users.async_insert(
+        id="user-keep",
+        username="keep",
+        email="keep@example.com",
+        password_hash="h",
+        tenant="tenant-a",
+        created_at=now,
+        updated_at=now,
+        is_active=True,
+    )
+    backup_file = _write_mismatched_backup(backup_dir, now.isoformat())
+
+    with pytest.raises(ValueError, match="does not match tenant:tenant-a"):
+        await manager.restore_backup(
+            backup_path=str(backup_file), tenant_id="tenant-a", verify_checksum=False
+        )
+
+    rows = await manager.db(manager.db.users.tenant == "tenant-a").select()
+    assert [r["id"] if isinstance(r, dict) else r.id for r in rows] == ["user-keep"]
+
+
+@pytest.mark.asyncio
+async def test_restore_backup_scope_mismatch_override_restores(
     backup_manager_and_dir: tuple[BackupManager, Path],
     capsys: pytest.CaptureFixture,
 ) -> None:
-    """restore_backup() logs a scope mismatch warning but still restores."""
+    """allow_scope_mismatch=True restores the matching rows and logs the mismatch."""
     manager, backup_dir = backup_manager_and_dir
-    now = datetime.now(timezone.utc).isoformat()
+    backup_file = _write_mismatched_backup(backup_dir, datetime.now(timezone.utc).isoformat())
 
-    tenant_dir = backup_dir / "tenant-a"
-    tenant_dir.mkdir(parents=True, exist_ok=True)
-    whole_db_backup = {
-        "metadata": {"version": "1.0", "scope": "whole_db", "tables": []},
-        "data": {
-            "users": [
-                {
-                    "id": "user-x",
-                    "username": "x",
-                    "email": "x@example.com",
-                    "password_hash": "h",
-                    "tenant": "tenant-a",
-                    "created_at": now,
-                    "updated_at": now,
-                    "is_active": True,
-                }
-            ]
-        },
-    }
-    backup_file = tenant_dir / "mismatched.json"
-    backup_file.write_text(json.dumps(whole_db_backup))
-
-    capsys.readouterr()  # clear any prior output
+    capsys.readouterr()
     result = await manager.restore_backup(
-        backup_path=str(backup_file), tenant_id="tenant-a", verify_checksum=False
+        backup_path=str(backup_file),
+        tenant_id="tenant-a",
+        verify_checksum=False,
+        allow_scope_mismatch=True,
     )
     captured = capsys.readouterr()
 
     assert result["total_rows_restored"] == 1
     assert "backup_scope_mismatch" in captured.out
+
+
+@pytest.mark.asyncio
+async def test_restore_tenant_no_matching_rows_leaves_table_intact(
+    backup_manager_and_dir: tuple[BackupManager, Path],
+) -> None:
+    """Regression (s174): a correctly-scoped file with zero rows for the tenant in a
+    table must not delete that table's existing tenant rows."""
+    manager, backup_dir = backup_manager_and_dir
+    now = datetime.now(timezone.utc)
+    await manager.db.users.async_insert(
+        id="user-keep",
+        username="keep",
+        email="keep@example.com",
+        password_hash="h",
+        tenant="tenant-a",
+        created_at=now,
+        updated_at=now,
+        is_active=True,
+    )
+    tenant_dir = backup_dir / "tenant-a"
+    tenant_dir.mkdir(parents=True, exist_ok=True)
+    backup_file = tenant_dir / "empty.json"
+    backup_file.write_text(
+        json.dumps(
+            {
+                "metadata": {"version": "1.0", "scope": "tenant:tenant-a", "tables": []},
+                "data": {
+                    "users": [
+                        {
+                            "id": "u-b",
+                            "username": "b",
+                            "email": "b@example.com",
+                            "password_hash": "h",
+                            "tenant": "tenant-b",
+                            "created_at": now.isoformat(),
+                            "updated_at": now.isoformat(),
+                            "is_active": True,
+                        }
+                    ]
+                },
+            }
+        )
+    )
+
+    result = await manager.restore_backup(
+        backup_path=str(backup_file), tenant_id="tenant-a", verify_checksum=False
+    )
+
+    assert result["total_rows_restored"] == 0
+    assert result["rows_skipped_foreign_tenant"] == 1
+    rows = await manager.db(manager.db.users.tenant == "tenant-a").select()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_restore_tenant_insert_failure_rolls_back_delete(
+    backup_manager_and_dir: tuple[BackupManager, Path],
+) -> None:
+    """Regression (s174): delete+insert share one transaction — a failing insert
+    rolls back the delete so the tenant's rows are not lost."""
+    manager, backup_dir = backup_manager_and_dir
+    now = datetime.now(timezone.utc)
+    await manager.db.users.async_insert(
+        id="user-keep",
+        username="keep",
+        email="keep@example.com",
+        password_hash="h",
+        tenant="tenant-a",
+        created_at=now,
+        updated_at=now,
+        is_active=True,
+    )
+    tenant_dir = backup_dir / "tenant-a"
+    tenant_dir.mkdir(parents=True, exist_ok=True)
+    backup_file = tenant_dir / "bad.json"
+    # Duplicate primary key forces the bulk insert to fail mid-transaction.
+    row = {
+        "id": "dup",
+        "username": "d",
+        "email": "d@example.com",
+        "password_hash": "h",
+        "tenant": "tenant-a",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "is_active": True,
+    }
+    backup_file.write_text(
+        json.dumps(
+            {
+                "metadata": {"version": "1.0", "scope": "tenant:tenant-a", "tables": []},
+                "data": {"users": [row, dict(row)]},
+            }
+        )
+    )
+
+    result = await manager.restore_backup(
+        backup_path=str(backup_file), tenant_id="tenant-a", verify_checksum=False
+    )
+
+    assert result["errors"], "insert failure must be recorded"
+    rows = await manager.db(manager.db.users.tenant == "tenant-a").select()
+    assert [r["id"] if isinstance(r, dict) else r.id for r in rows] == ["user-keep"]
+
+
+def _write_mismatched_backup(backup_dir: Path, now: str) -> Path:
+    """Write a whole_db-scoped backup file inside tenant-a's directory."""
+    tenant_dir = backup_dir / "tenant-a"
+    tenant_dir.mkdir(parents=True, exist_ok=True)
+    backup_file = tenant_dir / "mismatched.json"
+    backup_file.write_text(
+        json.dumps(
+            {
+                "metadata": {"version": "1.0", "scope": "whole_db", "tables": []},
+                "data": {
+                    "users": [
+                        {
+                            "id": "user-x",
+                            "username": "x",
+                            "email": "x@example.com",
+                            "password_hash": "h",
+                            "tenant": "tenant-a",
+                            "created_at": now,
+                            "updated_at": now,
+                            "is_active": True,
+                        }
+                    ]
+                },
+            }
+        )
+    )
+    return backup_file
 
 
 @pytest.mark.asyncio

@@ -50,6 +50,7 @@ async def _async_backup_cli(db: Any, args: Any) -> None:
             decryption_key=args.key,
             from_s3=args.from_s3,
             tenant_id=args.tenant_id,
+            allow_scope_mismatch=args.allow_scope_mismatch,
         )
         print(f"Restore completed: {result['total_rows_restored']} rows")
 
@@ -125,6 +126,11 @@ def backup_cli(db: Any, get_db_uri_fn: Any | None = None) -> None:
     restore_parser.add_argument("--from-s3", action="store_true", help="Restore from S3")
     restore_parser.add_argument(
         "--tenant-id", default=None, help="Scope restore to this tenant (default: whole DB)"
+    )
+    restore_parser.add_argument(
+        "--allow-scope-mismatch",
+        action="store_true",
+        help="Restore into --tenant-id even if the backup's declared scope differs",
     )
 
     # List backups
