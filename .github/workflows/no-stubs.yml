@@ -1,0 +1,25 @@
+name: No-Stubs Gate
+
+# Fatal on PRs into main and release/v*.X (enforcing-no-stubs skill).
+# Feature-branch pushes are not gated, so WIP backup pushes stay frictionless.
+on:
+  pull_request:
+    branches: [ main, 'release/v*' ]
+
+permissions:
+  contents: read
+
+jobs:
+  no-stubs-gate:
+    name: No-Stubs Gate (fatal)
+    # CI Runner Routing: GitHub-hosted for PRs into main AND fork PRs (untrusted code must never reach self-hosted); everything else on dal2alpha.
+    runs-on: ${{ (github.base_ref == 'main' || github.event.pull_request.head.repo.fork) && 'ubuntu-24.04' || fromJSON('{"group":"dal2alpha"}') }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: Gate self-test (must pass clean, fail on stub, fail on zero files)
+        run: make test-no-stubs-gate
+      - name: No-stubs gate
+        run: make check-no-stubs
