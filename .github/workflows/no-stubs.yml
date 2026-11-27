@@ -20,6 +20,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Gate self-test (must pass clean, fail on stub, fail on zero files)
-        run: make test-no-stubs-gate
+        run: bash scripts/ci/test-check-no-stubs.sh
       - name: No-stubs gate
-        run: make check-no-stubs
+        run: bash scripts/ci/check-no-stubs.sh
