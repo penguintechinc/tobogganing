@@ -3,8 +3,9 @@
 //! Initializes telemetry (tracing + OTLP + Prometheus), builds the inbound
 //! JWT public-key cache (fetched from hub-api over gRPC
 //! `HubAuthKeyService.GetPublicKeys`, refreshed hourly in the background
-//! — see `hub_router_auth::inbound::PublicKeyCache`), and serves the axum
-//! router (`hub_router::routes::router`) until a shutdown signal arrives.
+//! — see `hub_router_auth::inbound::PublicKeyCache`), and serves
+//! `grpc.health.v1` (`hub_router::health::serve`, readiness derived from
+//! the live key cache) until a shutdown signal arrives.
 //! Kept deliberately thin — the testable logic
 //! (`resolve_port`/`resolve_hub_api_grpc_url`/`wait_for_os_shutdown_signal`)
 //! lives in `hub_router`'s lib surface, mirroring
@@ -34,8 +35,8 @@ async fn main() {
     // (`HubAuthKeyService.GetPublicKeys`, SSO PR-2 — replaces the
     // transitional REST `GET /api/v1/auth/public-key` poll). Degrades
     // gracefully if unset or unreachable: the key cache simply stays
-    // empty and every protected request gets 503 until a fetch succeeds,
-    // never a crash.
+    // empty and the `hub-router` health service reports NOT_SERVING until
+    // a fetch succeeds, never a crash.
     let hub_api_grpc_url =
         hub_router::resolve_hub_api_grpc_url(std::env::var("HUB_API_GRPC_URL").ok().as_deref());
     let key_cache = Arc::new(
@@ -46,20 +47,21 @@ async fn main() {
         .clone()
         .spawn_refresh_loop(DEFAULT_REFRESH_INTERVAL);
 
-    let state = hub_router::AppState::new(key_cache);
-    let app = hub_router::router(state);
-
     let port = hub_router::resolve_port(std::env::var("PORT").ok().as_deref());
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(&addr)
         .await
         .expect("failed to bind to address");
 
-    info!(%addr, "hub-router listening");
+    info!(%addr, "hub-router gRPC listening");
 
-    if let Err(error) = axum::serve(listener, app)
-        .with_graceful_shutdown(hub_router::wait_for_os_shutdown_signal())
-        .await
+    if let Err(error) = hub_router::health::serve(
+        listener,
+        key_cache,
+        hub_router::health::DEFAULT_EVALUATE_INTERVAL,
+        hub_router::wait_for_os_shutdown_signal(),
+    )
+    .await
     {
         tracing::error!(%error, "hub-router server exited with an error");
     }

@@ -1,14 +1,10 @@
 //! Library surface for the hub-router service — split from `main.rs` so
-//! integration tests can drive the real axum router (middleware + routes)
-//! via `tower::ServiceExt::oneshot`/a real bound listener, mirroring
+//! integration tests can drive the real `grpc.health.v1` server over a
+//! bound listener, mirroring
 //! `engines/testserver-rs`'s lib/bin split.
 
-pub mod middleware;
-pub mod routes;
+pub mod health;
 pub mod telemetry;
-
-pub use middleware::AppState;
-pub use routes::router;
 
 /// Parses the `PORT` env var (raw string, already read by the caller) into
 /// a `u16`, defaulting to 8080 on absence or a malformed value — pure/no
@@ -44,7 +40,7 @@ pub fn resolve_hub_api_grpc_url(raw: Option<&str>) -> String {
 
 /// Waits for SIGINT or (on Unix) SIGTERM, whichever arrives first — the
 /// production graceful-shutdown trigger `main` feeds into
-/// `axum::serve(...).with_graceful_shutdown`. Never panics on
+/// `health::serve`'s graceful shutdown. Never panics on
 /// signal-handler installation failure; logs and falls back to pending
 /// (the other signal source, or the process's own termination, still
 /// takes effect). Mirrors `engines/testserver-rs`'s identical helper.
