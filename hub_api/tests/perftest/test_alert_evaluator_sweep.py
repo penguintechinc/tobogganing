@@ -428,3 +428,52 @@ async def test_sweep_notification_failure_does_not_raise(
     fired = await evaluator.sweep()
     # Event still counted as fired even though notification delivery failed.
     assert fired == 1
+
+
+@pytest.mark.asyncio
+async def test_sweep_paginates_rules_and_devices_per_tenant(real_dal: AsyncDB) -> None:
+    """With page_size=1 every rule and device page is visited, tenant-scoped.
+
+    Three tenants each get a tenant-wide breaching rule over two devices.
+    Bounded paging must still visit every tenant and never cross tenants;
+    per-rule window dedup leaves exactly one event per tenant.
+    """
+    now = datetime.now(timezone.utc)
+    tenants = ("pg-a", "pg-b", "pg-c")
+    for tenant in tenants:
+        for _ in range(2):
+            dev = str(uuid4())
+            await _insert_device(real_dal, tenant, dev)
+            await _insert_perf_result(
+                real_dal, tenant, dev, test_type="ping", latency_ms=500.0, completed_at=now
+            )
+        await _insert_rule(real_dal, tenant, metric="latency_ms", comparator="gt", threshold=1.0)
+    evaluator = AlertEvaluator(real_dal, NotificationService(real_dal))
+    fired = await evaluator.sweep(page_size=1)
+    assert fired == 3
+    for tenant in tenants:
+        events = await real_dal(real_dal.alert_events.tenant == tenant).select()
+        assert len(list(events)) == 1
+
+
+@pytest.mark.asyncio
+async def test_sweep_rejects_non_positive_page_size(real_dal: AsyncDB) -> None:
+    """A page_size below 1 is a programming error and fails loudly."""
+    evaluator = AlertEvaluator(real_dal, NotificationService(real_dal))
+    with pytest.raises(ValueError):
+        await evaluator.sweep(page_size=-1)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_result_paginates_rules(real_dal: AsyncDB) -> None:
+    """evaluate_result visits every rule page and ignores other tenants' rules."""
+    tenant = "eval-page"
+    for _ in range(3):
+        await _insert_rule(real_dal, tenant, metric="latency_ms", comparator="gt", threshold=1.0)
+    await _insert_rule(real_dal, "other", metric="latency_ms", comparator="gt", threshold=1.0)
+    evaluator = AlertEvaluator(real_dal, NotificationService(real_dal))
+    evaluator.SWEEP_PAGE_SIZE = 2
+    fired = await evaluator.evaluate_result(
+        tenant, {"device_id": None, "test_type": "ping", "latency_ms": 9.0}
+    )
+    assert fired == 3

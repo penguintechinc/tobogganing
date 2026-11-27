@@ -44,16 +44,6 @@ async def test_count_active_seats_outer_error_returns_zero() -> None:
     assert result == 0
 
 
-def test_count_registered_nodes_error_returns_zero() -> None:
-    """count_registered_nodes() returns 0 when db.clusters.select() raises."""
-    mock_db = MagicMock()
-    mock_db.clusters.select.side_effect = RuntimeError("db down")
-
-    result = count_registered_nodes(mock_db)
-
-    assert result == 0
-
-
 @pytest.mark.asyncio
 async def test_snapshot_outer_failure_returns_empty_without_cache() -> None:
     """snapshot() returns an empty Usage when construction itself fails and no cache exists.

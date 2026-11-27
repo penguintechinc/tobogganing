@@ -1,4 +1,5 @@
 """Tests for usage metering."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -79,6 +80,7 @@ async def test_usage_snapshot_empty_users() -> None:
 async def test_usage_snapshot_with_node_counter(mock_db: MagicMock) -> None:
     """Test that snapshot uses injected node_counter."""
     from unittest.mock import AsyncMock
+
     from hub_api.tests.conftest import make_mock_rowset
 
     mock_rowset = make_mock_rowset([])
@@ -103,6 +105,7 @@ async def test_usage_snapshot_with_node_counter(mock_db: MagicMock) -> None:
 async def test_usage_snapshot_default_node_counter(mock_db: MagicMock) -> None:
     """Test that snapshot defaults to 0 nodes without node_counter."""
     from unittest.mock import AsyncMock
+
     from hub_api.tests.conftest import make_mock_rowset
 
     mock_rowset = make_mock_rowset([])
@@ -169,6 +172,7 @@ async def test_report_success() -> None:
 async def test_report_license_client_error(mock_db: MagicMock) -> None:
     """Test that report swallows license client exceptions."""
     from unittest.mock import AsyncMock
+
     from hub_api.tests.conftest import make_mock_rowset
 
     user1 = MagicMock(id="user1")
@@ -178,9 +182,7 @@ async def test_report_license_client_error(mock_db: MagicMock) -> None:
     mock_db.__call__ = MagicMock(return_value=query_proxy)
 
     license_client = MagicMock()
-    license_client.keepalive = MagicMock(
-        side_effect=Exception("License server unreachable")
-    )
+    license_client.keepalive = MagicMock(side_effect=Exception("License server unreachable"))
 
     reporter = UsageReporter(mock_db, license_client)
 
@@ -194,6 +196,7 @@ async def test_report_license_client_error(mock_db: MagicMock) -> None:
 async def test_report_no_license_client(mock_db: MagicMock) -> None:
     """Test that report handles None license client."""
     from unittest.mock import AsyncMock
+
     from hub_api.tests.conftest import make_mock_rowset
 
     mock_rowset = make_mock_rowset([])
@@ -254,40 +257,3 @@ async def test_seat_counter_from_users_table() -> None:
     seats = await count_active_seats(mock_db)
 
     assert seats == 3
-
-
-@pytest.mark.asyncio
-async def test_node_counter_from_clusters_table() -> None:
-    """Test node counter queries clusters table for registered orchestrators."""
-    from hub_api.entitlements.metering import count_registered_nodes
-    from hub_api.tests.conftest import make_mock_rowset
-
-    # Create mock cluster rows (registered nodes/orchestrators)
-    cluster1 = MagicMock(id="cluster-1", name="hub-1")
-    cluster2 = MagicMock(id="cluster-2", name="hub-2")
-
-    mock_rowset = make_mock_rowset([cluster1, cluster2])
-    mock_db = MagicMock()
-    mock_db.clusters = MagicMock()
-    mock_db.clusters.select = MagicMock(return_value=mock_rowset)
-
-    # Call the node counter (sync version for backward compat with node_counter callable)
-    nodes = count_registered_nodes(mock_db)
-
-    assert nodes == 2
-
-
-@pytest.mark.asyncio
-async def test_node_counter_empty_clusters() -> None:
-    """Test node counter returns 0 when no clusters registered."""
-    from hub_api.entitlements.metering import count_registered_nodes
-    from hub_api.tests.conftest import make_mock_rowset
-
-    mock_rowset = make_mock_rowset([])
-    mock_db = MagicMock()
-    mock_db.clusters = MagicMock()
-    mock_db.clusters.select = MagicMock(return_value=mock_rowset)
-
-    nodes = count_registered_nodes(mock_db)
-
-    assert nodes == 0

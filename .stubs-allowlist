@@ -8,14 +8,10 @@ k8s/helm/tobogganing/charts/zeek/	*	Vendored upstream Helm sub-chart; markers ar
 k8s/helm/tobogganing/values-production.yaml	TODO	Prod image digests pinned once CI publishes the first v2.0.0 release	v2.0.0 release digest pinning (critical-rules Dependency Pinning)
 engines/testserver-rs/crates/protocols/src/tcp.rs	SSH banner probe not yet implemented	Fail-loud NotImplemented	follow-up
 engines/testserver-rs/crates/protocols/src/udp.rs	UDP\+TLS \(DTLS\) not yet implemented	Fail-loud; DTLS deferred	follow-up
-hub_api/core/api/jwt.py	FLAGGED \(security-audit 2026-09-25	Deferred audit item: metadata claim in plain JWS	needs-issue
 hub_api/modules/netsvcs/managers/config_service.py	not implemented in S1a	Phase-scoped threatintel hook docstring (S2)	follow-up
 hub_api/modules/sase/security/enforcement.py	isolate = .*reserved	Reserved enum value	n/a
-k8s/helm/tobogganing/charts/node-agent/values-production.yaml	TODO: pin to released digest	Zero digest fails loud until v0.1.0	needs-issue
 k8s/helm/tobogganing/charts/testserver/values.yaml	db\.host.*placeholder	Operator-provided chart doc	n/a
 k8s/helm/tobogganing/values-alpha.yaml	Dev-only placeholder, generated once	Alpha-only dev value	n/a
 k8s/helm/tobogganing/values.yaml	alpha gets a throwaway dev-only placeholder	Chart secrets doc	n/a
 hub_api/modules/sdwan/network/vrf_manager.py	STUB = "stub"	OSPF area type, not a stub	n/a
-hub_api/entitlements/metering.py	TODO\(spec §8 #6\)	Open spec question; code works	needs-issue
 agents/node-agent/crates/agent/src/telemetry.rs	leaves as a TODO	Doc comment, not a stub	n/a
-hub_api/modules/perftest_cluster/services/alert_evaluator.py	Placeholder MVP	Working MVP (full scan); StatsManager aggregation is a scale follow-up	needs-issue
