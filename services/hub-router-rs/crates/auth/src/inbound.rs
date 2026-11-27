@@ -222,6 +222,18 @@ impl PublicKeyCache {
         })
     }
 
+    /// Reports whether at least one usable verification key is cached —
+    /// the live readiness signal behind hub-router's `grpc.health.v1`
+    /// status: with no key, every protected call would be rejected, so the
+    /// service must not report SERVING.
+    pub fn has_keys(&self) -> bool {
+        !self
+            .keys
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty()
+    }
+
     fn client(&self) -> HubAuthKeyServiceClient<tonic::transport::Channel> {
         HubAuthKeyServiceClient::new(self.channel.clone())
     }
@@ -300,15 +312,6 @@ impl PublicKeyCache {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .candidates(kid)
-    }
-
-    /// `true` once at least one successful fetch has populated the cache.
-    fn has_keys(&self) -> bool {
-        !self
-            .keys
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_empty()
     }
 
     /// Seeds the cache with a single already-built verifier as the

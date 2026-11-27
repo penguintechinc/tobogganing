@@ -758,7 +758,6 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 name = "hub-router"
 version = "0.1.0"
 dependencies = [
- "axum",
  "hub-router-auth",
  "hub-router-common",
  "metrics",
@@ -771,14 +770,13 @@ dependencies = [
  "p256",
  "penguin-aaa",
  "rand_core 0.6.4",
- "reqwest",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",
  "tonic",
- "tower",
+ "tonic-health",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -2387,6 +2385,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -2442,6 +2441,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "tonic-health"
+version = "0.14.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcfab99db777fba2802f0dfa861d1628d1ae916fb199d29819941f139ae85082"
+dependencies = [
+ "prost",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-prost",
 ]
 
 [[package]]

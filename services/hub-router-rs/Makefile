@@ -35,7 +35,7 @@ deny: ## Gate: advisories (RustSec), license policy, banned/duplicate crates
 # --ignore-filename-regex 'main\.rs$': the binary entry point is a thin
 # `#[tokio::main]` glue function (env parsing delegates to tested
 # `hub_router::resolve_port`/`resolve_hub_api_url`; the rest is
-# telemetry-init/listener-bind/axum::serve calls with no meaningful branch
+# telemetry-init/listener-bind/health::serve calls with no meaningful branch
 # logic of its own) — not realistically unit-testable without spinning a
 # real server, same as `engines/testserver-rs`'s main.rs `run()`.
 coverage: ## Gate: fails below 90% lines/regions/functions — never `|| true`

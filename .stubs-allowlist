@@ -19,4 +19,3 @@ hub_api/modules/sdwan/network/vrf_manager.py	STUB = "stub"	OSPF area type, not a
 hub_api/entitlements/metering.py	TODO\(spec §8 #6\)	Open spec question; code works	needs-issue
 agents/node-agent/crates/agent/src/telemetry.rs	leaves as a TODO	Doc comment, not a stub	n/a
 hub_api/modules/perftest_cluster/services/alert_evaluator.py	Placeholder MVP	Working MVP (full scan); StatsManager aggregation is a scale follow-up	needs-issue
-services/hub-router-rs/crates/hub-router/src/routes.rs	Placeholder response; real router-status 	Status endpoint lacks WG/firewall data; blocked on Rust WireGuard work (Go-to-Rust migration)	needs-issue
