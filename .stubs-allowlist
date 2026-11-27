@@ -9,7 +9,7 @@ k8s/helm/tobogganing/values-production.yaml	TODO	Prod image digests pinned once 
 engines/testserver-rs/crates/protocols/src/tcp.rs	SSH banner probe not yet implemented	Fail-loud NotImplemented	follow-up
 engines/testserver-rs/crates/protocols/src/udp.rs	UDP\+TLS \(DTLS\) not yet implemented	Fail-loud; DTLS deferred	follow-up
 hub_api/core/api/jwt.py	FLAGGED \(security-audit 2026-09-25	Deferred audit item: metadata claim in plain JWS	needs-issue
-hub_api/modules/netsvcs/managers/config_service.py	Threatintel IOC enrichment hook|Placeholder cache/settings \(S1a minimal\)	Phase-scoped threatintel hook	follow-up
+hub_api/modules/netsvcs/managers/config_service.py	not implemented in S1a	Phase-scoped threatintel hook docstring (S2)	follow-up
 hub_api/modules/sase/security/enforcement.py	isolate = .*reserved	Reserved enum value	n/a
 k8s/helm/tobogganing/charts/node-agent/values-production.yaml	TODO: pin to released digest	Zero digest fails loud until v0.1.0	needs-issue
 k8s/helm/tobogganing/charts/testserver/values.yaml	db\.host.*placeholder	Operator-provided chart doc	n/a
