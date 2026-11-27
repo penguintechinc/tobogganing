@@ -77,12 +77,8 @@ pub struct AppConfig {
     pub http_port: u16,
     pub grpc_port: u16,
     pub metrics_port: u16,
-    /// TODO(follow-up PR): parsed but not yet enforced — the Go
-    /// implementation also left this dead (see main.go's `maxConcurrent`
-    /// variable, read but never wired to a semaphore). Wiring a
-    /// `tokio::sync::Semaphore` bound to this value is deferred to the PR
-    /// that ports ICMP/traceroute (the expensive shell-out probes this cap
-    /// is meant to protect against).
+    /// Global cap on concurrently running probes (REST + gRPC combined),
+    /// enforced by [`crate::TestLimiter`]; over-limit requests fail fast.
     pub max_concurrent_tests: usize,
     /// Config-driven CORS allowlist — unset/empty means deny-all, never a
     /// wildcard fallback (mirrors main.go's `parseAllowedOrigins`).

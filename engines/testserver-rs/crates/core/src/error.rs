@@ -37,6 +37,10 @@ pub enum ApiError {
     /// probe) — see PR description for the follow-up-PR tracking list.
     #[error("not yet implemented: {0}")]
     NotImplemented(String),
+
+    /// All `MAX_CONCURRENT_TESTS` probe slots are busy — see `limiter.rs`.
+    #[error("too many concurrent tests (limit {0}); retry later")]
+    TooManyTests(usize),
 }
 
 impl ApiError {
@@ -52,6 +56,7 @@ impl ApiError {
             ApiError::Validation { .. } | ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::Unauthorized | ApiError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             ApiError::NotImplemented(_) => StatusCode::NOT_IMPLEMENTED,
+            ApiError::TooManyTests(_) => StatusCode::TOO_MANY_REQUESTS,
             ApiError::TestExecution(_) | ApiError::Database(_) | ApiError::DatabaseUnavailable => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -84,6 +89,7 @@ impl From<ApiError> for tonic::Status {
                 tonic::Status::unauthenticated(err.to_string())
             }
             ApiError::NotImplemented(msg) => tonic::Status::unimplemented(msg),
+            ApiError::TooManyTests(_) => tonic::Status::resource_exhausted(err.to_string()),
             ApiError::TestExecution(_) | ApiError::Database(_) | ApiError::DatabaseUnavailable => {
                 tonic::Status::internal(err.to_string())
             }

@@ -761,7 +761,6 @@ dependencies = [
  "axum",
  "hub-router-auth",
  "hub-router-common",
- "hub-router-config",
  "metrics",
  "metrics-exporter-prometheus",
  "opentelemetry",
@@ -825,15 +824,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hub-router-config"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "hub-router-firewall"
 version = "0.1.0"
 dependencies = [
@@ -887,17 +877,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hub-router-proxy"
-version = "0.1.0"
-dependencies = [
- "hub-router-common",
- "serde",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "hub-router-syslog"
 version = "0.1.0"
 dependencies = [
@@ -909,17 +888,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "hub-router-wireguard"
-version = "0.1.0"
-dependencies = [
- "hub-router-common",
- "serde",
- "thiserror",
- "tokio",
  "tracing",
 ]
 
