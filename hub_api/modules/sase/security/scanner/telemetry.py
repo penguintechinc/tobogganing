@@ -31,6 +31,11 @@ INDICATORS_TRUNCATED = _meter.create_counter(
     unit="1",
     description="Indicators dropped because a scan exceeded the per-scan cap",
 )
+FINDINGS_TRUNCATED = _meter.create_counter(
+    "sase.scanner.threat_findings.truncated",
+    unit="1",
+    description="Threat-match findings dropped because a scan exceeded the per-scan finding cap",
+)
 LOOKUP_DURATION = _meter.create_histogram(
     "sase.scanner.threat_lookup.duration",
     unit="s",

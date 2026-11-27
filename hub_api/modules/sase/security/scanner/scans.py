@@ -26,6 +26,7 @@ from .parsers import (
 )
 from .telemetry import (
     CHECK_RESULTS,
+    FINDINGS_TRUNCATED,
     INDICATORS_TRUNCATED,
     LOOKUP_DURATION,
     THREAT_LOOKUPS,
@@ -400,6 +401,9 @@ LOG_TAIL_BYTES = 256 * 1024
 #: not-yet-budgeted suffix candidates). Indicators beyond it are dropped loudly
 #: (warning + metric + coverage finding); bounds DB load regardless of log content.
 MAX_LOOKUP_VALUES = 50_000
+#: Max threat-match findings emitted per scan; beyond it a single coverage finding
+#: reports how many matches were suppressed (bounds finding storage per scan).
+MAX_THREAT_FINDINGS = 1000
 #: DNS name length limit; longer "domains" are not resolvable and are skipped.
 MAX_DOMAIN_LENGTH = 253
 #: Values per ``IN (...)`` query chunk.
@@ -659,6 +663,29 @@ def _truncation_finding(scan_id: str, total: int, dropped: int, files: list[str]
     )
 
 
+def _findings_cap_finding(scan_id: str, total: int, dropped: int) -> ScanFinding:
+    """Build the finding that reports threat-match findings suppressed by the per-scan cap."""
+    now = datetime.utcnow()
+    return ScanFinding(
+        scan_id=scan_id,
+        finding_type="threat_intel_findings_truncated",
+        severity=ScanSeverity.HIGH,
+        title="Threat-intel findings truncated",
+        description=(
+            f"{dropped} of {total} threat-indicator matches were not emitted "
+            f"(per-scan finding cap {MAX_THREAT_FINDINGS}); investigate log sources"
+        ),
+        affected_component="threat_intel_scan",
+        recommendation="Review matched indicators in the threat-feed store and log sources",
+        cve_ids=[],
+        cvss_score=7.0,
+        confidence=100,
+        first_seen=now,
+        last_seen=now,
+        metadata={"matched": total, "dropped": dropped, "limit": MAX_THREAT_FINDINGS},
+    )
+
+
 async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     """Scan log tails for IPs/domains and batch-check them against the threat-feed store.
 
@@ -702,6 +729,7 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
     ip_hits = await _batch_lookup(db, tenants, ips, "ip")
     domain_hits = await _batch_lookup(db, tenants, domain_lookup, "domain")
 
+    matched = 0
     for (value, indicator_type), log_file in observed.items():
         if indicator_type == "ip":
             matches = ip_hits.get(value, [])
@@ -717,7 +745,19 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
                 log_file=log_file,
                 matches=len(matches),
             )
-            findings.append(_threat_finding(scan_id, value, indicator_type, log_file, matches))
+            matched += 1
+            if matched <= MAX_THREAT_FINDINGS:
+                findings.append(_threat_finding(scan_id, value, indicator_type, log_file, matches))
+    if matched > MAX_THREAT_FINDINGS:
+        suppressed = matched - MAX_THREAT_FINDINGS
+        logger.warning(
+            "threat_intel_findings_truncated",
+            matched=matched,
+            limit=MAX_THREAT_FINDINGS,
+            dropped=suppressed,
+        )
+        FINDINGS_TRUNCATED.add(suppressed)
+        findings.append(_findings_cap_finding(scan_id, matched, suppressed))
     logger.info(
         "threat_intel_scan_complete", indicators_checked=len(observed), findings=len(findings)
     )

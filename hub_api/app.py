@@ -204,6 +204,17 @@ def create_app(config: Config | None = None) -> Quart:
             # DB query spans (no-op when OTel is disabled; never fatal)
             instrument_sqlalchemy_engine(app, db.engine)
 
+            # Backfill security-scan jobs for every existing tenant (idempotent).
+            # Logged loudly on failure; the hourly beat sweep retries.
+            try:
+                from hub_api.modules.sase.security.scanner.tasks import (
+                    ensure_scan_jobs_for_all_tenants,
+                )
+
+                await ensure_scan_jobs_for_all_tenants(db)
+            except Exception:
+                logger.error("security_scan_jobs_backfill_failed", exc_info=True)
+
             # Initialize the global encryptor from the selected data key provider
             try:
                 data_key_provider = build_data_key_provider(registry)

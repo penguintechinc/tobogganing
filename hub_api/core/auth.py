@@ -1,4 +1,5 @@
 """User and session manager for authentication."""
+
 from __future__ import annotations
 
 import secrets
@@ -207,8 +208,7 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                (self.db.sessions.token == token)
-                & (self.db.sessions.tenant == tenant)
+                (self.db.sessions.token == token) & (self.db.sessions.tenant == tenant)
             ).select()
             session_row = rowset.first()
 
@@ -269,8 +269,7 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                (self.db.sessions.token == token)
-                & (self.db.sessions.tenant == tenant)
+                (self.db.sessions.token == token) & (self.db.sessions.tenant == tenant)
             ).select()
             session_row = rowset.first()
 
@@ -333,6 +332,19 @@ class UserManager:
             )
             return 0
 
+    async def _ensure_tenant_onboarded(self, tenant: str) -> None:
+        """Ensure a tenant's recurring security-scan job exists (tenant onboarding hook).
+
+        Idempotent. Failure is logged at ERROR with traceback, not raised: the user row
+        is already committed and the hourly ensure sweep re-creates the missing job.
+        """
+        from hub_api.modules.sase.security.scanner.tasks import ensure_security_scan_job
+
+        try:
+            await ensure_security_scan_job(self.db, tenant)
+        except Exception:
+            logger.error("tenant_scan_job_onboarding_failed", tenant=tenant, exc_info=True)
+
     async def create_user(
         self,
         username: str,
@@ -359,9 +371,9 @@ class UserManager:
         """
         try:
             user_id = str(uuid4())
-            password_hash = bcrypt.hashpw(
-                password.encode("utf-8"), bcrypt.gensalt()
-            ).decode("utf-8")
+            password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+                "utf-8"
+            )
 
             await self.db.users.async_insert(
                 id=user_id,
@@ -375,6 +387,7 @@ class UserManager:
                 updated_at=datetime.utcnow(),
                 mfa_enabled=False,
             )
+            await self._ensure_tenant_onboarded(tenant)
 
             user = User(
                 id=user_id,
@@ -465,8 +478,7 @@ class UserManager:
         """
         try:
             rowset = await self.db(
-                (self.db.users.id == user_id)
-                & (self.db.users.tenant == tenant)
+                (self.db.users.id == user_id) & (self.db.users.tenant == tenant)
             ).select()
 
             if not rowset.first():
@@ -478,16 +490,14 @@ class UserManager:
                 )
                 return False
 
-            await self.db(
-                (self.db.users.id == user_id)
-                & (self.db.users.tenant == tenant)
-            ).update(is_active=is_active)
+            await self.db((self.db.users.id == user_id) & (self.db.users.tenant == tenant)).update(
+                is_active=is_active
+            )
 
             # Invalidate all sessions if disabling user
             if not is_active:
                 await self.db(
-                    (self.db.sessions.user_id == user_id)
-                    & (self.db.sessions.tenant == tenant)
+                    (self.db.sessions.user_id == user_id) & (self.db.sessions.tenant == tenant)
                 ).delete()
 
             logger.info(

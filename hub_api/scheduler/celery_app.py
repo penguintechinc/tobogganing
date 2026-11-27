@@ -3,6 +3,7 @@
 Provides a Celery instance safe to import without a live broker.
 Implements beat schedule for recurring sweep execution.
 """
+
 from __future__ import annotations
 
 import os
@@ -29,9 +30,7 @@ except ImportError:
             self.app_name = app_name
             self.conf = _StubConfig()
 
-        def task(
-            self, *args: Any, **kwargs: Any
-        ) -> Any:
+        def task(self, *args: Any, **kwargs: Any) -> Any:
             """Provide stub task decorator."""
 
             def decorator(func: Any) -> Any:
@@ -59,17 +58,21 @@ except ImportError:
 
 # Create Celery instance
 # Broker and result backend from environment; Valkey (redis-compatible) by default
-broker_url = os.environ.get(
-    "CELERY_BROKER_URL", "redis://localhost:6379/0"
-)
-result_backend = os.environ.get(
-    "CELERY_RESULT_BACKEND", "redis://localhost:6379/1"
-)
+broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 
 celery_app = Celery(
     "tobogganing_scheduler",
     broker=broker_url,
     backend=result_backend,
+    # Task modules the worker imports at startup so every name the sweep
+    # dispatches (via the registry) and beat schedules is registered.
+    include=[
+        "hub_api.scheduler.tasks",
+        "hub_api.core.backup.tasks",
+        "hub_api.modules.sase.security.scanner.tasks",
+        "hub_api.modules.perftest_cluster.worker.tasks",
+    ],
 )
 
 # Configure Celery with sensible defaults
@@ -84,6 +87,10 @@ celery_app.conf.update(
         "scheduler-sweep": {
             "task": "hub_api.scheduler.tasks.sweep",
             "schedule": float(os.getenv("SCHEDULER_SWEEP_SECONDS", "30")),
+        },
+        "sase-scanner-ensure-jobs": {
+            "task": "hub_api.modules.sase.security.scanner.tasks.ensure_scan_jobs_sweep",
+            "schedule": float(os.getenv("SCANNER_ENSURE_JOBS_SECONDS", "3600")),
         },
     },
 )
