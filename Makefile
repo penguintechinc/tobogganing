@@ -124,8 +124,16 @@ test-cov: ## Run hub_api tests with coverage report
 	@python3 -m pytest hub_api/tests/ --cov=hub_api --cov-report=term-missing --cov-report=html --cov-fail-under=90
 	@echo "✅ Coverage report generated (open htmlcov/index.html)"
 
+# No-stubs gate (fatal on PRs into main/release; allowlist: .stubs-allowlist)
+.PHONY: check-no-stubs test-no-stubs-gate
+check-no-stubs: ## Fail on unallowlisted TODO/FIXME/stub/placeholder markers in shipped source
+	@bash scripts/ci/check-no-stubs.sh
+
+test-no-stubs-gate: ## Prove the no-stubs gate passes clean, fails on a stub, fails on zero files
+	@bash scripts/ci/test-check-no-stubs.sh
+
 # Lint targets
-lint: lint-python lint-portal lint-go ## Run all linters
+lint:lint-python lint-portal lint-go ## Run all linters
 
 lint-python: ## Lint Python code (ruff ONLY — never flake8/black alongside it, see backend-python.md); gated on NEW violations only, see scripts/hooks/run-ruff-gate.sh
 	@echo "🔍 Linting Python (hub_api)..."

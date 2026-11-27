@@ -1,0 +1,8 @@
+# No-stubs allowlist — format: path<TAB>line-regex<TAB>reason<TAB>tracking  (path ending "/" = prefix, regex "*" = any)
+# Every entry MUST carry a reason and a tracking note. Gate: scripts/ci/check-no-stubs.sh (make check-no-stubs)
+engines/testserver/internal/protocols/http.go	TODO: Implement HTTP/3	HTTP/3 branch fails loud (redirect, no silent success) until quic-go is stable	Go->Rust testserver migration (#155/#158)
+services/hub-router/proxy/auth/saml2.go	TODO: Implement SAML Single Logout	SAML SLO deferred; Go hub-router is being rewritten in Rust	Go->Rust migration plan #155 (hub-router)
+k8s/helm/tobogganing/charts/arkime/	*	Vendored upstream Helm sub-chart; markers are upstream comments	upstream chart; re-review on chart bump
+k8s/helm/tobogganing/charts/cape/	*	Vendored upstream Helm sub-chart; markers are upstream comments	upstream chart; re-review on chart bump
+k8s/helm/tobogganing/charts/zeek/	*	Vendored upstream Helm sub-chart; markers are upstream comments	upstream chart; re-review on chart bump
+k8s/helm/tobogganing/values-production.yaml	TODO	Prod image digests pinned once CI publishes the first v2.0.0 release	v2.0.0 release digest pinning (critical-rules Dependency Pinning)
