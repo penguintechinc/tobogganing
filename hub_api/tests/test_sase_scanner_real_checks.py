@@ -337,11 +337,33 @@ def test_normalizers() -> None:
     assert scans._normalize_domain("Ex.COM.") == "ex.com"
     assert scans._normalize_domain(".") is None
     assert scans._normalize_domain("a" * 70 + ".com") is None  # label too long for IDNA
+    assert scans._normalize_domain(("a" * 60 + ".") * 5 + "com") is None  # > 253 chars
+    assert scans._normalize_ip("010.000.000.001") == "10.0.0.1"  # zero-padded octets
+    assert scans._normalize_ip("010.000.000.256") is None
     deep = scans._domain_candidates("a.b.c.d.e.f.g.h.com")
-    assert deep[0] == "a.b.c.d.e.f.g.h.com"  # exact name always kept
-    assert deep[-1] == "h.com"  # registrable end always kept
-    assert len(deep) == scans.MAX_PARENT_DEPTH + 1
+    assert deep[0] == "a.b.c.d.e.f.g.h.com" and deep[-1] == "h.com"
+    assert len(deep) == 8  # every suffix down to 2 labels (9 labels)
     assert scans._domain_candidates("evil.com") == ["evil.com"]
+    assert scans._domain_candidates("localhost") == ["localhost"]
+
+
+@pytest.mark.asyncio
+async def test_threat_intel_middle_suffix_matches(tmp_path: Path) -> None:
+    """A feed entry at a middle level (x.y.evil.com) matches a deep subdomain."""
+    dal = _FakeDAL([_row("x.y.evil.com", "domain", scans.GLOBAL_FEED_TENANT)])
+    findings = await _scan(tmp_path, "GET a.b.c.d.e.f.g.h.x.y.evil.com\n", dal, tenant=None)
+    assert findings[0].metadata["matched_values"] == ["x.y.evil.com"]
+
+
+@pytest.mark.asyncio
+async def test_threat_intel_ipv6_and_padded_ipv4_match(tmp_path: Path) -> None:
+    """IPv6 tokens (non-canonical) and zero-padded IPv4 are extracted and matched."""
+    g = scans.GLOBAL_FEED_TENANT
+    dal = _FakeDAL([_row("2001:db8::1", "ip", g), _row("192.0.2.7", "ip", g)])
+    findings = await _scan(
+        tmp_path, "src=2001:DB8:0:0::1 at 12:30:45 via 192.000.002.007\n", dal, tenant=None
+    )
+    assert sorted(f.metadata["indicator"] for f in findings) == ["192.0.2.7", "2001:db8::1"]
 
 
 @pytest.mark.asyncio
@@ -397,7 +419,7 @@ async def test_threat_intel_caps_indicators_loudly(tmp_path: Path) -> None:
     dal = _FakeDAL([_row("10.1.0.19", "ip", scans.GLOBAL_FEED_TENANT)])
     text = "".join(f"10.1.0.{i}\n" for i in range(20))
     with (
-        patch(f"{SCANS}.MAX_INDICATORS_PER_SCAN", 5),
+        patch(f"{SCANS}.MAX_LOOKUP_VALUES", 5),
         patch(f"{SCANS}.INDICATORS_TRUNCATED") as trunc,
         patch(f"{SCANS}.THREAT_LOOKUPS") as lookups,
         patch(f"{SCANS}.logger") as log,
@@ -416,9 +438,33 @@ async def test_threat_intel_caps_indicators_loudly(tmp_path: Path) -> None:
     ]
 
 
-def test_cap_exceeds_tail_yield() -> None:
-    """The cap comfortably exceeds the indicators 3 x 256KB tails can produce."""
-    assert scans.MAX_INDICATORS_PER_SCAN >= 3 * scans.LOG_TAIL_BYTES // 7
+@pytest.mark.asyncio
+async def test_padded_deep_domains_truncated_within_budget(tmp_path: Path) -> None:
+    """Deep-domain padding is charged per suffix candidate; lookups never exceed the budget."""
+    deep = ".".join(f"l{j}" for j in range(30))  # 30 labels -> up to 29 candidates each
+    text = "".join(f"h{i}.{deep}.pad.com\n" for i in range(200)) + "x.evil.com\n"
+    dal = _FakeDAL([_row("evil.com", "domain", scans.GLOBAL_FEED_TENANT)])
+    budget = 100
+    with (
+        patch(f"{SCANS}.MAX_LOOKUP_VALUES", budget),
+        patch(f"{SCANS}._batch_lookup", wraps=scans._batch_lookup) as batch,
+    ):
+        findings = await _scan(tmp_path, text, dal, tenant=None)
+    looked_up = sum(len(c.args[2]) for c in batch.call_args_list)
+    assert looked_up <= budget
+    types = [f.finding_type for f in findings]
+    assert "threat_intel_coverage" in types  # truncation reported
+    assert "threat_indicator" in types  # newest line (x.evil.com) still checked
+
+
+def test_allocate_fairly_charges_domain_candidates() -> None:
+    """A domain costs its new suffixes; shared suffixes are charged once."""
+    items = [("a.b.ex.com", "domain"), ("c.b.ex.com", "domain"), ("1.2.3.4", "ip")]
+    kept, dropped = scans._allocate_fairly({"f": items}, 5)
+    # a.b.ex.com=3 (a.b.ex.com,b.ex.com,ex.com), c.b.ex.com=+1, ip=+1 -> 5
+    assert len(kept) == 3 and dropped == 0
+    kept, dropped = scans._allocate_fairly({"f": items}, 4)
+    assert len(kept) == 2 and dropped == 1
 
 
 def test_read_tail_is_bounded(tmp_path: Path) -> None:

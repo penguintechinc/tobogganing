@@ -396,12 +396,12 @@ async def _run_configuration_scan(scan_id: str, scanner: Any) -> list[ScanFindin
 
 #: Bytes read from the end of each log file per scan (bounded I/O).
 LOG_TAIL_BYTES = 256 * 1024
-#: Maximum unique indicators looked up per scan; excess is dropped loudly (metric + finding).
-#: Sized above what 3 x 256KB tails can yield (~7 bytes per shortest IPv4 token) since
-#: lookups are batched.
-MAX_INDICATORS_PER_SCAN = 120_000
-#: Maximum parent domains checked besides the exact name; the registrable end is always kept.
-MAX_PARENT_DEPTH = 5
+#: Lookup budget per scan, in distinct lookup values (each IP = 1, each domain = its
+#: not-yet-budgeted suffix candidates). Indicators beyond it are dropped loudly
+#: (warning + metric + coverage finding); bounds DB load regardless of log content.
+MAX_LOOKUP_VALUES = 50_000
+#: DNS name length limit; longer "domains" are not resolvable and are skipped.
+MAX_DOMAIN_LENGTH = 253
 #: Values per ``IN (...)`` query chunk.
 LOOKUP_BATCH_SIZE = 1000
 
@@ -409,34 +409,47 @@ LOOKUP_BATCH_SIZE = 1000
 def _normalize_domain(value: str) -> str | None:
     """Normalize a domain the way feed ingest stores it (lower-case, no trailing dot, IDNA).
 
-    Returns None for values that cannot be IDNA-encoded.
+    Returns None for values that cannot be IDNA-encoded or exceed the DNS length limit.
     """
     name = value.strip().lower().rstrip(".")
-    if not name:
+    if not name or len(name) > MAX_DOMAIN_LENGTH:
         return None
     try:
-        return name.encode("idna").decode("ascii")
+        encoded = name.encode("idna").decode("ascii")
     except UnicodeError:
         return None
+    return encoded if len(encoded) <= MAX_DOMAIN_LENGTH else None
+
+
+_DOTTED_QUAD = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 
 
 def _normalize_ip(value: str) -> str | None:
-    """Return the canonical text form of an IP address, or None if invalid."""
+    """Return the canonical text form of an IP address, or None if invalid.
+
+    Zero-padded IPv4 octets (``010.000.000.001``) are read as decimal, so padding
+    cannot be used to dodge an exact-match lookup.
+    """
+    text = value.strip()
+    if _DOTTED_QUAD.match(text):
+        octets = [int(o) for o in text.split(".")]
+        if any(o > 255 for o in octets):
+            return None
+        text = ".".join(str(o) for o in octets)
     try:
-        return str(ipaddress.ip_address(value.strip()))
+        return str(ipaddress.ip_address(text))
     except ValueError:
         return None
 
 
 def _domain_candidates(domain: str) -> list[str]:
-    """Return ``domain`` plus its shortest parent domains (down to 2 labels).
+    """Return ``domain`` and every parent suffix down to 2 labels.
 
-    At most MAX_PARENT_DEPTH parents are kept, always the ones nearest the registrable
-    end, so a deep subdomain still checks e.g. ``evil.com``.
+    Unbounded by design: DNS limits names to 253 chars, which _normalize_domain enforces,
+    so a feed entry at any level (x.y.evil.com, evil.com) is matched.
     """
     labels = domain.split(".")
-    parents = [".".join(labels[i:]) for i in range(1, len(labels) - 1)]
-    return [domain] + parents[-MAX_PARENT_DEPTH:]
+    return [".".join(labels[i:]) for i in range(len(labels) - 1)] or [domain]
 
 
 def _read_tail(path: str, max_bytes: int = LOG_TAIL_BYTES) -> list[str]:
@@ -533,11 +546,22 @@ def _threat_finding(
     )
 
 
+_IPV6_CANDIDATE = re.compile(r"(?<![\w:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![\w:])")
+
+
+def _extract_ipv6_from_log(log_line: str) -> list[str]:
+    """Return IPv6-looking tokens (validated later by _normalize_ip; times like 12:30:45 fail)."""
+    return _IPV6_CANDIDATE.findall(log_line)
+
+
 def _collect_indicators(lines: list[str]) -> list[tuple[str, str]]:
-    """Return unique normalized (value, type) indicators from ``lines``, newest line first."""
+    """Return unique normalized (value, type) indicators from ``lines``, newest line first.
+
+    IPv4 (incl. zero-padded), IPv6 and domain tokens are all collected.
+    """
     seen: dict[tuple[str, str], None] = {}
     for line in reversed(lines):
-        for raw_ip in _extract_ips_from_log(line):
+        for raw_ip in _extract_ips_from_log(line) + _extract_ipv6_from_log(line):
             ip = _normalize_ip(raw_ip)
             if ip:
                 seen.setdefault((ip, "ip"), None)
@@ -548,25 +572,41 @@ def _collect_indicators(lines: list[str]) -> list[tuple[str, str]]:
     return list(seen)
 
 
-def _allocate_fairly(
-    per_file: dict[str, list[tuple[str, str]]], cap: int
-) -> tuple[dict[tuple[str, str], str], int]:
-    """Round-robin newest-first indicators across files up to ``cap``.
+def _lookup_keys(key: tuple[str, str]) -> list[tuple[str, str]]:
+    """Return the (value, type) lookup values an indicator needs (domain suffixes or the IP)."""
+    value, itype = key
+    if itype == "domain":
+        return [(c, itype) for c in _domain_candidates(value)]
+    return [key]
 
-    Returns the kept indicators (mapped to their first source file) and the number of
-    unique indicators dropped, so one padded log cannot crowd out the others.
+
+def _allocate_fairly(
+    per_file: dict[str, list[tuple[str, str]]], budget: int
+) -> tuple[dict[tuple[str, str], str], int]:
+    """Round-robin newest-first indicators across files within a lookup-value ``budget``.
+
+    Each indicator costs the number of lookup values it adds that are not already
+    budgeted (an IP = 1, a domain = its new suffixes). When a file's next indicator no
+    longer fits, that file stops, so its newest indicators are the ones kept and one
+    padded log cannot crowd out the others. Returns kept indicators (mapped to their
+    first source file) and the number of unique indicators dropped.
     """
     kept: dict[tuple[str, str], str] = {}
+    budgeted: set[tuple[str, str]] = set()
     total = len({k for items in per_file.values() for k in items})
     iters = {f: iter(items) for f, items in per_file.items()}
-    while iters and len(kept) < cap:
+    while iters:
         for f in list(iters):
-            if len(kept) >= cap:
-                break
             for key in iters[f]:
-                if key not in kept:
+                if key in kept:
+                    continue
+                new = [k for k in _lookup_keys(key) if k not in budgeted]
+                if len(budgeted) + len(new) > budget:
+                    del iters[f]
+                else:
+                    budgeted.update(new)
                     kept[key] = f
-                    break
+                break
             else:
                 del iters[f]
     return kept, total - len(kept)
@@ -582,7 +622,7 @@ def _truncation_finding(scan_id: str, total: int, dropped: int) -> ScanFinding:
         title="Threat-intel coverage truncated",
         description=(
             f"{dropped} of {total} indicators in log tails were not checked "
-            f"(cap {MAX_INDICATORS_PER_SCAN}); logs may be padded to hide activity"
+            f"(lookup budget {MAX_LOOKUP_VALUES}); logs may be padded to hide activity"
         ),
         affected_component="threat_intel_scan",
         recommendation="Investigate log volume spikes; review log sources for padding",
@@ -591,7 +631,7 @@ def _truncation_finding(scan_id: str, total: int, dropped: int) -> ScanFinding:
         confidence=100,
         first_seen=now,
         last_seen=now,
-        metadata={"observed": total, "dropped": dropped, "limit": MAX_INDICATORS_PER_SCAN},
+        metadata={"observed": total, "dropped": dropped, "limit": MAX_LOOKUP_VALUES},
     )
 
 
@@ -617,13 +657,13 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
         for log_file in THREAT_LOG_FILES
         if os.path.exists(log_file)
     }
-    observed, dropped = _allocate_fairly(per_file, MAX_INDICATORS_PER_SCAN)
+    observed, dropped = _allocate_fairly(per_file, MAX_LOOKUP_VALUES)
     findings: list[ScanFinding] = []
     if dropped:
         logger.warning(
             "threat_intel_indicators_truncated",
             observed=len(observed) + dropped,
-            limit=MAX_INDICATORS_PER_SCAN,
+            limit=MAX_LOOKUP_VALUES,
             dropped=dropped,
         )
         INDICATORS_TRUNCATED.add(dropped)
