@@ -1,10 +1,10 @@
 """Core security scanner class."""
+
 from __future__ import annotations
 
 import asyncio
 import json
-import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
@@ -222,9 +222,8 @@ class SecurityScanner:
         """
         # Get last scan time - tenant-scoped query
         try:
-            cond = (
-                (self.db.security_scans.scan_type == scan_type.value)
-                & (self.db.security_scans.status == "completed")
+            cond = (self.db.security_scans.scan_type == scan_type.value) & (
+                self.db.security_scans.status == "completed"
             )
             if self.tenant_id:
                 cond = cond & (self.db.security_scans.tenant_id == self.tenant_id)
@@ -265,11 +264,10 @@ class SecurityScanner:
             scan_type: Type of scan to execute.
             config: Scan configuration.
         """
-        from .scans import execute_scan_by_type
-        from .parsers import count_findings_by_severity
-        from .models import SecurityScan, SecurityFinding
-
         from uuid import uuid4
+
+        from .parsers import count_findings_by_severity
+        from .scans import execute_scan_by_type
 
         scan_id = f"scan_{scan_type.value}_{int(datetime.utcnow().timestamp())}"
 
@@ -383,21 +381,42 @@ class SecurityScanner:
         except Exception as e:
             logger.error("failed_to_store_finding", error=str(e), exc_info=True)
 
-    # Placeholder methods for infrastructure monitoring
     async def _scan_new_containers(self) -> None:
-        """Scan for new containers."""
+        """Trigger a vulnerability scan when new Docker containers appear."""
+        from .infra_monitor import discover_new_containers
+
+        if discover_new_containers(self):
+            await self._execute_scan(
+                ScanType.VULNERABILITY_SCAN, self.scan_configs[ScanType.VULNERABILITY_SCAN]
+            )
 
     async def _scan_kubernetes_resources(self) -> None:
-        """Scan Kubernetes resources."""
+        """Kubernetes resource scanning: behaviour undefined; reported loudly each cycle."""
+        from .infra_monitor import report_unimplemented
+
+        report_unimplemented("kubernetes_resources")
 
     async def _scan_network_services(self) -> None:
-        """Scan network services."""
+        """Trigger a port scan when new listening TCP ports appear."""
+        from .infra_monitor import discover_new_listening_ports
+
+        if discover_new_listening_ports(self):
+            await self._execute_scan(ScanType.PORT_SCAN, self.scan_configs[ScanType.PORT_SCAN])
 
     async def _scan_logs_for_threats(self) -> None:
-        """Scan logs for threat indicators."""
+        """Run the threat-intel log scan (log indicators vs threat-feed store)."""
+        await self._execute_scan(
+            ScanType.THREAT_INTEL_SCAN, self.scan_configs[ScanType.THREAT_INTEL_SCAN]
+        )
 
     async def _scan_network_threats(self) -> None:
-        """Scan network traffic for threats."""
+        """Network-traffic threat scanning: no traffic source defined; reported loudly."""
+        from .infra_monitor import report_unimplemented
+
+        report_unimplemented("network_threats")
 
     async def _correlate_with_threat_feeds(self) -> None:
-        """Correlate findings with threat feeds."""
+        """Finding/threat-feed correlation: behaviour undefined; reported loudly."""
+        from .infra_monitor import report_unimplemented
+
+        report_unimplemented("threat_feed_correlation")

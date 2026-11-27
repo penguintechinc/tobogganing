@@ -1,22 +1,35 @@
 """Security scan implementations."""
+
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 - fixed-argv scanner tool invocations only
+import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import structlog
 
+from . import host_checks
 from .core import ScanFinding, ScanSeverity, ScanType
+from .host_checks import CheckIssue, CheckNotApplicable
 from .parsers import (
-    parse_trivy_results,
-    parse_safety_results,
-    parse_govulncheck_results,
     parse_docker_bench_results,
+    parse_govulncheck_results,
+    parse_safety_results,
+    parse_trivy_results,
+)
+from .telemetry import (
+    CHECK_RESULTS,
+    INDICATORS_TRUNCATED,
+    LOOKUP_DURATION,
+    THREAT_LOOKUPS,
+    ScannerDependencyError,
 )
 
 logger = structlog.get_logger()
@@ -72,7 +85,7 @@ async def _run_vulnerability_scan(scan_id: str, scanner: Any) -> list[ScanFindin
             for image in images[:5]:  # Limit to first 5 images
                 try:
                     # Run Trivy scan
-                    result = subprocess.run(
+                    result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                         ["trivy", "image", "--format", "json", "--quiet", image.id],
                         capture_output=True,
                         text=True,
@@ -85,11 +98,13 @@ async def _run_vulnerability_scan(scan_id: str, scanner: Any) -> list[ScanFindin
                 except (json.JSONDecodeError, subprocess.TimeoutExpired) as e:
                     logger.warning("Failed to scan image", image_id=image.id, error=str(e))
                 except Exception as e:
-                    logger.warning("Unexpected error scanning image", image_id=image.id, error=str(e))
+                    logger.warning(
+                        "Unexpected error scanning image", image_id=image.id, error=str(e)
+                    )
 
         # Scan filesystem
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                 ["trivy", "fs", "--format", "json", "--quiet", "/"],
                 capture_output=True,
                 text=True,
@@ -189,7 +204,7 @@ async def _run_dependency_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     try:
         # Check Python dependencies
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                 ["safety", "check", "--json"],
                 capture_output=True,
                 text=True,
@@ -208,7 +223,7 @@ async def _run_dependency_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
         go_mod_path = Path("/go.mod")
         if go_mod_path.exists():
             try:
-                result = subprocess.run(
+                result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                     ["govulncheck", "./..."],
                     cwd=go_mod_path.parent,
                     capture_output=True,
@@ -244,7 +259,7 @@ async def _run_container_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     try:
         # Run Docker Bench Security if available
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                 [
                     "docker",
                     "run",
@@ -285,168 +300,465 @@ async def _run_container_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     return findings
 
 
-async def _run_configuration_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
-    """Run configuration security scan.
+_CheckFn = Callable[[], list[CheckIssue]]
 
-    Args:
-        scan_id: Scan ID.
-        scanner: SecurityScanner instance.
+#: Configuration checks: (name, severity, function).
+CONFIG_CHECKS: list[tuple[str, ScanSeverity, _CheckFn]] = [
+    ("SSH Configuration", ScanSeverity.HIGH, lambda: host_checks.check_ssh_configuration()),
+    ("File Permissions", ScanSeverity.MEDIUM, lambda: host_checks.check_file_permissions()),
+    (
+        "Service Configuration",
+        ScanSeverity.MEDIUM,
+        lambda: host_checks.check_service_configuration(),
+    ),
+]
 
-    Returns:
-        List of configuration scan findings.
+#: Compliance controls: (framework, control, description, function).
+COMPLIANCE_CHECKS: list[tuple[str, str, str, _CheckFn]] = [
+    (
+        "CIS",
+        "1.1.1.1",
+        "Ensure mounting of freevxfs filesystems is disabled",
+        lambda: host_checks.check_cis_freevxfs_disabled(),
+    ),
+    ("NIST", "AC-2", "Account Management", lambda: host_checks.check_nist_ac2_accounts()),
+    (
+        "SOC2",
+        "CC6.1",
+        "Logical and Physical Access Controls",
+        lambda: host_checks.check_soc2_cc61_logical_access(),
+    ),
+]
+
+#: Tenant under which scheduled (global) threat feeds are stored by SecurityFeedsManager.
+GLOBAL_FEED_TENANT = "00000000-0000-0000-0000-000000000000"
+
+THREAT_LOG_FILES = [
+    "/var/log/auth.log",
+    "/var/log/nginx/access.log",
+    "/var/log/app.log",
+]
+
+
+def _run_check(name: str, fn: _CheckFn, errors: list[str]) -> list[CheckIssue]:
+    """Run one host check, recording its outcome as a metric and collecting errors.
+
+    Not-applicable checks return no issues; any other exception is appended to
+    ``errors`` so the caller can fail the scan after running the remaining checks.
     """
-    findings = []
-
     try:
-        # Check basic security configurations (placeholder)
-        config_checks = [
-            {"name": "SSH Configuration", "severity": ScanSeverity.HIGH},
-            {"name": "File Permissions", "severity": ScanSeverity.MEDIUM},
-            {"name": "Service Configuration", "severity": ScanSeverity.MEDIUM},
-        ]
+        issues = fn()
+    except CheckNotApplicable as e:
+        logger.info("scanner_check_not_applicable", check=name, reason=str(e))
+        CHECK_RESULTS.add(1, {"check": name, "status": "not_applicable"})
+        return []
+    except Exception as e:  # noqa: BLE001 - recorded and re-raised by caller
+        logger.error("scanner_check_error", check=name, error=str(e))
+        CHECK_RESULTS.add(1, {"check": name, "status": "error"})
+        errors.append(f"{name}: {e}")
+        return []
+    CHECK_RESULTS.add(1, {"check": name, "status": "fail" if issues else "pass"})
+    return issues
 
-        for check in config_checks:
-            try:
-                # Placeholder: actual checks would be implemented
-                result = None
-                if result:
-                    findings.append(
-                        ScanFinding(
-                            scan_id=scan_id,
-                            finding_type="configuration",
-                            severity=check["severity"],
-                            title=f"Configuration Issue: {check['name']}",
-                            description="Configuration issue detected",
-                            affected_component="system",
-                            recommendation="Review configuration",
-                            cve_ids=[],
-                            cvss_score=5.0,
-                            confidence=80,
-                            first_seen=datetime.utcnow(),
-                            last_seen=datetime.utcnow(),
-                            metadata={},
-                        )
-                    )
-            except Exception as e:
-                logger.warning("Configuration check failed", check_name=check["name"], error=str(e))
 
-    except Exception as e:
-        logger.error("Configuration scan failed", error=str(e))
+async def _run_configuration_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
+    """Run host configuration checks (sshd, account-file modes, Docker socket).
 
+    Raises:
+        ScannerDependencyError: if any check could not run (scan is recorded failed).
+    """
+    findings: list[ScanFinding] = []
+    errors: list[str] = []
+    now = datetime.utcnow()
+    for name, severity, fn in CONFIG_CHECKS:
+        for issue in _run_check(name, fn, errors):
+            findings.append(
+                ScanFinding(
+                    scan_id=scan_id,
+                    finding_type="configuration",
+                    severity=severity,
+                    title=f"Configuration Issue: {name}: {issue.title}",
+                    description=issue.description,
+                    affected_component=issue.component,
+                    recommendation=issue.recommendation,
+                    cve_ids=[],
+                    cvss_score=7.0 if severity == ScanSeverity.HIGH else 5.0,
+                    confidence=90,
+                    first_seen=now,
+                    last_seen=now,
+                    metadata={"check": name, **issue.metadata},
+                )
+            )
+    if errors:
+        raise ScannerDependencyError("configuration checks failed: " + "; ".join(errors))
     return findings
 
 
-async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
-    """Run threat intelligence scan.
+#: Bytes read from the end of each log file per scan (bounded I/O).
+LOG_TAIL_BYTES = 256 * 1024
+#: Lookup budget per scan, in distinct lookup values (each IP = 1, each domain = its
+#: not-yet-budgeted suffix candidates). Indicators beyond it are dropped loudly
+#: (warning + metric + coverage finding); bounds DB load regardless of log content.
+MAX_LOOKUP_VALUES = 50_000
+#: DNS name length limit; longer "domains" are not resolvable and are skipped.
+MAX_DOMAIN_LENGTH = 253
+#: Values per ``IN (...)`` query chunk.
+LOOKUP_BATCH_SIZE = 1000
 
-    Args:
-        scan_id: Scan ID.
-        scanner: SecurityScanner instance.
 
-    Returns:
-        List of threat intel findings.
+def _normalize_domain(value: str) -> str | None:
+    """Normalize a domain the way feed ingest stores it (lower-case, no trailing dot, IDNA).
+
+    Returns None for values that cannot be IDNA-encoded or exceed the DNS length limit.
     """
-    findings = []
-
+    name = value.strip().lower().rstrip(".")
+    if not name or len(name) > MAX_DOMAIN_LENGTH:
+        return None
     try:
-        # Scan recent logs for threat indicators
-        logs_to_scan = [
-            "/var/log/auth.log",
-            "/var/log/nginx/access.log",
-            "/var/log/app.log",
-        ]
+        encoded = name.encode("idna").decode("ascii")
+    except UnicodeError:
+        return None
+    return encoded if len(encoded) <= MAX_DOMAIN_LENGTH else None
 
-        for log_file in logs_to_scan:
-            if os.path.exists(log_file):
-                try:
-                    # Read recent log entries
-                    with open(log_file, "r") as f:
-                        lines = f.readlines()[-1000:]  # Last 1000 lines
 
-                    for line in lines:
-                        # Extract IP addresses and domains (placeholder)
-                        ips = _extract_ips_from_log(line)
-                        domains = _extract_domains_from_log(line)
+_DOTTED_QUAD = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 
-                        # In production, would check against threat feeds
-                        for ip in ips:
-                            pass  # Placeholder for threat feed lookup
 
-                        for domain in domains:
-                            pass  # Placeholder for threat feed lookup
+def _normalize_ip(value: str) -> str | None:
+    """Return the canonical text form of an IP address, or None if invalid.
 
-                except Exception as e:
-                    logger.warning("Failed to scan log file", log_file=log_file, error=str(e))
+    Zero-padded IPv4 octets (``010.000.000.001``) are read as decimal, so padding
+    cannot be used to dodge an exact-match lookup.
+    """
+    text = value.strip()
+    if _DOTTED_QUAD.match(text):
+        octets = [int(o) for o in text.split(".")]
+        if any(o > 255 for o in octets):
+            return None
+        text = ".".join(str(o) for o in octets)
+    try:
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return None
 
+
+def _domain_candidates(domain: str) -> list[str]:
+    """Return ``domain`` and every parent suffix down to 2 labels.
+
+    Unbounded by design: DNS limits names to 253 chars, which _normalize_domain enforces,
+    so a feed entry at any level (x.y.evil.com, evil.com) is matched.
+    """
+    labels = domain.split(".")
+    return [".".join(labels[i:]) for i in range(len(labels) - 1)] or [domain]
+
+
+def _read_tail(path: str, max_bytes: int = LOG_TAIL_BYTES) -> list[str]:
+    """Read at most ``max_bytes`` from the end of ``path`` and return whole lines."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        start = max(0, size - max_bytes)
+        f.seek(start)
+        data = f.read(max_bytes)
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if start > 0 and lines:
+        lines = lines[1:]  # first line is partial
+    return lines
+
+
+def _row_to_match(row: Any) -> dict[str, Any]:
+    """Convert a threat_indicators row into a match dict (value, types, source, confidence)."""
+    raw_types = row.get("threat_types") if hasattr(row, "get") else row["threat_types"]
+    try:
+        types = json.loads(raw_types) if raw_types else []
+    except (TypeError, ValueError):
+        types = []
+    return {
+        "value": row["value"],
+        "threat_types": types,
+        "source": row["source"],
+        "confidence": row["confidence"],
+    }
+
+
+async def _batch_lookup(
+    db: Any, tenants: list[str], values: list[str], indicator_type: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Look up ``values`` with one ``value IN (...)`` query per chunk across ``tenants``.
+
+    Raises:
+        ScannerDependencyError: when the threat-indicator store cannot be queried.
+    """
+    hits: dict[str, list[dict[str, Any]]] = {}
+    if not values:
+        return hits
+    table = db.threat_indicators
+    start = time.monotonic()
+    try:
+        for i in range(0, len(values), LOOKUP_BATCH_SIZE):
+            chunk = values[i : i + LOOKUP_BATCH_SIZE]
+            query = (
+                table.value.belongs(chunk)
+                & (table.active == True)  # noqa: E712 - DAL expression
+                & table.tenant_id.belongs(tenants)
+                & (table.indicator_type == indicator_type)
+            )
+            for row in await db(query).select():
+                match = _row_to_match(row)
+                hits.setdefault(match["value"], []).append(match)
     except Exception as e:
-        logger.error("Threat intelligence scan failed", error=str(e))
+        THREAT_LOOKUPS.add(1, {"indicator_type": indicator_type, "result": "error"})
+        raise ScannerDependencyError(f"threat-feed lookup failed: {e}") from e
+    finally:
+        LOOKUP_DURATION.record(time.monotonic() - start, {"indicator_type": indicator_type})
+    return hits
 
+
+def _threat_finding(
+    scan_id: str, value: str, indicator_type: str, log_file: str, matches: list[dict[str, Any]]
+) -> ScanFinding:
+    """Build a finding for an indicator observed in a log that matches threat feeds."""
+    confidence = max(int(m.get("confidence") or 0) for m in matches)
+    threat_types = sorted({t for m in matches for t in (m.get("threat_types") or [])})
+    severity = ScanSeverity.HIGH if confidence >= 90 else ScanSeverity.MEDIUM
+    now = datetime.utcnow()
+    return ScanFinding(
+        scan_id=scan_id,
+        finding_type="threat_indicator",
+        severity=severity,
+        title=f"Known malicious {indicator_type} observed in logs",
+        description=f"{indicator_type} {value} in {log_file} matches threat feed(s)",
+        affected_component=log_file,
+        recommendation="Investigate the connection and block the indicator",
+        cve_ids=[],
+        cvss_score=7.5 if severity == ScanSeverity.HIGH else 5.0,
+        confidence=confidence,
+        first_seen=now,
+        last_seen=now,
+        metadata={
+            "indicator": value,
+            "indicator_type": indicator_type,
+            "log_file": log_file,
+            "matched_values": sorted({str(m.get("value")) for m in matches}),
+            "sources": sorted({str(m.get("source")) for m in matches}),
+            "threat_types": threat_types,
+        },
+    )
+
+
+_IPV6_CANDIDATE = re.compile(r"(?<![\w:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![\w:])")
+
+
+def _extract_ipv6_from_log(log_line: str) -> list[str]:
+    """Return IPv6-looking tokens (validated later by _normalize_ip; times like 12:30:45 fail)."""
+    return _IPV6_CANDIDATE.findall(log_line)
+
+
+def _collect_indicators(lines: list[str]) -> list[tuple[str, str]]:
+    """Return unique normalized (value, type) indicators from ``lines``, newest line first.
+
+    IPv4 (incl. zero-padded), IPv6 and domain tokens are all collected.
+    """
+    seen: dict[tuple[str, str], None] = {}
+    for line in reversed(lines):
+        for raw_ip in _extract_ips_from_log(line) + _extract_ipv6_from_log(line):
+            ip = _normalize_ip(raw_ip)
+            if ip:
+                seen.setdefault((ip, "ip"), None)
+        for raw_domain in _extract_domains_from_log(line):  # TLD is alphabetic: never an IP
+            domain = _normalize_domain(raw_domain)
+            if domain:
+                seen.setdefault((domain, "domain"), None)
+    return list(seen)
+
+
+def _lookup_keys(key: tuple[str, str]) -> list[tuple[str, str]]:
+    """Return the (value, type) lookup values an indicator needs (domain suffixes or the IP)."""
+    value, itype = key
+    if itype == "domain":
+        return [(c, itype) for c in _domain_candidates(value)]
+    return [key]
+
+
+def _allocate_fairly(
+    per_file: dict[str, list[tuple[str, str]]], budget: int
+) -> tuple[dict[tuple[str, str], str], int, list[str]]:
+    """Allocate a lookup-value ``budget`` across files with per-file quotas.
+
+    Each indicator costs the lookup values it adds that are not already budgeted
+    (an IP = 1, a domain = its new suffixes). Pass 1 gives every file
+    ``budget // n_files``; within a file indicators are taken newest-first and any that
+    do not fit the file's remaining quota are skipped (smaller later ones may still
+    fit). Pass 2 spends unused quota on skipped indicators, file by file, newest-first.
+    So one noisy file cannot starve the others. Returns kept indicators (mapped to
+    their first source file), the number of unique indicators dropped, and the files
+    that had indicators dropped.
+    """
+    kept: dict[tuple[str, str], str] = {}
+    budgeted: set[tuple[str, str]] = set()
+    total = len({k for items in per_file.values() for k in items})
+    quota = budget // len(per_file) if per_file else 0
+
+    def take(key: tuple[str, str], f: str, limit: int) -> int | None:
+        """Keep ``key`` if its cost fits ``limit``; return the cost, or None if skipped."""
+        new = [k for k in _lookup_keys(key) if k not in budgeted]
+        if len(new) > limit:
+            return None
+        budgeted.update(new)
+        kept[key] = f
+        return len(new)
+
+    skipped: dict[str, list[tuple[str, str]]] = {}
+    for f, items in per_file.items():
+        used = 0
+        for key in items:
+            if key in kept:
+                continue
+            cost = take(key, f, quota - used)
+            if cost is None:
+                skipped.setdefault(f, []).append(key)
+            else:
+                used += cost
+
+    truncated: list[str] = []
+    for f, items in skipped.items():
+        for key in items:
+            if key in kept:
+                continue
+            if take(key, f, budget - len(budgeted)) is None and f not in truncated:
+                truncated.append(f)
+    return kept, total - len(kept), truncated
+
+
+def _truncation_finding(scan_id: str, total: int, dropped: int, files: list[str]) -> ScanFinding:
+    """Build the finding that reports incomplete threat-intel coverage for this scan."""
+    now = datetime.utcnow()
+    return ScanFinding(
+        scan_id=scan_id,
+        finding_type="threat_intel_coverage",
+        severity=ScanSeverity.MEDIUM,
+        title="Threat-intel coverage truncated",
+        description=(
+            f"{dropped} of {total} indicators in log tails were not checked "
+            f"(lookup budget {MAX_LOOKUP_VALUES}) in {', '.join(files)}; "
+            "logs may be padded to hide activity"
+        ),
+        affected_component=", ".join(files),
+        recommendation="Investigate log volume spikes; review log sources for padding",
+        cve_ids=[],
+        cvss_score=5.0,
+        confidence=100,
+        first_seen=now,
+        last_seen=now,
+        metadata={
+            "observed": total,
+            "dropped": dropped,
+            "limit": MAX_LOOKUP_VALUES,
+            "truncated_files": files,
+        },
+    )
+
+
+async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
+    """Scan log tails for IPs/domains and batch-check them against the threat-feed store.
+
+    Indicators are normalized like feed ingest, domains also match parent-domain feed
+    entries, and lookups cover the scanner's tenant plus the global feed tenant.
+
+    Raises:
+        ScannerDependencyError: no DB, or the threat-indicator store is unreachable.
+    """
+    db = getattr(scanner, "db", None)
+    if db is None:
+        raise ScannerDependencyError("threat intel scan requires a database (scanner.db is None)")
+    tenants = [GLOBAL_FEED_TENANT]
+    tenant_id = getattr(scanner, "tenant_id", None)
+    if tenant_id and tenant_id != GLOBAL_FEED_TENANT:
+        tenants.insert(0, tenant_id)
+
+    per_file = {
+        log_file: _collect_indicators(_read_tail(log_file))
+        for log_file in THREAT_LOG_FILES
+        if os.path.exists(log_file)
+    }
+    observed, dropped, truncated_files = _allocate_fairly(per_file, MAX_LOOKUP_VALUES)
+    findings: list[ScanFinding] = []
+    if dropped:
+        logger.warning(
+            "threat_intel_indicators_truncated",
+            observed=len(observed) + dropped,
+            limit=MAX_LOOKUP_VALUES,
+            dropped=dropped,
+            files=truncated_files,
+        )
+        INDICATORS_TRUNCATED.add(dropped)
+        findings.append(
+            _truncation_finding(scan_id, len(observed) + dropped, dropped, truncated_files)
+        )
+
+    ips = [v for v, t in observed if t == "ip"]
+    domains = [v for v, t in observed if t == "domain"]
+    domain_lookup = sorted({c for d in domains for c in _domain_candidates(d)})
+    ip_hits = await _batch_lookup(db, tenants, ips, "ip")
+    domain_hits = await _batch_lookup(db, tenants, domain_lookup, "domain")
+
+    for (value, indicator_type), log_file in observed.items():
+        if indicator_type == "ip":
+            matches = ip_hits.get(value, [])
+        else:
+            matches = [m for c in _domain_candidates(value) for m in domain_hits.get(c, [])]
+        THREAT_LOOKUPS.add(
+            1, {"indicator_type": indicator_type, "result": "hit" if matches else "miss"}
+        )
+        if matches:
+            logger.warning(
+                "threat_indicator_observed",
+                indicator_type=indicator_type,
+                log_file=log_file,
+                matches=len(matches),
+            )
+            findings.append(_threat_finding(scan_id, value, indicator_type, log_file, matches))
+    logger.info(
+        "threat_intel_scan_complete", indicators_checked=len(observed), findings=len(findings)
+    )
     return findings
 
 
 async def _run_compliance_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
-    """Run compliance security scan.
+    """Evaluate CIS / NIST / SOC2 controls against host state; one finding per failing control.
 
-    Args:
-        scan_id: Scan ID.
-        scanner: SecurityScanner instance.
-
-    Returns:
-        List of compliance findings.
+    Raises:
+        ScannerDependencyError: if any control could not be evaluated.
     """
-    findings = []
-
-    try:
-        # Basic compliance checks (placeholder)
-        compliance_checks = [
-            {
-                "framework": "CIS",
-                "control": "1.1.1.1",
-                "description": "Ensure mounting of freevxfs filesystems is disabled",
-            },
-            {
-                "framework": "NIST",
-                "control": "AC-2",
-                "description": "Account Management",
-            },
-            {
-                "framework": "SOC2",
-                "control": "CC6.1",
-                "description": "Logical and Physical Access Controls",
-            },
-        ]
-
-        for check in compliance_checks:
-            try:
-                # Placeholder: actual checks would be implemented
-                result = None
-                if not result:
-                    findings.append(
-                        ScanFinding(
-                            scan_id=scan_id,
-                            finding_type="compliance",
-                            severity=ScanSeverity.MEDIUM,
-                            title=f"Compliance Violation: {check['framework']} {check['control']}",
-                            description=check["description"],
-                            affected_component="system",
-                            recommendation="Review compliance requirements",
-                            cve_ids=[],
-                            cvss_score=4.0,
-                            confidence=85,
-                            first_seen=datetime.utcnow(),
-                            last_seen=datetime.utcnow(),
-                            metadata={
-                                "framework": check["framework"],
-                                "control": check["control"],
-                            },
-                        )
-                    )
-            except Exception as e:
-                logger.warning("Compliance check failed", control=check["control"], error=str(e))
-
-    except Exception as e:
-        logger.error("Compliance scan failed", error=str(e))
-
+    findings: list[ScanFinding] = []
+    errors: list[str] = []
+    now = datetime.utcnow()
+    for framework, control, description, fn in COMPLIANCE_CHECKS:
+        issues = _run_check(f"{framework} {control}", fn, errors)
+        if issues:
+            findings.append(
+                ScanFinding(
+                    scan_id=scan_id,
+                    finding_type="compliance",
+                    severity=ScanSeverity.MEDIUM,
+                    title=f"Compliance Violation: {framework} {control}",
+                    description=f"{description}: " + "; ".join(i.description for i in issues),
+                    affected_component=issues[0].component,
+                    recommendation="; ".join(i.recommendation for i in issues),
+                    cve_ids=[],
+                    cvss_score=4.0,
+                    confidence=85,
+                    first_seen=now,
+                    last_seen=now,
+                    metadata={
+                        "framework": framework,
+                        "control": control,
+                        "issues": [i.metadata for i in issues],
+                    },
+                )
+            )
+    if errors:
+        raise ScannerDependencyError("compliance checks failed: " + "; ".join(errors))
     return findings
 
 
@@ -472,5 +784,5 @@ def _extract_domains_from_log(log_line: str) -> list[str]:
     Returns:
         List of domains found.
     """
-    domain_pattern = r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b"
+    domain_pattern = r"\b(?:[^\W_](?:[\w-]{0,61}[^\W_])?\.)+[^\W\d_]{2,}\b"
     return re.findall(domain_pattern, log_line)
