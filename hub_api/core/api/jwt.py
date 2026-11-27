@@ -19,6 +19,52 @@ from hub_api.crypto.keys import KeyProvider
 from hub_api.entitlements.gate import require_feature
 
 logger = structlog.get_logger()
+audit_logger = structlog.get_logger("hub_api.audit.jwt")
+
+
+def mask_jti(jti: Any) -> str:
+    """Mask a JWT ``jti`` for logs, keeping only the last 4 characters.
+
+    The jti is a revocation handle; logging it whole would let a log reader
+    correlate or target specific tokens, so only a short suffix is kept.
+    """
+    if not isinstance(jti, str) or not jti:
+        return "****"
+    return f"****{jti[-4:]}" if len(jti) > 8 else "****"
+
+
+def _audit_token_issued(
+    *,
+    event: str,
+    tenant: str,
+    sub: Any,
+    node_type: str,
+    access_jti: Any,
+    refresh_jti: Any,
+    metadata: Any,
+) -> None:
+    """Emit a structured audit record for a machine-token issuance.
+
+    Records who/what received tokens and which topology metadata keys were
+    embedded unencrypted (plain JWS), never token values, full jti, or
+    metadata values. Audit failure never fails issuance.
+    """
+    try:
+        meta_keys = sorted(str(k) for k in metadata) if isinstance(metadata, dict) else []
+        audit_logger.info(
+            event,
+            audit=True,
+            tenant=tenant,
+            sub=str(sub),
+            node_type=node_type,
+            access_jti=mask_jti(access_jti),
+            refresh_jti=mask_jti(refresh_jti),
+            plaintext_claim_keys=meta_keys,
+            claims_encrypted=False,
+        )
+    except Exception as e:  # pragma: no cover - logging backend failure
+        logger.error("jwt_audit_log_failed", error=type(e).__name__)
+
 
 blueprint = Blueprint("core_jwt", __name__, url_prefix="/api/v1/jwt")
 
@@ -312,18 +358,9 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
         claims["node_type"] = node_type
         claims["permissions"] = " ".join(permissions)
         claims["metadata"] = metadata
-        # FLAGGED (security-audit 2026-09-25, deferred, not implemented):
-        # `metadata` (region/datacenter/cluster_id topology) rides in this
-        # claim as plain JWS -- security.md calls for sign-then-encrypt
-        # (nested JWS-in-JWE) for sensitive claims. Out of scope for this
-        # resilience/hardening pass: this app's JWT stack (auth/jwt.py) is
-        # hand-rolled RS256 JWS with no JWE support, so nested-JWE needs a
-        # new dependency (e.g. jwcrypto/Authlib), symmetric/asymmetric
-        # encryption-key management + rotation for every verifier, and
-        # decode-path changes everywhere this claim is read (this
-        # blueprint's /validate, auth/middleware.py's
-        # _extract_machine_identity, etc.) -- an architectural change, not
-        # a bounded fix. Tracked, not silently dropped.
+        # security-audit 2026-09-25: `metadata` (topology) rides as plain JWS;
+        # nested JWS-in-JWE is an architectural change tracked separately.
+        # Every issuance is audit-logged below (masked jti, metadata keys only).
 
         # Generate access token (1 hour default)
         try:
@@ -357,10 +394,14 @@ async def generate_jwt_token() -> tuple[dict[str, Any], int]:
                 500,
             )
 
-        logger.info(
-            "jwt_token_generated",
-            node_id=node_id,
+        _audit_token_issued(
+            event="jwt_token_issued",
+            tenant=tenant_id,
+            sub=principal_id,
             node_type=node_type,
+            access_jti=claims.get("jti"),
+            refresh_jti=refresh_claims.get("jti"),
+            metadata=metadata,
         )
 
         return (

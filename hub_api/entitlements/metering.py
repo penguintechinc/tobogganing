@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,7 @@ class Usage:
     """Usage snapshot for license keepalive reporting."""
 
     seats: int  # Distinct active identities (human or machine/AI)
-    nodes: int  # Count of registered clusters/headends/testservers
+    nodes: int  # Enrolled compute objects seen within NODE_STALENESS_DAYS
     features: frozenset[str]  # Enabled Enterprise features
 
 
@@ -46,20 +48,47 @@ async def count_active_seats(db: Any) -> int:
         return 0
 
 
-def count_registered_nodes(db: Any) -> int:
-    """Count registered clusters/orchestrators/nodes.
+NODE_STALENESS_DAYS = 30
+"""No-contact window after which an enrolled node frees its license slot."""
+
+
+async def _count(db: Any, query: Any) -> int:
+    """Run ``db(query).count()`` on a sync or async penguin-dal handle."""
+    result = db(query).count()
+    if inspect.isawaitable(result):
+        result = await result
+    return int(result or 0)
+
+
+async def count_registered_nodes(db: Any, now: datetime | None = None) -> int:
+    """Count licensable nodes: enrolled compute objects seen in the last 30 days.
+
+    Per org licensing (critical-rules.md Licensing Model), a node is the compute
+    object/OS instance, counted only once *enrolled* (credentialed and checked
+    in). Here that is SASE clusters/headends (enrolled via API key, heartbeat
+    required) plus WaddlePerf devices that have checked in at least once
+    (``last_heartbeat`` set). A node with no contact for ``NODE_STALENESS_DAYS``
+    frees its slot; reappearance simply re-counts. Overage is reported only and
+    never blocks enrollment -- this function is metering, not enforcement.
 
     Args:
-        db: penguin-dal database connection
+        db: penguin-dal database connection (sync or async)
+        now: Reference time (UTC); defaults to the current time.
 
     Returns:
-        Number of registered cluster/orchestrator nodes.
+        Number of enrolled, non-stale nodes; 0 on query failure (logged).
     """
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=NODE_STALENESS_DAYS)
     try:
-        # Query all clusters (registered orchestrators/headends)
-        # TODO(spec §8 #6): confirm node unit definition post-Phase 1
-        result = db.clusters.select()
-        return len(result) if result else 0
+        clusters = await _count(
+            db,
+            (db.clusters.last_heartbeat != None) & (db.clusters.last_heartbeat >= cutoff),  # noqa: E711
+        )
+        devices = await _count(
+            db,
+            (db.devices.last_heartbeat != None) & (db.devices.last_heartbeat >= cutoff),  # noqa: E711
+        )
+        return clusters + devices
     except Exception as e:
         logger.error(f"Failed to count registered nodes: {e}")
         return 0
@@ -72,7 +101,7 @@ class UsageReporter:
         self,
         db: object,
         license_client: object,
-        node_counter: Optional[Callable[[], int]] = None,
+        node_counter: Optional[Callable[[], Any]] = None,
     ) -> None:
         """
         Initialize the usage reporter.
@@ -106,7 +135,8 @@ class UsageReporter:
             # Get node count from injected callable
             nodes = 0
             try:
-                nodes = self.node_counter()
+                counted = self.node_counter()
+                nodes = int(await counted) if inspect.isawaitable(counted) else int(counted)
             except Exception as e:
                 logger.error(f"Failed to get node count: {e}")
                 nodes = 0

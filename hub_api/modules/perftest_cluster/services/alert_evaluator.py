@@ -1,6 +1,9 @@
 """Alert rule evaluation and event generation for performance metrics."""
+
 from __future__ import annotations
 
+import operator
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -12,9 +15,18 @@ from hub_api.notifications.service import NotificationService
 
 log = structlog.get_logger(__name__)
 
+_COMPARATORS: dict[str, Callable[[float, float], bool]] = {
+    "gt": operator.gt,
+    "gte": operator.ge,
+    "lt": operator.lt,
+    "lte": operator.le,
+}
+
 
 class AlertEvaluator:
     """Evaluate performance results against alert rules and fire notifications."""
+
+    SWEEP_PAGE_SIZE = 500
 
     def __init__(self, db: AsyncDB, notifications: NotificationService) -> None:
         """Initialize alert evaluator.
@@ -52,279 +64,191 @@ class AlertEvaluator:
             Number of alert events fired
         """
         events_fired = 0
-
-        # Get all enabled rules for this tenant
-        rules_rowset = await self.db(
-            (self.db.alert_rules.tenant == tenant)
-            & (self.db.alert_rules.enabled == True)  # noqa: E712 -- DAL query syntax
-        ).select()
-
-        for rule_row in rules_rowset:
-            rule_id = rule_row["id"]
-            metric_name = rule_row["metric"]
-            comparator = rule_row["comparator"]
-            threshold = rule_row["threshold"]
-            window_seconds = rule_row["window_seconds"]
-            device_filter = rule_row["device_id"]
-            test_type_filter = rule_row["test_type"]
-            channel_id = rule_row["channel_id"]
-
-            # Filter: if rule has device_filter, result's device_id must match
-            if device_filter and result.get("device_id") != device_filter:
-                continue
-
-            # Filter: if rule has test_type_filter, result's test_type must match
-            if test_type_filter and result.get("test_type") != test_type_filter:
-                continue
-
-            # Extract metric value from result
-            # Metrics come from individual result fields (latency_ms, throughput, etc.)
-            metric_value = result.get(metric_name)
-            if metric_value is None:
-                continue
-
-            # Evaluate comparator
-            breach = False
-            if comparator == "gt":
-                breach = metric_value > threshold
-            elif comparator == "gte":
-                breach = metric_value >= threshold
-            elif comparator == "lt":
-                breach = metric_value < threshold
-            elif comparator == "lte":
-                breach = metric_value <= threshold
-
-            if not breach:
-                continue
-
-            # Dedup: check if an event for this rule fired within window
-            now = datetime.now(timezone.utc)
-            window_start = now - timedelta(seconds=window_seconds)
-
-            recent_events = await self.db(
-                (self.db.alert_events.tenant == tenant)
-                & (self.db.alert_events.rule_id == rule_id)
-                & (self.db.alert_events.fired_at >= window_start)
-            ).select()
-
-            if recent_events.first():
-                # Event already fired within window, skip
-                log.info(
-                    "alert_dedup_skipped",
-                    rule_id=rule_id,
-                    tenant=tenant,
-                    metric=metric_name,
+        size = self.SWEEP_PAGE_SIZE
+        offset = 0
+        while True:
+            page = await self.db(
+                (self.db.alert_rules.tenant == tenant) & (self.db.alert_rules.enabled == True)  # noqa: E712 -- DAL query syntax
+            ).select(orderby=[self.db.alert_rules.id], limitby=(offset, offset + size))
+            rows = list(page)
+            for rule_row in rows:
+                if rule_row["device_id"] and result.get("device_id") != rule_row["device_id"]:
+                    continue
+                if rule_row["test_type"] and result.get("test_type") != rule_row["test_type"]:
+                    continue
+                metric_value = result.get(rule_row["metric"])
+                if metric_value is None or not _breached(
+                    rule_row["comparator"], metric_value, rule_row["threshold"]
+                ):
+                    continue
+                window_start = datetime.now(timezone.utc) - timedelta(
+                    seconds=rule_row["window_seconds"]
                 )
-                continue
-
-            # Insert alert event
-            event_id = str(uuid4())
-            await self.db.alert_events.async_insert(
-                id=event_id,
-                tenant=tenant,
-                rule_id=rule_id,
-                device_id=result.get("device_id"),
-                observed_value=metric_value,
-                fired_at=now,
-                notified=False,
-            )
-
-            # Notify: the rule's channel if set, else all enabled channels
-            try:
-                rule_name = rule_row["name"]
-                subject = f"Alert: {rule_name}"
-                body = (
-                    f"Rule '{rule_name}' breached: "
-                    f"{metric_name}={metric_value} (threshold={threshold})"
-                )
-
-                await self.notifications.notify(
-                    tenant,
-                    subject,
-                    body,
-                    channel_ids=[channel_id] if channel_id else None,
-                )
-
-                # Mark event as notified
-                await self.db(
-                    self.db.alert_events.id == event_id
-                ).update(notified=True)
-
-                log.info(
-                    "alert_notification_sent",
-                    event_id=event_id,
-                    rule_id=rule_id,
-                    tenant=tenant,
-                )
-
-            except Exception as e:
-                log.error(
-                    "alert_notification_failed",
-                    event_id=event_id,
-                    rule_id=rule_id,
-                    tenant=tenant,
-                    error=str(e),
-                )
-                # Do NOT re-raise; evaluation must never fail ingest
-
-            events_fired += 1
-            log.info(
-                "alert_event_fired",
-                event_id=event_id,
-                rule_id=rule_id,
-                tenant=tenant,
-                metric=metric_name,
-                observed=metric_value,
-                threshold=threshold,
-            )
-
+                if await self._fire(
+                    rule_row, tenant, result.get("device_id"), metric_value, window_start
+                ):
+                    events_fired += 1
+            if len(rows) < size:
+                break
+            offset += size
         return events_fired
 
-    async def sweep(self) -> int:
-        """Sweep for alerts across all tenants (scheduler job).
+    async def sweep(self, page_size: int | None = None) -> int:
+        """Sweep enabled alert rules across all tenants (scheduler job).
 
-        MVP: re-check latest result per (rule, device) within window.
+        Bounded batch evaluation: rules are read in keyset pages of ``page_size``
+        ordered by (tenant, id), so memory is O(page_size) regardless of table
+        size. Every downstream query (devices, results, dedup) is scoped to the
+        rule's own tenant; tenant-wide rules page through that tenant's devices.
+
+        Args:
+            page_size: Rules/devices per page; defaults to ``SWEEP_PAGE_SIZE``.
 
         Returns:
             Number of alert events fired during sweep
         """
-        # Placeholder MVP: iterate all rules, check most recent result per (rule, device)
-        # For production, would use aggregation from StatsManager
+        size = page_size or self.SWEEP_PAGE_SIZE
+        if size < 1:
+            raise ValueError("page_size must be >= 1")
         events_fired = 0
-
-        # Get all enabled rules across all tenants
-        rules_rowset = await self.db(
-            self.db.alert_rules.enabled == True  # noqa: E712 -- DAL query syntax
-        ).select()
-
-        for rule_row in rules_rowset:
-            tenant = rule_row["tenant"]
-            rule_id = rule_row["id"]
-            device_filter = rule_row["device_id"]
-            test_type_filter = rule_row["test_type"]
-            metric_name = rule_row["metric"]
-            threshold = rule_row["threshold"]
-            comparator = rule_row["comparator"]
-            window_seconds = rule_row["window_seconds"]
-            channel_id = rule_row["channel_id"]
-
-            # Determine device scope
-            devices_to_check = []
-            if device_filter:
-                devices_to_check = [device_filter]
-            else:
-                # Check all devices for this tenant
-                device_rowset = await self.db(
-                    self.db.devices.tenant == tenant
-                ).select()
-                devices_to_check = [d["id"] for d in device_rowset]
-
-            for device_id in devices_to_check:
-                # Get latest result for this device within window
-                now = datetime.now(timezone.utc)
-                window_start = now - timedelta(seconds=window_seconds)
-
-                query_parts = [
-                    self.db.perf_test_results.tenant == tenant,
-                    self.db.perf_test_results.device_id == device_id,
-                    self.db.perf_test_results.completed_at >= window_start,
-                ]
-
-                if test_type_filter:
-                    query_parts.append(self.db.perf_test_results.test_type == test_type_filter)
-
-                # Combine conditions
-                condition = query_parts[0]
-                for part in query_parts[1:]:
-                    condition = condition & part
-
-                result_rowset = await self.db(condition).select()
-
-                if not result_rowset:
-                    continue
-
-                # Get latest result
-                latest = result_rowset.last()
-                if not latest:
-                    continue
-
-                # Extract metric value
-                metric_value = latest.get(metric_name)
-                if metric_value is None:
-                    continue
-
-                # Evaluate breachcondition
-                breach = False
-                if comparator == "gt":
-                    breach = metric_value > threshold
-                elif comparator == "gte":
-                    breach = metric_value >= threshold
-                elif comparator == "lt":
-                    breach = metric_value < threshold
-                elif comparator == "lte":
-                    breach = metric_value <= threshold
-
-                if not breach:
-                    continue
-
-                # Check dedup
-                recent_events = await self.db(
-                    (self.db.alert_events.tenant == tenant)
-                    & (self.db.alert_events.rule_id == rule_id)
-                    & (self.db.alert_events.fired_at >= window_start)
-                ).select()
-
-                if recent_events.first():
-                    # Event already fired within window
-                    continue
-
-                # Fire event
-                event_id = str(uuid4())
-                await self.db.alert_events.async_insert(
-                    id=event_id,
-                    tenant=tenant,
-                    rule_id=rule_id,
-                    device_id=device_id,
-                    observed_value=metric_value,
-                    fired_at=now,
-                    notified=False,
-                )
-
-                # Send notification if channel configured
-                if channel_id:
-                    try:
-                        rule_name = rule_row["name"]
-                        subject = f"Alert: {rule_name}"
-                        body = (
-                            f"Rule '{rule_name}' breached: "
-                            f"{metric_name}={metric_value} (threshold={threshold})"
-                        )
-
-                        await self.notifications.notify(
-                            tenant,
-                            subject,
-                            body,
-                            channel_ids=[channel_id],
-                        )
-
-                        await self.db(
-                            self.db.alert_events.id == event_id
-                        ).update(notified=True)
-
-                    except Exception as e:
-                        log.error(
-                            "alert_sweep_notification_failed",
-                            event_id=event_id,
-                            rule_id=rule_id,
-                            error=str(e),
-                        )
-
-                events_fired += 1
-                log.info(
-                    "alert_sweep_fired",
-                    event_id=event_id,
-                    rule_id=rule_id,
-                    device_id=device_id,
-                )
-
+        rules_scanned = 0
+        offset = 0
+        while True:
+            page = await self.db(
+                self.db.alert_rules.enabled == True  # noqa: E712 -- DAL query syntax
+            ).select(
+                orderby=[self.db.alert_rules.tenant, self.db.alert_rules.id],
+                limitby=(offset, offset + size),
+            )
+            rows = list(page)
+            if not rows:
+                break
+            for rule_row in rows:
+                rules_scanned += 1
+                events_fired += await self._sweep_rule(rule_row, size)
+            if len(rows) < size:
+                break
+            offset += size
+        log.info("alert_sweep_complete", rules_scanned=rules_scanned, events_fired=events_fired)
         return events_fired
+
+    async def _iter_device_ids(self, tenant: str, size: int) -> AsyncIterator[str]:
+        """Yield a tenant's device ids in bounded pages ordered by id."""
+        offset = 0
+        while True:
+            page = await self.db(self.db.devices.tenant == tenant).select(
+                orderby=[self.db.devices.id], limitby=(offset, offset + size)
+            )
+            rows = list(page)
+            for d in rows:
+                yield d["id"]
+            if len(rows) < size:
+                return
+            offset += size
+
+    async def _sweep_rule(self, rule_row: Any, size: int) -> int:
+        """Evaluate one rule against the latest in-window result per device."""
+        tenant = rule_row["tenant"]
+        window_start = datetime.now(timezone.utc) - timedelta(seconds=rule_row["window_seconds"])
+        fired = 0
+        if rule_row["device_id"]:
+            devices: AsyncIterator[str] = _single(rule_row["device_id"])
+        else:
+            devices = self._iter_device_ids(tenant, size)
+        async for device_id in devices:
+            condition = (
+                (self.db.perf_test_results.tenant == tenant)
+                & (self.db.perf_test_results.device_id == device_id)
+                & (self.db.perf_test_results.completed_at >= window_start)
+            )
+            if rule_row["test_type"]:
+                condition = condition & (
+                    self.db.perf_test_results.test_type == rule_row["test_type"]
+                )
+            latest_rows = await self.db(condition).select(
+                orderby=self.db.perf_test_results.completed_at.column.desc(),
+                limitby=(0, 1),
+            )
+            latest = latest_rows.first()
+            if not latest:
+                continue
+            metric_value = latest.get(rule_row["metric"])
+            if metric_value is None or not _breached(
+                rule_row["comparator"], metric_value, rule_row["threshold"]
+            ):
+                continue
+            if await self._fire(rule_row, tenant, device_id, metric_value, window_start):
+                fired += 1
+        return fired
+
+    async def _fire(
+        self,
+        rule_row: Any,
+        tenant: str,
+        device_id: str | None,
+        metric_value: float,
+        window_start: datetime,
+    ) -> bool:
+        """Dedup, persist and notify one alert event; return True if fired."""
+        rule_id = rule_row["id"]
+        recent = await self.db(
+            (self.db.alert_events.tenant == tenant)
+            & (self.db.alert_events.rule_id == rule_id)
+            & (self.db.alert_events.fired_at >= window_start)
+        ).select(limitby=(0, 1))
+        if recent.first():
+            log.info("alert_dedup_skipped", rule_id=rule_id, tenant=tenant)
+            return False
+        event_id = str(uuid4())
+        await self.db.alert_events.async_insert(
+            id=event_id,
+            tenant=tenant,
+            rule_id=rule_id,
+            device_id=device_id,
+            observed_value=metric_value,
+            fired_at=datetime.now(timezone.utc),
+            notified=False,
+        )
+        channel_id = rule_row["channel_id"]
+        rule_name = rule_row["name"]
+        try:
+            await self.notifications.notify(
+                tenant,
+                f"Alert: {rule_name}",
+                f"Rule '{rule_name}' breached: {rule_row['metric']}={metric_value} "
+                f"(threshold={rule_row['threshold']})",
+                channel_ids=[channel_id] if channel_id else None,
+            )
+            await self.db(self.db.alert_events.id == event_id).update(notified=True)
+            log.info("alert_notification_sent", event_id=event_id, rule_id=rule_id, tenant=tenant)
+        except Exception as e:  # evaluation must never fail ingest/sweep
+            log.error(
+                "alert_notification_failed",
+                event_id=event_id,
+                rule_id=rule_id,
+                tenant=tenant,
+                error=str(e),
+            )
+        log.info(
+            "alert_event_fired",
+            event_id=event_id,
+            rule_id=rule_id,
+            tenant=tenant,
+            metric=rule_row["metric"],
+            observed=metric_value,
+            threshold=rule_row["threshold"],
+        )
+        return True
+
+
+def _breached(comparator: str, value: float, threshold: float) -> bool:
+    """Return True when ``value`` breaches ``threshold`` under ``comparator``."""
+    if comparator not in _COMPARATORS:
+        log.warning("alert_unknown_comparator", comparator=comparator)
+        return False
+    return _COMPARATORS[comparator](value, threshold)
+
+
+async def _single(value: str) -> AsyncIterator[str]:
+    """Yield a single value as an async iterator."""
+    yield value
