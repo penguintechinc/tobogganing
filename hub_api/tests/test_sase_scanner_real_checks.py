@@ -337,8 +337,39 @@ def test_normalizers() -> None:
     assert scans._normalize_domain("Ex.COM.") == "ex.com"
     assert scans._normalize_domain(".") is None
     assert scans._normalize_domain("a" * 70 + ".com") is None  # label too long for IDNA
-    assert scans._domain_candidates("a.b.c.d.e.f.g.h.com")[-1] == "f.g.h.com"
-    assert len(scans._domain_candidates("a.b.c.d.e.f.g.h.com")) == scans.MAX_PARENT_DEPTH + 1
+    deep = scans._domain_candidates("a.b.c.d.e.f.g.h.com")
+    assert deep[0] == "a.b.c.d.e.f.g.h.com"  # exact name always kept
+    assert deep[-1] == "h.com"  # registrable end always kept
+    assert len(deep) == scans.MAX_PARENT_DEPTH + 1
+    assert scans._domain_candidates("evil.com") == ["evil.com"]
+
+
+@pytest.mark.asyncio
+async def test_threat_intel_deep_subdomain_matches_feed_domain(tmp_path: Path) -> None:
+    """a.b.c.d.e.f.evil.com matches an evil.com feed entry despite the depth bound."""
+    dal = _FakeDAL([_row("evil.com", "domain", scans.GLOBAL_FEED_TENANT)])
+    findings = await _scan(tmp_path, "GET a.b.c.d.e.f.g.evil.com\n", dal, tenant=None)
+    assert findings[0].metadata["matched_values"] == ["evil.com"]
+
+
+def test_collect_indicators_newest_first() -> None:
+    """Indicators are ordered from the most recent log line backwards."""
+    got = scans._collect_indicators(["10.0.0.1", "10.0.0.2 x.example.com", "10.0.0.1"])
+    assert got == [("10.0.0.1", "ip"), ("10.0.0.2", "ip"), ("x.example.com", "domain")]
+
+
+def test_allocate_fairly_across_files() -> None:
+    """A padded file cannot crowd out others; duplicates across files count once."""
+    a = [(f"10.0.0.{i}", "ip") for i in range(100)]
+    b = [("10.9.9.9", "ip"), ("10.0.0.0", "ip")]
+    kept, dropped = scans._allocate_fairly({"a": a, "b": b}, 6)
+    assert ("10.9.9.9", "ip") in kept and kept[("10.9.9.9", "ip")] == "b"
+    assert len(kept) == 6 and dropped == 95
+    kept, dropped = scans._allocate_fairly({"a": a[:2], "b": b}, 10)
+    assert dropped == 0 and len(kept) == 3
+    b3 = [("10.7.0.1", "ip"), ("10.7.0.2", "ip"), ("10.7.0.3", "ip")]
+    kept, _ = scans._allocate_fairly({"a": a, "b": b3}, 5)  # cap hit mid-round
+    assert len(kept) == 5
 
 
 @pytest.mark.asyncio
@@ -362,8 +393,8 @@ async def test_threat_intel_batches_queries(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_threat_intel_caps_indicators_loudly(tmp_path: Path) -> None:
-    """Indicators beyond the cap are dropped with a warning and a truncation metric."""
-    dal = _FakeDAL([])
+    """Over-cap: newest indicators kept; warning, metric and a coverage finding emitted."""
+    dal = _FakeDAL([_row("10.1.0.19", "ip", scans.GLOBAL_FEED_TENANT)])
     text = "".join(f"10.1.0.{i}\n" for i in range(20))
     with (
         patch(f"{SCANS}.MAX_INDICATORS_PER_SCAN", 5),
@@ -371,10 +402,23 @@ async def test_threat_intel_caps_indicators_loudly(tmp_path: Path) -> None:
         patch(f"{SCANS}.THREAT_LOOKUPS") as lookups,
         patch(f"{SCANS}.logger") as log,
     ):
-        await _scan(tmp_path, text, dal)
+        findings = await _scan(tmp_path, text, dal)
     trunc.add.assert_called_once_with(15)
     assert lookups.add.call_count == 5
-    assert log.warning.call_args.args[0] == "threat_intel_indicators_truncated"
+    warnings = [c.args[0] for c in log.warning.call_args_list]
+    assert "threat_intel_indicators_truncated" in warnings
+    cov = [f for f in findings if f.finding_type == "threat_intel_coverage"]
+    assert len(cov) == 1 and cov[0].severity == ScanSeverity.MEDIUM
+    assert cov[0].metadata == {"observed": 20, "dropped": 15, "limit": 5}
+    # newest line (10.1.0.19) survived the cap and was matched
+    assert [f.metadata["indicator"] for f in findings if f.finding_type != cov[0].finding_type] == [
+        "10.1.0.19"
+    ]
+
+
+def test_cap_exceeds_tail_yield() -> None:
+    """The cap comfortably exceeds the indicators 3 x 256KB tails can produce."""
+    assert scans.MAX_INDICATORS_PER_SCAN >= 3 * scans.LOG_TAIL_BYTES // 7
 
 
 def test_read_tail_is_bounded(tmp_path: Path) -> None:

@@ -396,12 +396,14 @@ async def _run_configuration_scan(scan_id: str, scanner: Any) -> list[ScanFindin
 
 #: Bytes read from the end of each log file per scan (bounded I/O).
 LOG_TAIL_BYTES = 256 * 1024
-#: Maximum unique indicators looked up per scan; excess is dropped loudly.
-MAX_INDICATORS_PER_SCAN = 5000
-#: Maximum parent-domain levels checked (a.b.evil.com -> b.evil.com -> evil.com).
+#: Maximum unique indicators looked up per scan; excess is dropped loudly (metric + finding).
+#: Sized above what 3 x 256KB tails can yield (~7 bytes per shortest IPv4 token) since
+#: lookups are batched.
+MAX_INDICATORS_PER_SCAN = 120_000
+#: Maximum parent domains checked besides the exact name; the registrable end is always kept.
 MAX_PARENT_DEPTH = 5
 #: Values per ``IN (...)`` query chunk.
-LOOKUP_BATCH_SIZE = 500
+LOOKUP_BATCH_SIZE = 1000
 
 
 def _normalize_domain(value: str) -> str | None:
@@ -427,10 +429,14 @@ def _normalize_ip(value: str) -> str | None:
 
 
 def _domain_candidates(domain: str) -> list[str]:
-    """Return ``domain`` and its parent domains (>=2 labels), bounded by MAX_PARENT_DEPTH."""
+    """Return ``domain`` plus its shortest parent domains (down to 2 labels).
+
+    At most MAX_PARENT_DEPTH parents are kept, always the ones nearest the registrable
+    end, so a deep subdomain still checks e.g. ``evil.com``.
+    """
     labels = domain.split(".")
-    out = [".".join(labels[i:]) for i in range(len(labels) - 1)]
-    return out[: MAX_PARENT_DEPTH + 1]
+    parents = [".".join(labels[i:]) for i in range(1, len(labels) - 1)]
+    return [domain] + parents[-MAX_PARENT_DEPTH:]
 
 
 def _read_tail(path: str, max_bytes: int = LOG_TAIL_BYTES) -> list[str]:
@@ -527,19 +533,66 @@ def _threat_finding(
     )
 
 
-def _collect_indicators(
-    lines: list[str], log_file: str, observed: dict[tuple[str, str], str]
-) -> None:
-    """Add normalized IP/domain indicators from ``lines`` into ``observed`` (first file wins)."""
-    for line in lines:
+def _collect_indicators(lines: list[str]) -> list[tuple[str, str]]:
+    """Return unique normalized (value, type) indicators from ``lines``, newest line first."""
+    seen: dict[tuple[str, str], None] = {}
+    for line in reversed(lines):
         for raw_ip in _extract_ips_from_log(line):
             ip = _normalize_ip(raw_ip)
             if ip:
-                observed.setdefault((ip, "ip"), log_file)
+                seen.setdefault((ip, "ip"), None)
         for raw_domain in _extract_domains_from_log(line):  # TLD is alphabetic: never an IP
             domain = _normalize_domain(raw_domain)
             if domain:
-                observed.setdefault((domain, "domain"), log_file)
+                seen.setdefault((domain, "domain"), None)
+    return list(seen)
+
+
+def _allocate_fairly(
+    per_file: dict[str, list[tuple[str, str]]], cap: int
+) -> tuple[dict[tuple[str, str], str], int]:
+    """Round-robin newest-first indicators across files up to ``cap``.
+
+    Returns the kept indicators (mapped to their first source file) and the number of
+    unique indicators dropped, so one padded log cannot crowd out the others.
+    """
+    kept: dict[tuple[str, str], str] = {}
+    total = len({k for items in per_file.values() for k in items})
+    iters = {f: iter(items) for f, items in per_file.items()}
+    while iters and len(kept) < cap:
+        for f in list(iters):
+            if len(kept) >= cap:
+                break
+            for key in iters[f]:
+                if key not in kept:
+                    kept[key] = f
+                    break
+            else:
+                del iters[f]
+    return kept, total - len(kept)
+
+
+def _truncation_finding(scan_id: str, total: int, dropped: int) -> ScanFinding:
+    """Build the finding that reports incomplete threat-intel coverage for this scan."""
+    now = datetime.utcnow()
+    return ScanFinding(
+        scan_id=scan_id,
+        finding_type="threat_intel_coverage",
+        severity=ScanSeverity.MEDIUM,
+        title="Threat-intel coverage truncated",
+        description=(
+            f"{dropped} of {total} indicators in log tails were not checked "
+            f"(cap {MAX_INDICATORS_PER_SCAN}); logs may be padded to hide activity"
+        ),
+        affected_component="threat_intel_scan",
+        recommendation="Investigate log volume spikes; review log sources for padding",
+        cve_ids=[],
+        cvss_score=5.0,
+        confidence=100,
+        first_seen=now,
+        last_seen=now,
+        metadata={"observed": total, "dropped": dropped, "limit": MAX_INDICATORS_PER_SCAN},
+    )
 
 
 async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
@@ -559,21 +612,22 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
     if tenant_id and tenant_id != GLOBAL_FEED_TENANT:
         tenants.insert(0, tenant_id)
 
-    observed: dict[tuple[str, str], str] = {}
-    for log_file in THREAT_LOG_FILES:
-        if os.path.exists(log_file):
-            _collect_indicators(_read_tail(log_file), log_file, observed)
-
-    if len(observed) > MAX_INDICATORS_PER_SCAN:
-        dropped = len(observed) - MAX_INDICATORS_PER_SCAN
+    per_file = {
+        log_file: _collect_indicators(_read_tail(log_file))
+        for log_file in THREAT_LOG_FILES
+        if os.path.exists(log_file)
+    }
+    observed, dropped = _allocate_fairly(per_file, MAX_INDICATORS_PER_SCAN)
+    findings: list[ScanFinding] = []
+    if dropped:
         logger.warning(
             "threat_intel_indicators_truncated",
-            observed=len(observed),
+            observed=len(observed) + dropped,
             limit=MAX_INDICATORS_PER_SCAN,
             dropped=dropped,
         )
         INDICATORS_TRUNCATED.add(dropped)
-        observed = dict(list(observed.items())[:MAX_INDICATORS_PER_SCAN])
+        findings.append(_truncation_finding(scan_id, len(observed) + dropped, dropped))
 
     ips = [v for v, t in observed if t == "ip"]
     domains = [v for v, t in observed if t == "domain"]
@@ -581,7 +635,6 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
     ip_hits = await _batch_lookup(db, tenants, ips, "ip")
     domain_hits = await _batch_lookup(db, tenants, domain_lookup, "domain")
 
-    findings: list[ScanFinding] = []
     for (value, indicator_type), log_file in observed.items():
         if indicator_type == "ip":
             matches = ip_hits.get(value, [])
