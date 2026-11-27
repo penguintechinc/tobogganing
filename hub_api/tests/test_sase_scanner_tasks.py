@@ -135,3 +135,114 @@ def test_celery_task_dispatches_tenant() -> None:
             "failed": 0,
         }
     run.assert_awaited_once_with("t1")
+
+
+async def _add_user(db: Any, tenant: str) -> None:
+    """Insert a minimal users row for ``tenant`` into the real DAL."""
+    from datetime import datetime
+    from uuid import uuid4
+
+    uid = uuid4().hex
+    await db.users.async_insert(
+        id=uid,
+        username=f"u{uid[:8]}",
+        email=f"{uid[:8]}@example.invalid",
+        password_hash="x",
+        role="reporter",
+        tenant=tenant,
+        is_active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        mfa_enabled=False,
+    )
+
+
+async def _scan_jobs(db: Any, tenant: str) -> list[dict[str, Any]]:
+    """List scanner jobs for a tenant via the real JobManager."""
+    from hub_api.scheduler.job_manager import JobManager
+
+    return await JobManager(db).list_jobs(tenant, module=tasks.SCANNER_MODULE)
+
+
+@pytest.mark.asyncio
+async def test_ensure_security_scan_job_idempotent_real_dal(real_dal: Any) -> None:
+    """Second ensure for the same tenant creates nothing; exactly one job persists."""
+    assert await tasks.ensure_security_scan_job(real_dal, "t1") is True
+    assert await tasks.ensure_security_scan_job(real_dal, "t1") is False
+    jobs = await _scan_jobs(real_dal, "t1")
+    assert len(jobs) == 1 and jobs[0]["job_type"] == tasks.SCANNER_JOB_TYPE
+
+
+@pytest.mark.asyncio
+async def test_ensure_all_tenants_backfills_once_real_dal(real_dal: Any) -> None:
+    """Sweep creates one job per distinct users.tenant and is a no-op on re-run."""
+    for tenant in ("ta", "ta", "tb"):
+        await _add_user(real_dal, tenant)
+    assert await tasks.ensure_scan_jobs_for_all_tenants(real_dal) == 2
+    assert await tasks.ensure_scan_jobs_for_all_tenants(real_dal) == 0
+    assert len(await _scan_jobs(real_dal, "ta")) == 1
+    assert len(await _scan_jobs(real_dal, "tb")) == 1
+
+
+@pytest.mark.asyncio
+async def test_ensure_security_scan_job_requires_tenant() -> None:
+    """Empty tenant is rejected."""
+    with pytest.raises(ValueError):
+        await tasks.ensure_security_scan_job(object(), "")
+
+
+@pytest.mark.asyncio
+async def test_create_user_onboards_tenant_scan_job_real_dal(real_dal: Any) -> None:
+    """Creating a user in a new tenant creates that tenant's scan job (once)."""
+    from hub_api.core.auth import UserManager
+
+    mgr = UserManager.__new__(UserManager)
+    mgr.db = real_dal
+    await mgr.create_user("alice", "a@example.invalid", "pw-Long-1234", "tn")
+    await mgr.create_user("bob", "b@example.invalid", "pw-Long-1234", "tn")
+    assert len(await _scan_jobs(real_dal, "tn")) == 1
+
+
+@pytest.mark.asyncio
+async def test_onboarding_failure_logged_not_raised() -> None:
+    """Onboarding hook failure is logged at ERROR, user creation is not aborted."""
+    from hub_api.core import auth
+
+    mgr = auth.UserManager.__new__(auth.UserManager)
+    mgr.db = object()
+    with (
+        patch(
+            "hub_api.modules.sase.security.scanner.tasks.ensure_security_scan_job",
+            new=AsyncMock(side_effect=RuntimeError("db down")),
+        ),
+        patch.object(auth, "logger") as log,
+    ):
+        await mgr._ensure_tenant_onboarded("t1")
+    assert log.error.call_args.args[0] == "tenant_scan_job_onboarding_failed"
+
+
+def test_ensure_sweep_task_runs_async_path() -> None:
+    """Beat task delegates to the async ensure path."""
+    run = AsyncMock(return_value=3)
+    with patch.object(tasks, "_ensure_scan_jobs_async", new=run):
+        assert tasks.ensure_scan_jobs_sweep() == 3
+
+
+def test_celery_worker_includes_task_modules() -> None:
+    """Worker include list and beat schedule cover scanner, backup and sweep tasks."""
+    import importlib
+
+    from hub_api.scheduler.celery_app import celery_app
+
+    include = list(celery_app.conf.include or [])
+    for mod in (
+        "hub_api.scheduler.tasks",
+        "hub_api.core.backup.tasks",
+        "hub_api.modules.sase.security.scanner.tasks",
+    ):
+        assert mod in include
+        importlib.import_module(mod)
+    for name in (tasks.SCANNER_TASK_NAME, tasks.ENSURE_JOBS_TASK_NAME):
+        assert name in celery_app.tasks
+    beat = celery_app.conf.beat_schedule
+    assert beat["sase-scanner-ensure-jobs"]["task"] == tasks.ENSURE_JOBS_TASK_NAME

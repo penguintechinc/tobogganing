@@ -446,8 +446,13 @@ async def test_threat_intel_findings_capped_with_truncation_finding(tmp_path: Pa
     g = scans.GLOBAL_FEED_TENANT
     dal = _FakeDAL([_row(f"10.2.0.{i}", "ip", g) for i in range(10)])
     text = "".join(f"10.2.0.{i}\n" for i in range(10))
-    with patch(f"{SCANS}.MAX_THREAT_FINDINGS", 3), patch(f"{SCANS}.logger") as log:
+    with (
+        patch(f"{SCANS}.MAX_THREAT_FINDINGS", 3),
+        patch(f"{SCANS}.FINDINGS_TRUNCATED") as dropped,
+        patch(f"{SCANS}.logger") as log,
+    ):
         findings = await _scan(tmp_path, text, dal)
+    dropped.add.assert_called_once_with(7)
     trunc = [f for f in findings if f.finding_type == "threat_intel_findings_truncated"]
     assert len(findings) == 4 and len(trunc) == 1
     assert trunc[0].metadata == {"matched": 10, "dropped": 7, "limit": 3}

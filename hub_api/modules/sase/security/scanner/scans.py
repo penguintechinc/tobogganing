@@ -26,6 +26,7 @@ from .parsers import (
 )
 from .telemetry import (
     CHECK_RESULTS,
+    FINDINGS_TRUNCATED,
     INDICATORS_TRUNCATED,
     LOOKUP_DURATION,
     THREAT_LOOKUPS,
@@ -755,6 +756,7 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
             limit=MAX_THREAT_FINDINGS,
             dropped=suppressed,
         )
+        FINDINGS_TRUNCATED.add(suppressed)
         findings.append(_findings_cap_finding(scan_id, matched, suppressed))
     logger.info(
         "threat_intel_scan_complete", indicators_checked=len(observed), findings=len(findings)
