@@ -120,3 +120,116 @@ async def test_get_server_config_assembles_zones_and_records(real_dal) -> None:
     assert len(config.zones[0].records) == 1
     assert config.zones[0].records[0].name == "www"
     assert config.version == 1
+
+
+async def _add_zone(dal, tenant: str, name: str, visibility: str) -> str:
+    """Insert a zone with one A record; returns the zone id."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    zid = str(uuid4())
+    await dal.dns_zones.async_insert(
+        id=zid, tenant=tenant, name=name, visibility=visibility, created_at=now, updated_at=now
+    )
+    await dal.dns_records.async_insert(
+        id=str(uuid4()),
+        tenant=tenant,
+        zone_id=zid,
+        name=f"www.{name}",
+        type="A",
+        value="10.0.0.1",
+        ttl=60,
+        created_at=now,
+        updated_at=now,
+    )
+    return zid
+
+
+@pytest.mark.asyncio
+async def test_get_server_config_keeps_all_valid_visibilities(real_dal) -> None:
+    """All four spec visibility levels are pushed (normalized) with their records."""
+    tenant = str(uuid4())
+    for vis in ("public", "internal", "Restricted", "private"):
+        await _add_zone(real_dal, tenant, f"{vis.lower()}.example.com", vis)
+
+    config = await ConfigService(real_dal, tenant).get_server_config()
+
+    assert sorted(z.visibility for z in config.zones) == [
+        "internal",
+        "private",
+        "public",
+        "restricted",
+    ]
+    assert all(len(z.records) == 1 for z in config.zones)
+
+
+@pytest.mark.asyncio
+async def test_get_server_config_drops_unknown_visibility(real_dal) -> None:
+    """A zone with an unknown visibility is dropped (fail closed), not served as public."""
+    tenant = str(uuid4())
+    await _add_zone(real_dal, tenant, "ok.example.com", "public")
+    await _add_zone(real_dal, tenant, "bad.example.com", "everyone")
+    await _add_zone(real_dal, tenant, "empty.example.com", "")
+
+    config = await ConfigService(real_dal, tenant).get_server_config()
+
+    assert [z.name for z in config.zones] == ["ok.example.com"]
+
+
+@pytest.mark.asyncio
+async def test_get_server_config_excludes_other_tenant_zones(real_dal) -> None:
+    """Zones of another tenant never appear in this tenant's config."""
+    tenant, other = str(uuid4()), str(uuid4())
+    await _add_zone(real_dal, other, "other.example.com", "public")
+
+    config = await ConfigService(real_dal, tenant).get_server_config()
+
+    assert config.zones == []
+
+
+@pytest.mark.asyncio
+async def test_resolver_settings_default_when_no_row(real_dal) -> None:
+    """With no stored row, defaults flow into cache_settings/settings."""
+    config = await ConfigService(real_dal, str(uuid4())).get_server_config()
+
+    assert config.cache_settings == {"enabled": True, "ttl": 300, "max_entries": 10000}
+    assert config.settings == {"log_queries": True, "enable_dnssec": False, "ioc_filtering": True}
+
+
+@pytest.mark.asyncio
+async def test_resolver_settings_stored_values_are_served(real_dal) -> None:
+    """Stored settings replace the defaults and each update bumps the version."""
+    tenant = str(uuid4())
+    svc = ConfigService(real_dal, tenant)
+
+    await svc.update_resolver_settings(cache_ttl=60, enable_dnssec=True)
+    await svc.update_resolver_settings(cache_enabled=False, ioc_filtering=False)
+    config = await svc.get_server_config()
+
+    assert config.cache_settings == {"enabled": False, "ttl": 60, "max_entries": 10000}
+    assert config.settings == {"log_queries": True, "enable_dnssec": True, "ioc_filtering": False}
+    assert config.version == 2
+    other = await ConfigService(real_dal, str(uuid4())).get_resolver_settings()
+    assert other["cache_ttl"] == 300
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"nope": 1},
+        {"cache_ttl": -1},
+        {"cache_ttl": 86401},
+        {"cache_ttl": "300"},
+        {"cache_max_entries": True},
+        {"enable_dnssec": "yes"},
+    ],
+)
+async def test_update_resolver_settings_rejects_invalid(real_dal, changes) -> None:
+    """Invalid keys/values raise ValueError and write nothing."""
+    svc = ConfigService(real_dal, str(uuid4()))
+
+    with pytest.raises(ValueError):
+        await svc.update_resolver_settings(**changes)
+
+    assert await svc.get_config_version() == 0
