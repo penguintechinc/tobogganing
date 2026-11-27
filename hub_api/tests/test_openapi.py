@@ -115,14 +115,36 @@ async def test_openapi_json_with_valid_token_returns_200(
     assert resp.status_code == 200
 
     data = await resp.get_json()
-    assert data["openapi"] == "3.1.0"
-    assert data["info"]["title"]  # Should have a title
-    # Full spec should expose all endpoints
-    assert "/api/v1/auth/login" in data["paths"]
-    assert "/api/v1/auth/refresh-token" in data["paths"]
-    assert "/api/v1/auth/logout" in data["paths"]
-    assert "/health" in data["paths"]
-    assert "/ready" in data["paths"]
+    assert data["openapi"].startswith("3.")
+    assert data["info"]["title"]
+    assert data["info"]["version"]
+    paths = data["paths"]
+    # Generated from real routes, not a hand-written placeholder (which had 1 path).
+    for route in ("/api/v1/auth/login", "/health", "/ready", "/openapi.json"):
+        assert route in paths, f"{route} missing from generated spec"
+    assert len(paths) >= 10
+    for ops in paths.values():
+        assert isinstance(ops, dict) and ops
+    # Sanitizer applied: no snake_case bearer_format leaks out.
+    assert "bearer_format" not in str(data.get("components", {}))
+
+
+def test_sanitize_spec_fixes_quart_schema_quirks() -> None:
+    """sanitize_spec renames bearer_format and drops default: null."""
+    from hub_api.openapi_spec import sanitize_spec
+
+    spec = {
+        "components": {
+            "securitySchemes": {"B": {"type": "http", "bearer_format": "JWT"}},
+            "schemas": {"X": {"properties": {"a": {"default": None}, "b": {"default": 1}}}},
+        },
+        "x": [{"default": None}],
+    }
+    out = sanitize_spec(spec)
+    assert out["components"]["securitySchemes"]["B"] == {"type": "http", "bearerFormat": "JWT"}
+    assert "default" not in out["components"]["schemas"]["X"]["properties"]["a"]
+    assert out["components"]["schemas"]["X"]["properties"]["b"]["default"] == 1
+    assert out["x"] == [{}]
 
 
 @pytest.mark.asyncio
