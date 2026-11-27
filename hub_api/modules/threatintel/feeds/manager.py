@@ -211,8 +211,14 @@ class SecurityFeedsManager:
                     duration_seconds=duration,
                     completed_at=datetime.now(timezone.utc),
                 )
-            except Exception:
-                pass
+            except Exception as status_err:
+                slog.warning(
+                    "feed_update_failure_status_write_failed",
+                    source=source.value,
+                    update_id=update_id,
+                    error=str(status_err),
+                    tenant_id=tenant_id,
+                )
 
             slog.error(
                 "feed_update_failed",
