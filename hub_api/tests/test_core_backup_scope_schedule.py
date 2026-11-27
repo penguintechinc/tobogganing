@@ -156,4 +156,4 @@ def test_celery_entry_point() -> None:
     ) as run:
         fn = getattr(backup_tasks.run_scheduled_backup, "run", backup_tasks.run_scheduled_backup)
         assert fn("jid-12345678", "t", "core_backup", "create_backup", "{}") == {"r": 1}
-    run.assert_awaited_once_with("t", "{}")
+    run.assert_awaited_once_with("t", "{}", job_id="jid-12345678")

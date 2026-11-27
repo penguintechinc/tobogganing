@@ -269,7 +269,9 @@ class BackupManager:
             should_upload_s3 = upload_to_s3 if upload_to_s3 is not None else self.s3_config.enabled
 
             if should_upload_s3 and self.s3_manager:
-                s3_info = self.s3_manager.upload_backup(backup_file, backup_name)
+                s3_info = self.s3_manager.upload_backup(
+                    backup_file, backup_name, tenant_id=tenant_id
+                )
 
             # Create metadata
             metadata: dict[str, Any] = {
@@ -292,7 +294,7 @@ class BackupManager:
                 json.dump(metadata, f, indent=2)
 
             if s3_info and self.s3_manager:
-                self.s3_manager.upload_metadata(metadata_file, backup_name)
+                self.s3_manager.upload_metadata(metadata_file, backup_name, tenant_id=tenant_id)
 
             logger.info(
                 "backup_created",
@@ -342,6 +344,8 @@ class BackupManager:
 
             # Handle S3 download
             if from_s3 and self.s3_manager:
+                if tenant_id and not self.s3_manager.key_belongs_to_tenant(backup_path, tenant_id):
+                    raise ValueError("S3 key is outside the caller's tenant prefix")
                 backup_file = self.s3_manager.download_backup(backup_path)
                 # S3 restores have no local tenant directory to gate on; ownership
                 # is enforced at the row level below (foreign-tenant rows dropped).
@@ -538,10 +542,12 @@ class BackupManager:
 
         # S3 backups
         if include_s3 and self.s3_manager:
-            s3_backups = self.s3_manager.list_backups()
+            s3_backups = self.s3_manager.list_backups(tenant_id=tenant_id)
             for s3_backup in s3_backups:
                 s3_backup["storage_location"] = "s3"
-                s3_metadata = self.s3_manager.get_metadata(s3_backup["backup_name"])
+                s3_metadata = self.s3_manager.get_metadata(
+                    s3_backup["backup_name"], tenant_id=tenant_id
+                )
                 if s3_metadata:
                     s3_metadata.update(s3_backup)
                     backups.append(s3_metadata)
@@ -591,7 +597,9 @@ class BackupManager:
         _validate_backup_name(backup_name)
 
         if from_s3 and self.s3_manager:
-            return self.s3_manager.delete_backup(backup_name)
+            if tenant_id:
+                _validate_backup_name(tenant_id)
+            return self.s3_manager.delete_backup(backup_name, tenant_id=tenant_id)
 
         if tenant_id:
             _validate_backup_name(tenant_id)

@@ -94,7 +94,7 @@ class S3Manager:
 
             logger.info(f"S3 initialized: {self.config.bucket}")
 
-        except NoCredentialsError as e:
+        except NoCredentialsError:
             logger.error("S3 credentials not found")
             raise
         except Exception as e:
@@ -127,16 +127,27 @@ class S3Manager:
             else:
                 self.client.create_bucket(
                     Bucket=self.config.bucket,
-                    CreateBucketConfiguration={
-                        "LocationConstraint": self.config.region
-                    },
+                    CreateBucketConfiguration={"LocationConstraint": self.config.region},
                 )
             logger.info(f"Bucket created: {self.config.bucket}")
         except ClientError as e:
             logger.error(f"Bucket creation failed: {e}")
             raise
 
-    def upload_backup(self, backup_file: Path, backup_name: str) -> Dict[str, Any]:
+    def tenant_base(self, tenant_id: Optional[str] = None) -> str:
+        """Return the key prefix for a tenant (``{prefix}{tenant}/``) or the root prefix.
+
+        Tenant-scoped objects live under their own prefix so names never collide.
+        """
+        return f"{self.config.prefix}{tenant_id}/" if tenant_id else self.config.prefix
+
+    def key_belongs_to_tenant(self, s3_key: str, tenant_id: str) -> bool:
+        """True if ``s3_key`` lies under ``tenant_id``'s prefix (no traversal)."""
+        return ".." not in s3_key and s3_key.startswith(self.tenant_base(tenant_id))
+
+    def upload_backup(
+        self, backup_file: Path, backup_name: str, tenant_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Upload backup file to S3.
 
@@ -151,7 +162,7 @@ class S3Manager:
             raise RuntimeError("S3 client not initialized")
 
         try:
-            s3_key = f"{self.config.prefix}{backup_name}/{backup_file.name}"
+            s3_key = f"{self.tenant_base(tenant_id)}{backup_name}/{backup_file.name}"
 
             with open(backup_file, "rb") as f:
                 self.client.upload_fileobj(
@@ -167,9 +178,7 @@ class S3Manager:
                     },
                 )
 
-            response = self.client.head_object(
-                Bucket=self.config.bucket, Key=s3_key
-            )
+            response = self.client.head_object(Bucket=self.config.bucket, Key=s3_key)
 
             return {
                 "bucket": self.config.bucket,
@@ -183,13 +192,15 @@ class S3Manager:
             logger.error(f"Upload failed: {e}")
             raise
 
-    def upload_metadata(self, metadata_file: Path, backup_name: str) -> None:
+    def upload_metadata(
+        self, metadata_file: Path, backup_name: str, tenant_id: Optional[str] = None
+    ) -> None:
         """Upload metadata file to S3."""
         if not self.client:
             return
 
         try:
-            s3_key = f"{self.config.prefix}{backup_name}/{metadata_file.name}"
+            s3_key = f"{self.tenant_base(tenant_id)}{backup_name}/{metadata_file.name}"
 
             with open(metadata_file, "rb") as f:
                 self.client.upload_fileobj(
@@ -231,18 +242,17 @@ class S3Manager:
             logger.error(f"Download failed: {e}")
             raise
 
-    def list_backups(self) -> List[Dict[str, Any]]:
-        """List all backups in S3."""
+    def list_backups(self, tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List backups in S3; restricted to the tenant's prefix when tenant_id is set."""
         if not self.client:
             return []
 
         try:
             backups: List[Dict[str, Any]] = []
+            base = self.tenant_base(tenant_id)
             paginator = self.client.get_paginator("list_objects_v2")
 
-            for page in paginator.paginate(
-                Bucket=self.config.bucket, Prefix=self.config.prefix
-            ):
+            for page in paginator.paginate(Bucket=self.config.bucket, Prefix=base):
                 if "Contents" not in page:
                     continue
 
@@ -251,9 +261,11 @@ class S3Manager:
                     if key.endswith("/") or key.endswith(".meta"):
                         continue
 
-                    parts = key.replace(self.config.prefix, "").split("/")
+                    if tenant_id and not self.key_belongs_to_tenant(key, tenant_id):
+                        continue
+                    parts = key[len(base) :].split("/")
                     if len(parts) >= 2:
-                        backup_name = parts[0]
+                        backup_name = parts[-2]
                         filename = parts[-1]
 
                         backups.append(
@@ -273,7 +285,7 @@ class S3Manager:
             logger.error(f"List S3 backups failed: {e}")
             return []
 
-    def delete_backup(self, backup_name: str) -> bool:
+    def delete_backup(self, backup_name: str, tenant_id: Optional[str] = None) -> bool:
         """
         Delete backup from S3.
 
@@ -287,10 +299,8 @@ class S3Manager:
             return False
 
         try:
-            prefix = f"{self.config.prefix}{backup_name}/"
-            response = self.client.list_objects_v2(
-                Bucket=self.config.bucket, Prefix=prefix
-            )
+            prefix = f"{self.tenant_base(tenant_id)}{backup_name}/"
+            response = self.client.list_objects_v2(Bucket=self.config.bucket, Prefix=prefix)
 
             if "Contents" not in response:
                 return False
@@ -311,7 +321,9 @@ class S3Manager:
             logger.error(f"Delete S3 backup failed: {e}")
             return False
 
-    def get_metadata(self, backup_name: str) -> Optional[Dict[str, Any]]:
+    def get_metadata(
+        self, backup_name: str, tenant_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Get metadata for S3 backup.
 
@@ -325,7 +337,7 @@ class S3Manager:
             return None
 
         try:
-            metadata_key = f"{self.config.prefix}{backup_name}/{backup_name}.meta"
+            metadata_key = f"{self.tenant_base(tenant_id)}{backup_name}/{backup_name}.meta"
             obj = self.client.get_object(Bucket=self.config.bucket, Key=metadata_key)
             import json
 

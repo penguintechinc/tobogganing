@@ -20,6 +20,10 @@ async def _async_backup_cli(db: Any, args: Any) -> None:
     tenant's rows; omitting it performs a whole-DB operation, which is
     reserved for platform operators with shell access to the hub.
 
+    Backup/restore is CLI- and scheduler-worker-only: no HTTP route exposes
+    it. Any future HTTP route MUST require platform-admin scope for whole-DB
+    operations and tenant-matched scope for tenant-scoped ones.
+
     Args:
         db: penguin-dal AsyncDB instance
         args: Parsed command-line arguments

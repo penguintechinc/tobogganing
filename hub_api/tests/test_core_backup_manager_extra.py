@@ -298,7 +298,7 @@ class TestListAndDeleteEdgeCases:
         result = manager.delete_backup("b1", from_s3=True)
 
         assert result is True
-        fake_s3.delete_backup.assert_called_once_with("b1")
+        fake_s3.delete_backup.assert_called_once_with("b1", tenant_id=None)
 
 
 @pytest.mark.asyncio

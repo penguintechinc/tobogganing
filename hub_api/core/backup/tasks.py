@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 from typing import Any
+from uuid import uuid4
 
 import structlog
 
@@ -39,13 +40,16 @@ def register_backup_jobs() -> None:
     register_job_handler(BACKUP_MODULE, BACKUP_JOB_TYPE, BACKUP_TASK_NAME)
 
 
-async def _run_scheduled_backup_async(tenant: str, payload: Any, db: Any = None) -> dict[str, Any]:
+async def _run_scheduled_backup_async(
+    tenant: str, payload: Any, db: Any = None, job_id: str = "adhoc"
+) -> dict[str, Any]:
     """Run one scheduled tenant-scoped backup.
 
     Args:
         tenant: Tenant ID from the scheduled job (never whole-DB).
         payload: Job payload (dict or JSON string) of create_backup options.
         db: AsyncDB instance; created from config when None.
+        job_id: Scheduled job ID, prefixed into the unique backup name.
 
     Returns:
         create_backup result dict.
@@ -76,6 +80,7 @@ async def _run_scheduled_backup_async(tenant: str, payload: Any, db: Any = None)
 
     manager = BackupManager(db, backup_dir=os.environ.get("BACKUP_DIR", "/backups"))
     result = await manager.create_backup(
+        backup_name=f"sched_{job_id}_{uuid4().hex}",
         compress=bool(opts.get("compress", True)),
         encrypt=bool(opts.get("encrypt", False)),
         encryption_key=encryption_key,
@@ -95,4 +100,4 @@ def run_scheduled_backup(
     Args mirror the sweep's dispatch kwargs; only tenant and payload are used.
     """
     logger.info("scheduled_backup_started", job_id=job_id[:8], tenant=tenant)
-    return asyncio.run(_run_scheduled_backup_async(tenant, payload))
+    return asyncio.run(_run_scheduled_backup_async(tenant, payload, job_id=job_id))
