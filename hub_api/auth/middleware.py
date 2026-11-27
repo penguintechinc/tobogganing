@@ -620,7 +620,7 @@ async def _extract_machine_identity(
     """Extract and validate machine-JWT identity.
 
     Decodes the token, checks aud=="headend" and required scopes.
-    T4 denylist hook: check jti revocation status (not implemented yet).
+    T4 denylist: rejects tokens whose jti is revoked (via is_jti_revoked).
 
     Args:
         token: Bearer token to decode.
