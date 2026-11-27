@@ -192,7 +192,7 @@ class TestEncryption:
 
     def test_encrypt_kdf_parameters_match(self, tmp_path: Path) -> None:
         """Test that KDF parameters are consistent between encrypt/decrypt."""
-        from hub_api.core.backup.crypto import SCRYPT_N, SCRYPT_R, SCRYPT_P
+        from hub_api.core.backup.crypto import SCRYPT_N, SCRYPT_P, SCRYPT_R
 
         # Verify upgraded parameters per OWASP
         assert SCRYPT_N == 2**17, "KDF n parameter should be 2^17 (131072)"
@@ -304,7 +304,9 @@ class TestBackupManagerLocal:
             assert backup_file.with_suffix(".meta").exists()
 
     @pytest.mark.asyncio
-    async def test_create_backup_compressed(self, tmp_path: Path, backup_mock_db: MagicMock) -> None:
+    async def test_create_backup_compressed(
+        self, tmp_path: Path, backup_mock_db: MagicMock
+    ) -> None:
         """Test compressed backup creation."""
         backup_dir = tmp_path / "backups"
 
@@ -690,9 +692,7 @@ class TestBackupRestore:
                 "db_uri": "postgresql://localhost/testdb",
                 "tables": [{"name": "users", "row_count": 1}],
             },
-            "data": {
-                "users": [{"id": 1, "name": "Test User", "email": "test@example.com"}]
-            },
+            "data": {"users": [{"id": 1, "name": "Test User", "email": "test@example.com"}]},
         }
 
         # Write backup file
@@ -751,20 +751,6 @@ class TestBackupRestore:
                 assert result["total_rows_restored"] == 1
                 assert len(result["tables_restored"]) == 1
                 db.commit.assert_called()
-
-
-class TestBackupScheduling:
-    """Test backup scheduling."""
-
-    def test_schedule_backup(self, tmp_path: Path) -> None:
-        """Test backup scheduling."""
-        db = _create_backup_mock_db()
-        with patch.dict("os.environ", {"BACKUP_S3_ENABLED": "false"}):
-            manager = BackupManager(db, backup_dir=str(tmp_path))
-
-            schedule_id = manager.schedule_backup("0 2 * * *")
-
-            assert schedule_id.startswith("schedule_")
 
 
 @pytest.mark.asyncio
