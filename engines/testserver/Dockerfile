@@ -28,7 +28,7 @@ FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8
 #    trace.go shell out to these for the icmp/traceroute/http_trace probe
 #    types (Tier-1 path-localization probes per the perftest-probe-suite spec)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20250419~deb12u1 \
+    ca-certificates=20250419~deb12u2 \
     iputils-ping=3:20221126-1+deb12u1 \
     traceroute=1:2.1.2-1 \
     tcptraceroute=1.5beta7+debian-4.1+b1 \

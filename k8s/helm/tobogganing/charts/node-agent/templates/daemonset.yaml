@@ -54,6 +54,14 @@ spec:
 
       containers:
         - name: node-agent
+          {{- if .Values.image.requireDigest }}
+          {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" (required "image.digest is required (sha256:<64 hex>) when image.requireDigest=true — no published node-agent image digest is pinned" .Values.image.digest)) }}
+          {{- fail "image.digest must be sha256:<64 hex>" }}
+          {{- end }}
+          {{- if hasPrefix "sha256:0000000000" .Values.image.digest }}
+          {{- fail "image.digest is a placeholder zero digest — set the real published digest" }}
+          {{- end }}
+          {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default .Values.global.image.pullPolicy }}
 

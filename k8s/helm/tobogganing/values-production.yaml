@@ -96,8 +96,9 @@ node-agent:
   image:
     repository: ghcr.io/penguintechinc/tobogganing/node-agent
     tag: v0.1.0
-    # TODO: pin to released digest
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # No published image yet — render fails until a real digest is set.
+    digest: ""
+    requireDigest: true
   nodeAgent:
     resources:
       requests:
