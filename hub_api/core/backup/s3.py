@@ -1,5 +1,6 @@
 """S3 backup storage configuration and operations."""
 
+import json
 import logging
 import tempfile
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Reserved S3 key segment for whole-DB backups; tenant IDs cannot start with "_".
 GLOBAL_PREFIX_SEGMENT = "_global"
+# Metadata scope values that mark a whole-DB (non-tenant) backup.
+LEGACY_GLOBAL_SCOPES = frozenset({"whole_db", "global"})
 
 
 @dataclass(slots=True)
@@ -329,6 +332,70 @@ class S3Manager:
         except Exception as e:
             logger.error(f"Delete S3 backup failed: {e}")
             return False
+
+    def migrate_global_prefix(self, dry_run: bool = False) -> Dict[str, Any]:
+        """Move legacy root-level whole-DB backups into the reserved ``_global/`` prefix.
+
+        Only ``{prefix}{name}/{name}.meta`` folders whose metadata scope is whole-DB
+        are moved; tenant folders never match. Each object is copied, verified by
+        size/ETag, then the source deleted, so a re-run is a no-op (idempotent).
+        """
+        if not self.client:
+            raise RuntimeError("S3 client not configured")
+        prefix = self.config.prefix
+        dest_base = self.tenant_base(None)
+        report: Dict[str, Any] = {"examined": 0, "backups": [], "moved": 0, "skipped": 0}
+
+        paginator = self.client.get_paginator("list_objects_v2")
+        candidates: Dict[str, List[str]] = {}
+        for page in paginator.paginate(Bucket=self.config.bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                rel = obj["Key"][len(prefix) :]
+                report["examined"] += 1
+                parts = rel.split("/")
+                if len(parts) != 2 or not parts[1] or parts[0].startswith("_"):
+                    continue
+                candidates.setdefault(parts[0], []).append(obj["Key"])
+
+        for name, keys in sorted(candidates.items()):
+            # Metadata is written as ``{backup_file}.with_suffix(".meta")``,
+            # e.g. ``name.json.meta`` or ``name.json.gz.meta``.
+            meta_keys = [
+                k for k in keys if k.rsplit("/", 1)[1].startswith(name) and k.endswith(".meta")
+            ]
+            if len(meta_keys) != 1:
+                report["skipped"] += 1
+                continue
+            meta_key = meta_keys[0]
+            body = self.client.get_object(Bucket=self.config.bucket, Key=meta_key)["Body"].read()
+            try:
+                scope = json.loads(body.decode("utf-8")).get("scope", "")
+            except (ValueError, UnicodeDecodeError):
+                scope = ""
+            if scope not in LEGACY_GLOBAL_SCOPES:
+                report["skipped"] += 1
+                continue
+            report["backups"].append(name)
+            for src in sorted(keys):
+                dst = f"{dest_base}{src[len(prefix) :]}"
+                if dry_run:
+                    continue
+                self.client.copy_object(
+                    Bucket=self.config.bucket,
+                    Key=dst,
+                    CopySource={"Bucket": self.config.bucket, "Key": src},
+                )
+                s_head = self.client.head_object(Bucket=self.config.bucket, Key=src)
+                d_head = self.client.head_object(Bucket=self.config.bucket, Key=dst)
+                if (s_head["ContentLength"], s_head.get("ETag")) != (
+                    d_head["ContentLength"],
+                    d_head.get("ETag"),
+                ):
+                    raise RuntimeError(f"Copy verification failed for {src}; source kept")
+                self.client.delete_object(Bucket=self.config.bucket, Key=src)
+                report["moved"] += 1
+        logger.info(f"migrate_global_prefix dry_run={dry_run} report={report}")
+        return report
 
     def get_metadata(
         self, backup_name: str, tenant_id: Optional[str] = None

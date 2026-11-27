@@ -77,6 +77,16 @@ async def _async_backup_cli(db: Any, args: Any) -> None:
         else:
             print(f"Backup not found: {args.name}")
 
+    elif args.command == "migrate-global-prefix":
+        if not manager.s3_manager:
+            raise RuntimeError("S3 not configured")
+        report = manager.s3_manager.migrate_global_prefix(dry_run=args.dry_run)
+        verb = "Would move" if args.dry_run else "Moved"
+        print(
+            f"{verb} {len(report['backups'])} whole-DB backups "
+            f"({report['moved']} objects moved, {report['examined']} keys examined)"
+        )
+
     elif args.command == "s3-status":
         config = manager.s3_config
         print(f"S3 Enabled: {config.enabled}")
@@ -145,6 +155,11 @@ def backup_cli(db: Any, get_db_uri_fn: Any | None = None) -> None:
 
     # S3 status
     subparsers.add_parser("s3-status", help="Check S3 configuration")
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-global-prefix", help="Move legacy root whole-DB S3 backups into _global/"
+    )
+    migrate_parser.add_argument("--dry-run", action="store_true", help="Report only")
 
     args = parser.parse_args()
 
