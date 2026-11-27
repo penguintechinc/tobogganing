@@ -3,9 +3,9 @@
 image:
   tag: v1.0.0
   repository: ghcr.io/penguintechinc/tobogganing/testserver
-  # TODO: pin to released digest — replace with the real sha256 once a
-  # v1.0.0 testserver image is published to ghcr.io.
-  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  # No published image digest yet - render fails until a real one is set.
+  digest: ""
+  requireDigest: true
 
 replicaCount: 3
 

@@ -11,8 +11,9 @@ hubApi:
   image:
     repository: ghcr.io/penguintechinc/tobogganing/hub-api
     tag: v2.0.0
-    # TODO: pin to released digest
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # No published image digest yet - render fails until a real one is set.
+    digest: ""
+    requireDigest: true
   managerUrl: "https://tobogganing.penguintech.io/api"
   corsOrigins: "https://tobogganing.penguintech.io"
   resources:
@@ -32,8 +33,9 @@ hubRouter:
   image:
     repository: ghcr.io/penguintechinc/tobogganing/hub-router
     tag: v2.0.0
-    # TODO: pin to released digest
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # No published image digest yet - render fails until a real one is set.
+    digest: ""
+    requireDigest: true
   # hubRouter.sessionSigningKey intentionally NOT set here — a real value
   # must never be committed to a production values file (the exact class
   # of HIGH fixed for postgres.password, see git history). Inject via
@@ -53,8 +55,9 @@ hubWebui:
   image:
     repository: ghcr.io/penguintechinc/tobogganing/hub-webui
     tag: v2.0.0
-    # TODO: pin to released digest
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # No published image digest yet - render fails until a real one is set.
+    digest: ""
+    requireDigest: true
   resources:
     requests:
       memory: "256Mi"
@@ -80,8 +83,9 @@ netsvcs-dns:
   image:
     repository: ghcr.io/penguintechinc/tobogganing/netsvcs-dns
     tag: v0.1.0
-    # TODO: pin to released digest
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # No published image digest yet - render fails until a real one is set.
+    digest: ""
+    requireDigest: true
   resources:
     requests:
       cpu: 500m
@@ -117,8 +121,9 @@ testserver:
   image:
     repository: ghcr.io/penguintechinc/tobogganing/testserver
     tag: v1.0.0
-    # TODO: pin to released digest
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # No published image digest yet - render fails until a real one is set.
+    digest: ""
+    requireDigest: true
   replicaCount: 3
   config:
     allowedOrigins: "https://tobogganing.penguintech.io"
