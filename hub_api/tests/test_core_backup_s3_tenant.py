@@ -61,12 +61,43 @@ class TestS3TenantPrefix:
         assert mgr.client.upload_fileobj.call_args.args[2] == "backups/ta/n/n.json"
 
     def test_untenanted_key_unchanged(self, tmp_path: Path) -> None:
-        """Whole-DB backups keep the root prefix layout."""
+        """Whole-DB backups live under the reserved _global prefix."""
         f = tmp_path / "w.json"
         f.write_text("{}")
         mgr = _s3()
         mgr.client.head_object.return_value = {"ETag": '"e"', "ContentLength": 2}
-        assert mgr.upload_backup(f, "w")["s3_key"] == "backups/w/w.json"
+        assert mgr.upload_backup(f, "w")["s3_key"] == "backups/_global/w/w.json"
+
+    def test_global_backup_not_visible_to_tenant_named_like_it(self) -> None:
+        """Regression (s174): a whole-DB backup named like a tenant ID is not listed
+        under that tenant, and whole-DB listing still finds it."""
+        mgr = _s3(["backups/_global/ta/ta.json", "backups/ta/n/n.json"])
+        mgr.client.get_paginator.return_value.paginate.side_effect = lambda Bucket, Prefix: [
+            {
+                "Contents": [
+                    {"Key": k, "Size": 1, "LastModified": datetime.now(timezone.utc)}
+                    for k in ["backups/_global/ta/ta.json", "backups/ta/n/n.json"]
+                    if k.startswith(Prefix)
+                ]
+            }
+        ]
+        assert [o["s3_key"] for o in mgr.list_backups(tenant_id="ta")] == ["backups/ta/n/n.json"]
+        assert [o["s3_key"] for o in mgr.list_backups()] == ["backups/_global/ta/ta.json"]
+        assert not mgr.key_belongs_to_tenant("backups/_global/ta/ta.json", "ta")
+
+    def test_tenant_id_with_reserved_underscore_rejected(self) -> None:
+        """Tenant IDs starting with '_' cannot alias the reserved global prefix."""
+        mgr = _s3()
+        with pytest.raises(ValueError, match="reserved"):
+            mgr.tenant_base("_global")
+
+    def test_manager_rejects_underscore_tenant_id(self) -> None:
+        """The manager's tenant validator rejects a leading underscore."""
+        from hub_api.core.backup.manager import _validate_tenant_id
+
+        with pytest.raises(ValueError, match="reserved"):
+            _validate_tenant_id("_global")
+        _validate_tenant_id("tenant-a")
 
     def test_list_filtered_to_tenant(self) -> None:
         """Tenant listing uses the tenant prefix and drops foreign keys."""

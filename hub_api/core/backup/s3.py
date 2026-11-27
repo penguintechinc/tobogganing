@@ -18,6 +18,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# Reserved S3 key segment for whole-DB backups; tenant IDs cannot start with "_".
+GLOBAL_PREFIX_SEGMENT = "_global"
+
+
 @dataclass(slots=True)
 class S3Config:
     """S3 configuration for backup storage."""
@@ -135,11 +139,16 @@ class S3Manager:
             raise
 
     def tenant_base(self, tenant_id: Optional[str] = None) -> str:
-        """Return the key prefix for a tenant (``{prefix}{tenant}/``) or the root prefix.
+        """Return the key prefix for a tenant (``{prefix}{tenant}/``) or whole-DB backups.
 
-        Tenant-scoped objects live under their own prefix so names never collide.
+        Whole-DB backups live under the reserved ``{prefix}_global/`` prefix; tenant IDs
+        may not start with ``_``, so no tenant prefix can ever alias it.
         """
-        return f"{self.config.prefix}{tenant_id}/" if tenant_id else self.config.prefix
+        if not tenant_id:
+            return f"{self.config.prefix}{GLOBAL_PREFIX_SEGMENT}/"
+        if tenant_id.startswith("_"):
+            raise ValueError("Tenant ID cannot start with '_' (reserved prefix)")
+        return f"{self.config.prefix}{tenant_id}/"
 
     def key_belongs_to_tenant(self, s3_key: str, tenant_id: str) -> bool:
         """True if ``s3_key`` lies under ``tenant_id``'s prefix (no traversal)."""

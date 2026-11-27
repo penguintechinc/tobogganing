@@ -250,17 +250,17 @@ class TestListBackupsEdgeCases:
             {
                 "Contents": [
                     {
-                        "Key": "backups/b1/b1.meta",
+                        "Key": "backups/_global/b1/b1.meta",
                         "Size": 1,
                         "LastModified": MagicMock(isoformat=lambda: "x"),
                     },
                     {
-                        "Key": "backups/b1/",
+                        "Key": "backups/_global/b1/",
                         "Size": 0,
                         "LastModified": MagicMock(isoformat=lambda: "x"),
                     },
                     {
-                        "Key": "backups/b1/b1.json.gz",
+                        "Key": "backups/_global/b1/b1.json.gz",
                         "Size": 100,
                         "LastModified": MagicMock(isoformat=lambda: "2026-01-01"),
                     },

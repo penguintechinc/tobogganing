@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import insert as sa_insert
 
 from .crypto import decrypt_file, encrypt_file
 from .s3 import S3Config, S3Manager
@@ -41,6 +43,17 @@ def _validate_backup_name(backup_name: str) -> None:
 
     if not VALID_BACKUP_NAME_PATTERN.match(backup_name):
         raise ValueError("Backup name must contain only alphanumeric, dots, hyphens, underscores")
+
+
+def _validate_tenant_id(tenant_id: str) -> None:
+    """Validate a tenant ID used in backup paths and S3 prefixes.
+
+    Applies the backup-name allowlist and rejects a leading ``_``, which is reserved
+    for the whole-DB ``_global`` S3 prefix so a tenant can never alias it.
+    """
+    _validate_backup_name(tenant_id)
+    if tenant_id.startswith("_"):
+        raise ValueError("Tenant ID cannot start with '_' (reserved prefix)")
 
 
 def _validate_path_in_directory(file_path: Path, base_dir: Path) -> Path:
@@ -163,7 +176,7 @@ class BackupManager:
 
             # Build path with tenant isolation if provided
             if tenant_id:
-                _validate_backup_name(tenant_id)  # Validate tenant_id too
+                _validate_tenant_id(tenant_id)  # Validate tenant_id too
                 backup_file = self.backup_dir / tenant_id / f"{backup_name}{ext}"
                 backup_file.parent.mkdir(parents=True, exist_ok=True)
             else:
@@ -319,6 +332,7 @@ class BackupManager:
         verify_checksum: bool = True,
         from_s3: bool = False,
         tenant_id: str | None = None,
+        allow_scope_mismatch: bool = False,
     ) -> dict[str, Any]:
         """
         Restore database from backup.
@@ -330,6 +344,8 @@ class BackupManager:
             verify_checksum: Whether to verify integrity
             from_s3: Whether to download from S3 first
             tenant_id: Tenant ID for multi-tenant isolation (validates authorization; fail-closed)
+            allow_scope_mismatch: Explicit override to restore a backup whose declared
+                scope is not ``tenant:{tenant_id}`` (foreign rows are still dropped)
 
         Returns:
             Restore statistics dict
@@ -340,7 +356,7 @@ class BackupManager:
         try:
             # Validate tenant_id format up front (used by both S3 and local paths)
             if tenant_id:
-                _validate_backup_name(tenant_id)
+                _validate_tenant_id(tenant_id)
 
             # Handle S3 download
             if from_s3 and self.s3_manager:
@@ -394,10 +410,10 @@ class BackupManager:
             if "metadata" not in backup_data or "data" not in backup_data:
                 raise ValueError("Invalid backup format")
 
-            # Scope check (informational only). The backup's declared scope lives
-            # inside the same untrusted file as the data, so it is NOT the security
-            # boundary — row-level tenant enforcement below is. We log a mismatch so
-            # a tenant restoring a whole_db backup is visible in the audit trail.
+            # Scope guard: refuse a tenant restore of a file not declared for this
+            # tenant (the wrong file would otherwise wipe the tenant's tables). The
+            # scope lives in the same untrusted file, so row-level enforcement below
+            # stays the security boundary; this guard protects against operator error.
             if tenant_id:
                 backup_scope = backup_data.get("metadata", {}).get("scope", "")
                 if backup_scope != f"tenant:{tenant_id}":
@@ -405,7 +421,13 @@ class BackupManager:
                         "backup_scope_mismatch",
                         tenant_id=tenant_id,
                         backup_scope=backup_scope,
+                        overridden=allow_scope_mismatch,
                     )
+                    if not allow_scope_mismatch:
+                        raise ValueError(
+                            f"Backup scope {backup_scope!r} does not match tenant:{tenant_id}; "
+                            "pass allow_scope_mismatch=True to override"
+                        )
 
             # Restore
             restore_stats: dict[str, Any] = {
@@ -437,9 +459,15 @@ class BackupManager:
                                 tenant_id=tenant_id,
                             )
                             continue
-                        # Delete only this tenant's rows before re-inserting them.
-                        tenant_field = getattr(table, tenant_column)
-                        await self.db(tenant_field == tenant_id).delete()
+                        rows_restored = await self._restore_tenant_table(
+                            table_name, tenant_column, tenant_id, table_data, restore_stats
+                        )
+                        restore_stats["tables_restored"].append(
+                            {"name": table_name, "rows": rows_restored}
+                        )
+                        restore_stats["total_rows_restored"] += rows_restored
+                        logger.info("restored_rows", table_name=table_name, rows=rows_restored)
+                        continue
                     else:
                         tenant_column = None
                         # Whole-DB restore: delete all rows using first column != None as condition
@@ -502,6 +530,55 @@ class BackupManager:
             logger.error("restore_failed", error=str(e))
             raise
 
+    @staticmethod
+    def _coerce_datetimes(row_data: dict[str, Any]) -> dict[str, Any]:
+        """Convert ISO datetime strings in ``*_at`` fields back to datetime objects.
+
+        Non-parseable values are kept as-is so the insert surfaces any real error.
+        """
+        for field, value in list(row_data.items()):
+            if isinstance(value, str) and field.endswith("_at"):
+                try:
+                    row_data[field] = datetime.fromisoformat(value)
+                except (ValueError, TypeError):
+                    pass
+        return row_data
+
+    async def _restore_tenant_table(
+        self,
+        table_name: str,
+        tenant_column: str,
+        tenant_id: str,
+        table_data: list[dict[str, Any]],
+        restore_stats: dict[str, Any],
+    ) -> int:
+        """Atomically replace one tenant's rows in a table from backup data.
+
+        Filters rows to the caller's tenant first; if none match, the table is left
+        untouched. Otherwise delete + insert run in one transaction, so a failure
+        mid-insert rolls back and never leaves the tenant's table empty.
+        """
+        matching: list[dict[str, Any]] = []
+        for row_data in table_data:
+            if str(row_data.get(tenant_column)) != str(tenant_id):
+                restore_stats["rows_skipped_foreign_tenant"] += 1
+                continue
+            matching.append(self._coerce_datetimes(dict(row_data)))
+
+        if not matching:
+            logger.warning(
+                "tenant_restore_no_matching_rows",
+                table_name=table_name,
+                tenant_id=tenant_id,
+            )
+            return 0
+
+        sa_table = self.db.tables[table_name]
+        async with self.db.engine.begin() as conn:
+            await conn.execute(sa_delete(sa_table).where(sa_table.c[tenant_column] == tenant_id))
+            await conn.execute(sa_insert(sa_table), matching)
+        return len(matching)
+
     def list_backups(
         self, include_s3: bool = True, tenant_id: str | None = None
     ) -> list[dict[str, Any]]:
@@ -521,7 +598,7 @@ class BackupManager:
         backups: list[dict[str, Any]] = []
 
         if tenant_id:
-            _validate_backup_name(tenant_id)
+            _validate_tenant_id(tenant_id)
             backup_search_dir = self.backup_dir / tenant_id
         else:
             backup_search_dir = self.backup_dir
@@ -598,11 +675,11 @@ class BackupManager:
 
         if from_s3 and self.s3_manager:
             if tenant_id:
-                _validate_backup_name(tenant_id)
+                _validate_tenant_id(tenant_id)
             return self.s3_manager.delete_backup(backup_name, tenant_id=tenant_id)
 
         if tenant_id:
-            _validate_backup_name(tenant_id)
+            _validate_tenant_id(tenant_id)
             delete_dir = self.backup_dir / tenant_id
         else:
             delete_dir = self.backup_dir
