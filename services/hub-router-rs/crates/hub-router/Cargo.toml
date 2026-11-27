@@ -17,7 +17,6 @@ path = "src/main.rs"
 
 [dependencies]
 hub-router-common = { workspace = true }
-hub-router-config = { workspace = true }
 hub-router-auth = { workspace = true }
 penguin-aaa = { workspace = true }
 axum = { workspace = true }

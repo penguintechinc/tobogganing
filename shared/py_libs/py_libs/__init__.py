@@ -1,10 +1,7 @@
-"""
-py_libs - Shared Python libraries for secure application development.
+"""py_libs - Shared Python libraries for secure application development.
 
 This package provides "batteries included" security-focused utilities:
 - validation: PyDAL-style input validators
-- security: Rate limiting, CSRF, secure headers, sanitization
-- crypto: Token generation, hashing, encryption
 - http: Request correlation, resilient HTTP client
 - grpc: gRPC server/client with security interceptors
 """
