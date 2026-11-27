@@ -38,6 +38,7 @@ spec:
       {{- end }}
       containers:
       - name: testserver
+        {{- include "testserver.digestGuard" (dict "image" .Values.image "name" "testserver") }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ end }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | default .Values.global.image.pullPolicy }}
         securityContext:

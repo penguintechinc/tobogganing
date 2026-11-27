@@ -26,6 +26,7 @@ spec:
         runAsUser: {{ .Values.hubApi.securityContext.runAsUser }}
       containers:
         - name: hub-api
+          {{- include "tobogganing.digestGuard" (dict "image" .Values.hubApi.image "name" "hub-api") }}
           image: "{{ .Values.hubApi.image.repository }}:{{ .Values.hubApi.image.tag }}{{ if .Values.hubApi.image.digest }}@{{ .Values.hubApi.image.digest }}{{ end }}"
           imagePullPolicy: {{ .Values.hubApi.image.pullPolicy | default .Values.global.image.pullPolicy }}
           ports:

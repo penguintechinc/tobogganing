@@ -18,16 +18,8 @@
 # at an operator-provisioned MariaDB (schema pre-applied) before this
 # engine will start successfully.
 #
-# Also flagged: engines/testserver/Dockerfile installs only
-# ca-certificates in the runtime stage, but internal/protocols/icmp.go
-# and trace.go shell out to `ping`/`traceroute`/`tcptraceroute` via
-# os/exec — those binaries are not present in the image, so ICMP and
-# traceroute test types will fail at runtime (http/tcp/udp/speedtest are
-# unaffected, pure-Go). The Dockerfile's "ROOT EXCEPTION (approved):
-# NET_RAW required for ICMP raw sockets" comment does not match the code
-# path (it shells out to system ping, doesn't open raw sockets itself)
-# and no capability is actually granted — pre-existing Dockerfile
-# inconsistency, not introduced or fixed here.
+# engines/testserver/Dockerfile ships ping/traceroute/tcptraceroute
+# (pinned) in the runtime stage; NET_RAW is granted via securityContext below.
 
 # Standalone-render fallback for Helm's auto-injected `global` values.
 # When deployed as a tobogganing umbrella dependency, the parent's

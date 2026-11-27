@@ -27,11 +27,18 @@ FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8
 #  - iputils-ping, traceroute, tcptraceroute: internal/protocols/icmp.go and
 #    trace.go shell out to these for the icmp/traceroute/http_trace probe
 #    types (Tier-1 path-localization probes per the perftest-probe-suite spec)
+#  - libcap2-bin: setcap; tcptraceroute is a shell wrapper around
+#    `traceroute -T`, so cap_net_raw=ep goes on the real traceroute.db binary
+#    (same file cap ping ships with). Kept installed: iputils-ping depends on it.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20250419~deb12u1 \
+    ca-certificates=20250419~deb12u2 \
     iputils-ping=3:20221126-1+deb12u1 \
     traceroute=1:2.1.2-1 \
     tcptraceroute=1.5beta7+debian-4.1+b1 \
+    libcap2-bin=1:2.66-4+deb12u3+b1 \
+    && setcap cap_net_raw=ep /usr/bin/traceroute.db \
+    && getcap /usr/bin/traceroute.db | grep -q cap_net_raw \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
