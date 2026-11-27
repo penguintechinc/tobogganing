@@ -582,37 +582,55 @@ def _lookup_keys(key: tuple[str, str]) -> list[tuple[str, str]]:
 
 def _allocate_fairly(
     per_file: dict[str, list[tuple[str, str]]], budget: int
-) -> tuple[dict[tuple[str, str], str], int]:
-    """Round-robin newest-first indicators across files within a lookup-value ``budget``.
+) -> tuple[dict[tuple[str, str], str], int, list[str]]:
+    """Allocate a lookup-value ``budget`` across files with per-file quotas.
 
-    Each indicator costs the number of lookup values it adds that are not already
-    budgeted (an IP = 1, a domain = its new suffixes). When a file's next indicator no
-    longer fits, that file stops, so its newest indicators are the ones kept and one
-    padded log cannot crowd out the others. Returns kept indicators (mapped to their
-    first source file) and the number of unique indicators dropped.
+    Each indicator costs the lookup values it adds that are not already budgeted
+    (an IP = 1, a domain = its new suffixes). Pass 1 gives every file
+    ``budget // n_files``; within a file indicators are taken newest-first and any that
+    do not fit the file's remaining quota are skipped (smaller later ones may still
+    fit). Pass 2 spends unused quota on skipped indicators, file by file, newest-first.
+    So one noisy file cannot starve the others. Returns kept indicators (mapped to
+    their first source file), the number of unique indicators dropped, and the files
+    that had indicators dropped.
     """
     kept: dict[tuple[str, str], str] = {}
     budgeted: set[tuple[str, str]] = set()
     total = len({k for items in per_file.values() for k in items})
-    iters = {f: iter(items) for f, items in per_file.items()}
-    while iters:
-        for f in list(iters):
-            for key in iters[f]:
-                if key in kept:
-                    continue
-                new = [k for k in _lookup_keys(key) if k not in budgeted]
-                if len(budgeted) + len(new) > budget:
-                    del iters[f]
-                else:
-                    budgeted.update(new)
-                    kept[key] = f
-                break
+    quota = budget // len(per_file) if per_file else 0
+
+    def take(key: tuple[str, str], f: str, limit: int) -> int | None:
+        """Keep ``key`` if its cost fits ``limit``; return the cost, or None if skipped."""
+        new = [k for k in _lookup_keys(key) if k not in budgeted]
+        if len(new) > limit:
+            return None
+        budgeted.update(new)
+        kept[key] = f
+        return len(new)
+
+    skipped: dict[str, list[tuple[str, str]]] = {}
+    for f, items in per_file.items():
+        used = 0
+        for key in items:
+            if key in kept:
+                continue
+            cost = take(key, f, quota - used)
+            if cost is None:
+                skipped.setdefault(f, []).append(key)
             else:
-                del iters[f]
-    return kept, total - len(kept)
+                used += cost
+
+    truncated: list[str] = []
+    for f, items in skipped.items():
+        for key in items:
+            if key in kept:
+                continue
+            if take(key, f, budget - len(budgeted)) is None and f not in truncated:
+                truncated.append(f)
+    return kept, total - len(kept), truncated
 
 
-def _truncation_finding(scan_id: str, total: int, dropped: int) -> ScanFinding:
+def _truncation_finding(scan_id: str, total: int, dropped: int, files: list[str]) -> ScanFinding:
     """Build the finding that reports incomplete threat-intel coverage for this scan."""
     now = datetime.utcnow()
     return ScanFinding(
@@ -622,16 +640,22 @@ def _truncation_finding(scan_id: str, total: int, dropped: int) -> ScanFinding:
         title="Threat-intel coverage truncated",
         description=(
             f"{dropped} of {total} indicators in log tails were not checked "
-            f"(lookup budget {MAX_LOOKUP_VALUES}); logs may be padded to hide activity"
+            f"(lookup budget {MAX_LOOKUP_VALUES}) in {', '.join(files)}; "
+            "logs may be padded to hide activity"
         ),
-        affected_component="threat_intel_scan",
+        affected_component=", ".join(files),
         recommendation="Investigate log volume spikes; review log sources for padding",
         cve_ids=[],
         cvss_score=5.0,
         confidence=100,
         first_seen=now,
         last_seen=now,
-        metadata={"observed": total, "dropped": dropped, "limit": MAX_LOOKUP_VALUES},
+        metadata={
+            "observed": total,
+            "dropped": dropped,
+            "limit": MAX_LOOKUP_VALUES,
+            "truncated_files": files,
+        },
     )
 
 
@@ -657,7 +681,7 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
         for log_file in THREAT_LOG_FILES
         if os.path.exists(log_file)
     }
-    observed, dropped = _allocate_fairly(per_file, MAX_LOOKUP_VALUES)
+    observed, dropped, truncated_files = _allocate_fairly(per_file, MAX_LOOKUP_VALUES)
     findings: list[ScanFinding] = []
     if dropped:
         logger.warning(
@@ -665,9 +689,12 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
             observed=len(observed) + dropped,
             limit=MAX_LOOKUP_VALUES,
             dropped=dropped,
+            files=truncated_files,
         )
         INDICATORS_TRUNCATED.add(dropped)
-        findings.append(_truncation_finding(scan_id, len(observed) + dropped, dropped))
+        findings.append(
+            _truncation_finding(scan_id, len(observed) + dropped, dropped, truncated_files)
+        )
 
     ips = [v for v, t in observed if t == "ip"]
     domains = [v for v, t in observed if t == "domain"]

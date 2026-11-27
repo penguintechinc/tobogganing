@@ -384,13 +384,13 @@ def test_allocate_fairly_across_files() -> None:
     """A padded file cannot crowd out others; duplicates across files count once."""
     a = [(f"10.0.0.{i}", "ip") for i in range(100)]
     b = [("10.9.9.9", "ip"), ("10.0.0.0", "ip")]
-    kept, dropped = scans._allocate_fairly({"a": a, "b": b}, 6)
+    kept, dropped, _ = scans._allocate_fairly({"a": a, "b": b}, 6)
     assert ("10.9.9.9", "ip") in kept and kept[("10.9.9.9", "ip")] == "b"
     assert len(kept) == 6 and dropped == 95
-    kept, dropped = scans._allocate_fairly({"a": a[:2], "b": b}, 10)
+    kept, dropped, _ = scans._allocate_fairly({"a": a[:2], "b": b}, 10)
     assert dropped == 0 and len(kept) == 3
     b3 = [("10.7.0.1", "ip"), ("10.7.0.2", "ip"), ("10.7.0.3", "ip")]
-    kept, _ = scans._allocate_fairly({"a": a, "b": b3}, 5)  # cap hit mid-round
+    kept, _, _ = scans._allocate_fairly({"a": a, "b": b3}, 5)  # cap hit mid-round
     assert len(kept) == 5
 
 
@@ -431,7 +431,9 @@ async def test_threat_intel_caps_indicators_loudly(tmp_path: Path) -> None:
     assert "threat_intel_indicators_truncated" in warnings
     cov = [f for f in findings if f.finding_type == "threat_intel_coverage"]
     assert len(cov) == 1 and cov[0].severity == ScanSeverity.MEDIUM
-    assert cov[0].metadata == {"observed": 20, "dropped": 15, "limit": 5}
+    assert cov[0].metadata["dropped"] == 15 and cov[0].metadata["observed"] == 20
+    assert cov[0].metadata["truncated_files"] == [str(tmp_path / "a.log")]
+    assert str(tmp_path / "a.log") in cov[0].description
     # newest line (10.1.0.19) survived the cap and was matched
     assert [f.metadata["indicator"] for f in findings if f.finding_type != cov[0].finding_type] == [
         "10.1.0.19"
@@ -457,13 +459,47 @@ async def test_padded_deep_domains_truncated_within_budget(tmp_path: Path) -> No
     assert "threat_indicator" in types  # newest line (x.evil.com) still checked
 
 
+def test_quota_noisy_file_cannot_starve_quiet_file() -> None:
+    """Deep-domain noise in one file leaves the quiet file fully covered."""
+    deep = ".".join(f"l{j}" for j in range(20))
+    noisy = [(f"h{i}.{deep}.pad.com", "domain") for i in range(50)]
+    quiet = [("10.0.0.1", "ip"), ("q.example.com", "domain")]
+    kept, dropped, truncated = scans._allocate_fairly({"noisy": noisy, "quiet": quiet}, 60)
+    assert all(k in kept for k in quiet)
+    assert truncated == ["noisy"] and dropped > 0
+
+
+def test_quota_skips_oversized_then_takes_smaller() -> None:
+    """An indicator too big for the quota is skipped; later smaller ones still fit."""
+    big = (".".join(f"x{j}" for j in range(10)) + ".com", "domain")  # 10 candidates
+    items = [big, ("10.0.0.1", "ip"), ("10.0.0.2", "ip")]
+    kept, dropped, truncated = scans._allocate_fairly({"f": items, "g": []}, 8)
+    assert big not in kept and len(kept) == 2
+    assert dropped == 1 and truncated == ["f"]
+
+
+def test_quota_carry_over_to_other_files() -> None:
+    """Unused quota from a light file is spent on a heavy file's skipped indicators."""
+    heavy = [(f"10.1.0.{i}", "ip") for i in range(8)]
+    light = [("10.2.0.1", "ip")]
+    kept, dropped, truncated = scans._allocate_fairly({"heavy": heavy, "light": light}, 8)
+    # quota 4 each; light uses 1, heavy gets 4 + 3 carried over
+    assert len(kept) == 8 and dropped == 1 and truncated == ["heavy"]
+    assert ("10.1.0.6", "ip") in kept and ("10.1.0.7", "ip") not in kept  # newest-first
+    assert scans._allocate_fairly({}, 10) == ({}, 0, [])
+    # same oversized indicator skipped in both files: carried once, not reported twice
+    big = ("a.b.c.d.example.com", "domain")  # 5 candidates > quota 3
+    kept, dropped, truncated = scans._allocate_fairly({"x": [big], "y": [big]}, 6)
+    assert kept == {big: "x"} and dropped == 0 and truncated == []
+
+
 def test_allocate_fairly_charges_domain_candidates() -> None:
     """A domain costs its new suffixes; shared suffixes are charged once."""
     items = [("a.b.ex.com", "domain"), ("c.b.ex.com", "domain"), ("1.2.3.4", "ip")]
-    kept, dropped = scans._allocate_fairly({"f": items}, 5)
+    kept, dropped, _ = scans._allocate_fairly({"f": items}, 5)
     # a.b.ex.com=3 (a.b.ex.com,b.ex.com,ex.com), c.b.ex.com=+1, ip=+1 -> 5
     assert len(kept) == 3 and dropped == 0
-    kept, dropped = scans._allocate_fairly({"f": items}, 4)
+    kept, dropped, _ = scans._allocate_fairly({"f": items}, 4)
     assert len(kept) == 2 and dropped == 1
 
 
