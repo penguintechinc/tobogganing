@@ -9,6 +9,8 @@ from typing import Any
 
 import structlog
 
+from hub_api.modules.netsvcs.managers.zone_manager import row_allowed_teams
+
 logger = structlog.get_logger()
 
 # Zone visibility levels the resolver's SelectiveRouter understands. Anything
@@ -52,6 +54,7 @@ class DNSZoneDTO:
     name: str
     visibility: str
     records: list[DNSRecordDTO] = field(default_factory=list)
+    allowed_teams: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -198,6 +201,7 @@ class ConfigService:
                     name=zone_row.name,
                     visibility=visibility,
                     records=record_dtos,
+                    allowed_teams=row_allowed_teams(zone_row),
                 )
             )
 

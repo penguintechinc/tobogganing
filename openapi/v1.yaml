@@ -365,6 +365,11 @@ components:
     ZoneResponse:
       description: Zone response DTO.
       properties:
+        allowed_teams:
+          items:
+            type: string
+          title: Allowed Teams
+          type: array
         created_at:
           title: Created At
           type: string
@@ -1083,6 +1088,133 @@ paths:
       summary: Rotate DNS resolver server tokens with replay protection.
       tags:
       - netsvcs
+  /api/v1/netsvcs/resolver-settings:
+    get:
+      description: ''
+      operationId: get_get_resolver_settings
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Effective resolver settings for the caller's tenant.
+                properties:
+                  cache_enabled:
+                    title: Cache Enabled
+                    type: boolean
+                  cache_max_entries:
+                    title: Cache Max Entries
+                    type: integer
+                  cache_ttl:
+                    title: Cache Ttl
+                    type: integer
+                  enable_dnssec:
+                    title: Enable Dnssec
+                    type: boolean
+                  ioc_filtering:
+                    title: Ioc Filtering
+                    type: boolean
+                  log_queries:
+                    title: Log Queries
+                    type: boolean
+                required:
+                - cache_enabled
+                - cache_ttl
+                - cache_max_entries
+                - log_queries
+                - enable_dnssec
+                - ioc_filtering
+                title: ResolverSettingsResponse
+                type: object
+          description: Effective resolver settings for the caller's tenant.
+      summary: Return the caller tenant's effective resolver settings (defaults if
+        unset).
+      tags:
+      - netsvcs
+    put:
+      description: '
+
+        Returns 400 on an empty body or an out-of-range/mistyped value.'
+      operationId: put_put_resolver_settings
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Partial update; omitted (null) fields keep their current
+                value.
+              properties:
+                cache_enabled:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Cache Enabled
+                cache_max_entries:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  title: Cache Max Entries
+                cache_ttl:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  title: Cache Ttl
+                enable_dnssec:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Enable Dnssec
+                ioc_filtering:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Ioc Filtering
+                log_queries:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Log Queries
+              title: UpdateResolverSettingsRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Effective resolver settings for the caller's tenant.
+                properties:
+                  cache_enabled:
+                    title: Cache Enabled
+                    type: boolean
+                  cache_max_entries:
+                    title: Cache Max Entries
+                    type: integer
+                  cache_ttl:
+                    title: Cache Ttl
+                    type: integer
+                  enable_dnssec:
+                    title: Enable Dnssec
+                    type: boolean
+                  ioc_filtering:
+                    title: Ioc Filtering
+                    type: boolean
+                  log_queries:
+                    title: Log Queries
+                    type: boolean
+                required:
+                - cache_enabled
+                - cache_ttl
+                - cache_max_entries
+                - log_queries
+                - enable_dnssec
+                - ioc_filtering
+                title: ResolverSettingsResponse
+                type: object
+          description: Effective resolver settings for the caller's tenant.
+      summary: Update the caller tenant's resolver settings and bump the config version.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/zones:
     get:
       description: "\nReturns:\n    JSON response with list of zones and meta."
@@ -1125,6 +1257,11 @@ paths:
             schema:
               description: Create zone request DTO.
               properties:
+                allowed_teams:
+                  items:
+                    type: string
+                  title: Allowed Teams
+                  type: array
                 description:
                   anyOf:
                   - type: string
@@ -1148,6 +1285,11 @@ paths:
               schema:
                 description: Zone response DTO.
                 properties:
+                  allowed_teams:
+                    items:
+                      type: string
+                    title: Allowed Teams
+                    type: array
                   created_at:
                     title: Created At
                     type: string
@@ -1228,6 +1370,11 @@ paths:
               schema:
                 description: Zone response DTO.
                 properties:
+                  allowed_teams:
+                    items:
+                      type: string
+                    title: Allowed Teams
+                    type: array
                   created_at:
                     title: Created At
                     type: string
@@ -1273,6 +1420,13 @@ paths:
             schema:
               description: Update zone request DTO.
               properties:
+                allowed_teams:
+                  anyOf:
+                  - items:
+                      type: string
+                    type: array
+                  - type: 'null'
+                  title: Allowed Teams
                 description:
                   anyOf:
                   - type: string
@@ -1297,6 +1451,11 @@ paths:
               schema:
                 description: Zone response DTO.
                 properties:
+                  allowed_teams:
+                    items:
+                      type: string
+                    title: Allowed Teams
+                    type: array
                   created_at:
                     title: Created At
                     type: string

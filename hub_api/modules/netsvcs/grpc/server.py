@@ -794,6 +794,7 @@ class ManagerServicer(manager_pb2_grpc.ManagerServiceServicer):
                 id=zone.id,  # M5: Zone ID now populated from DTO
                 name=zone.name,
                 visibility=zone.visibility,
+                allowed_teams=list(zone.allowed_teams),
                 records=[
                     manager_pb2.DNSRecord(
                         name=rec.name,

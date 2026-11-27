@@ -15,6 +15,8 @@ from typing import Any
 
 import structlog
 
+from hub_api.tenancy import SYSTEM_TENANT
+
 from . import host_checks
 from .core import ScanFinding, ScanSeverity, ScanType
 from .host_checks import CheckIssue, CheckNotApplicable
@@ -331,8 +333,9 @@ COMPLIANCE_CHECKS: list[tuple[str, str, str, _CheckFn]] = [
     ),
 ]
 
-#: Tenant under which scheduled (global) threat feeds are stored by SecurityFeedsManager.
-GLOBAL_FEED_TENANT = "00000000-0000-0000-0000-000000000000"
+#: Tenant under which scheduled (global) threat feeds are stored: the reserved
+#: operator-plane ``system`` tenant (read-only to customer tenants).
+GLOBAL_FEED_TENANT = SYSTEM_TENANT
 
 THREAT_LOG_FILES = [
     "/var/log/auth.log",
