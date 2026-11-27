@@ -111,7 +111,7 @@ async def test_schedule_feed_updates_loop_success_then_error_then_cancelled(
 ) -> None:
     """_schedule_feed_updates() sleeps after success, retries after error, breaks on cancel."""
     manager = SecurityFeedsManager(mock_db)
-    manager.update_feed = AsyncMock(
+    manager.update_global_feed = AsyncMock(
         side_effect=[None, RuntimeError("transient failure"), asyncio.CancelledError()]
     )
 
@@ -121,7 +121,7 @@ async def test_schedule_feed_updates_loop_success_then_error_then_cancelled(
     ) as mock_sleep:
         await manager._schedule_feed_updates(FeedSource.BLACKWEB)
 
-    assert manager.update_feed.call_count == 3
+    assert manager.update_global_feed.call_count == 3
     # Normal interval sleep after success, then error-path sleep(300)
     mock_sleep.assert_any_call(300)
 

@@ -206,6 +206,7 @@ async fn telemetry_pipeline_emits_logs_metrics_and_histograms() {
         db,
         jwt_verifier: None,
         auth_enabled: false,
+        limiter: testserver_core::TestLimiter::new(10),
     };
     let app = testserver::http_api::router(state, std::collections::HashSet::new());
     let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")

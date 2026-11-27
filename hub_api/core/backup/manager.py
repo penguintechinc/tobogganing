@@ -1,23 +1,25 @@
 """Database backup manager for local and S3 storage."""
+
 from __future__ import annotations
 
 import gzip
 import hashlib
 import json
-import logging
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 import structlog
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import insert as sa_insert
 
 from .crypto import decrypt_file, encrypt_file
 from .s3 import S3Config, S3Manager
 
 logger = structlog.get_logger()
+
+_SCHEDULABLE_BACKUP_OPTIONS = frozenset({"compress", "encrypt", "upload_to_s3"})
 
 # Strict allowlist pattern for backup names: alphanumeric, dots, hyphens, underscores
 VALID_BACKUP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -40,9 +42,18 @@ def _validate_backup_name(backup_name: str) -> None:
         raise ValueError("Backup name cannot contain '..' or start with '/'")
 
     if not VALID_BACKUP_NAME_PATTERN.match(backup_name):
-        raise ValueError(
-            "Backup name must contain only alphanumeric, dots, hyphens, underscores"
-        )
+        raise ValueError("Backup name must contain only alphanumeric, dots, hyphens, underscores")
+
+
+def _validate_tenant_id(tenant_id: str) -> None:
+    """Validate a tenant ID used in backup paths and S3 prefixes.
+
+    Applies the backup-name allowlist and rejects a leading ``_``, which is reserved
+    for the whole-DB ``_global`` S3 prefix so a tenant can never alias it.
+    """
+    _validate_backup_name(tenant_id)
+    if tenant_id.startswith("_"):
+        raise ValueError("Tenant ID cannot start with '_' (reserved prefix)")
 
 
 def _validate_path_in_directory(file_path: Path, base_dir: Path) -> Path:
@@ -165,7 +176,7 @@ class BackupManager:
 
             # Build path with tenant isolation if provided
             if tenant_id:
-                _validate_backup_name(tenant_id)  # Validate tenant_id too
+                _validate_tenant_id(tenant_id)  # Validate tenant_id too
                 backup_file = self.backup_dir / tenant_id / f"{backup_name}{ext}"
                 backup_file.parent.mkdir(parents=True, exist_ok=True)
             else:
@@ -217,12 +228,15 @@ class BackupManager:
                         # Whole-DB backup: select all rows using first column != None as condition
                         # (get an always-true condition for unconditional select)
                         if hasattr(table, "id"):
-                            rows = await self.db(table.id != None).select()  # noqa: E712
-                        elif table_name in self.db.tables and len(self.db.tables[table_name].c.keys()) > 0:
+                            rows = await self.db(table.id != None).select()  # noqa: E711
+                        elif (
+                            table_name in self.db.tables
+                            and len(self.db.tables[table_name].c.keys()) > 0
+                        ):
                             # Use first column if id doesn't exist
                             first_col_name = list(self.db.tables[table_name].c.keys())[0]
                             first_col = getattr(table, first_col_name)
-                            rows = await self.db(first_col != None).select()  # noqa: E712
+                            rows = await self.db(first_col != None).select()  # noqa: E711
                         else:
                             # Fallback: skip table if we can't construct a select
                             logger.warning("cannot_select_table", table_name=table_name)
@@ -265,12 +279,12 @@ class BackupManager:
 
             # Upload to S3 if enabled
             s3_info: dict[str, Any] | None = None
-            should_upload_s3 = (
-                upload_to_s3 if upload_to_s3 is not None else self.s3_config.enabled
-            )
+            should_upload_s3 = upload_to_s3 if upload_to_s3 is not None else self.s3_config.enabled
 
             if should_upload_s3 and self.s3_manager:
-                s3_info = self.s3_manager.upload_backup(backup_file, backup_name)
+                s3_info = self.s3_manager.upload_backup(
+                    backup_file, backup_name, tenant_id=tenant_id
+                )
 
             # Create metadata
             metadata: dict[str, Any] = {
@@ -293,7 +307,7 @@ class BackupManager:
                 json.dump(metadata, f, indent=2)
 
             if s3_info and self.s3_manager:
-                self.s3_manager.upload_metadata(metadata_file, backup_name)
+                self.s3_manager.upload_metadata(metadata_file, backup_name, tenant_id=tenant_id)
 
             logger.info(
                 "backup_created",
@@ -318,6 +332,7 @@ class BackupManager:
         verify_checksum: bool = True,
         from_s3: bool = False,
         tenant_id: str | None = None,
+        allow_scope_mismatch: bool = False,
     ) -> dict[str, Any]:
         """
         Restore database from backup.
@@ -329,6 +344,8 @@ class BackupManager:
             verify_checksum: Whether to verify integrity
             from_s3: Whether to download from S3 first
             tenant_id: Tenant ID for multi-tenant isolation (validates authorization; fail-closed)
+            allow_scope_mismatch: Explicit override to restore a backup whose declared
+                scope is not ``tenant:{tenant_id}`` (foreign rows are still dropped)
 
         Returns:
             Restore statistics dict
@@ -339,10 +356,12 @@ class BackupManager:
         try:
             # Validate tenant_id format up front (used by both S3 and local paths)
             if tenant_id:
-                _validate_backup_name(tenant_id)
+                _validate_tenant_id(tenant_id)
 
             # Handle S3 download
             if from_s3 and self.s3_manager:
+                if tenant_id and not self.s3_manager.key_belongs_to_tenant(backup_path, tenant_id):
+                    raise ValueError("S3 key is outside the caller's tenant prefix")
                 backup_file = self.s3_manager.download_backup(backup_path)
                 # S3 restores have no local tenant directory to gate on; ownership
                 # is enforced at the row level below (foreign-tenant rows dropped).
@@ -391,10 +410,10 @@ class BackupManager:
             if "metadata" not in backup_data or "data" not in backup_data:
                 raise ValueError("Invalid backup format")
 
-            # Scope check (informational only). The backup's declared scope lives
-            # inside the same untrusted file as the data, so it is NOT the security
-            # boundary — row-level tenant enforcement below is. We log a mismatch so
-            # a tenant restoring a whole_db backup is visible in the audit trail.
+            # Scope guard: refuse a tenant restore of a file not declared for this
+            # tenant (the wrong file would otherwise wipe the tenant's tables). The
+            # scope lives in the same untrusted file, so row-level enforcement below
+            # stays the security boundary; this guard protects against operator error.
             if tenant_id:
                 backup_scope = backup_data.get("metadata", {}).get("scope", "")
                 if backup_scope != f"tenant:{tenant_id}":
@@ -402,7 +421,13 @@ class BackupManager:
                         "backup_scope_mismatch",
                         tenant_id=tenant_id,
                         backup_scope=backup_scope,
+                        overridden=allow_scope_mismatch,
                     )
+                    if not allow_scope_mismatch:
+                        raise ValueError(
+                            f"Backup scope {backup_scope!r} does not match tenant:{tenant_id}; "
+                            "pass allow_scope_mismatch=True to override"
+                        )
 
             # Restore
             restore_stats: dict[str, Any] = {
@@ -434,19 +459,28 @@ class BackupManager:
                                 tenant_id=tenant_id,
                             )
                             continue
-                        # Delete only this tenant's rows before re-inserting them.
-                        tenant_field = getattr(table, tenant_column)
-                        await self.db(tenant_field == tenant_id).delete()
+                        rows_restored = await self._restore_tenant_table(
+                            table_name, tenant_column, tenant_id, table_data, restore_stats
+                        )
+                        restore_stats["tables_restored"].append(
+                            {"name": table_name, "rows": rows_restored}
+                        )
+                        restore_stats["total_rows_restored"] += rows_restored
+                        logger.info("restored_rows", table_name=table_name, rows=rows_restored)
+                        continue
                     else:
                         tenant_column = None
                         # Whole-DB restore: delete all rows using first column != None as condition
                         if hasattr(table, "id"):
-                            await self.db(table.id != None).delete()  # noqa: E712
-                        elif table_name in self.db.tables and len(self.db.tables[table_name].c.keys()) > 0:
+                            await self.db(table.id != None).delete()  # noqa: E711
+                        elif (
+                            table_name in self.db.tables
+                            and len(self.db.tables[table_name].c.keys()) > 0
+                        ):
                             # Use first column if id doesn't exist
                             first_col_name = list(self.db.tables[table_name].c.keys())[0]
                             first_col = getattr(table, first_col_name)
-                            await self.db(first_col != None).delete()  # noqa: E712
+                            await self.db(first_col != None).delete()  # noqa: E711
                         else:
                             logger.warning("cannot_delete_table", table_name=table_name)
                             continue
@@ -496,6 +530,55 @@ class BackupManager:
             logger.error("restore_failed", error=str(e))
             raise
 
+    @staticmethod
+    def _coerce_datetimes(row_data: dict[str, Any]) -> dict[str, Any]:
+        """Convert ISO datetime strings in ``*_at`` fields back to datetime objects.
+
+        Non-parseable values are kept as-is so the insert surfaces any real error.
+        """
+        for field, value in list(row_data.items()):
+            if isinstance(value, str) and field.endswith("_at"):
+                try:
+                    row_data[field] = datetime.fromisoformat(value)
+                except (ValueError, TypeError):
+                    pass
+        return row_data
+
+    async def _restore_tenant_table(
+        self,
+        table_name: str,
+        tenant_column: str,
+        tenant_id: str,
+        table_data: list[dict[str, Any]],
+        restore_stats: dict[str, Any],
+    ) -> int:
+        """Atomically replace one tenant's rows in a table from backup data.
+
+        Filters rows to the caller's tenant first; if none match, the table is left
+        untouched. Otherwise delete + insert run in one transaction, so a failure
+        mid-insert rolls back and never leaves the tenant's table empty.
+        """
+        matching: list[dict[str, Any]] = []
+        for row_data in table_data:
+            if str(row_data.get(tenant_column)) != str(tenant_id):
+                restore_stats["rows_skipped_foreign_tenant"] += 1
+                continue
+            matching.append(self._coerce_datetimes(dict(row_data)))
+
+        if not matching:
+            logger.warning(
+                "tenant_restore_no_matching_rows",
+                table_name=table_name,
+                tenant_id=tenant_id,
+            )
+            return 0
+
+        sa_table = self.db.tables[table_name]
+        async with self.db.engine.begin() as conn:
+            await conn.execute(sa_delete(sa_table).where(sa_table.c[tenant_column] == tenant_id))
+            await conn.execute(sa_insert(sa_table), matching)
+        return len(matching)
+
     def list_backups(
         self, include_s3: bool = True, tenant_id: str | None = None
     ) -> list[dict[str, Any]]:
@@ -515,7 +598,7 @@ class BackupManager:
         backups: list[dict[str, Any]] = []
 
         if tenant_id:
-            _validate_backup_name(tenant_id)
+            _validate_tenant_id(tenant_id)
             backup_search_dir = self.backup_dir / tenant_id
         else:
             backup_search_dir = self.backup_dir
@@ -536,10 +619,12 @@ class BackupManager:
 
         # S3 backups
         if include_s3 and self.s3_manager:
-            s3_backups = self.s3_manager.list_backups()
+            s3_backups = self.s3_manager.list_backups(tenant_id=tenant_id)
             for s3_backup in s3_backups:
                 s3_backup["storage_location"] = "s3"
-                s3_metadata = self.s3_manager.get_metadata(s3_backup["backup_name"])
+                s3_metadata = self.s3_manager.get_metadata(
+                    s3_backup["backup_name"], tenant_id=tenant_id
+                )
                 if s3_metadata:
                     s3_metadata.update(s3_backup)
                     backups.append(s3_metadata)
@@ -589,10 +674,12 @@ class BackupManager:
         _validate_backup_name(backup_name)
 
         if from_s3 and self.s3_manager:
-            return self.s3_manager.delete_backup(backup_name)
+            if tenant_id:
+                _validate_tenant_id(tenant_id)
+            return self.s3_manager.delete_backup(backup_name, tenant_id=tenant_id)
 
         if tenant_id:
-            _validate_backup_name(tenant_id)
+            _validate_tenant_id(tenant_id)
             delete_dir = self.backup_dir / tenant_id
         else:
             delete_dir = self.backup_dir
@@ -622,7 +709,9 @@ class BackupManager:
                             meta_file.unlink()
                             logger.info("deleted_meta_file", meta_file=str(meta_file))
                 except ValueError as e:
-                    logger.error("delete_failed_path_validation", backup_file=str(backup_file), error=str(e))
+                    logger.error(
+                        "delete_failed_path_validation", backup_file=str(backup_file), error=str(e)
+                    )
                 except Exception as e:
                     logger.error("delete_failed", backup_file=str(backup_file), error=str(e))
 
@@ -639,20 +728,58 @@ class BackupManager:
 
         return deleted
 
-    def schedule_backup(self, cron_expression: str, **backup_kwargs: Any) -> str:
-        """Schedule automatic backups.
+    async def schedule_backup(
+        self, tenant_id: str, interval_seconds: int, **backup_kwargs: Any
+    ) -> str:
+        """Register a recurring tenant-scoped backup on the hub scheduler.
+
+        Persists a ``scheduled_jobs`` row (module ``core_backup``) that the
+        scheduler sweep dispatches to ``run_scheduled_backup``.
 
         Args:
-            cron_expression: Cron expression
-            **backup_kwargs: create_backup arguments
+            tenant_id: Tenant whose data is backed up (required).
+            interval_seconds: Seconds between runs (scheduler minimum 30).
+            **backup_kwargs: create_backup options (compress, encrypt, upload_to_s3).
 
         Returns:
-            Schedule ID
+            Scheduled job ID.
+
+        Raises:
+            ValueError: Missing tenant, unsupported option, or secret in payload.
         """
-        # Placeholder for scheduler integration
-        schedule_id = f"schedule_{datetime.now(timezone.utc).timestamp()}"
-        logger.info("scheduled_backup", schedule_id=schedule_id, cron_expression=cron_expression)
-        return schedule_id
+        from hub_api.core.backup.tasks import (
+            BACKUP_JOB_TYPE,
+            BACKUP_MODULE,
+            register_backup_jobs,
+        )
+        from hub_api.scheduler.job_manager import JobManager
+
+        if not tenant_id:
+            raise ValueError("tenant_id is required for scheduled backups")
+        if "encryption_key" in backup_kwargs:
+            raise ValueError(
+                "encryption_key must not be persisted in a scheduled job; "
+                "configure BACKUP_ENCRYPTION_KEY for the worker instead"
+            )
+        unknown = set(backup_kwargs) - _SCHEDULABLE_BACKUP_OPTIONS
+        if unknown:
+            raise ValueError(f"unsupported scheduled backup options: {sorted(unknown)}")
+
+        register_backup_jobs()
+        job = await JobManager(self.db).create_job(
+            tenant=tenant_id,
+            module=BACKUP_MODULE,
+            job_type=BACKUP_JOB_TYPE,
+            payload=dict(backup_kwargs),
+            interval_seconds=interval_seconds,
+        )
+        logger.info(
+            "scheduled_backup",
+            job_id=str(job["id"])[:8],
+            tenant=tenant_id,
+            interval_seconds=interval_seconds,
+        )
+        return str(job["id"])
 
     def _sanitize_db_uri(self) -> str:
         """Remove sensitive info from database URI."""

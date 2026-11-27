@@ -194,14 +194,70 @@ class TestCategorizeDomainTask:
             categorize_domain("example.com", "tenant-a")  # must not raise
 
 
-class TestRefreshCategoriesDaily:
-    """Covers refresh_categories_daily's inner async refresh + outer error handling."""
+def _source(name: str) -> MagicMock:
+    """Build a fake CategorySource with only a name."""
+    src = MagicMock()
+    src.name = name
+    return src
 
-    def test_refresh_runs_successfully(self) -> None:
-        """A normal run constructs the DB/cache/ingester and completes without error."""
+
+def _stats(scanned: int, stored: int = 0, skipped: int = 0) -> MagicMock:
+    """Build fake IngestStats."""
+    return MagicMock(scanned=scanned, stored=stored, skipped=skipped)
+
+
+class TestRunCategoryRefresh:
+    """Covers _run_category_refresh outcome accounting and failure paths."""
+
+    @pytest.mark.asyncio
+    async def test_all_sources_succeed(self) -> None:
+        """Every source ingesting entries yields real totals and no failures."""
+        from hub_api.modules.sase.security.swg.tasks import _run_category_refresh
+
+        ingester = MagicMock()
+        ingester.ingest_source = AsyncMock(side_effect=[_stats(5, 4, 1), _stats(3, 3)])
+        result = await _run_category_refresh(ingester, [_source("a"), _source("b")])
+        assert result == {"sources": 2, "failed": [], "scanned": 8, "stored": 7, "skipped": 1}
+
+    @pytest.mark.asyncio
+    async def test_partial_failure_reported(self) -> None:
+        """A source scanning nothing is reported as failed without failing the run."""
+        from hub_api.modules.sase.security.swg.tasks import _run_category_refresh
+
+        ingester = MagicMock()
+        ingester.ingest_source = AsyncMock(side_effect=[_stats(0), _stats(2, 2)])
+        result = await _run_category_refresh(ingester, [_source("dead"), _source("ok")])
+        assert result["failed"] == ["dead"]
+        assert result["stored"] == 2
+
+    @pytest.mark.asyncio
+    async def test_all_sources_fail_raises(self) -> None:
+        """When every source ingests nothing, the run raises instead of logging success."""
+        from hub_api.modules.sase.security.swg.tasks import _run_category_refresh
+
+        ingester = MagicMock()
+        ingester.ingest_source = AsyncMock(return_value=_stats(0))
+        with pytest.raises(RuntimeError, match="all 2 sources failed"):
+            await _run_category_refresh(ingester, [_source("a"), _source("b")])
+
+    @pytest.mark.asyncio
+    async def test_no_sources_raises(self) -> None:
+        """An empty source list is a configuration error, not a success."""
+        from hub_api.modules.sase.security.swg.tasks import _run_category_refresh
+
+        with pytest.raises(RuntimeError, match="no category sources"):
+            await _run_category_refresh(MagicMock(), [])
+
+
+class TestRefreshCategoriesDaily:
+    """Covers refresh_categories_daily wiring to the real source registry."""
+
+    def test_refresh_ingests_registered_sources_and_closes_session(self) -> None:
+        """A run ingests every CATEGORY_SOURCES entry and closes the HTTP session."""
+        from hub_api.modules.sase.security.swg.sources import CATEGORY_SOURCES
+
         mock_db = MagicMock()
         mock_cache = MagicMock()
-
         with (
             patch("hub_api.config.Config", return_value=MagicMock()),
             patch("hub_api.config.build_db_uri", return_value="sqlite:///:memory:"),
@@ -209,11 +265,25 @@ class TestRefreshCategoriesDaily:
             patch("hub_api.cache.CacheClient", return_value=mock_cache),
             patch("hub_api.modules.sase.security.swg.ingest.CategoryIngestManager") as MockIngester,
         ):
+            inst = MockIngester.return_value
+            inst.ingest_source = AsyncMock(return_value=_stats(1, 1))
+            inst.session = MagicMock(close=AsyncMock())
             refresh_categories_daily()
 
         MockIngester.assert_called_once_with(mock_db, mock_cache)
+        assert inst.ingest_source.await_count == len(CATEGORY_SOURCES) > 0
+        inst.session.close.assert_awaited_once()
 
-    def test_refresh_outer_exception_is_swallowed(self) -> None:
-        """A failure inside asyncio.run() for the refresh coroutine is caught."""
-        with patch(f"{TASKS_MOD}.asyncio.run", side_effect=RuntimeError("boom")):
-            refresh_categories_daily()  # must not raise
+    def test_refresh_all_failed_propagates(self) -> None:
+        """All sources failing propagates so the scheduler records a failed run."""
+        with (
+            patch("hub_api.config.Config", return_value=MagicMock()),
+            patch("hub_api.config.build_db_uri", return_value="sqlite:///:memory:"),
+            patch("penguin_dal.AsyncDB"),
+            patch("hub_api.cache.CacheClient"),
+            patch("hub_api.modules.sase.security.swg.ingest.CategoryIngestManager") as MockIngester,
+        ):
+            MockIngester.return_value.ingest_source = AsyncMock(return_value=_stats(0))
+            MockIngester.return_value.session = None
+            with pytest.raises(RuntimeError, match="sources failed"):
+                refresh_categories_daily()

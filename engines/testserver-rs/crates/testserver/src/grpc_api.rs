@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 use std::time::Instant;
-use testserver_core::{check_api_version, validation, ApiError};
+use testserver_core::{check_api_version, validation, ApiError, TestLimiter};
 use testserver_db::SwitchableStore;
 use tonic::{Request, Response, Status};
 
@@ -33,11 +33,14 @@ pub struct TestServiceImpl {
     /// is a method-body change, not a constructor signature change.
     #[allow(dead_code)]
     db: Arc<SwitchableStore>,
+    /// Shared with the REST surface — one global `MAX_CONCURRENT_TESTS` cap.
+    limiter: TestLimiter,
 }
 
 impl TestServiceImpl {
-    pub fn into_server(db: Arc<SwitchableStore>) -> TestServiceServer<Self> {
-        TestServiceServer::new(Self { db })
+    /// Wraps the service in its tonic server, sharing `limiter` with REST.
+    pub fn into_server(db: Arc<SwitchableStore>, limiter: TestLimiter) -> TestServiceServer<Self> {
+        TestServiceServer::new(Self { db, limiter })
     }
 }
 
@@ -87,6 +90,7 @@ impl TestService for TestServiceImpl {
             count: req.count as i64,
         };
 
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_http(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -140,6 +144,7 @@ impl TestService for TestServiceImpl {
             count: req.count as i64,
         };
 
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_tcp(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -196,6 +201,7 @@ impl TestService for TestServiceImpl {
             query: validation::sanitize_string(&req.query, validation::MAX_QUERY_LENGTH),
         };
 
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_udp(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -243,6 +249,7 @@ impl TestService for TestServiceImpl {
             timeout: req.timeout as i64,
         };
 
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_icmp(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -282,6 +289,7 @@ impl TestService for TestServiceImpl {
             target: validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH),
             timeout: req.timeout as i64,
         };
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_traceroute(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -311,6 +319,7 @@ impl TestService for TestServiceImpl {
             port: req.port as i64,
             timeout: req.timeout as i64,
         };
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_http_trace(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -340,6 +349,7 @@ impl TestService for TestServiceImpl {
             port: req.port as i64,
             timeout: req.timeout as i64,
         };
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_tcp_trace(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -369,6 +379,7 @@ impl TestService for TestServiceImpl {
             port: req.port as i64,
             timeout: req.timeout as i64,
         };
+        let _permit = self.limiter.try_acquire().map_err(to_status)?;
         let probe_start = Instant::now();
         let outcome = testserver_protocols::test_udp_trace(inner).await;
         let elapsed = probe_start.elapsed().as_secs_f64();
@@ -410,6 +421,7 @@ mod tests {
     async fn health_rejects_unknown_api_version() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let resp = svc
             .health(Request::new(HealthRequest {
@@ -425,6 +437,7 @@ mod tests {
     async fn health_accepts_v1() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let resp = svc
             .health(Request::new(HealthRequest {
@@ -448,6 +461,7 @@ mod tests {
     async fn run_http_test_rejects_unknown_api_version() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_http_test(Request::new(PbHttpTestRequest {
@@ -465,6 +479,7 @@ mod tests {
     async fn run_http_test_rejects_invalid_target() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_http_test(Request::new(PbHttpTestRequest {
@@ -482,6 +497,7 @@ mod tests {
     async fn run_tcp_test_rejects_invalid_protocol() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_tcp_test(Request::new(PbTcpTestRequest {
@@ -510,6 +526,7 @@ mod tests {
 
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let resp = svc
             .run_tcp_test(Request::new(PbTcpTestRequest {
@@ -525,10 +542,44 @@ mod tests {
         assert!(resp.into_inner().success);
     }
 
+    /// The shared limiter bounds the real probe path: with every slot held,
+    /// a valid request is rejected RESOURCE_EXHAUSTED; once released it runs.
+    #[tokio::test]
+    async fn run_tcp_test_rejected_when_limit_saturated() {
+        let ip = local_test_ip();
+        let listener = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { while listener.accept().await.is_ok() {} });
+
+        let limiter = TestLimiter::new(1);
+        let svc = TestServiceImpl {
+            db: SwitchableStore::new(),
+            limiter: limiter.clone(),
+        };
+        let req = || {
+            Request::new(PbTcpTestRequest {
+                api_version: "v1".to_string(),
+                target: ip.to_string(),
+                protocol: "raw".to_string(),
+                port: addr.port() as i32,
+                timeout: 3,
+                ..Default::default()
+            })
+        };
+        let held = limiter.try_acquire().expect("take the only slot");
+        let err = svc.run_tcp_test(req()).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::ResourceExhausted);
+        drop(held);
+        let ok = svc.run_tcp_test(req()).await.expect("slot free again");
+        assert!(ok.into_inner().success);
+        assert_eq!(limiter.available(), 1, "permit released after probe");
+    }
+
     #[tokio::test]
     async fn run_udp_test_rejects_invalid_dns_query() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_udp_test(Request::new(PbUdpTestRequest {
@@ -551,6 +602,7 @@ mod tests {
         // instead of falling through to a real ping subprocess.
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_icmp_test(Request::new(PbIcmpTestRequest {
@@ -569,6 +621,7 @@ mod tests {
     async fn run_traceroute_rejects_invalid_target() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_traceroute(Request::new(PbTracerouteRequest {
@@ -585,6 +638,7 @@ mod tests {
     async fn run_http_trace_rejects_invalid_port() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_http_trace(Request::new(PbHttpTraceRequest {
@@ -613,6 +667,7 @@ mod tests {
 
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let resp = svc
             .run_tcp_trace(Request::new(PbTcpTraceRequest {
@@ -630,6 +685,7 @@ mod tests {
     async fn run_udp_trace_rejects_invalid_target() {
         let svc = TestServiceImpl {
             db: SwitchableStore::new(),
+            limiter: TestLimiter::new(10),
         };
         let err = svc
             .run_udp_trace(Request::new(PbUdpTraceRequest {

@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
-use testserver_core::{validation, ApiError, AppConfig, AuthUser, JwtVerifier};
+use testserver_core::{validation, ApiError, AppConfig, AuthUser, JwtVerifier, TestLimiter};
 use testserver_db::{AuthDb, NewTestResult, SwitchableStore, TestResultStore};
 use testserver_protocols::{
     http::{HttpTestRequest, HttpTestResult},
@@ -33,11 +33,14 @@ pub struct AppState {
     pub db: Arc<SwitchableStore>,
     pub jwt_verifier: Option<JwtVerifier>,
     pub auth_enabled: bool,
+    /// Global probe-concurrency cap, shared with the gRPC surface.
+    pub limiter: TestLimiter,
 }
 
 impl AppState {
-    pub fn new(db: Arc<SwitchableStore>, cfg: &AppConfig) -> Self {
+    pub fn new(db: Arc<SwitchableStore>, cfg: &AppConfig, limiter: TestLimiter) -> Self {
         Self {
+            limiter,
             db,
             jwt_verifier: cfg.jwt_verifier.clone(),
             auth_enabled: cfg.auth_enabled,
@@ -346,6 +349,7 @@ async fn http_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_http(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -400,6 +404,7 @@ async fn tcp_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_tcp(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -454,6 +459,7 @@ async fn udp_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_udp(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -512,6 +518,7 @@ async fn icmp_test_handler(
 
     let target = req.target.clone();
     let protocol = req.protocol.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_icmp(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -583,6 +590,7 @@ async fn traceroute_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_traceroute(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -620,6 +628,7 @@ async fn http_trace_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_http_trace(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -657,6 +666,7 @@ async fn tcp_trace_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_tcp_trace(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -694,6 +704,7 @@ async fn udp_trace_handler(
     req.target = validation::sanitize_string(&req.target, validation::MAX_TARGET_LENGTH);
 
     let target = req.target.clone();
+    let _permit = state.limiter.try_acquire()?;
     let probe_start = Instant::now();
     let outcome = testserver_protocols::test_udp_trace(req).await;
     let probe_elapsed = probe_start.elapsed().as_secs_f64();
@@ -795,6 +806,7 @@ mod tests {
                     .expect("a freshly generated EC public key must build a verifier")
             }),
             auth_enabled,
+            limiter: TestLimiter::new(10),
         }
     }
 
@@ -1070,6 +1082,7 @@ mod tests {
                     .expect("a freshly generated EC public key must build a verifier"),
             ),
             auth_enabled: true,
+            limiter: TestLimiter::new(10),
         });
 
         let resp = app
@@ -1096,6 +1109,7 @@ mod tests {
                     .expect("a freshly generated EC public key must build a verifier"),
             ),
             auth_enabled: true,
+            limiter: TestLimiter::new(10),
         });
         let resp = app
             .oneshot(post_json(
@@ -1338,6 +1352,7 @@ mod tests {
             db,
             jwt_verifier: None,
             auth_enabled: false,
+            limiter: TestLimiter::new(10),
         });
 
         let body = serde_json::json!({

@@ -49,7 +49,8 @@ pub async fn serve(
         "config loaded"
     );
 
-    let state = crate::http_api::AppState::new(db.clone(), cfg);
+    let limiter = testserver_core::TestLimiter::new(cfg.max_concurrent_tests);
+    let state = crate::http_api::AppState::new(db.clone(), cfg, limiter.clone());
     let app = crate::http_api::router(state, cfg.allowed_origins.clone());
 
     let http_addr: SocketAddr = ([0, 0, 0, 0], cfg.http_port).into();
@@ -71,7 +72,10 @@ pub async fn serve(
     let grpc_shutdown = shutdown.clone();
     let grpc_server = async {
         tonic::transport::Server::builder()
-            .add_service(crate::grpc_api::TestServiceImpl::into_server(db.clone()))
+            .add_service(crate::grpc_api::TestServiceImpl::into_server(
+                db.clone(),
+                limiter.clone(),
+            ))
             .serve_with_shutdown(grpc_addr, async move { grpc_shutdown.cancelled().await })
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)

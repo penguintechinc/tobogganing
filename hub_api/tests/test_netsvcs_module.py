@@ -17,10 +17,12 @@ async def test_netsvcs_module_returns_valid_contract() -> None:
     contract = netsvcs_module()
 
     assert contract.name == "netsvcs"
-    assert len(contract.blueprints) == 3  # zones, dns_servers, analytics blueprints
-    assert len(contract.nav) == 3  # Zones, DNS Servers, Analytics nav entries
-    assert len(contract.flags) == 6  # dns, zones, dns_servers, analytics, dhcp, ntp
-    assert len(contract.entitlements) == 6  # same set, per-entitlement
+    assert len(contract.blueprints) == 4  # zones, dns_servers, analytics, resolver_settings
+    assert len(contract.nav) == 4  # Zones, DNS Servers, Analytics, Resolver Settings
+    assert (
+        len(contract.flags) == 7
+    )  # dns, zones, dns_servers, analytics, resolver_settings, dhcp, ntp
+    assert len(contract.entitlements) == 7  # same set, per-entitlement
     assert len(contract.migrations) == 1  # 0025
     assert contract.health is None
 
@@ -29,10 +31,11 @@ async def test_netsvcs_module_returns_valid_contract() -> None:
     assert "netsvcs_zones" in blueprint_names
     assert "netsvcs_dns_servers" in blueprint_names
     assert "netsvcs_analytics" in blueprint_names
+    assert "netsvcs_resolver_settings" in blueprint_names
 
     # Verify nav entries (portal sidebar slugs derive from these labels)
     nav_labels = {entry.label for entry in contract.nav}
-    assert nav_labels == {"Zones", "DNS Servers", "Analytics"}
+    assert nav_labels == {"Zones", "DNS Servers", "Analytics", "Resolver Settings"}
 
     # Verify flags
     expected_flags = {
@@ -40,6 +43,7 @@ async def test_netsvcs_module_returns_valid_contract() -> None:
         "tobogganing.netsvcs.zones",
         "tobogganing.netsvcs.dns_servers",
         "tobogganing.netsvcs.analytics",
+        "tobogganing.netsvcs.resolver_settings",
         "tobogganing.netsvcs.dhcp",
         "tobogganing.netsvcs.ntp",
     }
@@ -51,6 +55,7 @@ async def test_netsvcs_module_returns_valid_contract() -> None:
         "netsvcs.zones",
         "netsvcs.dns_servers",
         "netsvcs.analytics",
+        "netsvcs.resolver_settings",
         "netsvcs.dhcp",
         "netsvcs.ntp",
     }
@@ -78,6 +83,7 @@ async def test_netsvcs_blueprints_mount_at_correct_urls(app: Quart) -> None:
         "netsvcs_zones": "/api/v1/netsvcs/zones",
         "netsvcs_dns_servers": "/api/v1/netsvcs/dns-servers",
         "netsvcs_analytics": "/api/v1/netsvcs/analytics",
+        "netsvcs_resolver_settings": "/api/v1/netsvcs/resolver-settings",
     }
 
     for bp in contract.blueprints:

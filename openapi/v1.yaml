@@ -365,6 +365,11 @@ components:
     ZoneResponse:
       description: Zone response DTO.
       properties:
+        allowed_teams:
+          items:
+            type: string
+          title: Allowed Teams
+          type: array
         created_at:
           title: Created At
           type: string
@@ -402,34 +407,28 @@ openapi: 3.1.0
 paths:
   /api/v1/auth/login:
     post:
-      description: '
-
-        Request body: {email, password, mfa_token?}
-
-        Returns:
-
-        - 200 {access_token, refresh_token, expires_in: 3600, token_type: "Bearer"}
-
-        - 200 {mfa_required: true} (no tokens) when MFA needed
-
-        - 401 {error: "Invalid credentials"} on failure
-
-        - 400 on missing fields'
+      description: "\nRequest body: {email, password, mfa_token?}\nReturns:\n- 200\
+        \ {access_token, refresh_token, expires_in: 3600, token_type: \"Bearer\"}\n\
+        \  Also sets access_token/refresh_token/csrf_token as HttpOnly (except\n \
+        \ csrf_token) cookies for the browser/portal flow \u2014 additive, the JSON\n\
+        \  body is unchanged for non-browser callers.\n- 200 {mfa_required: true}\
+        \ (no tokens, no cookies) when MFA needed\n- 401 {error: \"Invalid credentials\"\
+        } on failure\n- 400 on missing fields\n\nLogin is never CSRF-checked: it authenticates\
+        \ via credentials (email/\npassword), not an ambient cookie \u2014 it's the\
+        \ origin of the auth cookies,\nnot a consumer of them."
       operationId: post_login
       parameters: []
       responses: {}
       summary: Authenticate user by email and password.
   /api/v1/auth/logout:
     post:
-      description: '
-
-        Request body: {refresh_token}
-
-        Returns:
-
-        - 204 No Content on success
-
-        - 400 on missing fields'
+      description: "\nRequest body: {refresh_token} \u2014 optional for browser callers,\
+        \ which may\nomit the body and rely on the refresh_token cookie instead (see\n\
+        _refresh_token_from_request). Always clears the access_token/\nrefresh_token/csrf_token\
+        \ cookies, regardless of whether a valid token was\nfound (idempotent, matching\
+        \ the existing 204-even-on-unknown-token\nbehavior).\n\nReturns:\n- 204 No\
+        \ Content on success\n- 400 on missing fields\n- 403 on missing/invalid CSRF\
+        \ token (cookie-sourced refresh token only)"
       operationId: post_logout
       parameters: []
       responses: {}
@@ -461,36 +460,26 @@ paths:
       summary: Refresh JWT access token using refresh token with rotation.
   /api/v1/auth/refresh-token:
     post:
-      description: '
-
-        Request body: {refresh_token}
-
-        Returns:
-
-        - 200 {access_token, refresh_token, expires_in: 3600, token_type: "Bearer"}
-
-        - 401 on invalid/expired refresh token
-
-        - 400 on missing fields
-
-
-        Route-shadowing regression (fixed): this used to be registered at
-
-        POST /api/v1/auth/refresh, which collided with headend_bp''s machine
-
-        refresh route at the exact same path (headend_routes.py:502). Because
-
-        auth_bp is registered first in create_app(), it silently shadowed the
-
-        machine handler for every request. Moved to /refresh-token so both
-
-        user and machine refresh flows are independently reachable. The
-
-        machine path is documented in docs/architecture/headend-machine-jwt-contract.md
-
-        and consumed by live machine clients (services/hub-router (Go),
-
-        agents/node-agent (Rust)), so it keeps its original path instead.'
+      description: "\nRequest body: {refresh_token} \u2014 optional for browser callers,\
+        \ which may\nomit the body entirely and rely on the refresh_token cookie instead\
+        \ (the\ncookie is HttpOnly, so portal JS cannot read its value to put it in\
+        \ the\nbody). A body-supplied token always takes precedence (non-browser callers:\n\
+        mobile apps, CLI). When the token is sourced from the cookie, the request\n\
+        must also carry a matching X-CSRF-Token header (double-submit CSRF) \u2014\
+        \nbody-supplied tokens are exempt, mirroring the bearer-header exemption on\n\
+        the general resource API.\n\nReturns:\n- 200 {access_token, refresh_token,\
+        \ expires_in: 3600, token_type: \"Bearer\"}\n  Also rotates the access_token/refresh_token/csrf_token\
+        \ cookies for\n  browser callers.\n- 401 on invalid/expired refresh token\n\
+        - 400 on missing fields\n- 403 on missing/invalid CSRF token (cookie-sourced\
+        \ refresh token only)\n\nRoute-shadowing regression (fixed): this used to\
+        \ be registered at\nPOST /api/v1/auth/refresh, which collided with headend_bp's\
+        \ machine\nrefresh route at the exact same path (headend_routes.py:502). Because\n\
+        auth_bp is registered first in create_app(), it silently shadowed the\nmachine\
+        \ handler for every request. Moved to /refresh-token so both\nuser and machine\
+        \ refresh flows are independently reachable. The\nmachine path is documented\
+        \ in docs/architecture/headend-machine-jwt-contract.md\nand consumed by live\
+        \ machine clients (services/hub-router (Go),\nagents/node-agent (Rust)), so\
+        \ it keeps its original path instead."
       operationId: post_refresh
       parameters: []
       responses: {}
@@ -525,12 +514,17 @@ paths:
   /api/v1/certs/certificates:
     post:
       description: "\nRequires machine-JWT with certs:issue scope (or legacy enrollment\
-        \ token if flag OFF).\nUsed during node onboarding and cert renewal.\n\nRequest\
-        \ body:\n{\n    \"type\": \"client\" | \"headend\",\n    \"id\": \"node-id\"\
-        ,\n    \"name\": \"node-name\",\n    \"client_type\": \"docker\" | \"native\"\
-        \ (for client type),\n    \"san_names\": [\"dns1\", \"dns2\"] (for headend\
-        \ type)\n}\n\nReturns:\n    JSON response with certificate type and PEM-encoded\
-        \ cert/key/CA."
+        \ token if flag OFF).\nUsed during node onboarding and cert renewal. The requested\
+        \ `id` (CN) is\nbound to the authenticated caller's own tenant (and, where\
+        \ a real\nmachine-JWT subject is available, to the caller's own node) via\n\
+        `_authorize_cert_identity` \u2014 a caller cannot mint a cert naming a node\
+        \ in\nanother tenant. Headend cert SANs are derived server-side from the\n\
+        caller's own registered cluster record (`_cluster_san_names`) \u2014 body\n\
+        `san_names` is ignored and never trusted, since SAN is what TLS/mTLS peer\n\
+        identity is actually matched on.\n\nRequest body:\n{\n    \"type\": \"client\"\
+        \ | \"headend\",\n    \"id\": \"node-id\",\n    \"name\": \"node-name\",\n\
+        \    \"client_type\": \"docker\" | \"native\" (for client type)\n}\n\nReturns:\n\
+        \    JSON response with certificate type and PEM-encoded cert/key/CA."
       operationId: post_generate_certificate
       parameters: []
       responses: {}
@@ -1094,6 +1088,133 @@ paths:
       summary: Rotate DNS resolver server tokens with replay protection.
       tags:
       - netsvcs
+  /api/v1/netsvcs/resolver-settings:
+    get:
+      description: ''
+      operationId: get_get_resolver_settings
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Effective resolver settings for the caller's tenant.
+                properties:
+                  cache_enabled:
+                    title: Cache Enabled
+                    type: boolean
+                  cache_max_entries:
+                    title: Cache Max Entries
+                    type: integer
+                  cache_ttl:
+                    title: Cache Ttl
+                    type: integer
+                  enable_dnssec:
+                    title: Enable Dnssec
+                    type: boolean
+                  ioc_filtering:
+                    title: Ioc Filtering
+                    type: boolean
+                  log_queries:
+                    title: Log Queries
+                    type: boolean
+                required:
+                - cache_enabled
+                - cache_ttl
+                - cache_max_entries
+                - log_queries
+                - enable_dnssec
+                - ioc_filtering
+                title: ResolverSettingsResponse
+                type: object
+          description: Effective resolver settings for the caller's tenant.
+      summary: Return the caller tenant's effective resolver settings (defaults if
+        unset).
+      tags:
+      - netsvcs
+    put:
+      description: '
+
+        Returns 400 on an empty body or an out-of-range/mistyped value.'
+      operationId: put_put_resolver_settings
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: Partial update; omitted (null) fields keep their current
+                value.
+              properties:
+                cache_enabled:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Cache Enabled
+                cache_max_entries:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  title: Cache Max Entries
+                cache_ttl:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  title: Cache Ttl
+                enable_dnssec:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Enable Dnssec
+                ioc_filtering:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Ioc Filtering
+                log_queries:
+                  anyOf:
+                  - type: boolean
+                  - type: 'null'
+                  title: Log Queries
+              title: UpdateResolverSettingsRequest
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Effective resolver settings for the caller's tenant.
+                properties:
+                  cache_enabled:
+                    title: Cache Enabled
+                    type: boolean
+                  cache_max_entries:
+                    title: Cache Max Entries
+                    type: integer
+                  cache_ttl:
+                    title: Cache Ttl
+                    type: integer
+                  enable_dnssec:
+                    title: Enable Dnssec
+                    type: boolean
+                  ioc_filtering:
+                    title: Ioc Filtering
+                    type: boolean
+                  log_queries:
+                    title: Log Queries
+                    type: boolean
+                required:
+                - cache_enabled
+                - cache_ttl
+                - cache_max_entries
+                - log_queries
+                - enable_dnssec
+                - ioc_filtering
+                title: ResolverSettingsResponse
+                type: object
+          description: Effective resolver settings for the caller's tenant.
+      summary: Update the caller tenant's resolver settings and bump the config version.
+      tags:
+      - netsvcs
   /api/v1/netsvcs/zones:
     get:
       description: "\nReturns:\n    JSON response with list of zones and meta."
@@ -1136,6 +1257,11 @@ paths:
             schema:
               description: Create zone request DTO.
               properties:
+                allowed_teams:
+                  items:
+                    type: string
+                  title: Allowed Teams
+                  type: array
                 description:
                   anyOf:
                   - type: string
@@ -1159,6 +1285,11 @@ paths:
               schema:
                 description: Zone response DTO.
                 properties:
+                  allowed_teams:
+                    items:
+                      type: string
+                    title: Allowed Teams
+                    type: array
                   created_at:
                     title: Created At
                     type: string
@@ -1239,6 +1370,11 @@ paths:
               schema:
                 description: Zone response DTO.
                 properties:
+                  allowed_teams:
+                    items:
+                      type: string
+                    title: Allowed Teams
+                    type: array
                   created_at:
                     title: Created At
                     type: string
@@ -1284,6 +1420,13 @@ paths:
             schema:
               description: Update zone request DTO.
               properties:
+                allowed_teams:
+                  anyOf:
+                  - items:
+                      type: string
+                    type: array
+                  - type: 'null'
+                  title: Allowed Teams
                 description:
                   anyOf:
                   - type: string
@@ -1308,6 +1451,11 @@ paths:
               schema:
                 description: Zone response DTO.
                 properties:
+                  allowed_teams:
+                    items:
+                      type: string
+                    title: Allowed Teams
+                    type: array
                   created_at:
                     title: Created At
                     type: string
@@ -2694,8 +2842,12 @@ paths:
       summary: Update cluster heartbeat with client count.
   /api/v1/sdwan/status:
     get:
-      description: "\nReturns aggregate metrics for clusters and clients.\n\nReturns:\n\
-        \    JSON response with service status and metrics."
+      description: "\nReturns aggregate metrics for clusters and clients, scoped to\
+        \ the\ncaller's tenant. Requires a valid JWT with status:read scope \u2014\
+        \ this\nendpoint previously had no auth at all and hard-coded a \"default\"\
+        \ntenant (security-review finding HIGH-B), leaking cross-tenant cluster\n\
+        and client counts to unauthenticated callers.\n\nReturns:\n    JSON response\
+        \ with service status and metrics."
       operationId: get_get_status
       parameters: []
       responses: {}
@@ -3137,6 +3289,13 @@ paths:
       parameters: []
       responses: {}
       summary: Liveness probe endpoint. Returns 200 if process is running.
+  /metrics:
+    get:
+      description: ''
+      operationId: get_metrics_endpoint
+      parameters: []
+      responses: {}
+      summary: Prometheus text exposition, scraped by the hub-api ServiceMonitor.
   /openapi.json:
     get:
       description: '

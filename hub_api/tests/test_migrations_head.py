@@ -164,9 +164,15 @@ def test_alembic_migrations_cover_all_tables() -> None:
         "auto_checkin_state",
     }
 
+    # Tables created by migration 0029 (per-tenant DNS resolver settings)
+    created_by_migration_0029 = {
+        "dns_resolver_settings",
+    }
+
     # All tables covered by migrations
     all_migration_tables = (
-        created_by_existing_migrations
+        created_by_migration_0029
+        | created_by_existing_migrations
         | created_by_migration_0008
         | created_by_wpc_migrations
         | created_by_scheduler_migrations

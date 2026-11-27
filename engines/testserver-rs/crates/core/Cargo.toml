@@ -23,7 +23,7 @@ tonic = { workspace = true }
 penguin-aaa = { workspace = true }
 # Used only for validate_target's anti-DNS-rebind hostname resolution
 # (tokio::net::lookup_host) — see validation.rs.
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["net", "sync"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

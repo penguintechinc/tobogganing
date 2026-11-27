@@ -1,4 +1,5 @@
 """Security threat feeds manager."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,17 +14,19 @@ from typing import Any, Dict, List, Tuple
 import aiohttp
 import structlog
 
+from hub_api.tenancy import SYSTEM_TENANT, assert_not_system_tenant
+
 from .detection import DetectionLogger
-from .models import FeedUpdate, ThreatIndicator
 from .sources import (
     FeedSource,
-    ThreatIndicator as ThreatIndicatorData,
     ThreatType,
     build_threat_indicator,
     fetch_blackweb_domains,
     fetch_blackweb_ips,
     fetch_spamhaus_drop,
-    query_dnsbl,
+)
+from .sources import (
+    ThreatIndicator as ThreatIndicatorData,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,8 +115,8 @@ class SecurityFeedsManager:
 
         while True:
             try:
-                # Use a default tenant for system-wide feeds
-                await self.update_feed("00000000-0000-0000-0000-000000000000", source)
+                # Scheduled feeds are global: stored under the reserved system tenant.
+                await self.update_global_feed(source)
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 break
@@ -121,18 +124,32 @@ class SecurityFeedsManager:
                 logger.error(f"Error updating feed {source.value}: {e}")
                 await asyncio.sleep(300)
 
-    async def update_feed(
-        self, tenant_id: str, source: FeedSource
-    ) -> Dict[str, int]:
-        """Update a specific threat feed.
+    async def update_global_feed(self, source: FeedSource) -> Dict[str, int]:
+        """Refresh a platform-wide feed under the reserved system tenant.
+
+        The only path that writes global feed data; tenants read it via
+        lookups that include SYSTEM_TENANT but cannot write it.
+        """
+        return await self._update_feed(SYSTEM_TENANT, source)
+
+    async def update_feed(self, tenant_id: str, source: FeedSource) -> Dict[str, int]:
+        """Update a specific threat feed for one customer tenant.
 
         Args:
-            tenant_id: Tenant ID for tenant-scoping.
+            tenant_id: Tenant ID for tenant-scoping (never the system tenant).
             source: Feed source to update.
 
         Returns:
             Stats dictionary with added/updated/removed/errors counts.
+
+        Raises:
+            ReservedTenantWriteError: tenant_id is the reserved system tenant.
         """
+        assert_not_system_tenant(tenant_id)
+        return await self._update_feed(tenant_id, source)
+
+    async def _update_feed(self, tenant_id: str, source: FeedSource) -> Dict[str, int]:
+        """Fetch and store one feed for tenant_id; shared by global and tenant paths."""
         start_time = datetime.now(timezone.utc)
         stats = {"added": 0, "updated": 0, "removed": 0, "errors": 0}
 
@@ -194,8 +211,14 @@ class SecurityFeedsManager:
                     duration_seconds=duration,
                     completed_at=datetime.now(timezone.utc),
                 )
-            except Exception:
-                pass
+            except Exception as status_err:
+                slog.warning(
+                    "feed_update_failure_status_write_failed",
+                    source=source.value,
+                    update_id=update_id,
+                    error=str(status_err),
+                    tenant_id=tenant_id,
+                )
 
             slog.error(
                 "feed_update_failed",
@@ -312,9 +335,7 @@ class SecurityFeedsManager:
         logger.info("DNSBL configured for real-time lookups only")
         return {"added": 0, "updated": 0, "removed": 0, "errors": 0}
 
-    async def _store_indicator(
-        self, tenant_id: str, indicator: ThreatIndicatorData
-    ) -> bool:
+    async def _store_indicator(self, tenant_id: str, indicator: ThreatIndicatorData) -> bool:
         """Store threat indicator in database.
 
         Args:
@@ -391,7 +412,7 @@ class SecurityFeedsManager:
 
         query = (
             (self.db.threat_indicators.value == value)
-            & (self.db.threat_indicators.active == True)
+            & (self.db.threat_indicators.active == True)  # noqa: E712
             & (self.db.threat_indicators.tenant_id == tenant_id)
         )
 
@@ -412,19 +433,13 @@ class SecurityFeedsManager:
                     "source": indicator["source"],
                     "confidence": indicator["confidence"],
                     "first_seen": (
-                        indicator["first_seen"].isoformat()
-                        if indicator.get("first_seen")
-                        else None
+                        indicator["first_seen"].isoformat() if indicator.get("first_seen") else None
                     ),
                     "last_seen": (
-                        indicator["last_seen"].isoformat()
-                        if indicator.get("last_seen")
-                        else None
+                        indicator["last_seen"].isoformat() if indicator.get("last_seen") else None
                     ),
                     "metadata": (
-                        json.loads(indicator["metadata"])
-                        if indicator.get("metadata")
-                        else {}
+                        json.loads(indicator["metadata"]) if indicator.get("metadata") else {}
                     ),
                 }
             )

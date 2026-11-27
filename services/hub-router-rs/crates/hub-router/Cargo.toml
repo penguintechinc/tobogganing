@@ -17,11 +17,11 @@ path = "src/main.rs"
 
 [dependencies]
 hub-router-common = { workspace = true }
-hub-router-config = { workspace = true }
 hub-router-auth = { workspace = true }
 penguin-aaa = { workspace = true }
-axum = { workspace = true }
-tower = { workspace = true, features = ["util"] }
+tonic = { workspace = true, features = ["router", "transport", "server"] }
+tonic-health = { workspace = true }
+tokio-stream = { workspace = true, features = ["net"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
@@ -38,7 +38,6 @@ tracing-opentelemetry = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
-tower = { workspace = true, features = ["util"] }
 # Feature-unifies hub-router-auth's test-only PublicKeyCache::inject_for_test
 # into this crate's test builds (never a production build — see that
 # crate's Cargo.toml).
@@ -49,6 +48,3 @@ p256 = { workspace = true }
 rand_core = { workspace = true }
 # In-process mock OTLP collector for tests/telemetry_smoke.rs.
 opentelemetry-proto = { workspace = true, features = ["gen-tonic", "trace", "metrics", "logs"] }
-tokio-stream = { workspace = true, features = ["net"] }
-tonic = { workspace = true, features = ["router", "transport"] }
-reqwest = { workspace = true, features = ["json"] }

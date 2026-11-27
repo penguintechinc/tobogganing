@@ -26,6 +26,7 @@ spec:
         runAsUser: {{ .Values.hubWebui.securityContext.runAsUser }}
       containers:
         - name: hub-webui
+          {{- include "tobogganing.digestGuard" (dict "image" .Values.hubWebui.image "name" "hub-webui") }}
           image: "{{ .Values.hubWebui.image.repository }}:{{ .Values.hubWebui.image.tag }}{{ if .Values.hubWebui.image.digest }}@{{ .Values.hubWebui.image.digest }}{{ end }}"
           imagePullPolicy: {{ .Values.hubWebui.image.pullPolicy | default .Values.global.image.pullPolicy }}
           ports:

@@ -29,6 +29,7 @@ spec:
       {{- end }}
       containers:
         - name: hub-router
+          {{- include "tobogganing.digestGuard" (dict "image" .Values.hubRouter.image "name" "hub-router") }}
           image: "{{ .Values.hubRouter.image.repository }}:{{ .Values.hubRouter.image.tag }}{{ if .Values.hubRouter.image.digest }}@{{ .Values.hubRouter.image.digest }}{{ end }}"
           imagePullPolicy: {{ .Values.hubRouter.image.pullPolicy | default .Values.global.image.pullPolicy }}
           ports:

@@ -1,47 +1,71 @@
-"""Tests for SASE context-based authentication evaluator."""
+"""Tests for SASE context-based authorization evaluator (tenant-first, scope-based)."""
+
 from __future__ import annotations
+
+from typing import Any
 
 import pytest
 
-from hub_api.modules.sase.auth.context import ContextAuthEvaluator, ContextAuthDecision
+from hub_api.modules.sase.auth.context import ContextAuthDecision, ContextAuthEvaluator
 
 
-@pytest.mark.asyncio
-async def test_context_auth_evaluator_instantiates() -> None:
-    """Test that ContextAuthEvaluator can be instantiated.
-
-    Verifies the stub is wired and ready for future development.
-    """
-    evaluator = ContextAuthEvaluator()
-    assert evaluator is not None
+def _ctx(claims: Any, tenant: Any = "t1", scopes: Any = ("sase:read",)) -> dict[str, Any]:
+    """Build an evaluation context."""
+    return {"claims": claims, "tenant": tenant, "required_scopes": scopes}
 
 
-@pytest.mark.asyncio
-async def test_context_auth_evaluate_returns_decision() -> None:
-    """Test that evaluate returns a ContextAuthDecision.
-
-    Verifies the method signature and return type match the contract.
-    """
-    evaluator = ContextAuthEvaluator()
-    context = {"node_id": "test-node", "tenant": "default"}
-
-    decision = evaluator.evaluate(context)
-
-    assert isinstance(decision, ContextAuthDecision)
-    assert isinstance(decision.allowed, bool)
-    assert isinstance(decision.reason, str)
+def test_allowed() -> None:
+    """Matching tenant and scope allows."""
+    d = ContextAuthEvaluator().evaluate(_ctx({"tenant": "t1", "scope": "sase:read x:y"}))
+    assert d == ContextAuthDecision(True, "allowed", 200)
 
 
-@pytest.mark.asyncio
-async def test_context_auth_evaluate_safe_default() -> None:
-    """Test that evaluate returns allow=True by default (Phase-1 stub).
+def test_allowed_wildcard() -> None:
+    """Wildcard scope satisfies requirement."""
+    assert ContextAuthEvaluator().evaluate(_ctx({"tenant": "t1", "scope": "sase:*"})).allowed
 
-    Phase-1 scaffold always allows; future phases will integrate threat intel.
-    """
-    evaluator = ContextAuthEvaluator()
-    context = {"node_id": "any-node", "tenant": "any-tenant"}
 
-    decision = evaluator.evaluate(context)
+def test_missing_tenant() -> None:
+    """Missing tenant claim rejects before scope checks."""
+    d = ContextAuthEvaluator().evaluate(_ctx({"scope": "*:*"}))
+    assert (d.allowed, d.reason, d.status) == (False, "missing_tenant_claim", 401)
 
-    assert decision.allowed is True
-    assert "not_implemented" in decision.reason.lower()
+
+def test_tenant_mismatch() -> None:
+    """Tenant mismatch is 403 even with admin scope."""
+    d = ContextAuthEvaluator().evaluate(_ctx({"tenant": "t2", "scope": "*:*"}))
+    assert (d.allowed, d.reason, d.status) == (False, "tenant_mismatch", 403)
+
+
+def test_missing_scope() -> None:
+    """No scope claim denies."""
+    d = ContextAuthEvaluator().evaluate(_ctx({"tenant": "t1"}))
+    assert (d.allowed, d.reason, d.status) == (False, "missing_scope", 403)
+
+
+def test_wrong_scope() -> None:
+    """Unrelated scope denies; role names are ignored."""
+    d = ContextAuthEvaluator().evaluate(
+        _ctx({"tenant": "t1", "scope": "sase:write", "roles": ["admin"]})
+    )
+    assert not d.allowed and d.reason == "insufficient_scope:sase:read"
+
+
+@pytest.mark.parametrize(
+    "ctx,reason",
+    [
+        ({}, "missing_claims"),
+        (_ctx({"tenant": "t1", "scope": "sase:read"}, tenant=None), "missing_resource_tenant"),
+        (_ctx({"tenant": "t1", "scope": "sase:read"}, scopes=()), "no_required_scopes_declared"),
+        (
+            _ctx({"tenant": "t1", "scope": "sase:read"}, scopes="sase:read"),
+            "no_required_scopes_declared",
+        ),
+        (_ctx({"tenant": "t1", "scope": 5}), "missing_scope"),
+        (_ctx({"tenant": "t1", "scope": "sase:read"}, scopes=(None,)), "insufficient_scope:None"),
+    ],
+)
+def test_fail_closed(ctx: dict[str, Any], reason: str) -> None:
+    """Malformed input always denies."""
+    d = ContextAuthEvaluator().evaluate(ctx)
+    assert not d.allowed and d.reason == reason

@@ -1,9 +1,9 @@
 //! Telemetry-validation smoke test (critical-rules.md Observability +
-//! testing.md Telemetry Validation): boots the real axum router against an
+//! testing.md Telemetry Validation): boots the real grpc.health.v1 server against an
 //! in-process mock OTLP collector (standard `TraceService`/
 //! `MetricsService`/`LogsService` gRPC stubs from `opentelemetry-proto`),
-//! drives one authenticated request through the protected route end-to-end
-//! (exercising both the per-request and the JWT-verify-step histograms),
+//! drives a real health Check end-to-end (exercising the evaluation
+//! latency histogram),
 //! then asserts the collector actually received log records, metric data
 //! points, and at least one histogram metric — never a bare "no error"
 //! absence-of-failure signal. A sink that fails to start is a hard test
@@ -30,12 +30,14 @@ use opentelemetry_proto::tonic::collector::trace::v1::{
 };
 use opentelemetry_proto::tonic::metrics::v1::metric::Data;
 use p256::ecdsa::{SigningKey, VerifyingKey};
-use p256::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
-use penguin_aaa::{Claims, Es256Signer};
+use p256::pkcs8::{EncodePublicKey, LineEnding};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
+use tonic_health::pb::health_check_response::ServingStatus;
+use tonic_health::pb::health_client::HealthClient;
+use tonic_health::pb::HealthCheckRequest;
 
 /// Counters the mock collector increments on every received export call —
 /// `Arc`-shared with the test so it can assert on them after the request
@@ -135,13 +137,6 @@ mod service_impls {
     }
 }
 
-fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock is after the Unix epoch")
-        .as_secs() as i64
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn telemetry_pipeline_emits_logs_metrics_and_histograms() {
     // --- 1. Start the mock OTLP collector -----------------------------
@@ -189,64 +184,48 @@ async fn telemetry_pipeline_emits_logs_metrics_and_histograms() {
         "OTLP metrics pipeline must initialize when OTEL_EXPORTER_OTLP_ENDPOINT is set"
     );
 
-    // --- 3. Boot the real axum router with a seeded public-key cache ---
+    // --- 3. Boot the real gRPC health server with a seeded key cache ---
     let signing_key = SigningKey::random(&mut rand_core::OsRng);
-    let private_pem = signing_key
-        .to_pkcs8_pem(LineEnding::LF)
-        .expect("encoding a freshly generated P-256 key as PKCS#8 PEM must succeed")
-        .to_string();
     let public_pem = VerifyingKey::from(&signing_key)
         .to_public_key_pem(LineEnding::LF)
-        .expect("encoding the matching public key as SPKI PEM must succeed");
-
+        .expect("encoding the public key as SPKI PEM must succeed");
     let key_cache = PublicKeyCache::new("http://unused.invalid")
         .expect("building a client with no special TLS/proxy config must succeed");
     key_cache.inject_for_test(
         penguin_aaa::Es256Verifier::from_public_key_pem(public_pem.as_bytes())
             .expect("a freshly generated EC public key must build a verifier"),
     );
-    let state = hub_router::AppState::new(Arc::new(key_cache));
-    let app = hub_router::router(state);
-
-    let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+    let grpc_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
-        .expect("axum listener must bind");
-    let http_addr = http_listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(http_listener, app)
+        .expect("gRPC listener must bind");
+    let grpc_addr = grpc_listener.local_addr().unwrap();
+    tokio::spawn(hub_router::health::serve(
+        grpc_listener,
+        Arc::new(key_cache),
+        Duration::from_millis(50),
+        std::future::pending(),
+    ));
+
+    // --- 4. Exercise grpc.health.v1 Check end-to-end ------------------
+    let mut client = HealthClient::new(
+        tonic::transport::Endpoint::from_shared(format!("http://{grpc_addr}"))
+            .expect("valid endpoint")
+            .connect()
             .await
-            .expect("axum server must not exit with an error during the test");
-    });
-
-    // --- 4. Exercise the protected route end-to-end via real HTTP ------
-    let claims = Claims {
-        sub: "node-1".to_string(),
-        iss: "hub-api-test".to_string(),
-        aud: "hub-router".to_string(),
-        iat: now(),
-        exp: now() + 3600,
-        scope: "router:read".to_string(),
-        tenant: Some("acme".to_string()),
-        teams: Vec::new(),
-        roles: vec!["viewer".to_string()],
-    };
-    let token = Es256Signer::from_ec_pem(private_pem.as_bytes())
-        .expect("a freshly generated EC PEM must load as a signing key")
-        .sign(&claims)
-        .expect("signing a well-formed claim set must succeed");
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(format!("http://{http_addr}/api/v1/router/status"))
-        .bearer_auth(token)
-        .send()
+            .expect("health client must connect"),
+    );
+    let status = client
+        .check(HealthCheckRequest {
+            service: hub_router::health::SERVICE_NAME.to_string(),
+        })
         .await
-        .expect("request must reach the running server");
+        .expect("health check must succeed")
+        .into_inner()
+        .status;
     assert_eq!(
-        resp.status(),
-        reqwest::StatusCode::OK,
-        "authenticated request to the protected route must succeed for the telemetry \
-         pipeline to have anything to export"
+        status,
+        ServingStatus::Serving as i32,
+        "seeded key cache must report SERVING"
     );
 
     // --- 5. Force an immediate export rather than waiting on batch/-----

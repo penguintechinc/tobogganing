@@ -29,6 +29,7 @@ spec:
       {{- end }}
       containers:
       - name: resolver
+        {{- include "netsvcsdns.digestGuard" (dict "image" .Values.image "name" "netsvcs-dns") }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ end }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | default .Values.global.image.pullPolicy }}
         securityContext:

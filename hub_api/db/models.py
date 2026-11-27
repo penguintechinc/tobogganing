@@ -927,6 +927,7 @@ class DNSZone(Base):
     name: Column[str] = Column(String(255), nullable=False)
     visibility: Column[str] = Column(String(50), default="public", nullable=False)
     description: Column[str | None] = Column(Text, nullable=True)
+    allowed_teams: Column[list] = Column(JSON, nullable=False, server_default="[]")
     created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
@@ -1066,6 +1067,36 @@ class DNSResolverToken(Base):
     def __repr__(self) -> str:
         """Return string representation."""
         return f"<DNSResolverToken(id={self.id}, tenant={self.tenant}, name={self.name})>"
+
+
+class DNSResolverSettings(Base):
+    """Per-tenant resolver cache/behaviour settings pushed to netsvcs-dns.
+
+    One row per tenant; absent row means the column defaults apply.
+    """
+
+    __tablename__ = "dns_resolver_settings"
+
+    id: Column[str] = Column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+        nullable=False,
+    )
+    tenant: Column[str] = Column(String(255), nullable=False, unique=True)
+    cache_enabled: Column[bool] = Column(Boolean, default=True, nullable=False)
+    cache_ttl: Column[int] = Column(Integer, default=300, nullable=False)
+    cache_max_entries: Column[int] = Column(Integer, default=10000, nullable=False)
+    log_queries: Column[bool] = Column(Boolean, default=True, nullable=False)
+    enable_dnssec: Column[bool] = Column(Boolean, default=False, nullable=False)
+    ioc_filtering: Column[bool] = Column(Boolean, default=True, nullable=False)
+    updated_at: Column[datetime] = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation."""
+        return f"<DNSResolverSettings(tenant={self.tenant})>"
 
 
 class DNSConfigVersion(Base):

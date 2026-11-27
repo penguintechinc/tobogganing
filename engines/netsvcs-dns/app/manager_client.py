@@ -219,7 +219,12 @@ class ManagerClient:
             self.refresh_token = resp.refresh_token
             self.config = {
                 "zones": [
-                    {"id": z.id, "name": z.name, "visibility": z.visibility}
+                    {
+                        "id": z.id,
+                        "name": z.name,
+                        "visibility": z.visibility,
+                        "allowed_teams": list(z.allowed_teams),
+                    }
                     for z in resp.config.zones
                 ],
                 "version": resp.config_version,
@@ -258,7 +263,12 @@ class ManagerClient:
             resp = await self.stub.GetConfig(req, metadata=self._metadata(self.jwt), timeout=5.0)
             config_dict = {
                 "zones": [
-                    {"id": z.id, "name": z.name, "visibility": z.visibility}
+                    {
+                        "id": z.id,
+                        "name": z.name,
+                        "visibility": z.visibility,
+                        "allowed_teams": list(z.allowed_teams),
+                    }
                     for z in resp.config.zones
                 ],
                 "version": resp.version,
@@ -407,6 +417,7 @@ class ManagerClient:
                             "id": z.id,
                             "name": z.name,
                             "visibility": z.visibility,
+                            "allowed_teams": list(z.allowed_teams),
                             "records": [
                                 {
                                     "name": r.name,
