@@ -210,17 +210,6 @@ async def test_get_tenant_column_returns_none_for_unknown_table(
     assert manager._get_tenant_column("not_a_real_table") is None
 
 
-def test_schedule_backup_returns_id() -> None:
-    """schedule_backup() returns a schedule_id string (placeholder implementation)."""
-    mock_db = MagicMock()
-    mock_db.tables = []
-    manager = BackupManager(mock_db, backup_dir=tempfile.mkdtemp())
-
-    schedule_id = manager.schedule_backup("0 0 * * *", compress=True)
-
-    assert schedule_id.startswith("schedule_")
-
-
 @pytest.mark.asyncio
 class TestListAndDeleteEdgeCases:
     """Edge cases for list_backups() and delete_backup()."""

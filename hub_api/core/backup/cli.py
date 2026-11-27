@@ -1,4 +1,5 @@
 """Command-line interface for backup operations."""
+
 from __future__ import annotations
 
 import argparse
@@ -15,9 +16,9 @@ logger = logging.getLogger(__name__)
 async def _async_backup_cli(db: Any, args: Any) -> None:
     """Async implementation of backup CLI commands.
 
-    NOTE: This CLI performs whole-database backups only (tenant_id=None).
-    For per-tenant backups, use the HTTP API route (when implemented).
-    Whole-DB operations are reserved for platform admins only.
+    create/restore accept ``--tenant-id`` to scope the operation to one
+    tenant's rows; omitting it performs a whole-DB operation, which is
+    reserved for platform operators with shell access to the hub.
 
     Args:
         db: penguin-dal AsyncDB instance
@@ -26,29 +27,25 @@ async def _async_backup_cli(db: Any, args: Any) -> None:
     manager = BackupManager(db)
 
     if args.command == "create":
-        # TODO: Add --tenant-id flag to support tenant-scoped backups
-        # TODO: Enforce platform-admin scope at HTTP API route level
         result = await manager.create_backup(
             backup_name=args.name,
             compress=args.compress,
             encrypt=args.encrypt,
             encryption_key=args.key,
             upload_to_s3=args.s3,
-            tenant_id=None,  # Whole-DB backup (platform-admin only)
+            tenant_id=args.tenant_id,
         )
         print(f"Backup created: {result['file_path']}")
         if result.get("s3_info"):
             print(f"Uploaded to S3: {result['s3_info']['s3_key']}")
 
     elif args.command == "restore":
-        # TODO: Add --tenant-id flag to support tenant-scoped restores
-        # TODO: Enforce proper scope at HTTP API route level
         result = await manager.restore_backup(
             backup_path=args.path,
             decrypt=args.decrypt,
             decryption_key=args.key,
             from_s3=args.from_s3,
-            tenant_id=None,  # Whole-DB restore (platform-admin only)
+            tenant_id=args.tenant_id,
         )
         print(f"Restore completed: {result['total_rows_restored']} rows")
 
@@ -92,7 +89,7 @@ async def _async_backup_cli(db: Any, args: Any) -> None:
                     print(f"Connection Test: ✗ Failed ({e})")
 
     else:
-        parser.print_help()
+        raise ValueError(f"unknown command: {args.command}")
 
 
 def backup_cli(db: Any, get_db_uri_fn: Any | None = None) -> None:
@@ -102,35 +99,33 @@ def backup_cli(db: Any, get_db_uri_fn: Any | None = None) -> None:
         db: penguin-dal AsyncDB instance
         get_db_uri_fn: Optional function to get database URI
     """
-    parser = argparse.ArgumentParser(
-        description="SASEWaddle Database Backup Manager"
-    )
+    parser = argparse.ArgumentParser(description="SASEWaddle Database Backup Manager")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
     # Create backup
     backup_parser = subparsers.add_parser("create", help="Create backup")
     backup_parser.add_argument("--name", help="Backup name")
-    backup_parser.add_argument(
-        "--compress", action="store_true", help="Compress backup"
-    )
+    backup_parser.add_argument("--compress", action="store_true", help="Compress backup")
     backup_parser.add_argument("--encrypt", action="store_true", help="Encrypt backup")
     backup_parser.add_argument("--key", help="Encryption key")
     backup_parser.add_argument("--s3", action="store_true", help="Upload to S3")
+    backup_parser.add_argument(
+        "--tenant-id", default=None, help="Scope backup to this tenant (default: whole DB)"
+    )
 
     # Restore backup
     restore_parser = subparsers.add_parser("restore", help="Restore from backup")
     restore_parser.add_argument("path", help="Backup path or S3 key")
     restore_parser.add_argument("--decrypt", action="store_true", help="Decrypt backup")
     restore_parser.add_argument("--key", help="Decryption key")
+    restore_parser.add_argument("--from-s3", action="store_true", help="Restore from S3")
     restore_parser.add_argument(
-        "--from-s3", action="store_true", help="Restore from S3"
+        "--tenant-id", default=None, help="Scope restore to this tenant (default: whole DB)"
     )
 
     # List backups
     list_parser = subparsers.add_parser("list", help="List backups")
-    list_parser.add_argument(
-        "--local-only", action="store_true", help="List only local"
-    )
+    list_parser.add_argument("--local-only", action="store_true", help="List only local")
     list_parser.add_argument("--s3-only", action="store_true", help="List only S3")
 
     # Delete backup
@@ -139,7 +134,7 @@ def backup_cli(db: Any, get_db_uri_fn: Any | None = None) -> None:
     delete_parser.add_argument("--from-s3", action="store_true", help="Delete from S3")
 
     # S3 status
-    s3_parser = subparsers.add_parser("s3-status", help="Check S3 configuration")
+    subparsers.add_parser("s3-status", help="Check S3 configuration")
 
     args = parser.parse_args()
 
