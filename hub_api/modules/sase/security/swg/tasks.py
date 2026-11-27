@@ -4,6 +4,7 @@ Background tasks:
 1. categorize_domain(domain, tenant) - fetch → scrape → classify → write-back
 2. refresh_categories_daily() - re-ingest feed categories + radix rebuild
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,12 +28,13 @@ async def _categorize_domain_async(domain: str, tenant: str) -> None:
         domain: Domain to categorize.
         tenant: Tenant ID.
     """
-    from hub_api.modules.sase.security.swg.tier2.fetcher import fetch
-    from hub_api.modules.sase.security.swg.tier2.scraper import extract_metadata
-    from hub_api.modules.sase.security.swg.tier2.classifier import DomainClassifier
+    from penguin_dal import AsyncDB
+
     from hub_api.cache import CacheClient
     from hub_api.config import Config, build_db_uri
-    from penguin_dal import AsyncDB
+    from hub_api.modules.sase.security.swg.tier2.classifier import DomainClassifier
+    from hub_api.modules.sase.security.swg.tier2.fetcher import fetch
+    from hub_api.modules.sase.security.swg.tier2.scraper import extract_metadata
 
     CONFIDENCE_THRESHOLD = 0.5
     MODEL_PATH = "/opt/penguintech/models/domain_classifier.joblib"  # Configurable
@@ -79,13 +81,11 @@ async def _categorize_domain_async(domain: str, tenant: str) -> None:
 
         try:
             # Upsert to domain_categories (source="ai", tenant-aware)
-            from datetime import datetime, timezone
             import uuid
+            from datetime import datetime, timezone
 
             now = datetime.now(timezone.utc)
-            existing = await db.domain_categories.select(
-                domain=domain, source="ai", tenant=tenant
-            )
+            existing = await db.domain_categories.select(domain=domain, source="ai", tenant=tenant)
 
             if existing:
                 for row in existing:
@@ -93,14 +93,16 @@ async def _categorize_domain_async(domain: str, tenant: str) -> None:
                     await db.domain_categories.update(row)
             else:
                 new_id = str(uuid.uuid4())
-                await db.domain_categories.insert({
-                    "id": new_id,
-                    "domain": domain,
-                    "categories": json.dumps([category]),
-                    "source": "ai",
-                    "tenant": tenant,
-                    "updated_at": now,
-                })
+                await db.domain_categories.insert(
+                    {
+                        "id": new_id,
+                        "domain": domain,
+                        "categories": json.dumps([category]),
+                        "source": "ai",
+                        "tenant": tenant,
+                        "updated_at": now,
+                    }
+                )
 
             # Write to cache (canonical signature)
             cache = CacheClient()
@@ -128,7 +130,6 @@ async def _categorize_domain_async(domain: str, tenant: str) -> None:
 
 # Celery task registration (try/except to handle Celery unavailability)
 try:
-    from celery import Celery
     from hub_api.modules.sase.security.swg.worker.celery_app import celery_app
 
     @celery_app.task(bind=True, name="sase.categorize_domain", max_retries=0)
@@ -161,10 +162,11 @@ def refresh_categories_daily() -> None:
     Fixes the dangling handler registered in scheduler.py.
     Called by the scheduler on a daily schedule.
     """
-    from hub_api.modules.sase.security.swg.ingest import CategoryIngestManager
+    from penguin_dal import AsyncDB
+
     from hub_api.cache import CacheClient
     from hub_api.config import Config, build_db_uri
-    from penguin_dal import AsyncDB
+    from hub_api.modules.sase.security.swg.ingest import CategoryIngestManager
 
     async def _refresh_async() -> None:
         cfg = Config()
@@ -180,18 +182,56 @@ def refresh_categories_daily() -> None:
         cache = CacheClient()
 
         ingester = CategoryIngestManager(db, cache)
-
-        # Re-ingest all sources (from config/environment)
-        # This is a simplified implementation; in production, fetch the source list from DB/config
         try:
-            logger.info("refresh_categories_starting")
-            # Placeholder: would get sources from config
-            # await ingester.ingest_all(sources)
-            logger.info("refresh_categories_complete")
-        except Exception as e:
-            logger.error("refresh_categories_error", error=str(e))
+            await _run_category_refresh(ingester, CATEGORY_SOURCES)
+        finally:
+            if ingester.session is not None:
+                await ingester.session.close()
+
+    from hub_api.modules.sase.security.swg.sources import CATEGORY_SOURCES
 
     try:
         asyncio.run(_refresh_async())
     except Exception as e:
         logger.error("refresh_categories_task_error", error=str(e))
+        raise
+
+
+async def _run_category_refresh(ingester: Any, sources: list[Any]) -> dict[str, Any]:
+    """Ingest every category source and report real per-source outcomes.
+
+    A source that yields zero scanned entries (fetch/parse failure or empty
+    feed) counts as failed. Raises RuntimeError when no sources are
+    configured or every source failed, so the run is never logged as success
+    when nothing was ingested.
+    """
+    if not sources:
+        logger.error("refresh_categories_no_sources")
+        raise RuntimeError("refresh_categories: no category sources configured")
+
+    logger.info("refresh_categories_starting", sources=len(sources))
+    failed: list[str] = []
+    scanned = stored = skipped = 0
+    for source in sources:
+        stats = await ingester.ingest_source(source)
+        if stats.scanned == 0:
+            failed.append(source.name)
+        scanned += stats.scanned
+        stored += stats.stored
+        skipped += stats.skipped
+
+    result = {
+        "sources": len(sources),
+        "failed": failed,
+        "scanned": scanned,
+        "stored": stored,
+        "skipped": skipped,
+    }
+    if len(failed) == len(sources):
+        logger.error("refresh_categories_failed", **result)
+        raise RuntimeError(f"refresh_categories: all {len(sources)} sources failed")
+    if failed:
+        logger.warning("refresh_categories_partial", **result)
+    else:
+        logger.info("refresh_categories_complete", **result)
+    return result
