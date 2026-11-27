@@ -26,6 +26,11 @@ INFRA_MONITOR_RUNS = _meter.create_counter(
     unit="1",
     description="Infrastructure monitor component runs by component and status",
 )
+INDICATORS_TRUNCATED = _meter.create_counter(
+    "sase.scanner.threat_indicators.truncated",
+    unit="1",
+    description="Indicators dropped because a scan exceeded the per-scan cap",
+)
 LOOKUP_DURATION = _meter.create_histogram(
     "sase.scanner.threat_lookup.duration",
     unit="s",

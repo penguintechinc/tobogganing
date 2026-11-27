@@ -6,7 +6,7 @@ import ipaddress
 import json
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 - fixed-argv scanner tool invocations only
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -26,6 +26,7 @@ from .parsers import (
 )
 from .telemetry import (
     CHECK_RESULTS,
+    INDICATORS_TRUNCATED,
     LOOKUP_DURATION,
     THREAT_LOOKUPS,
     ScannerDependencyError,
@@ -84,7 +85,7 @@ async def _run_vulnerability_scan(scan_id: str, scanner: Any) -> list[ScanFindin
             for image in images[:5]:  # Limit to first 5 images
                 try:
                     # Run Trivy scan
-                    result = subprocess.run(
+                    result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                         ["trivy", "image", "--format", "json", "--quiet", image.id],
                         capture_output=True,
                         text=True,
@@ -103,7 +104,7 @@ async def _run_vulnerability_scan(scan_id: str, scanner: Any) -> list[ScanFindin
 
         # Scan filesystem
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                 ["trivy", "fs", "--format", "json", "--quiet", "/"],
                 capture_output=True,
                 text=True,
@@ -203,7 +204,7 @@ async def _run_dependency_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     try:
         # Check Python dependencies
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                 ["safety", "check", "--json"],
                 capture_output=True,
                 text=True,
@@ -222,7 +223,7 @@ async def _run_dependency_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
         go_mod_path = Path("/go.mod")
         if go_mod_path.exists():
             try:
-                result = subprocess.run(
+                result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                     ["govulncheck", "./..."],
                     cwd=go_mod_path.parent,
                     capture_output=True,
@@ -258,7 +259,7 @@ async def _run_container_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     try:
         # Run Docker Bench Security if available
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell, tools resolved via PATH in scanner image
                 [
                     "docker",
                     "run",
@@ -393,29 +394,105 @@ async def _run_configuration_scan(scan_id: str, scanner: Any) -> list[ScanFindin
     return findings
 
 
-async def _lookup_indicator(
-    feeds: Any, tenants: list[str], value: str, indicator_type: str
-) -> list[dict[str, Any]]:
-    """Look ``value`` up in the threat-indicator store for every tenant in ``tenants``.
+#: Bytes read from the end of each log file per scan (bounded I/O).
+LOG_TAIL_BYTES = 256 * 1024
+#: Maximum unique indicators looked up per scan; excess is dropped loudly.
+MAX_INDICATORS_PER_SCAN = 5000
+#: Maximum parent-domain levels checked (a.b.evil.com -> b.evil.com -> evil.com).
+MAX_PARENT_DEPTH = 5
+#: Values per ``IN (...)`` query chunk.
+LOOKUP_BATCH_SIZE = 500
+
+
+def _normalize_domain(value: str) -> str | None:
+    """Normalize a domain the way feed ingest stores it (lower-case, no trailing dot, IDNA).
+
+    Returns None for values that cannot be IDNA-encoded.
+    """
+    name = value.strip().lower().rstrip(".")
+    if not name:
+        return None
+    try:
+        return name.encode("idna").decode("ascii")
+    except UnicodeError:
+        return None
+
+
+def _normalize_ip(value: str) -> str | None:
+    """Return the canonical text form of an IP address, or None if invalid."""
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
+def _domain_candidates(domain: str) -> list[str]:
+    """Return ``domain`` and its parent domains (>=2 labels), bounded by MAX_PARENT_DEPTH."""
+    labels = domain.split(".")
+    out = [".".join(labels[i:]) for i in range(len(labels) - 1)]
+    return out[: MAX_PARENT_DEPTH + 1]
+
+
+def _read_tail(path: str, max_bytes: int = LOG_TAIL_BYTES) -> list[str]:
+    """Read at most ``max_bytes`` from the end of ``path`` and return whole lines."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        start = max(0, size - max_bytes)
+        f.seek(start)
+        data = f.read(max_bytes)
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if start > 0 and lines:
+        lines = lines[1:]  # first line is partial
+    return lines
+
+
+def _row_to_match(row: Any) -> dict[str, Any]:
+    """Convert a threat_indicators row into a match dict (value, types, source, confidence)."""
+    raw_types = row.get("threat_types") if hasattr(row, "get") else row["threat_types"]
+    try:
+        types = json.loads(raw_types) if raw_types else []
+    except (TypeError, ValueError):
+        types = []
+    return {
+        "value": row["value"],
+        "threat_types": types,
+        "source": row["source"],
+        "confidence": row["confidence"],
+    }
+
+
+async def _batch_lookup(
+    db: Any, tenants: list[str], values: list[str], indicator_type: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Look up ``values`` with one ``value IN (...)`` query per chunk across ``tenants``.
 
     Raises:
         ScannerDependencyError: when the threat-indicator store cannot be queried.
     """
+    hits: dict[str, list[dict[str, Any]]] = {}
+    if not values:
+        return hits
+    table = db.threat_indicators
     start = time.monotonic()
-    matches: list[dict[str, Any]] = []
     try:
-        for tenant in tenants:
-            _, details = await feeds.check_threat_indicator(tenant, value, indicator_type)
-            matches.extend(details)
+        for i in range(0, len(values), LOOKUP_BATCH_SIZE):
+            chunk = values[i : i + LOOKUP_BATCH_SIZE]
+            query = (
+                table.value.belongs(chunk)
+                & (table.active == True)  # noqa: E712 - DAL expression
+                & table.tenant_id.belongs(tenants)
+                & (table.indicator_type == indicator_type)
+            )
+            for row in await db(query).select():
+                match = _row_to_match(row)
+                hits.setdefault(match["value"], []).append(match)
     except Exception as e:
         THREAT_LOOKUPS.add(1, {"indicator_type": indicator_type, "result": "error"})
         raise ScannerDependencyError(f"threat-feed lookup failed: {e}") from e
     finally:
         LOOKUP_DURATION.record(time.monotonic() - start, {"indicator_type": indicator_type})
-    THREAT_LOOKUPS.add(
-        1, {"indicator_type": indicator_type, "result": "hit" if matches else "miss"}
-    )
-    return matches
+    return hits
 
 
 def _threat_finding(
@@ -443,25 +520,40 @@ def _threat_finding(
             "indicator": value,
             "indicator_type": indicator_type,
             "log_file": log_file,
+            "matched_values": sorted({str(m.get("value")) for m in matches}),
             "sources": sorted({str(m.get("source")) for m in matches}),
             "threat_types": threat_types,
         },
     )
 
 
-async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
-    """Scan recent log lines for IPs/domains and look them up in the threat-feed store.
+def _collect_indicators(
+    lines: list[str], log_file: str, observed: dict[tuple[str, str], str]
+) -> None:
+    """Add normalized IP/domain indicators from ``lines`` into ``observed`` (first file wins)."""
+    for line in lines:
+        for raw_ip in _extract_ips_from_log(line):
+            ip = _normalize_ip(raw_ip)
+            if ip:
+                observed.setdefault((ip, "ip"), log_file)
+        for raw_domain in _extract_domains_from_log(line):  # TLD is alphabetic: never an IP
+            domain = _normalize_domain(raw_domain)
+            if domain:
+                observed.setdefault((domain, "domain"), log_file)
 
-    Indicators are checked against the scanner's tenant and the global feed tenant.
+
+async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
+    """Scan log tails for IPs/domains and batch-check them against the threat-feed store.
+
+    Indicators are normalized like feed ingest, domains also match parent-domain feed
+    entries, and lookups cover the scanner's tenant plus the global feed tenant.
 
     Raises:
         ScannerDependencyError: no DB, or the threat-indicator store is unreachable.
     """
-    if getattr(scanner, "db", None) is None:
+    db = getattr(scanner, "db", None)
+    if db is None:
         raise ScannerDependencyError("threat intel scan requires a database (scanner.db is None)")
-    from hub_api.modules.threatintel.feeds.manager import SecurityFeedsManager
-
-    feeds = SecurityFeedsManager(scanner.db)
     tenants = [GLOBAL_FEED_TENANT]
     tenant_id = getattr(scanner, "tenant_id", None)
     if tenant_id and tenant_id != GLOBAL_FEED_TENANT:
@@ -469,20 +561,35 @@ async def _run_threat_intel_scan(scan_id: str, scanner: Any) -> list[ScanFinding
 
     observed: dict[tuple[str, str], str] = {}
     for log_file in THREAT_LOG_FILES:
-        if not os.path.exists(log_file):
-            continue
-        with open(log_file, "r", errors="replace") as f:
-            lines = f.readlines()[-1000:]
-        for line in lines:
-            for ip in _extract_ips_from_log(line):
-                observed.setdefault((ip, "ip"), log_file)
-            for domain in _extract_domains_from_log(line):
-                if not _is_ipv4(domain):
-                    observed.setdefault((domain, "domain"), log_file)
+        if os.path.exists(log_file):
+            _collect_indicators(_read_tail(log_file), log_file, observed)
+
+    if len(observed) > MAX_INDICATORS_PER_SCAN:
+        dropped = len(observed) - MAX_INDICATORS_PER_SCAN
+        logger.warning(
+            "threat_intel_indicators_truncated",
+            observed=len(observed),
+            limit=MAX_INDICATORS_PER_SCAN,
+            dropped=dropped,
+        )
+        INDICATORS_TRUNCATED.add(dropped)
+        observed = dict(list(observed.items())[:MAX_INDICATORS_PER_SCAN])
+
+    ips = [v for v, t in observed if t == "ip"]
+    domains = [v for v, t in observed if t == "domain"]
+    domain_lookup = sorted({c for d in domains for c in _domain_candidates(d)})
+    ip_hits = await _batch_lookup(db, tenants, ips, "ip")
+    domain_hits = await _batch_lookup(db, tenants, domain_lookup, "domain")
 
     findings: list[ScanFinding] = []
     for (value, indicator_type), log_file in observed.items():
-        matches = await _lookup_indicator(feeds, tenants, value, indicator_type)
+        if indicator_type == "ip":
+            matches = ip_hits.get(value, [])
+        else:
+            matches = [m for c in _domain_candidates(value) for m in domain_hits.get(c, [])]
+        THREAT_LOOKUPS.add(
+            1, {"indicator_type": indicator_type, "result": "hit" if matches else "miss"}
+        )
         if matches:
             logger.warning(
                 "threat_indicator_observed",
@@ -535,14 +642,6 @@ async def _run_compliance_scan(scan_id: str, scanner: Any) -> list[ScanFinding]:
     return findings
 
 
-def _is_ipv4(value: str) -> bool:
-    """Return True when ``value`` is a dotted-quad IPv4 address."""
-    try:
-        return isinstance(ipaddress.ip_address(value), ipaddress.IPv4Address)
-    except ValueError:
-        return False
-
-
 def _extract_ips_from_log(log_line: str) -> list[str]:
     """Extract IP addresses from log line.
 
@@ -565,5 +664,5 @@ def _extract_domains_from_log(log_line: str) -> list[str]:
     Returns:
         List of domains found.
     """
-    domain_pattern = r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b"
+    domain_pattern = r"\b(?:[^\W_](?:[\w-]{0,61}[^\W_])?\.)+[^\W\d_]{2,}\b"
     return re.findall(domain_pattern, log_line)

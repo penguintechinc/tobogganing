@@ -197,23 +197,77 @@ async def test_default_check_tables_execute(tmp_path: Path) -> None:
 # ---- threat intel ----------------------------------------------------------
 
 
-class _FakeFeeds:
-    """Fake SecurityFeedsManager returning canned matches per (tenant, value)."""
+class _Cond:
+    """Conjunction of DAL-style conditions evaluated against dict rows."""
 
-    def __init__(self, db: Any) -> None:
-        self.calls: list[tuple[str, str, str]] = []
-        _FakeFeeds.instance = self
+    def __init__(self, preds: list[Any]) -> None:
+        self.preds = preds
 
-    instance: "_FakeFeeds"
-    hits: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    def __and__(self, other: "_Cond") -> "_Cond":
+        return _Cond(self.preds + other.preds)
 
-    async def check_threat_indicator(
-        self, tenant: str, value: str, itype: str
-    ) -> tuple[bool, list[dict[str, Any]]]:
-        """Record the call and return configured matches."""
-        self.calls.append((tenant, value, itype))
-        d = self.hits.get((tenant, value), [])
-        return bool(d), d
+    def __call__(self, row: dict[str, Any]) -> bool:
+        return all(p(row) for p in self.preds)
+
+
+class _Field:
+    """DAL-style field supporting ``==`` and ``belongs``."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __eq__(self, other: object) -> _Cond:  # type: ignore[override]
+        return _Cond([lambda r: r[self.name] == other])
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    def belongs(self, values: list[str]) -> _Cond:
+        vs = set(values)
+        return _Cond([lambda r: r[self.name] in vs])
+
+
+class _FakeDAL:
+    """Minimal penguin-dal stand-in over an in-memory threat_indicators table."""
+
+    def __init__(self, rows: list[dict[str, Any]], fail: bool = False) -> None:
+        self.rows = rows
+        self.fail = fail
+        self.queries = 0
+        self.threat_indicators = SimpleNamespace(
+            **{n: _Field(n) for n in ("value", "active", "tenant_id", "indicator_type")}
+        )
+
+    def __call__(self, cond: _Cond) -> Any:
+        dal = self
+
+        async def select() -> list[dict[str, Any]]:
+            dal.queries += 1
+            if dal.fail:
+                raise RuntimeError("db down")
+            return [r for r in dal.rows if cond(r)]
+
+        return SimpleNamespace(select=select)
+
+
+def _row(value: str, itype: str, tenant: str, conf: int = 80, src: str = "feed") -> dict[str, Any]:
+    """Build an active threat_indicators row."""
+    return {
+        "value": value,
+        "indicator_type": itype,
+        "tenant_id": tenant,
+        "active": True,
+        "threat_types": '["c2"]',
+        "source": src,
+        "confidence": conf,
+    }
+
+
+async def _scan(tmp_path: Path, text: str, dal: Any, tenant: str | None = "t1") -> list[Any]:
+    """Run the threat-intel scan over one temp log file."""
+    log = _write(tmp_path / "a.log", text)
+    with patch(f"{SCANS}.THREAT_LOG_FILES", [str(log), str(tmp_path / "missing")]):
+        return await scans._run_threat_intel_scan("s1", SimpleNamespace(db=dal, tenant_id=tenant))
 
 
 @pytest.mark.asyncio
@@ -224,93 +278,138 @@ async def test_threat_intel_requires_db() -> None:
 
 
 @pytest.mark.asyncio
-async def test_threat_intel_hits_produce_findings(tmp_path: Path) -> None:
-    """Indicators in logs are looked up in tenant + global feeds; hits become findings."""
-    log = _write(tmp_path / "a.log", "conn from 203.0.113.9 to evil.example.com\nok 198.51.100.1\n")
-    _FakeFeeds.hits = {
-        ("t1", "203.0.113.9"): [
-            {"confidence": 95, "source": "spamhaus", "threat_types": ["botnet"]}
-        ],
-        (scans.GLOBAL_FEED_TENANT, "evil.example.com"): [{"confidence": 80, "source": "blackweb"}],
-    }
-    with (
-        patch(f"{SCANS}.THREAT_LOG_FILES", [str(log), str(tmp_path / "missing")]),
-        patch("hub_api.modules.threatintel.feeds.manager.SecurityFeedsManager", _FakeFeeds),
-        patch(f"{SCANS}.THREAT_LOOKUPS") as lookups,
-    ):
-        findings = await scans._run_threat_intel_scan(
-            "s1", SimpleNamespace(db=object(), tenant_id="t1")
+async def test_threat_intel_hits_tenant_and_global(tmp_path: Path) -> None:
+    """Tenant and global-feed hits become findings; other tenants never match."""
+    g = scans.GLOBAL_FEED_TENANT
+    dal = _FakeDAL(
+        [
+            _row("203.0.113.9", "ip", "t1", 95, "spamhaus"),
+            _row("evil.example.com", "domain", g, 80, "blackweb"),
+            _row("198.51.100.1", "ip", "other-tenant", 99),
+        ]
+    )
+    with patch(f"{SCANS}.THREAT_LOOKUPS") as lookups:
+        findings = await _scan(
+            tmp_path, "from 203.0.113.9 to evil.example.com\nok 198.51.100.1\n", dal
         )
-    by_value = {f.metadata["indicator"]: f for f in findings}
-    assert by_value["203.0.113.9"].severity == ScanSeverity.HIGH
-    assert by_value["203.0.113.9"].metadata["threat_types"] == ["botnet"]
-    assert by_value["evil.example.com"].severity == ScanSeverity.MEDIUM
-    assert len(findings) == 2
-    tenants = {c[0] for c in _FakeFeeds.instance.calls}
-    assert tenants == {"t1", scans.GLOBAL_FEED_TENANT}
-    results = sorted(c.args[1]["result"] for c in lookups.add.call_args_list)
-    assert results == ["hit", "hit", "miss"]
+    by = {f.metadata["indicator"]: f for f in findings}
+    assert set(by) == {"203.0.113.9", "evil.example.com"}
+    assert by["203.0.113.9"].severity == ScanSeverity.HIGH
+    assert by["evil.example.com"].severity == ScanSeverity.MEDIUM
+    assert sorted(c.args[1]["result"] for c in lookups.add.call_args_list) == [
+        "hit",
+        "hit",
+        "miss",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_threat_intel_global_only_without_tenant(tmp_path: Path) -> None:
-    """No scanner tenant -> only the global feed tenant is queried."""
-    log = _write(tmp_path / "a.log", "198.51.100.1\n")
-    _FakeFeeds.hits = {}
+async def test_threat_intel_normalization_and_parent_match(tmp_path: Path) -> None:
+    """Mixed-case, trailing-dot, IDN and subdomain indicators match canonical feed rows."""
+    g = scans.GLOBAL_FEED_TENANT
+    idn = "bücher.example".encode("idna").decode()
+    dal = _FakeDAL(
+        [
+            _row("evil.com", "domain", g),
+            _row("malware.org", "domain", g),
+            _row(idn, "domain", g),
+        ]
+    )
+    findings = await _scan(
+        tmp_path,
+        "a A.B.Evil.COM. b\nMALWARE.ORG. x\nget bücher.example\n",
+        dal,
+        tenant=None,
+    )
+    vals = {f.metadata["indicator"]: f.metadata["matched_values"] for f in findings}
+    assert vals == {
+        "a.b.evil.com": ["evil.com"],
+        "malware.org": ["malware.org"],
+        idn: [idn],
+    }
+
+
+def test_normalizers() -> None:
+    """IPs canonicalized (non-canonical forms fixed, invalid skipped); domains IDNA'd."""
+    assert scans._normalize_ip("2001:DB8:0:0::1") == "2001:db8::1"
+    assert scans._normalize_ip(" 10.0.0.1 ") == "10.0.0.1"
+    assert scans._normalize_ip("999.1.1.1") is None
+    assert scans._normalize_domain("Ex.COM.") == "ex.com"
+    assert scans._normalize_domain(".") is None
+    assert scans._normalize_domain("a" * 70 + ".com") is None  # label too long for IDNA
+    assert scans._domain_candidates("a.b.c.d.e.f.g.h.com")[-1] == "f.g.h.com"
+    assert len(scans._domain_candidates("a.b.c.d.e.f.g.h.com")) == scans.MAX_PARENT_DEPTH + 1
+
+
+@pytest.mark.asyncio
+async def test_threat_intel_ipv6_non_canonical(tmp_path: Path) -> None:
+    """A feed IPv6 row matches regardless of extraction (IPv4 regex only); IPv4 canonical."""
+    dal = _FakeDAL([_row("192.0.2.5", "ip", scans.GLOBAL_FEED_TENANT)])
+    findings = await _scan(tmp_path, "src=192.0.2.5 bad=300.1.1.1\n", dal, tenant=None)
+    assert [f.metadata["indicator"] for f in findings] == ["192.0.2.5"]
+
+
+@pytest.mark.asyncio
+async def test_threat_intel_batches_queries(tmp_path: Path) -> None:
+    """Lookups are one IN-query per chunk per indicator type, not one per indicator."""
+    dal = _FakeDAL([])
+    text = "".join(f"10.0.{i // 250}.{i % 250} host{i}.example.com\n" for i in range(600))
+    with patch(f"{SCANS}.LOOKUP_BATCH_SIZE", 500):
+        assert await _scan(tmp_path, text, dal) == []
+    # 600 IPs -> 2 chunks; 600 hosts + parent example.com = 601 domains -> 2 chunks
+    assert dal.queries == 4
+
+
+@pytest.mark.asyncio
+async def test_threat_intel_caps_indicators_loudly(tmp_path: Path) -> None:
+    """Indicators beyond the cap are dropped with a warning and a truncation metric."""
+    dal = _FakeDAL([])
+    text = "".join(f"10.1.0.{i}\n" for i in range(20))
     with (
-        patch(f"{SCANS}.THREAT_LOG_FILES", [str(log)]),
-        patch("hub_api.modules.threatintel.feeds.manager.SecurityFeedsManager", _FakeFeeds),
+        patch(f"{SCANS}.MAX_INDICATORS_PER_SCAN", 5),
+        patch(f"{SCANS}.INDICATORS_TRUNCATED") as trunc,
+        patch(f"{SCANS}.THREAT_LOOKUPS") as lookups,
+        patch(f"{SCANS}.logger") as log,
     ):
-        assert (
-            await scans._run_threat_intel_scan("s1", SimpleNamespace(db=object(), tenant_id=None))
-            == []
-        )
-    assert {c[0] for c in _FakeFeeds.instance.calls} == {scans.GLOBAL_FEED_TENANT}
+        await _scan(tmp_path, text, dal)
+    trunc.add.assert_called_once_with(15)
+    assert lookups.add.call_count == 5
+    assert log.warning.call_args.args[0] == "threat_intel_indicators_truncated"
+
+
+def test_read_tail_is_bounded(tmp_path: Path) -> None:
+    """Only the last max_bytes are read and a leading partial line is dropped."""
+    p = _write(tmp_path / "big.log", "".join(f"line-{i:04d}\n" for i in range(1000)))
+    lines = scans._read_tail(str(p), max_bytes=35)
+    assert lines == ["line-0997", "line-0998", "line-0999"]
+    assert len(scans._read_tail(str(p))) == 1000
 
 
 @pytest.mark.asyncio
 async def test_threat_intel_store_failure_fails_loudly(tmp_path: Path) -> None:
-    """A DB error during lookup raises ScannerDependencyError and records an error metric."""
-    log = _write(tmp_path / "a.log", "198.51.100.1\n")
-    feeds = MagicMock()
-    feeds.return_value.check_threat_indicator = AsyncMock(side_effect=RuntimeError("db down"))
-    with (
-        patch(f"{SCANS}.THREAT_LOG_FILES", [str(log)]),
-        patch("hub_api.modules.threatintel.feeds.manager.SecurityFeedsManager", feeds),
-        patch(f"{SCANS}.THREAT_LOOKUPS") as lookups,
-    ):
+    """A DB error raises ScannerDependencyError and records an error metric."""
+    with patch(f"{SCANS}.THREAT_LOOKUPS") as lookups:
         with pytest.raises(ScannerDependencyError, match="db down"):
-            await scans._run_threat_intel_scan("s1", SimpleNamespace(db=object(), tenant_id="t"))
+            await _scan(tmp_path, "198.51.100.1\n", _FakeDAL([], fail=True))
     assert lookups.add.call_args.args[1]["result"] == "error"
 
 
+def test_row_to_match_bad_types_json() -> None:
+    """Malformed threat_types JSON degrades to an empty list; non-dict rows supported."""
+
+    class _R:
+        def __getitem__(self, k: str) -> Any:
+            return {"value": "v", "source": "s", "confidence": 1, "threat_types": "{bad"}[k]
+
+    assert scans._row_to_match(_R())["threat_types"] == []
+
+
 @pytest.mark.asyncio
-async def test_threat_intel_real_manager_against_fake_dal(tmp_path: Path) -> None:
-    """Exercise the real SecurityFeedsManager.check_threat_indicator query path."""
-    log = _write(tmp_path / "a.log", "198.51.100.7\n")
-    row = {
-        "value": "198.51.100.7",
-        "threat_types": '["c2"]',
-        "source": "spamhaus",
-        "confidence": 99,
-        "first_seen": None,
-        "last_seen": None,
-        "metadata": None,
-    }
-    query = MagicMock()
-    query.select = AsyncMock(return_value=[row])
-    db = MagicMock(return_value=query)
-    with patch(f"{SCANS}.THREAT_LOG_FILES", [str(log)]):
-        findings = await scans._run_threat_intel_scan("s1", SimpleNamespace(db=db, tenant_id=None))
-    assert findings[0].metadata["threat_types"] == ["c2"]
-    assert findings[0].confidence == 99
-
-
-def test_is_ipv4() -> None:
-    """Dotted quads are IPv4; hostnames and invalid octets are not."""
-    assert scans._is_ipv4("10.0.0.1")
-    assert not scans._is_ipv4("example.com")
-    assert not scans._is_ipv4("999.1.1.1")
+async def test_batch_lookup_empty() -> None:
+    """No values -> no query."""
+    dal = _FakeDAL([])
+    assert await scans._batch_lookup(dal, ["t"], [], "ip") == {}
+    assert dal.queries == 0
 
 
 # ---- infra monitor ---------------------------------------------------------
