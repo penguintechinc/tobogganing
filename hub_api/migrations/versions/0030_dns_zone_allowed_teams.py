@@ -35,21 +35,15 @@ def upgrade() -> None:
 
     # Global threat feeds move from the legacy nil-UUID tenant to the reserved
     # operator-plane "system" tenant.
-    for table in _GLOBAL_FEED_TABLES:
-        op.execute(
-            sa.text(f"UPDATE {table} SET tenant_id = :new WHERE tenant_id = :old").bindparams(
-                new=_SYSTEM, old=_NIL
-            )
-        )
+    for table_name in _GLOBAL_FEED_TABLES:
+        t = sa.table(table_name, sa.column("tenant_id", sa.String))
+        op.execute(t.update().where(t.c.tenant_id == _NIL).values(tenant_id=_SYSTEM))
 
 
 def downgrade() -> None:
     """Drop dns_zones.allowed_teams; restore the nil-UUID global feed tenant."""
-    for table in _GLOBAL_FEED_TABLES:
-        op.execute(
-            sa.text(f"UPDATE {table} SET tenant_id = :old WHERE tenant_id = :new").bindparams(
-                new=_SYSTEM, old=_NIL
-            )
-        )
+    for table_name in _GLOBAL_FEED_TABLES:
+        t = sa.table(table_name, sa.column("tenant_id", sa.String))
+        op.execute(t.update().where(t.c.tenant_id == _SYSTEM).values(tenant_id=_NIL))
     with op.batch_alter_table("dns_zones") as batch:
         batch.drop_column("allowed_teams")
