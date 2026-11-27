@@ -1,13 +1,14 @@
 """DNS zones and records blueprint for netsvcs module."""
+
 from __future__ import annotations
 
-import asyncio
-import structlog
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from quart import Blueprint, current_app, jsonify, request
+import structlog
+from quart import Blueprint, jsonify
+from quart_schema import tag, validate_request, validate_response
 
 from hub_api.auth.middleware import (
     current_claims,
@@ -18,7 +19,6 @@ from hub_api.db import get_db
 from hub_api.entitlements.gate import require_feature
 from hub_api.modules.netsvcs.managers.config_service import ConfigService
 from hub_api.modules.netsvcs.managers.zone_manager import ZoneManager
-from quart_schema import validate_request, validate_response, tag
 
 logger = structlog.get_logger()
 
@@ -33,6 +33,7 @@ class CreateZoneRequest:
     name: str
     visibility: str = "public"
     description: str | None = None
+    allowed_teams: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -42,6 +43,7 @@ class UpdateZoneRequest:
     name: str | None = None
     visibility: str | None = None
     description: str | None = None
+    allowed_teams: list[str] | None = None
 
 
 @dataclass(slots=True)
@@ -80,6 +82,7 @@ class ZoneResponse:
     visibility: str
     description: str | None
     created_at: str
+    allowed_teams: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -150,6 +153,7 @@ async def list_zones() -> tuple[dict[str, Any], int]:
                 visibility=z.visibility,
                 description=z.description,
                 created_at=z.created_at.isoformat(),
+                allowed_teams=z.allowed_teams,
             )
             for z in zones
         ]
@@ -198,6 +202,7 @@ async def create_zone(data: CreateZoneRequest) -> tuple[dict[str, Any], int]:
             name=data.name,
             visibility=data.visibility,
             description=data.description,
+            allowed_teams=data.allowed_teams,
         )
 
         if not zone:
@@ -215,9 +220,12 @@ async def create_zone(data: CreateZoneRequest) -> tuple[dict[str, Any], int]:
                 "visibility": zone.visibility,
                 "description": zone.description,
                 "created_at": zone.created_at.isoformat(),
+                "allowed_teams": zone.allowed_teams,
             },
             201,
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error("create_zone_error", error=str(e))
         return jsonify({"error": "Internal server error"}), 500
@@ -255,6 +263,7 @@ async def get_zone(zone_id: str) -> tuple[dict[str, Any] | Any, int]:
                 "visibility": zone.visibility,
                 "description": zone.description,
                 "created_at": zone.created_at.isoformat(),
+                "allowed_teams": zone.allowed_teams,
             },
             200,
         )
@@ -270,9 +279,7 @@ async def get_zone(zone_id: str) -> tuple[dict[str, Any] | Any, int]:
 @require_feature("netsvcs", "zones")
 @validate_request(UpdateZoneRequest)
 @validate_response(ZoneResponse)
-async def update_zone(
-    zone_id: str, data: UpdateZoneRequest
-) -> tuple[dict[str, Any] | Any, int]:
+async def update_zone(zone_id: str, data: UpdateZoneRequest) -> tuple[dict[str, Any] | Any, int]:
     """Update an existing zone.
 
     Args:
@@ -292,6 +299,7 @@ async def update_zone(
             name=data.name,
             visibility=data.visibility,
             description=data.description,
+            allowed_teams=data.allowed_teams,
         )
 
         if not zone:
@@ -308,9 +316,12 @@ async def update_zone(
                 "visibility": zone.visibility,
                 "description": zone.description,
                 "created_at": zone.created_at.isoformat(),
+                "allowed_teams": zone.allowed_teams,
             },
             200,
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error("update_zone_error", error=str(e), zone_id=zone_id)
         return jsonify({"error": "Internal server error"}), 500
@@ -428,9 +439,7 @@ async def list_records(zone_id: str) -> tuple[dict[str, Any], int]:
 @require_feature("netsvcs", "zones")
 @validate_request(CreateRecordRequest)
 @validate_response(RecordResponse)
-async def create_record(
-    zone_id: str, data: CreateRecordRequest
-) -> tuple[dict[str, Any], int]:
+async def create_record(zone_id: str, data: CreateRecordRequest) -> tuple[dict[str, Any], int]:
     """Create a new record in a zone.
 
     Args:

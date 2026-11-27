@@ -59,6 +59,7 @@ message DNSZone {
   string name = 2;
   string visibility = 3;  // public, internal, restricted, private
   repeated DNSRecord records = 4;
+  repeated string allowed_teams = 5;  // team UUIDs for internal/restricted visibility
 }
 
 message DNSRecord {

@@ -927,6 +927,7 @@ class DNSZone(Base):
     name: Column[str] = Column(String(255), nullable=False)
     visibility: Column[str] = Column(String(50), default="public", nullable=False)
     description: Column[str | None] = Column(Text, nullable=True)
+    allowed_teams: Column[list] = Column(JSON, nullable=False, server_default="[]")
     created_at: Column[datetime] = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Column[datetime] = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False

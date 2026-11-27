@@ -1,12 +1,53 @@
 """DNS zones and records management using penguin-dal."""
+
 from __future__ import annotations
 
-import structlog
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
+
 logger = structlog.get_logger()
+
+# Upper bound on teams per zone; keeps the pushed resolver config bounded.
+MAX_ALLOWED_TEAMS = 256
+
+
+def normalize_allowed_teams(teams: list[str] | None) -> list[str]:
+    """Validate and canonicalise a zone's allowed_teams list.
+
+    Team references cross the API boundary, so each entry must be a team
+    UUID (never a name). Duplicates are dropped; order is preserved.
+    """
+    if teams is None:
+        return []
+    if not isinstance(teams, list) or len(teams) > MAX_ALLOWED_TEAMS:
+        raise ValueError(f"allowed_teams must be a list of at most {MAX_ALLOWED_TEAMS} UUIDs")
+    out: list[str] = []
+    for team in teams:
+        if not isinstance(team, str):
+            raise ValueError("allowed_teams entries must be UUID strings")
+        try:
+            canon = str(uuid.UUID(team))
+        except ValueError as exc:
+            raise ValueError(f"allowed_teams entry is not a UUID: {team!r}") from exc
+        if canon not in out:
+            out.append(canon)
+    return out
+
+
+def row_allowed_teams(row: Any) -> list[str]:
+    """Return a row's allowed_teams as a list (JSON column may come back as str)."""
+    value = getattr(row, "allowed_teams", None)
+    if value is None:
+        return []
+    if isinstance(value, str):
+        import json
+
+        value = json.loads(value)
+    return [str(t) for t in value]
 
 
 @dataclass(slots=True)
@@ -20,6 +61,7 @@ class DNSZoneRecord:
     tenant: str
     created_at: datetime
     updated_at: datetime
+    allowed_teams: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -59,9 +101,7 @@ class ZoneManager:
         Returns:
             List of DNSZoneRecord instances
         """
-        rowset = await self.db(
-            self.db.dns_zones.tenant == self.tenant_id
-        ).select()
+        rowset = await self.db(self.db.dns_zones.tenant == self.tenant_id).select()
         return [
             DNSZoneRecord(
                 id=row.id,
@@ -71,6 +111,7 @@ class ZoneManager:
                 tenant=row.tenant,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
+                allowed_teams=row_allowed_teams(row),
             )
             for row in rowset
         ]
@@ -80,6 +121,7 @@ class ZoneManager:
         name: str,
         visibility: str = "public",
         description: str | None = None,
+        allowed_teams: list[str] | None = None,
     ) -> DNSZoneRecord | None:
         """Create a new zone for this tenant.
 
@@ -89,14 +131,18 @@ class ZoneManager:
             name: Zone name (must be unique per tenant)
             visibility: Zone visibility (public/internal/restricted/private)
             description: Optional zone description
+            allowed_teams: Team UUIDs allowed to see internal/restricted zones
 
         Returns:
             DNSZoneRecord if created, None if duplicate name in tenant
+
+        Raises:
+            ValueError: allowed_teams is malformed.
         """
+        teams = normalize_allowed_teams(allowed_teams)
         # Check for duplicate name in tenant
         rowset = await self.db(
-            (self.db.dns_zones.tenant == self.tenant_id)
-            & (self.db.dns_zones.name == name)
+            (self.db.dns_zones.tenant == self.tenant_id) & (self.db.dns_zones.name == name)
         ).select()
         if rowset.first():
             logger.warning(
@@ -106,7 +152,7 @@ class ZoneManager:
             )
             return None
 
-        zone_id = str(__import__("uuid").uuid4())
+        zone_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
 
         await self.db.dns_zones.async_insert(
@@ -115,6 +161,7 @@ class ZoneManager:
             name=name,
             visibility=visibility,
             description=description,
+            allowed_teams=teams,
             created_at=now,
             updated_at=now,
         )
@@ -135,6 +182,7 @@ class ZoneManager:
             tenant=self.tenant_id,
             created_at=now,
             updated_at=now,
+            allowed_teams=teams,
         )
 
     async def get_zone(self, zone_id: str) -> DNSZoneRecord | None:
@@ -147,8 +195,7 @@ class ZoneManager:
             DNSZoneRecord if found, None otherwise
         """
         rowset = await self.db(
-            (self.db.dns_zones.id == zone_id)
-            & (self.db.dns_zones.tenant == self.tenant_id)
+            (self.db.dns_zones.id == zone_id) & (self.db.dns_zones.tenant == self.tenant_id)
         ).select()
         row = rowset.first()
 
@@ -163,6 +210,7 @@ class ZoneManager:
             tenant=row.tenant,
             created_at=row.created_at,
             updated_at=row.updated_at,
+            allowed_teams=row_allowed_teams(row),
         )
 
     async def update_zone(
@@ -171,6 +219,7 @@ class ZoneManager:
         name: str | None = None,
         visibility: str | None = None,
         description: str | None = None,
+        allowed_teams: list[str] | None = None,
     ) -> DNSZoneRecord | None:
         """Update an existing zone.
 
@@ -179,10 +228,15 @@ class ZoneManager:
             name: New zone name (must remain unique per tenant)
             visibility: New visibility value
             description: New description
+            allowed_teams: Replacement team-UUID list (None leaves it unchanged)
 
         Returns:
             Updated DNSZoneRecord if found, None otherwise
+
+        Raises:
+            ValueError: allowed_teams is malformed.
         """
+        teams = normalize_allowed_teams(allowed_teams) if allowed_teams is not None else None
         # Verify zone exists and belongs to tenant
         zone = await self.get_zone(zone_id)
         if not zone:
@@ -213,19 +267,20 @@ class ZoneManager:
             updates["visibility"] = visibility
         if description is not None:
             updates["description"] = description
+        if teams is not None:
+            updates["allowed_teams"] = teams
 
         updates["updated_at"] = now
 
         await self.db(
-            (self.db.dns_zones.id == zone_id)
-            & (self.db.dns_zones.tenant == self.tenant_id)
+            (self.db.dns_zones.id == zone_id) & (self.db.dns_zones.tenant == self.tenant_id)
         ).update(**updates)
 
         logger.info(
             "zone_updated",
             zone_id=zone_id,
             tenant=self.tenant_id,
-            updates=updates.keys(),
+            updates=sorted(updates),
         )
 
         return DNSZoneRecord(
@@ -236,6 +291,7 @@ class ZoneManager:
             tenant=self.tenant_id,
             created_at=zone.created_at,
             updated_at=now,
+            allowed_teams=teams if teams is not None else zone.allowed_teams,
         )
 
     async def delete_zone(self, zone_id: str) -> bool:
@@ -260,8 +316,7 @@ class ZoneManager:
 
         # Delete zone
         await self.db(
-            (self.db.dns_zones.id == zone_id)
-            & (self.db.dns_zones.tenant == self.tenant_id)
+            (self.db.dns_zones.id == zone_id) & (self.db.dns_zones.tenant == self.tenant_id)
         ).delete()
 
         logger.info(
@@ -401,9 +456,7 @@ class ZoneManager:
             updated_at=now,
         )
 
-    async def get_record(
-        self, zone_id: str, record_id: str
-    ) -> DNSRecordRecord | None:
+    async def get_record(self, zone_id: str, record_id: str) -> DNSRecordRecord | None:
         """Get a single record by ID.
 
         Args:
