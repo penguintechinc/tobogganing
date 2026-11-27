@@ -11,7 +11,7 @@ on:
       - '.version'
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
   PYTHON_VERSION: '3.13'
   NODE_VERSION: '18'
 
@@ -78,13 +78,13 @@ jobs:
         [ -f "hub_api/app.py" ] && echo "  ✓ Hub API app.py found"
         [ -f "hub_api/requirements.txt" ] && echo "  ✓ Hub API requirements.txt found"
 
-    - name: Verify Hub Router Service (Go 1.24)
+    - name: Verify Hub Router Service (Go 1.25)
       run: |
         echo "Hub Router Service Version Check"
         [ -f "services/hub-router/go.mod" ] && echo "  ✓ Hub Router go.mod found"
         [ -d "services/hub-router/proxy" ] && echo "  ✓ Hub Router proxy package found"
 
-    - name: Verify K8s CNI Plugin (Go 1.24)
+    - name: Verify K8s CNI Plugin (Go 1.25)
       run: |
         echo "K8s CNI Plugin Version Check"
         [ -f "k8s-cni/go.mod" ] && echo "  ✓ K8s CNI go.mod found"

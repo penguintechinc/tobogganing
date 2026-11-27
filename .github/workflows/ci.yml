@@ -12,7 +12,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME_HUB_API: ${{ github.repository }}/hub-api
   IMAGE_NAME_HUB_ROUTER: ${{ github.repository }}/hub-router
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
   PYTHON_VERSION: '3.13'
   NODE_VERSION: '18'
 
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        go-version: [1.24]
+        go-version: [1.25]
 
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
