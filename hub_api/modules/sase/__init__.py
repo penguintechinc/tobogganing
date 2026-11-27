@@ -1,11 +1,13 @@
 """SASE module - Security inspection and context-based authentication."""
+
 from __future__ import annotations
 
 from hub_api.modules.sase.api import blueprints
-from hub_api.modules.sase.security.swg.api import blueprint as swg_blueprint
 from hub_api.modules.sase.security.blockpages.api import blueprint as blockpages_blueprint
-from hub_api.registry import Entitlement, ModuleContract, NavEntry
+from hub_api.modules.sase.security.scanner.tasks import register_scanner_jobs
+from hub_api.modules.sase.security.swg.api import blueprint as swg_blueprint
 from hub_api.modules.sase.security.swg.scheduler import register_swg_jobs
+from hub_api.registry import Entitlement, ModuleContract, NavEntry
 
 
 def module() -> ModuleContract:
@@ -20,6 +22,7 @@ def module() -> ModuleContract:
 
     # Register SWG scheduled jobs
     register_swg_jobs()
+    register_scanner_jobs()
 
     return ModuleContract(
         name="sase",

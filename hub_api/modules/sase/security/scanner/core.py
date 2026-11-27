@@ -257,12 +257,40 @@ class SecurityScanner:
             logger.error("error_checking_scan_schedule", error=str(e), exc_info=True)
             return True
 
-    async def _execute_scan(self, scan_type: ScanType, config: dict[str, Any]) -> None:
+    async def run_due_scans(self) -> dict[str, int]:
+        """Run every enabled scan type that is due, once (scheduler entry point).
+
+        Returns:
+            Counts of ``ran`` and ``failed`` scans.
+
+        Raises:
+            RuntimeError: Missing tenant, or one or more scans failed (fail loud).
+        """
+        if not self.tenant_id:
+            raise RuntimeError("scheduled security scans require a tenant_id")
+        ran = 0
+        failed: list[str] = []
+        for scan_type, config in self.scan_configs.items():
+            if not config.get("enabled", True):
+                continue
+            if not await self._should_run_scan(scan_type, config):
+                continue
+            ran += 1
+            if not await self._execute_scan(scan_type, config):
+                failed.append(scan_type.value)
+        if failed:
+            raise RuntimeError(f"security scans failed for tenant: {', '.join(failed)}")
+        return {"ran": ran, "failed": 0}
+
+    async def _execute_scan(self, scan_type: ScanType, config: dict[str, Any]) -> bool:
         """Execute a security scan.
 
         Args:
             scan_type: Type of scan to execute.
             config: Scan configuration.
+
+        Returns:
+            True on success, False if the scan failed (recorded as ``failed``).
         """
         from uuid import uuid4
 
@@ -329,6 +357,7 @@ class SecurityScanner:
                 scan_id=scan_id,
                 findings_count=len(findings),
             )
+            return True
 
         except Exception as e:
             logger.error("failed_scan", scan_type=scan_type.value, scan_id=scan_id, error=str(e))
@@ -345,6 +374,7 @@ class SecurityScanner:
                 )
             except Exception:
                 logger.debug("could_not_update_failed_scan_record", exc_info=True)
+            return False
 
     async def _store_finding(self, finding: ScanFinding) -> None:
         """Store a security finding in the database.
